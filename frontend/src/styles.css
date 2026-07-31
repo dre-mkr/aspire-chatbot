@@ -1,0 +1,2286 @@
+/* The webfonts are NOT imported here on purpose.
+   A remote @import cannot be discovered until this file has been downloaded and
+   parsed, which puts the font CSS and then the font files on a three-hop serial
+   critical path. The stylesheet link lives in `src/routes/__root.tsx` instead, so
+   the browser finds it in the first HTML scan and fetches it in parallel with
+   this file. Change the families there, not here. */
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ASPIRE design system
+   Tokens mirror the shared design-system bundle (tokens/*.css). The product
+   is light-only by design: the brand gradient carries the contrast, so a dark
+   theme would fight it rather than help.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* One palette, one place. `@theme` is the source — Tailwind generates its
+   utilities from these, so a value that lives only in `:root` is a value the
+   utility layer can contradict. The `:root` block below aliases them into the
+   short names the stylesheet actually writes. */
+@theme {
+	--font-sans: "Sora", system-ui, -apple-system, sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, monospace;
+	--font-display: "Instrument Serif", Georgia, serif;
+
+	--color-plum: #482977;
+	--color-plum-light: #6b42a1;
+	--color-plum-deep: #351d5a;
+	--color-magenta: #c22f99;
+	--color-magenta-light: #d94db3;
+
+	--color-ink: #1a1a2e;
+	--color-prose: #2d3748;
+	/* Muted text is tinted from the brand purple rather than left neutral grey.
+	   The original design-system greys (#566279 / #7a8aa3 / #a0aec4) sit at
+	   4.2:1, 2.9:1 and 1.9:1 on these surfaces — two of them below AA. These are
+	   the same steps pulled to AA and given the plum cast, so quiet text reads
+	   as part of the palette, not beside it. Measured on white:
+	     --color-slate 7.99:1 · --color-quiet 5.85:1 · --color-faint 3.93:1
+	   --color-faint is for icons and rules only; never for text. */
+	--color-slate: #554d63;
+	--color-quiet: #6a6177;
+	--color-faint: #857d92;
+
+	--color-success: #16a34a;
+	/* 5.9:1 on the page surface — a failure has to be readable, not just red. */
+	--color-danger: #b3261e;
+}
+
+:root {
+	color-scheme: light only;
+
+	--plum: var(--color-plum);
+	--plum-light: var(--color-plum-light);
+	--plum-deep: var(--color-plum-deep);
+	--magenta: var(--color-magenta);
+	--magenta-light: var(--color-magenta-light);
+
+	--ink: var(--color-ink);
+	--prose: var(--color-prose);
+	--slate: var(--color-slate);
+	--quiet: var(--color-quiet);
+	--faint: var(--color-faint);
+	--success: var(--color-success);
+	--danger: var(--color-danger);
+
+	/* Every rule that tints against a brand colour derives from these, so a
+	   palette change never leaves a stray hard-coded rgba() behind. Plum is the
+	   structural wash; magenta marks the selected and recording states; danger
+	   is failure only. The number is the alpha in hundredths. */
+	--wash-3: rgb(72 41 119 / 0.03);
+	--wash-6: rgb(72 41 119 / 0.06);
+	--wash-7: rgb(72 41 119 / 0.07);
+	--wash-8: rgb(72 41 119 / 0.08);
+	--wash-9: rgb(72 41 119 / 0.09);
+	--wash-12: rgb(72 41 119 / 0.12);
+	--wash-14: rgb(72 41 119 / 0.14);
+	--wash-18: rgb(72 41 119 / 0.18);
+	--wash-30: rgb(72 41 119 / 0.3);
+	--wash-32: rgb(72 41 119 / 0.32);
+	--hairline: rgb(72 41 119 / 0.1);
+
+	--wash-m-6: rgb(194 47 153 / 0.06);
+	--wash-m-10: rgb(194 47 153 / 0.1);
+	--wash-m-12: rgb(194 47 153 / 0.12);
+	--wash-m-16: rgb(194 47 153 / 0.16);
+	--wash-m-22: rgb(194 47 153 / 0.22);
+	--wash-m-32: rgb(194 47 153 / 0.32);
+
+	--danger-wash: rgb(179 38 30 / 0.07);
+	--danger-tint: rgb(179 38 30 / 0.1);
+	--danger-line: rgb(179 38 30 / 0.18);
+	--danger-line-strong: rgb(179 38 30 / 0.2);
+
+	--ease: cubic-bezier(0.4, 0, 0.2, 1);
+	--morph: 560ms var(--ease);
+	--swift: 150ms var(--ease);
+	--settle: 300ms var(--ease);
+
+	--rail-open: 272px;
+	--rail-shut: 76px;
+	--reading-width: 780px;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-sans);
+	color: var(--ink);
+	background: var(--plum-deep);
+	line-height: 1.6;
+}
+
+:focus-visible {
+	outline: 2px solid var(--focus-ring, var(--plum));
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+*::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+	background: var(--wash-18);
+	border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: var(--wash-30);
+}
+
+/* ── Shell ──────────────────────────────────────────────────────────────── */
+
+/* No min-height. The shell is height-driven and clips at its own edge, so a
+   floor taller than the viewport puts the composer off-screen with nothing to
+   scroll — a phone in landscape could read but not ask. Every track inside
+   collapses instead. */
+.app {
+	position: relative;
+	display: flex;
+	height: 100dvh;
+	overflow: hidden;
+	background: linear-gradient(
+		180deg,
+		#33165c 0%,
+		#482977 17%,
+		#6b3a9c 36%,
+		#ab3199 53%,
+		#e0a0d0 67%,
+		#faeff6 80%,
+		#ffffff 92%
+	);
+
+	/* Phase-driven geometry. The landing state is the default; `data-phase`
+	   flips these and every consumer transitions on its own schedule. */
+	--rail-w: 0px;
+	--rail-events: none;
+	--rail-border: transparent;
+	--frame-inset: 0px;
+	--frame-radius: 0px;
+	--frame-shadow: none;
+	--panel-bg: transparent;
+	--chrome: rgb(255 255 255 / 0.95);
+	--hero-opacity: 1;
+	--hero-max: min(380px, 44vh);
+	--starters-row: 0.7fr;
+	--composer-min: min(168px, 22vh);
+	--input-h: min(96px, 12vh);
+}
+
+/* The ring is plum everywhere it lands on a light surface. Only the top bar
+   sits on the dark gradient during landing, so only it flips to white — a
+   white ring on the white composer card would be no ring at all. */
+.app[data-phase="landing"] .topbar {
+	--focus-ring: #ffffff;
+}
+
+.app[data-phase="chat"] {
+	--rail-w: var(--rail-open);
+	--rail-events: auto;
+	--rail-border: var(--hairline);
+	--frame-inset: 16px;
+	--frame-radius: 28px;
+	--frame-shadow: 0 30px 70px -20px rgb(30 10 55 / 0.55);
+	--panel-bg: rgb(255 255 255 / 0.97);
+	--chrome: var(--prose);
+	--hero-opacity: 0;
+	--hero-max: 0px;
+	--starters-row: 0fr;
+	--composer-min: 112px;
+	--input-h: 46px;
+}
+
+.app[data-phase="chat"][data-rail="collapsed"] {
+	--rail-w: var(--rail-shut);
+}
+
+/* ── Atmosphere ─────────────────────────────────────────────────────────── */
+
+.atmosphere {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+	transition: opacity 700ms var(--ease);
+}
+
+/* No `will-change`. It is a targeted hint for a known-expensive transition, not
+   a resting state — left on, it pins four large blurred layers in compositor
+   memory for the whole session. These animate slowly enough that the promotion
+   the animation itself triggers is sufficient. */
+.atmosphere span {
+	position: absolute;
+	border-radius: 50%;
+}
+
+/* In chat the frame covers all but a 16px margin, so the drift is doing
+   continuous GPU work almost nobody can see. The layers stay — they still tint
+   that margin — but they stop moving. */
+.app[data-phase="chat"] .atmosphere span {
+	animation-play-state: paused;
+}
+
+.atmosphere span:nth-child(1) {
+	width: 720px;
+	height: 430px;
+	left: 14%;
+	top: -9%;
+	background: rgb(255 255 255 / 0.3);
+	filter: blur(90px);
+	animation: drift-a 34s ease-in-out infinite;
+}
+
+.atmosphere span:nth-child(2) {
+	width: 640px;
+	height: 540px;
+	left: 52%;
+	top: 2%;
+	background: rgb(194 47 153 / 0.48);
+	filter: blur(110px);
+	animation: drift-b 42s ease-in-out infinite;
+}
+
+.atmosphere span:nth-child(3) {
+	width: 540px;
+	height: 440px;
+	left: -7%;
+	top: 20%;
+	background: rgb(107 66 161 / 0.55);
+	filter: blur(100px);
+	animation: drift-c 30s ease-in-out infinite;
+}
+
+.atmosphere span:nth-child(4) {
+	width: 820px;
+	height: 300px;
+	left: 28%;
+	top: 33%;
+	background: rgb(255 255 255 / 0.24);
+	filter: blur(80px);
+	animation: drift-b 48s ease-in-out infinite reverse;
+}
+
+@keyframes drift-a {
+	0%,
+	100% {
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+	50% {
+		transform: translate3d(5%, -4%, 0) scale(1.14);
+	}
+}
+
+@keyframes drift-b {
+	0%,
+	100% {
+		transform: translate3d(0, 0, 0) scale(1.08);
+	}
+	50% {
+		transform: translate3d(-6%, 5%, 0) scale(1);
+	}
+}
+
+@keyframes drift-c {
+	0%,
+	100% {
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+	50% {
+		transform: translate3d(7%, 6%, 0) scale(1.2);
+	}
+}
+
+/* ── Frame ──────────────────────────────────────────────────────────────── */
+
+.frame {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	margin: var(--frame-inset);
+	border-radius: var(--frame-radius);
+	box-shadow: var(--frame-shadow);
+	transition:
+		margin var(--morph),
+		border-radius var(--morph),
+		box-shadow var(--morph);
+}
+
+/* ── Rail ───────────────────────────────────────────────────────────────── */
+
+.rail {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	width: var(--rail-w);
+	min-width: var(--rail-w);
+	overflow: hidden;
+	background: rgb(255 255 255 / 0.88);
+	backdrop-filter: blur(16px);
+	border-right: 1px solid var(--rail-border);
+	pointer-events: var(--rail-events);
+	transition:
+		width 480ms var(--ease),
+		border-color var(--settle);
+}
+
+.rail__head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-shrink: 0;
+	padding: 18px 18px 14px;
+}
+
+.rail__mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border: none;
+	border-radius: 14px;
+	overflow: hidden;
+	background: linear-gradient(135deg, var(--plum), var(--magenta));
+	box-shadow: 0 4px 12px rgb(72 41 119 / 0.28);
+	transition: transform var(--settle);
+}
+
+.rail__mark:hover {
+	transform: scale(1.06);
+}
+
+.rail__mark img {
+	width: 40px;
+	height: 40px;
+	object-fit: cover;
+}
+
+.rail__wordmark {
+	height: 15px;
+	width: auto;
+	flex-shrink: 0;
+}
+
+/* Everything that folds away when the rail collapses shares one rule, so the
+   fade always stays in step with the width animation. */
+.rail__fold {
+	opacity: 1;
+	transition: opacity var(--settle);
+}
+
+.app[data-rail="collapsed"] .rail__fold {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.rail__body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 0 18px 8px;
+}
+
+.rail__new {
+	flex-shrink: 0;
+	padding: 6px 18px 16px;
+}
+
+.rail__collapse {
+	margin-left: auto;
+}
+
+.rail__section-label {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 34px;
+	margin: 0;
+	color: var(--quiet);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+/* Fixed 20px so the glyph holds the same column whether the rail is open or
+   folded to icons — the label beside it is what disappears, not the rhythm. */
+.rail__section-glyph {
+	display: flex;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 20px;
+}
+
+.rail__groups {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding-top: 10px;
+}
+
+.rail__empty {
+	margin: 0;
+	padding: 4px 10px;
+	font-size: 0.78125rem;
+	line-height: 1.55;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.rail__group-title {
+	margin: 0;
+	padding: 0 10px 6px;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	color: var(--quiet);
+	letter-spacing: 0.04em;
+}
+
+.rail__foot {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-shrink: 0;
+	padding: 14px 18px;
+	border-top: 1px solid var(--hairline);
+}
+
+.rail__device {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	border-radius: 999px;
+	background: var(--wash-8);
+	color: var(--plum);
+}
+
+.rail__identity {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.rail__name {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--ink);
+	white-space: nowrap;
+}
+
+/* Sans, not mono: this is a sentence about where things are kept, not a
+   measurement. */
+.rail__note {
+	font-size: 0.71875rem;
+	color: var(--quiet);
+	white-space: nowrap;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn-new {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: var(--rail-open);
+	max-width: 236px;
+	min-height: 44px;
+	padding: 0 12px;
+	overflow: hidden;
+	border: none;
+	border-radius: 16px;
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+	color: #fff;
+	font: inherit;
+	font-size: 0.875rem;
+	font-weight: 600;
+	box-shadow: 0 4px 14px rgb(72 41 119 / 0.28);
+	transition:
+		box-shadow var(--settle),
+		transform var(--settle),
+		max-width 480ms var(--ease);
+}
+
+.app[data-rail="collapsed"] .btn-new {
+	max-width: 44px;
+}
+
+.btn-new:hover {
+	box-shadow: 0 8px 22px rgb(72 41 119 / 0.34);
+	transform: translateY(-1px);
+}
+
+.btn-new__glyph {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	flex-shrink: 0;
+}
+
+.btn-new span:last-child {
+	white-space: nowrap;
+}
+
+/* ── Touch targets ──────────────────────────────────────────────────────────
+   Several controls are deliberately small — a 44px painted icon button would
+   shout. The painted box stays as designed and an invisible overlay carries the
+   pointer target out to 44px in the vertical axis, which is the one a thumb
+   misses in. Horizontal growth is opt-in, because these sit in rows 8px apart
+   and two overlapping targets steal each other's taps. */
+
+.chip-btn,
+.text-btn,
+.play-btn,
+.voice-choice,
+.sources__toggle,
+.composer__mic,
+.composer__send {
+	position: relative;
+}
+
+.chip-btn::after,
+.text-btn::after,
+.play-btn::after,
+.voice-choice::after,
+.sources__toggle::after,
+.composer__mic::after,
+.composer__send::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 100%;
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
+}
+
+/* These sit alone or with wide gaps, so they can grow in both axes. */
+.chip-btn--square::after,
+.composer__mic::after,
+.composer__send::after {
+	width: max(100%, 44px);
+}
+
+/* Quiet square icon button — used across the rail, topbar and message actions */
+.icon-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	position: relative;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--quiet);
+	transition:
+		background var(--swift),
+		color var(--swift);
+}
+
+.icon-btn::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, 44px);
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
+}
+
+.icon-btn:hover {
+	background: var(--wash-8);
+	color: var(--plum);
+}
+
+.icon-btn--faint {
+	color: var(--faint);
+}
+
+.history-item {
+	width: 100%;
+	min-height: 38px;
+	text-align: left;
+	padding: 9px 10px;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--slate);
+	font: inherit;
+	font-size: 0.8125rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transition:
+		background var(--swift),
+		color var(--swift);
+}
+
+.history-item:hover {
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.history-item[aria-current="true"] {
+	background: var(--wash-7);
+	color: var(--plum);
+	font-weight: 500;
+}
+
+/* ── Workspace ──────────────────────────────────────────────────────────── */
+
+.workspace {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	background: var(--panel-bg);
+	transition: background var(--morph);
+}
+
+.topbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-shrink: 0;
+	height: 64px;
+	padding: 0 22px;
+	color: var(--chrome);
+	border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+	transition: color var(--morph);
+}
+
+/* Chrome controls read against both the purple gradient and the white panel by
+   deriving every colour from the inherited text colour. */
+.chip-btn {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	min-height: 36px;
+	padding: 0 13px;
+	border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+	border-radius: 12px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	white-space: nowrap;
+	transition: background var(--swift);
+}
+
+.chip-btn:hover {
+	background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.chip-btn--model {
+	padding: 0 12px 0 8px;
+	font-size: 0.84375rem;
+	font-weight: 600;
+	background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.chip-btn--model:hover {
+	background: color-mix(in srgb, currentColor 13%, transparent);
+}
+
+.chip-btn--square {
+	min-width: 36px;
+	padding: 0;
+	justify-content: center;
+}
+
+.topbar__caption {
+	font-size: 0.78125rem;
+	opacity: 0.78;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.topbar__end {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* ── Stage ──────────────────────────────────────────────────────────────── */
+
+.stage {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) auto var(--starters-row);
+	flex: 1;
+	min-height: 0;
+	transition: grid-template-rows var(--morph);
+}
+
+.thread {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	overscroll-behavior: contain;
+}
+
+/* Anchors short conversations to the bottom so the first reply rises out of
+   the composer instead of dropping in from the top. */
+.thread__inner {
+	margin-top: auto;
+	width: 100%;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+
+.hero {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	flex-shrink: 0;
+	text-align: center;
+	overflow: hidden;
+	opacity: var(--hero-opacity);
+	max-height: var(--hero-max);
+	transition:
+		opacity 380ms var(--ease),
+		max-height var(--morph);
+}
+
+.hero__title {
+	margin: 0 0 10px;
+	max-width: 900px;
+	font-family: var(--font-display);
+	font-size: clamp(1.875rem, 3.4vw, 3.25rem);
+	font-weight: 400;
+	line-height: 1.12;
+	letter-spacing: -0.01em;
+	color: #fff;
+	text-shadow: 0 2px 24px rgb(53 29 90 / 0.28);
+	text-wrap: pretty;
+}
+
+.hero__sub {
+	margin: 0 0 30px;
+	max-width: 520px;
+	font-size: 1rem;
+	font-weight: 300;
+	line-height: 1.6;
+	color: rgb(255 255 255 / 0.82);
+	text-wrap: pretty;
+}
+
+/* ── Orb ────────────────────────────────────────────────────────────────── */
+
+.orb {
+	position: relative;
+	flex-shrink: 0;
+	width: var(--orb-size, 30px);
+	height: var(--orb-size, 30px);
+}
+
+.orb::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: 999px;
+	background: radial-gradient(
+		circle at 33% 26%,
+		#ffffff 0%,
+		#f0c8e6 12%,
+		var(--magenta-light) 38%,
+		var(--plum-light) 72%,
+		var(--plum-deep) 100%
+	);
+	box-shadow:
+		inset 0 -3px 7px rgb(53 29 90 / 0.5),
+		0 4px 12px rgb(72 41 119 / 0.25);
+}
+
+.orb--hero {
+	--orb-size: 64px;
+	margin-bottom: 20px;
+	animation: orb-float 6s ease-in-out infinite;
+}
+
+.orb--hero::after {
+	box-shadow:
+		inset 0 -6px 14px rgb(53 29 90 / 0.55),
+		inset 0 4px 10px rgb(255 255 255 / 0.5),
+		0 12px 30px rgb(53 29 90 / 0.35);
+}
+
+/* Bloom behind the hero orb only — at message scale it would just look blurry */
+.orb--hero::before {
+	content: "";
+	position: absolute;
+	inset: -18px;
+	border-radius: 999px;
+	background: radial-gradient(
+		circle,
+		rgb(255 255 255 / 0.55) 0%,
+		rgb(217 77 179 / 0.35) 45%,
+		transparent 72%
+	);
+	filter: blur(12px);
+	animation: orb-glow 4.5s ease-in-out infinite;
+}
+
+.orb--thinking {
+	animation: orb-float 2.4s ease-in-out infinite;
+}
+
+@keyframes orb-float {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-7px);
+	}
+}
+
+@keyframes orb-glow {
+	0%,
+	100% {
+		opacity: 0.45;
+	}
+	50% {
+		opacity: 0.85;
+	}
+}
+
+/* ── Messages ───────────────────────────────────────────────────────────── */
+
+.transcript {
+	display: flex;
+	flex-direction: column;
+	width: min(var(--reading-width), calc(100% - 48px));
+	margin: 0 auto;
+	padding: 24px 0 18px;
+}
+
+.turn {
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 30px;
+	animation: rise 400ms var(--ease) both;
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.turn--user {
+	align-items: flex-end;
+}
+
+.bubble {
+	max-width: 74%;
+	padding: 13px 18px;
+	border-radius: 24px 24px 8px 24px;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+	font-size: 0.9375rem;
+	line-height: 1.6;
+	box-shadow: 0 6px 18px rgb(72 41 119 / 0.22);
+	text-wrap: pretty;
+}
+
+.turn--assistant {
+	flex-direction: row;
+	gap: 14px;
+	align-items: flex-start;
+}
+
+.turn--assistant .orb {
+	margin-top: 2px;
+}
+
+.answer {
+	flex: 1;
+	min-width: 0;
+	padding-top: 1px;
+}
+
+.answer p {
+	margin: 0 0 19px;
+	font-size: 0.96875rem;
+	line-height: 1.72;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.answer ul {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	margin: 0 0 18px;
+	padding: 0;
+	list-style: none;
+}
+
+.answer li {
+	display: flex;
+	gap: 11px;
+	font-size: 0.9375rem;
+	line-height: 1.65;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.answer li::before {
+	content: "";
+	flex-shrink: 0;
+	width: 6px;
+	height: 6px;
+	margin-top: 9px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--plum), var(--magenta));
+}
+
+.answer > :last-child {
+	margin-bottom: 0;
+}
+
+/* ── Voice ──────────────────────────────────────────────────────────────────
+   The microphone, the listening state, and everything that explains what
+   happens to a recording. Sits between the transcript and the composer so a
+   consent panel or a failure note never covers the answer being read. */
+
+.voice-slot {
+	display: flex;
+	justify-content: center;
+	padding: 0 24px;
+}
+
+.voice-slot > * {
+	width: min(780px, 100%);
+}
+
+/* ── Consent ─────────────────────────────────────────────────────────────── */
+
+.voice-consent {
+	display: flex;
+	flex-direction: column;
+	gap: 11px;
+	margin-bottom: 14px;
+	padding: 15px 16px;
+	border: 1px solid var(--wash-12);
+	border-radius: 18px;
+	background: var(--wash-3);
+	animation: rise 300ms var(--ease) both;
+}
+
+.voice-consent__head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.voice-consent__head .orb {
+	--orb-size: 20px;
+}
+
+.voice-consent__title {
+	font-size: 0.90625rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.voice-consent__points {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.voice-consent__points li {
+	display: flex;
+	gap: 11px;
+	font-size: 0.84375rem;
+	line-height: 1.6;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.voice-consent__points li::before {
+	content: "";
+	flex-shrink: 0;
+	width: 6px;
+	height: 6px;
+	margin-top: 8px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--plum), var(--magenta));
+}
+
+.voice-consent__actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.voice-consent__aside {
+	font-size: 0.78125rem;
+	color: var(--quiet);
+}
+
+@media (min-width: 700px) {
+	.voice-consent__aside {
+		margin-left: auto;
+	}
+}
+
+/* ── Buttons shared by the voice surfaces ────────────────────────────────── */
+
+.voice-btn {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 0 16px;
+	border: 1px solid transparent;
+	border-radius: 14px;
+	font: inherit;
+	font-size: 0.84375rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		box-shadow var(--settle),
+		transform var(--settle);
+}
+
+.voice-btn--primary {
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+	color: #fff;
+	box-shadow: 0 5px 16px rgb(72 41 119 / 0.3);
+}
+
+.voice-btn--primary:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 9px 22px rgb(72 41 119 / 0.38);
+}
+
+.voice-btn--quiet {
+	border-color: var(--wash-12);
+	background: transparent;
+	color: var(--slate);
+	font-weight: 500;
+}
+
+.voice-btn--quiet:hover {
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.voice-btn--stop {
+	background: var(--magenta);
+	color: #fff;
+	box-shadow: 0 5px 16px rgb(194 47 153 / 0.32);
+}
+
+.voice-btn--stop:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 9px 22px rgb(194 47 153 / 0.4);
+}
+
+.voice-btn:active {
+	transform: scale(0.96);
+}
+
+.voice-btn__square {
+	display: block;
+	width: 13px;
+	height: 13px;
+	border-radius: 3px;
+	background: currentColor;
+}
+
+/* ── Notes ───────────────────────────────────────────────────────────────── */
+
+.voice-note {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--wash-12);
+	border-radius: 18px;
+	background: var(--wash-3);
+	font-size: 0.84375rem;
+	line-height: 1.55;
+	color: var(--prose);
+	animation: rise 300ms var(--ease) both;
+}
+
+.voice-note__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 26px;
+	height: 26px;
+	border-radius: 999px;
+	background: var(--wash-8);
+	color: var(--plum);
+}
+
+.voice-note__text {
+	flex: 1;
+	min-width: 0;
+	text-wrap: pretty;
+}
+
+.voice-note__action {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	min-height: 40px;
+	padding: 0 15px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: rgb(255 255 255 / 0.7);
+	color: var(--plum);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift);
+}
+
+.voice-note__action:hover {
+	background: #fff;
+	border-color: var(--wash-18);
+}
+
+/* Tone carries the meaning; the icon and copy carry it too, so colour is never
+   the only signal. */
+.voice-note[data-tone="bad"] {
+	border-color: var(--danger-line-strong);
+	background: var(--danger-wash);
+}
+
+.voice-note[data-tone="bad"] .voice-note__icon {
+	background: var(--danger-tint);
+	color: var(--danger);
+}
+
+.voice-note[data-tone="warn"] {
+	border-color: var(--wash-m-22);
+	background: var(--wash-m-6);
+}
+
+.voice-note[data-tone="warn"] .voice-note__icon {
+	background: var(--wash-m-12);
+	color: var(--magenta);
+}
+
+.voice-note[data-tone="brand"] {
+	border-color: var(--wash-18);
+	background: var(--wash-6);
+}
+
+/* ── Listening and transcribing ──────────────────────────────────────────── */
+
+.voice-live {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding-top: 12px;
+}
+
+.voice-live--busy {
+	gap: 12px;
+}
+
+.voice-rec {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+	min-height: 30px;
+	padding: 0 12px;
+	border: 1px solid var(--wash-m-32);
+	border-radius: 999px;
+	background: var(--wash-m-10);
+}
+
+.voice-rec__dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	background: var(--magenta);
+	animation: orb-glow 1.6s ease-in-out infinite;
+}
+
+.voice-rec__label,
+.voice-rec__time {
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	color: var(--magenta);
+}
+
+.voice-rec__time {
+	letter-spacing: 0.02em;
+	color: var(--plum);
+}
+
+.voice-live__hint,
+.voice-live__captured {
+	font-size: 0.78125rem;
+	color: var(--quiet);
+}
+
+.voice-live__title {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--plum);
+}
+
+.voice-live__actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.voice-live__trailing {
+	margin-left: auto;
+}
+
+.voice-stars {
+	flex-shrink: 0;
+}
+
+.voice-stars path {
+	transition: opacity 220ms var(--ease);
+}
+
+.voice-spinner {
+	display: block;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+	border: 2px solid var(--wash-18);
+	border-top-color: var(--plum);
+	border-radius: 999px;
+	animation: voice-spin 0.9s linear infinite;
+}
+
+@keyframes voice-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ── The microphone itself ───────────────────────────────────────────────── */
+
+.composer__mic {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: var(--wash-6);
+	color: var(--plum);
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		color var(--swift),
+		border-color var(--swift),
+		transform var(--settle);
+}
+
+.composer__mic:hover:not(:disabled) {
+	background: var(--wash-12);
+	color: var(--plum-deep);
+	transform: translateY(-1px);
+}
+
+.composer__mic:active:not(:disabled) {
+	transform: scale(0.95);
+}
+
+.composer__mic[data-mic="denied"] {
+	background: var(--danger-wash);
+	border-color: var(--danger-line-strong);
+	color: var(--danger);
+}
+
+.composer__mic[data-mic="off"] {
+	background: var(--wash-3);
+	color: var(--faint);
+	cursor: not-allowed;
+}
+
+/* ── Read aloud, per answer ──────────────────────────────────────────────── */
+
+.play-btn {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 34px;
+	padding: 0 11px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: transparent;
+	/* --faint is 3.93:1 and is reserved for icons and rules. This button has a
+	   visible label, so it takes the text step. */
+	color: var(--quiet);
+	font: inherit;
+	font-size: 0.78125rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		color var(--swift),
+		border-color var(--swift);
+}
+
+.play-btn:hover {
+	border-color: var(--wash-18);
+	color: var(--plum);
+}
+
+.play-btn[data-state="playing"],
+.play-btn[data-state="paused"] {
+	border-color: var(--wash-18);
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.voice-stars--play path {
+	animation: star-rise 1.4s ease-in-out infinite;
+}
+
+@keyframes star-rise {
+	0%,
+	100% {
+		opacity: 0.2;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* ── Voice options menu ──────────────────────────────────────────────────── */
+
+.topbar__model {
+	position: relative;
+}
+
+.voice-menu {
+	position: absolute;
+	z-index: 30;
+	top: calc(100% + 9px);
+	left: 0;
+	width: 292px;
+	padding: 15px 16px 16px;
+	border: 1px solid var(--wash-12);
+	border-radius: 22px;
+	background: rgb(255 255 255 / 0.97);
+	backdrop-filter: blur(20px);
+	box-shadow:
+		0 22px 48px -14px rgb(53 29 90 / 0.34),
+		0 2px 6px rgb(53 29 90 / 0.06);
+	color: var(--ink);
+	animation: rise 220ms var(--ease) both;
+}
+
+.voice-menu__label {
+	margin: 0 0 9px;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--quiet);
+}
+
+.voice-menu__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.voice-menu__copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.voice-menu__title {
+	font-size: 0.84375rem;
+	font-weight: 600;
+}
+
+.voice-menu__sub {
+	font-size: 0.75rem;
+	color: var(--quiet);
+}
+
+.voice-menu__rule {
+	margin: 14px 0;
+	border: none;
+	border-top: 1px solid var(--hairline);
+}
+
+.voice-menu__choices {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 14px;
+}
+
+.voice-choice {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 34px;
+	padding: 0 12px;
+	border: 1px solid var(--wash-12);
+	border-radius: 10px;
+	background: transparent;
+	color: var(--slate);
+	font: inherit;
+	font-size: 0.78125rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		color var(--swift);
+}
+
+.voice-choice:hover {
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.voice-choice[aria-pressed="true"] {
+	border-color: var(--wash-m-32);
+	background: var(--wash-m-10);
+	color: var(--magenta);
+}
+
+.voice-choice--lang {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.voice-choice__code {
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	font-weight: 600;
+}
+
+.voice-menu__link {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 40px;
+	margin-top: 2px;
+	padding: 0 12px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: transparent;
+	color: var(--slate);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		color var(--swift);
+}
+
+.voice-menu__link:hover {
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.voice-switch {
+	position: relative;
+	flex-shrink: 0;
+	width: 44px;
+	height: 26px;
+	margin-left: auto;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: var(--wash-18);
+	cursor: pointer;
+	transition: background var(--settle);
+}
+
+.voice-switch[aria-checked="true"] {
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+}
+
+.voice-switch:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.voice-switch__knob {
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 20px;
+	height: 20px;
+	border-radius: 999px;
+	background: #fff;
+	box-shadow: 0 1px 3px rgb(53 29 90 / 0.3);
+	transition: transform var(--settle);
+}
+
+.voice-switch[aria-checked="true"] .voice-switch__knob {
+	transform: translateX(18px);
+}
+
+/* ── Links inside an answer ─────────────────────────────────────────────────
+   Underlined rather than colour-only: colour alone is not a distinguishable
+   affordance, and these often sit inside bold where weight is already spoken
+   for. The offset keeps the rule clear of descenders in Sora. */
+
+.answer-link {
+	color: var(--plum);
+	text-decoration: underline;
+	text-decoration-color: var(--wash-18);
+	text-decoration-thickness: 1.5px;
+	text-underline-offset: 3px;
+	/* Long portal URLs must not push the answer column wider on a phone. */
+	overflow-wrap: anywhere;
+	transition:
+		color var(--swift),
+		text-decoration-color var(--swift);
+}
+
+.answer-link:hover {
+	color: var(--magenta);
+	text-decoration-color: currentColor;
+}
+
+.answer-link:focus-visible {
+	outline: 2px solid var(--magenta);
+	outline-offset: 2px;
+	border-radius: 3px;
+	text-decoration-color: currentColor;
+}
+
+/* ── Sources ────────────────────────────────────────────────────────────────
+   The evidence behind an answer, not the answer itself: closed by default,
+   quiet when closed, and legible the moment it opens. */
+
+.sources {
+	margin: -4px 0 2px;
+}
+
+.sources__toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 34px;
+	padding: 5px 11px 5px 10px;
+	border: 1px solid var(--hairline);
+	border-radius: 999px;
+	background: var(--wash-3);
+	color: var(--quiet);
+	font-size: 0.78125rem;
+	font-weight: 500;
+	cursor: pointer;
+	/* Both are needed to retire the native disclosure triangle. */
+	list-style: none;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		color var(--swift);
+}
+
+.sources__toggle::-webkit-details-marker {
+	display: none;
+}
+
+.sources__toggle:hover {
+	background: var(--wash-6);
+	border-color: var(--wash-18);
+	color: var(--plum);
+}
+
+.sources__chevron {
+	transition: transform var(--settle);
+}
+
+.sources[open] .sources__chevron {
+	transform: rotate(180deg);
+}
+
+.sources__list {
+	margin: 11px 0 0;
+	padding: 0;
+	list-style: none;
+	border: 1px solid var(--hairline);
+	border-radius: 14px;
+	/* Separators inside a single frame — one card per snippet would nest cards. */
+	overflow: hidden;
+}
+
+.source {
+	display: block;
+	padding: 12px 15px;
+	background: var(--wash-3);
+}
+
+.source + .source {
+	border-top: 1px solid var(--hairline);
+}
+
+/* `.answer p` is more specific than a lone class, so both of these carry the
+   parent to win the cascade rather than reaching for !important. */
+.answer .source__label {
+	margin: 0 0 5px;
+	font-size: 0.78125rem;
+	font-weight: 600;
+	line-height: 1.45;
+	color: var(--plum);
+}
+
+.answer .source__text {
+	margin: 0;
+	font-size: 0.8125rem;
+	line-height: 1.6;
+	color: var(--slate);
+	/* Snippets are extracts and can be long; the label is what you scan. */
+	white-space: pre-line;
+}
+
+/* ── Failed turn ────────────────────────────────────────────────────────── */
+
+.answer .failure {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0;
+	padding: 12px 15px;
+	border: 1px solid var(--danger-line);
+	border-radius: 14px;
+	background: var(--danger-wash);
+	font-size: 0.90625rem;
+	line-height: 1.6;
+	color: var(--danger);
+}
+
+.answer .failure svg {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+
+.orb--muted::after {
+	background: var(--wash-18);
+	animation: none;
+}
+
+.answer-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	/* 8px, not 6: the buttons carry 44px-tall invisible hit areas and this is
+	   the margin that keeps neighbouring targets from stealing each other's
+	   taps. */
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.text-btn {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 34px;
+	padding: 0 11px;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--quiet);
+	font: inherit;
+	font-size: 0.78125rem;
+	font-weight: 500;
+	transition:
+		background var(--swift),
+		color var(--swift);
+}
+
+.text-btn:hover {
+	background: var(--wash-8);
+	color: var(--plum);
+}
+
+.icon-btn--sm {
+	width: 32px;
+	height: 32px;
+}
+
+.thinking {
+	display: flex;
+	gap: 14px;
+	align-items: center;
+	margin-bottom: 30px;
+}
+
+.thinking__dots {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	height: 30px;
+}
+
+.thinking__dots i {
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--plum-light);
+	animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* The run walks plum → magenta, so the middle dot is the midpoint rather than
+   a fourth colour nobody declared. */
+.thinking__dots i:nth-child(2) {
+	background: color-mix(in srgb, var(--plum-light), var(--magenta) 45%);
+	animation-delay: 0.16s;
+}
+
+.thinking__dots i:nth-child(3) {
+	background: var(--magenta);
+	animation-delay: 0.32s;
+}
+
+@keyframes dot-pulse {
+	0%,
+	80%,
+	100% {
+		transform: translateY(0);
+		opacity: 0.35;
+	}
+	40% {
+		transform: translateY(-4px);
+		opacity: 1;
+	}
+}
+
+/* ── Follow-ups ─────────────────────────────────────────────────────────── */
+
+.follow-ups {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 9px;
+	margin: -12px 0 26px 44px;
+	animation: rise 400ms var(--ease) both;
+}
+
+.follow-up {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 15px;
+	border: 1px solid var(--wash-18);
+	border-radius: 999px;
+	background: var(--wash-3);
+	color: var(--plum);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	text-align: left;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		transform var(--settle);
+}
+
+.follow-up:hover {
+	background: var(--wash-9);
+	border-color: var(--wash-32);
+	transform: translateY(-1px);
+}
+
+.follow-up svg {
+	flex-shrink: 0;
+	color: var(--magenta);
+}
+
+/* ── Composer ───────────────────────────────────────────────────────────── */
+
+.composer-slot {
+	display: flex;
+	justify-content: center;
+	padding: 4px 24px 0;
+}
+
+.composer {
+	display: flex;
+	flex-direction: column;
+	width: min(var(--reading-width), 100%);
+	min-height: var(--composer-min);
+	padding: 18px 18px 14px;
+	border: 1px solid var(--wash-14);
+	border-radius: 26px;
+	background: rgb(255 255 255 / 0.9);
+	backdrop-filter: blur(20px);
+	box-shadow:
+		0 20px 44px -14px rgb(53 29 90 / 0.3),
+		0 2px 6px rgb(53 29 90 / 0.06);
+	transition:
+		min-height var(--morph),
+		border-color var(--swift),
+		box-shadow var(--swift);
+}
+
+.composer:focus-within {
+	border-color: var(--wash-32);
+	box-shadow:
+		0 20px 44px -14px rgb(53 29 90 / 0.34),
+		0 0 0 3px var(--hairline);
+}
+
+/* The input grows and shrinks with the phase. Sizing the track rather than the
+   textarea keeps the morph off the element's own layout box. */
+.composer__field {
+	display: grid;
+	grid-template-rows: var(--input-h);
+	transition: grid-template-rows var(--morph);
+}
+
+.composer textarea {
+	width: 100%;
+	min-height: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	resize: none;
+	font: inherit;
+	font-size: 1rem;
+	line-height: 1.6;
+	color: var(--ink);
+}
+
+.composer textarea::placeholder {
+	color: var(--quiet);
+	opacity: 1;
+}
+
+.composer__tools {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-top: 12px;
+}
+
+.tool-btn {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 36px;
+	padding: 0 14px;
+	border: 1px solid var(--wash-12);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--slate);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	transition:
+		background var(--swift),
+		color var(--swift),
+		border-color var(--swift);
+}
+
+.tool-btn:hover {
+	background: var(--wash-7);
+	color: var(--plum);
+}
+
+.tool-btn[aria-pressed="true"] {
+	border-color: var(--wash-m-32);
+	background: var(--wash-m-10);
+	color: var(--magenta);
+}
+
+.composer__send {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	flex-shrink: 0;
+	border: none;
+	border-radius: 14px;
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+	color: #fff;
+	box-shadow: 0 5px 16px rgb(72 41 119 / 0.35);
+	transition:
+		transform var(--settle),
+		box-shadow var(--settle),
+		opacity var(--settle);
+}
+
+.composer__send:hover:not(:disabled) {
+	transform: translateY(-1px);
+	box-shadow: 0 9px 22px rgb(72 41 119 / 0.42);
+}
+
+.composer__send:active:not(:disabled) {
+	transform: scale(0.95);
+}
+
+.composer__send:disabled {
+	opacity: 0.38;
+	box-shadow: none;
+	cursor: not-allowed;
+}
+
+.composer__end {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* ── Starters ───────────────────────────────────────────────────────────── */
+
+.starters {
+	overflow: hidden;
+	min-height: 0;
+}
+
+.starters__row {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+	padding: 22px 24px 0;
+}
+
+.starter {
+	padding: 11px 18px;
+	border: 1px solid var(--hairline);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 0.94);
+	color: var(--plum);
+	font: inherit;
+	font-size: 0.84375rem;
+	font-weight: 500;
+	box-shadow: 0 3px 10px rgb(53 29 90 / 0.1);
+	transition:
+		transform var(--settle),
+		box-shadow var(--settle);
+}
+
+.starter:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 8px 20px rgb(53 29 90 / 0.16);
+}
+
+/* ── Disclaimer ─────────────────────────────────────────────────────────── */
+
+.disclaimer {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	flex-shrink: 0;
+	min-height: 46px;
+	padding: 0 16px;
+	font-size: 0.78125rem;
+	color: var(--quiet);
+	text-align: center;
+}
+
+.disclaimer strong {
+	font-weight: 500;
+	color: var(--slate);
+}
+
+/* ── Model dot ──────────────────────────────────────────────────────────── */
+
+.model-dot {
+	display: block;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: radial-gradient(
+		circle at 32% 28%,
+		#ffffff 0%,
+		var(--magenta-light) 30%,
+		var(--plum-light) 66%,
+		var(--plum-deep) 100%
+	);
+	box-shadow: inset 0 -1px 3px rgb(53 29 90 / 0.5);
+}
+
+/* ── Screen-reader only ─────────────────────────────────────────────────── */
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Dismiss layer behind the drawer. Only mounted while the drawer is open. */
+.rail-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 15;
+	padding: 0;
+	border: none;
+	background: rgb(30 10 55 / 0.34);
+	backdrop-filter: blur(2px);
+	animation: fade-in 200ms var(--ease) both;
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+/* Below this width the rail stops being a column and becomes an overlay, so
+   the conversation keeps the full reading width on a phone. */
+@media (max-width: 860px) {
+	.app[data-phase="chat"] {
+		--frame-inset: 0px;
+		--frame-radius: 0px;
+		--frame-shadow: none;
+	}
+
+	.app[data-phase="chat"] .rail {
+		position: absolute;
+		inset: 0 auto 0 0;
+		z-index: 20;
+		width: var(--rail-open);
+		min-width: var(--rail-open);
+		box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
+		transform: translateX(-100%);
+		transition: transform 320ms var(--ease);
+	}
+
+	.app[data-phase="chat"][data-rail="expanded"] .rail {
+		transform: none;
+	}
+
+	.app[data-phase="chat"][data-rail="collapsed"] .rail {
+		pointer-events: none;
+	}
+
+	.topbar {
+		padding: 0 14px;
+		gap: 8px;
+	}
+
+	.topbar__caption {
+		display: none;
+	}
+
+	.transcript {
+		width: calc(100% - 32px);
+	}
+
+	.bubble {
+		max-width: 88%;
+	}
+
+	.composer-slot {
+		padding: 4px 12px 0;
+	}
+
+	.follow-ups {
+		margin-left: 0;
+	}
+
+	.starters__row {
+		padding: 18px 16px 0;
+	}
+}
+
+/* The composer tool row is the first thing to overflow on narrow screens. The
+   labels go; the buttons stay. "Explain it simply" is the plain-words toggle
+   and has no other entry point, so dropping the control would remove the
+   feature from exactly the readers it exists for. The label keeps its place in
+   the accessibility tree, so the button is still named. */
+@media (max-width: 620px) {
+	.tool-btn {
+		min-width: 36px;
+		padding: 0;
+		justify-content: center;
+	}
+
+	.tool-btn__label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	.hero__sub {
+		font-size: 0.9375rem;
+	}
+}
+
+/* Short viewports — a phone in landscape, a small window, or a soft keyboard
+   taking half the screen. Height is the scarce axis here, so the hero gives up
+   its space first and the composer keeps its own. Nothing may push the input
+   past the bottom edge: the shell clips and does not scroll. */
+@media (max-height: 600px) {
+	.app {
+		--hero-max: 0px;
+		--hero-opacity: 0;
+		--starters-row: auto;
+		--composer-min: 96px;
+		--input-h: 44px;
+	}
+
+	.app[data-phase="chat"] {
+		--composer-min: 96px;
+		--input-h: 44px;
+	}
+
+	.topbar {
+		height: 52px;
+	}
+
+	.starters__row {
+		padding: 12px 16px 0;
+	}
+
+	.disclaimer {
+		min-height: 36px;
+	}
+}
+
+/* ── Motion preferences ─────────────────────────────────────────────────────
+   Scoped, not blanket. A global `animation: 0.01ms` also kills the two
+   indicators that report a request is still in flight, which leaves a reduced-
+   motion reader unable to tell working from hung. Decorative motion stops;
+   progress keeps a signal, carried by opacity alone so nothing travels. */
+
+@keyframes dot-fade {
+	0%,
+	100% {
+		opacity: 0.3;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+@keyframes soft-pulse {
+	0%,
+	100% {
+		opacity: 0.4;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* Ambient and ornamental — nothing here reports state. */
+	.atmosphere span,
+	.orb--hero,
+	.orb--hero::before,
+	.orb--thinking,
+	.voice-stars--play path {
+		animation: none !important;
+	}
+
+	/* Entrances collapse to their finished frame rather than travelling. */
+	.turn,
+	.follow-ups,
+	.voice-consent,
+	.voice-note,
+	.voice-menu,
+	.rail-scrim {
+		animation-duration: 1ms !important;
+	}
+
+	*,
+	*::before,
+	*::after {
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	/* The three keep working: the thinking dots, the transcribing spinner, and
+	   the recording dot are the only evidence that something is happening. */
+	.thinking__dots i {
+		animation: dot-fade 1.4s ease-in-out infinite !important;
+		transform: none !important;
+	}
+
+	.voice-spinner {
+		border-color: var(--wash-18);
+		border-top-color: var(--plum);
+		animation: soft-pulse 1.2s ease-in-out infinite !important;
+	}
+
+	.voice-rec__dot {
+		animation: soft-pulse 1.6s ease-in-out infinite !important;
+	}
+}

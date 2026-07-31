@@ -1,0 +1,35 @@
+[Unit]
+Description=ASPIRE frontend (TanStack Start SSR)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=aspire
+Group=aspire
+WorkingDirectory=/srv/aspire/frontend
+
+# server.mjs binds the Web-standard fetch handler that `vite build` emits to a
+# port. It renders HTML only — it does not serve dist/client, and will 404 every
+# asset. nginx serves those from disk; see nginx-aspire.conf.
+ExecStart=/usr/bin/node server.mjs
+
+Environment=NODE_ENV=production
+# Bind to loopback: nginx is the only thing that should reach this.
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+# The SSR process writes nothing, so it gets no writable path at all.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

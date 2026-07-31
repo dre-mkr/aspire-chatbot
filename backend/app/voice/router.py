@@ -1,0 +1,264 @@
+"""HTTP surface for the voice layer.
+
+Every response body here is safe to show a user: no upstream messages, no keys,
+no stack traces. Audio bytes live in a local variable for the duration of the
+request and are never written to disk or a log.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
+
+from app.voice.cache import cache_key, get_cache
+from app.voice.client import VoiceUnavailable, get_client
+from app.voice.config import ALLOWED_AUDIO_MIME, get_voice_settings
+from app.voice.limiter import get_limiter
+from app.voice.registry import Language, Persona, build_registry, resolve_profile
+from app.voice.schemas import (
+    PersonaVoice,
+    SpeakRequest,
+    TranscriptionResponse,
+    VoiceConfigResponse,
+    VoiceLimits,
+)
+from app.voice.speakable import has_many_numbers, speakable
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/voice", tags=["voice"])
+
+# What the client shows instead of a dead button when we cannot serve audio.
+_FALLBACK = {"error": "voice_unavailable", "fallback": "browser"}
+
+
+def _session_key(request: Request, thread_id: str | None) -> str:
+    """Bucket for rate limiting: the caller's thread, else its address."""
+    if thread_id:
+        return f"thread:{thread_id}"
+    client = request.client
+    return f"ip:{client.host}" if client else "ip:unknown"
+
+
+def _base_mime(raw: str | None) -> str:
+    """The bare media type, without its RFC 2045 parameters.
+
+    A browser recorder reports the container *and* the codec: Chrome and Edge
+    hand us `audio/webm;codecs=opus`, Firefox `audio/ogg;codecs=opus`. The
+    parameter is a legitimate part of a well-formed media type, so the allowlist
+    has to be checked against the type alone — comparing the whole string
+    rejects every recording Chrome has ever made.
+    """
+    return (raw or "").split(";", 1)[0].strip().lower()
+
+
+@router.get("/config", response_model=VoiceConfigResponse)
+def voice_config() -> VoiceConfigResponse:
+    """Everything the client UI needs so it does not hardcode drifting numbers."""
+    settings = get_voice_settings()
+    registry = build_registry(settings)
+
+    personas: list[PersonaVoice] = []
+    for persona in Persona:
+        languages = [lang for lang in Language if (persona, lang) in registry]
+        if not languages:
+            continue
+        profile = registry[(persona, languages[0])]
+        personas.append(
+            PersonaVoice(
+                persona=persona,
+                languages=languages,
+                speed=profile.settings.speed or 1.0,
+                stability=profile.settings.stability or 0.5,
+            )
+        )
+
+    return VoiceConfigResponse(
+        enabled=settings.voice_enabled,
+        personas=personas,
+        languages=list(Language),
+        limits=VoiceLimits(
+            max_duration_seconds=settings.max_duration_seconds,
+            max_file_size_bytes=settings.max_upload_bytes,
+            allowed_mime_types=sorted(ALLOWED_AUDIO_MIME),
+            max_transcriptions_per_window=settings.max_transcriptions_per_window,
+            max_speech_per_window=settings.max_speech_per_window,
+            rate_window_seconds=settings.rate_window_seconds,
+        ),
+        realtime_enabled=settings.realtime_enabled,
+    )
+
+
+@router.post("/transcribe", response_model=TranscriptionResponse)
+async def transcribe(
+    request: Request,
+    file: UploadFile = File(...),
+    voice_consent: bool = Form(...),
+    language: str | None = Form(default=None),
+    persona: str | None = Form(default=None),
+    thread_id: str | None = Form(default=None),
+) -> TranscriptionResponse:
+    settings = get_voice_settings()
+
+    # Consent first: Stella's audience starts at five years old, so a recording
+    # without explicit consent is not something to even validate, let alone send.
+    if not voice_consent:
+        raise HTTPException(
+            status_code=403,
+            detail="Voice consent is required before audio can be transcribed.",
+        )
+
+    if _base_mime(file.content_type) not in ALLOWED_AUDIO_MIME:
+        raise HTTPException(
+            status_code=415,
+            # The unparsed value, so the log names exactly what the browser sent.
+            detail=(
+                f"Unsupported audio type {file.content_type!r}. "
+                f"Supported: {', '.join(sorted(ALLOWED_AUDIO_MIME))}."
+            ),
+        )
+
+    audio = await file.read()
+    size = len(audio)
+    if size == 0:
+        raise HTTPException(status_code=400, detail="The audio file is empty.")
+    if size > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio exceeds the {settings.max_upload_bytes // 1_048_576} MB limit.",
+        )
+    # Byte proxy for the duration cap. WebM/Opus rarely carries a duration in
+    # its header, so the real figure only arrives with the transcript below.
+    if size > settings.duration_guard_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio is longer than the {settings.max_duration_seconds:.0f} second limit.",
+        )
+
+    decision = get_limiter().check_transcription(_session_key(request, thread_id))
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many voice requests. Please wait a moment.",
+            headers={"Retry-After": str(decision.retry_after_seconds)},
+        )
+
+    hint = Language(language).value if language in {l.value for l in Language} else None
+
+    try:
+        transcript = await get_client().transcribe(
+            audio, file.filename or "audio.webm", hint
+        )
+    except VoiceUnavailable:
+        raise HTTPException(status_code=503, detail=_FALLBACK) from None
+    finally:
+        # Drop the reference promptly; nothing else ever held it.
+        del audio
+
+    # Deliberately no transcript text and no persona in the log.
+    logger.info(
+        "transcribe ok bytes=%d duration=%.1fs language=%s p=%.2f",
+        size,
+        transcript.duration_seconds,
+        transcript.language_code,
+        transcript.language_probability,
+    )
+
+    if (
+        transcript.duration_seconds
+        and transcript.duration_seconds > settings.max_duration_seconds
+    ):
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio is longer than the {settings.max_duration_seconds:.0f} second limit.",
+        )
+
+    # The transcript is a user message and nothing more. It is returned to the
+    # client, which submits it to /chat through exactly the same validation a
+    # typed message gets. It is never routed into a prompt or tool from here.
+    return TranscriptionResponse(
+        text=transcript.text,
+        language_code=transcript.language_code,
+        language_probability=transcript.language_probability,
+        duration_seconds=transcript.duration_seconds,
+    )
+
+
+@router.post("/speak")
+async def speak(request: Request, body: SpeakRequest) -> Response:
+    settings = get_voice_settings()
+
+    if body.format.lower() != "mp3":
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported format {body.format!r}. Use 'mp3'."
+        )
+
+    spoken = speakable(body.text, body.language, max_chars=settings.max_speakable_chars)
+    if not spoken:
+        raise HTTPException(status_code=400, detail="Nothing to say once the text was cleaned.")
+
+    profile = resolve_profile(body.persona, body.language)
+    # Figure-heavy lines go to the higher-quality model, which reads numbers
+    # better. Measured on the ORIGINAL text: speakable() has already spelled the
+    # digits out, so the sanitised string never contains any to count.
+    model_id = (
+        settings.tts_model_quality if has_many_numbers(body.text) else profile.model_id
+    )
+
+    key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
+    cache = get_cache()
+    if (cached := cache.get(key)) is not None:
+        return Response(
+            content=cached,
+            media_type="audio/mpeg",
+            headers={"X-Voice-Cache": "hit", "Cache-Control": "private, max-age=86400"},
+        )
+
+    decision = get_limiter().check_speech(_session_key(request, body.thread_id))
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many voice requests. Please wait a moment.",
+            headers={"Retry-After": str(decision.retry_after_seconds)},
+        )
+
+    try:
+        audio = await get_client().synthesise(
+            spoken, profile.voice_id, model_id, profile.settings
+        )
+    except VoiceUnavailable:
+        raise HTTPException(status_code=503, detail=_FALLBACK) from None
+
+    cache.put(key, audio)
+    logger.info(
+        "speak ok persona=%s language=%s chars=%d model=%s bytes=%d",
+        body.persona.value,
+        body.language.value,
+        len(spoken),
+        model_id,
+        len(audio),
+    )
+
+    return StreamingResponse(
+        iter((audio,)),
+        media_type="audio/mpeg",
+        headers={"X-Voice-Cache": "miss", "Cache-Control": "private, max-age=86400"},
+    )
+
+
+@router.post("/realtime-token")
+async def realtime_token() -> Response:
+    """Stretch goal, disabled by default.
+
+    Intended to mint a short-TTL single-use token so a browser can open a
+    scribe_v2_realtime socket without ever seeing the API key. Returns 501 until
+    the batch path has proven itself and the flag is turned on.
+    """
+    if not get_voice_settings().realtime_enabled:
+        raise HTTPException(
+            status_code=501,
+            detail="Realtime voice is not enabled. Set VOICE_REALTIME_ENABLED=true.",
+        )
+    raise HTTPException(status_code=501, detail="Realtime token issuance is not implemented yet.")

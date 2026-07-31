@@ -1,0 +1,46 @@
+[Unit]
+Description=ASPIRE backend (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=aspire
+Group=aspire
+WorkingDirectory=/srv/aspire/backend
+
+# The venv built by `uv sync --frozen` at deploy time. Running the binary
+# directly rather than through `uv run` keeps uv, and its cache writes, out of
+# the runtime entirely.
+#
+# --workers 1 is REQUIRED, not a default worth tuning. Conversation memory is a
+# langgraph InMemorySaver and the voice rate limiter is a process-local dict, so
+# a second worker would give each its own copy: a follow-up question could land
+# on the worker that never saw the first one and lose the thread, and the rate
+# limit would silently double. Scaling past one process means moving both to
+# Redis or Postgres first.
+ExecStart=/srv/aspire/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1
+
+Environment=PYTHONUNBUFFERED=1
+
+Restart=always
+RestartSec=3
+
+# Boot does a cold ingest if the vector store is empty, which can take a while
+# on first run. Do not let systemd kill it mid-embed.
+TimeoutStartSec=600
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# The only writable path: Chroma's store and the voice cache both live here.
+ReadWritePaths=/srv/aspire/backend/data
+
+[Install]
+WantedBy=multi-user.target

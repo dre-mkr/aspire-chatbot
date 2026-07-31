@@ -1,0 +1,32 @@
+[project]
+name = "aspire-backend"
+version = "0.1.0"
+description = "ASPIRE Phase 1 backend: agentic RAG over a CSV knowledge base."
+requires-python = ">=3.12"
+dependencies = [
+    "elevenlabs==2.60.0",
+    "fastapi==0.141.1",
+    "fastembed==0.8.0",
+    "langchain==1.3.14",
+    "langchain-anthropic==1.5.3",
+    "langchain-chroma==1.1.0",
+    "langchain-openai==1.4.1",
+    "langchain-text-splitters==1.1.1",
+    "langgraph==1.2.10",
+    "num2words==0.5.14",
+    "pydantic-settings==2.14.2",
+    "python-dotenv==1.2.1",
+    "python-multipart==0.0.32",
+    "uvicorn[standard]==0.52.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "pytest==9.0.1",
+]
+
+[tool.pytest.ini_options]
+# Put the project root on sys.path so `from app...` resolves without installing.
+pythonpath = ["."]
+testpaths = ["tests"]

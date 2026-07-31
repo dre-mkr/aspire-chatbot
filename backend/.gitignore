@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Persisted vector store: rebuild with `python -m app.ingest`
+data/chroma/
+
+# Synthesised speech: rebuild with `python scripts/prewarm_voice.py`
+data/voice_cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Local model cache (fastembed downloads ONNX weights here)
+.fastembed_cache/
+local_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
