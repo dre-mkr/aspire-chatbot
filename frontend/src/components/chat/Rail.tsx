@@ -1,6 +1,9 @@
+import { useEffect, useId, useRef, useState } from "react";
 import {
 	ClockIcon,
 	DeviceIcon,
+	DownloadIcon,
+	MoreIcon,
 	PanelLeftIcon,
 	PlusIcon,
 } from "#/components/icons";
@@ -20,6 +23,8 @@ interface RailProps {
 	onToggle: () => void;
 	onNewChat: () => void;
 	onOpenPast: (conversation: StoredConversation) => void;
+	/** Writes one conversation out as a text file — any of them, not just the open one. */
+	onSaveConversation: (conversation: StoredConversation) => void;
 }
 
 export function Rail({
@@ -30,6 +35,7 @@ export function Rail({
 	onToggle,
 	onNewChat,
 	onOpenPast,
+	onSaveConversation,
 }: RailProps) {
 	// Anything folded away has to leave the tab order too, or focus lands on
 	// controls nobody can see.
@@ -104,15 +110,13 @@ export function Rail({
 							<section key={group.label} aria-label={group.label}>
 								<p className="rail__group-title">{group.label}</p>
 								{group.items.map((conversation) => (
-									<button
+									<HistoryRow
 										key={conversation.threadId}
-										type="button"
-										className="history-item"
-										aria-current={conversation.threadId === activeThreadId}
-										onClick={() => onOpenPast(conversation)}
-									>
-										{conversation.title}
-									</button>
+										conversation={conversation}
+										active={conversation.threadId === activeThreadId}
+										onOpen={onOpenPast}
+										onSave={onSaveConversation}
+									/>
 								))}
 							</section>
 						))
@@ -132,5 +136,136 @@ export function Rail({
 				</span>
 			</div>
 		</aside>
+	);
+}
+
+/**
+ * One conversation in the rail, with its own overflow menu.
+ *
+ * "Save chat" used to be a button in the top bar that wrote out whichever
+ * conversation happened to be open. Attached to a row instead, it can save any
+ * conversation on the device — and the action now says which one it means.
+ *
+ * The trigger is always in the DOM and always focusable, revealed on hover,
+ * focus-within, or while its own menu is open. A control that only exists on
+ * hover does not exist for a keyboard or a touchscreen.
+ */
+function HistoryRow({
+	conversation,
+	active,
+	onOpen,
+	onSave,
+}: {
+	conversation: StoredConversation;
+	active: boolean;
+	onOpen: (conversation: StoredConversation) => void;
+	onSave: (conversation: StoredConversation) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	/**
+	 * Viewport coordinates for the menu.
+	 *
+	 * The menu is `position: fixed` rather than absolute, because the rail body
+	 * is a scroll container and an absolutely positioned child is clipped by it —
+	 * measured at 50px cut off and unreachable on the last row of a scrolled
+	 * list. Fixed positioning escapes the clip; these coordinates put it back
+	 * against its trigger, flipping above when there is no room below.
+	 */
+	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+	const menuId = useId();
+	const wrapRef = useRef<HTMLDivElement>(null);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+
+	const place = () => {
+		const trigger = triggerRef.current;
+		if (!trigger) return;
+		const r = trigger.getBoundingClientRect();
+		const MENU_H = 56;
+		const below = window.innerHeight - r.bottom;
+		setAt({
+			top: below < MENU_H + 12 ? r.top - MENU_H - 4 : r.bottom + 4,
+			left: Math.min(r.right - 168, window.innerWidth - 176),
+		});
+	};
+
+	useEffect(() => {
+		if (!open) return;
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.stopPropagation();
+			setOpen(false);
+			triggerRef.current?.focus();
+		};
+		const onPointer = (event: PointerEvent) => {
+			if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+		};
+		// Fixed coordinates stop being true the moment anything moves, so the
+		// menu closes rather than drifting away from the row it belongs to.
+		const onMove = () => setOpen(false);
+
+		window.addEventListener("keydown", onKey, true);
+		window.addEventListener("pointerdown", onPointer);
+		window.addEventListener("resize", onMove);
+		document
+			.querySelector(".rail__body")
+			?.addEventListener("scroll", onMove, { passive: true });
+		return () => {
+			window.removeEventListener("keydown", onKey, true);
+			window.removeEventListener("pointerdown", onPointer);
+			window.removeEventListener("resize", onMove);
+			document
+				.querySelector(".rail__body")
+				?.removeEventListener("scroll", onMove);
+		};
+	}, [open]);
+
+	return (
+		<div className="history-row" ref={wrapRef} data-open={open || undefined}>
+			<button
+				type="button"
+				className="history-item"
+				aria-current={active}
+				onClick={() => onOpen(conversation)}
+			>
+				{conversation.title}
+			</button>
+
+			<button
+				type="button"
+				ref={triggerRef}
+				className="history-more"
+				aria-expanded={open}
+				aria-controls={menuId}
+				aria-label={`Actions for ${conversation.title}`}
+				onClick={() => {
+					if (!open) place();
+					setOpen((value) => !value);
+				}}
+			>
+				<MoreIcon />
+			</button>
+
+			{open && at ? (
+				<div
+					className="row-menu"
+					id={menuId}
+					role="group"
+					aria-label={`Actions for ${conversation.title}`}
+					style={{ top: at.top, left: at.left }}
+				>
+					<button
+						type="button"
+						className="row-menu__item"
+						onClick={() => {
+							setOpen(false);
+							onSave(conversation);
+						}}
+					>
+						<DownloadIcon />
+						Save chat
+					</button>
+				</div>
+			) : null}
+		</div>
 	);
 }

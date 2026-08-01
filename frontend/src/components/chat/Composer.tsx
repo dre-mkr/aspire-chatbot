@@ -3,6 +3,7 @@ import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { VoiceListening, VoiceTranscribing } from "./Voice";
+import { VoiceSettings, type VoiceSettingsProps } from "./VoiceSettings";
 
 /** No hover means no pointer to hover with, which here means no Space key. */
 const TOUCH = "(hover: none)";
@@ -18,7 +19,8 @@ interface ComposerProps {
 	/** Draft is lifted so a transcript can land in it for review before sending. */
 	draft: string;
 	onDraftChange: (value: string) => void;
-	voice: {
+	/** Recording state, plus everything the settings panel needs now it lives here. */
+	voice: VoiceSettingsProps["voice"] & {
 		phase: VoicePhase;
 		micState: MicState;
 		elapsed: number;
@@ -171,6 +173,11 @@ export function Composer({
 					/>
 				) : (
 					<div className="composer__tools">
+						{/* Voice settings live here, not beside the mic. The mic is
+						    already a voice affordance; a second voice-looking control
+						    next to it would leave neither meaning anything. */}
+						<VoiceSettings voice={voice} />
+
 						{/* The label collapses to the icon on a narrow screen rather than
 						    the whole control disappearing — this is the plain-words
 						    toggle, and it has no other entry point. */}

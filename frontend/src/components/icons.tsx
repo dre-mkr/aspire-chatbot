@@ -171,6 +171,36 @@ export function SendIcon(props: IconProps) {
 	);
 }
 
+/* The per-conversation overflow trigger in the rail. Filled dots rather than
+   stroked circles: at 17px a 1.8px stroke on a 1.6px radius closes up into a
+   smudge. */
+export function MoreIcon(props: IconProps) {
+	return (
+		<Icon size={17} {...props}>
+			<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+			<circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+			<circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
+		</Icon>
+	);
+}
+
+/* Sliders, deliberately not a mic variant: this opens voice *settings* and it
+   sits two controls away from the actual mic. Two microphone-ish glyphs in one
+   row would leave neither meaning anything. Drawn on the same 24px grid as its
+   neighbours rather than pulled from an icon set. */
+export function SlidersIcon(props: IconProps) {
+	return (
+		<Icon size={17} {...props}>
+			<path d="M4 7h9" />
+			<path d="M17 7h3" />
+			<path d="M4 17h3" />
+			<path d="M11 17h9" />
+			<circle cx="15" cy="7" r="2.2" />
+			<circle cx="9" cy="17" r="2.2" />
+		</Icon>
+	);
+}
+
 /* Filled rather than stroked, unlike its neighbours: stop is the one control
    here that halts something already running, and the solid mark is the
    universal shape for it. Same 24px grid, same currentColor. */

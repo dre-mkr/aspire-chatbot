@@ -6,8 +6,19 @@
  * near the service and works with the backend down.
  */
 
+import type { StoredMessage } from "./history";
 import { answerToText } from "./knowledge";
 import type { ChatMessage } from "./use-conversation";
+
+/**
+ * A turn this module can write out.
+ *
+ * Both the live `ChatMessage` and the stored `StoredMessage` satisfy it: the
+ * transcript only ever reads `role`, `text`, `blocks` and `sources`, never the
+ * id. That is what lets the rail save any conversation on the device, not just
+ * the one currently open.
+ */
+export type ExportableMessage = ChatMessage | StoredMessage;
 
 /** `2026-07-31-1408` — sorts by date and is legal on every filesystem. */
 function fileStamp(date: Date) {
@@ -28,7 +39,7 @@ function fileStamp(date: Date) {
  * without its evidence is the part worth checking.
  */
 export function transcriptToText(
-	messages: Array<ChatMessage>,
+	messages: ReadonlyArray<ExportableMessage>,
 	savedAt = new Date(),
 ) {
 	const lines = [
@@ -65,7 +76,9 @@ export function transcriptToText(
 }
 
 /** Writes the transcript out as a download. No-op with nothing to save. */
-export function downloadTranscript(messages: Array<ChatMessage>) {
+export function downloadTranscript(
+	messages: ReadonlyArray<ExportableMessage>,
+) {
 	if (messages.length === 0) return;
 
 	const blob = new Blob([transcriptToText(messages)], {

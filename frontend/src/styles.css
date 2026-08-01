@@ -185,10 +185,11 @@ body {
 	--input-h: min(96px, 12vh);
 }
 
-/* The ring is plum everywhere it lands on a light surface. Only the top bar
-   sits on the dark gradient during landing, so only it flips to white — a
-   white ring on the white composer card would be no ring at all. */
-.app[data-phase="landing"] .topbar {
+/* The ring is plum everywhere it lands on a light surface. The one control
+   still sitting on the dark gradient during landing is the drawer trigger, so
+   only it flips to white — a white ring on the white composer would be no ring
+   at all. */
+.app[data-phase="landing"] .rail-open {
 	--focus-ring: #ffffff;
 }
 
@@ -664,11 +665,117 @@ body {
    rows are stacked with no gap, so an overlay would have neighbours
    overlapping by 6px and stealing each other's taps — the exact failure the
    overlay was introduced to avoid. */
+/* A conversation and its overflow trigger share a row. The trigger is always
+   present and always focusable -- revealed on hover, on focus inside the row,
+   or while its own menu is open. A control that only exists on hover does not
+   exist for a keyboard or a touchscreen. */
+.history-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.history-more {
+	position: absolute;
+	right: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
+	border: none;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--quiet);
+	opacity: 0;
+	transition:
+		opacity var(--swift),
+		background var(--swift),
+		color var(--swift);
+}
+
+.history-more::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, 44px);
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
+}
+
+.history-row:hover .history-more,
+.history-row:focus-within .history-more,
+.history-row[data-open] .history-more {
+	opacity: 1;
+}
+
+/* Touch has no hover, so waiting for it would hide the control forever. */
+@media (hover: none) {
+	.history-more {
+		opacity: 1;
+	}
+}
+
+.history-more:hover,
+.history-row[data-open] .history-more {
+	background: var(--wash-12);
+	color: var(--plum);
+}
+
+/* Fixed, not absolute: the rail body scrolls, and a scroll container clips its
+   absolutely positioned children — the menu on the last row was cut off by
+   50px and could not be clicked. Coordinates come from the trigger. */
+.row-menu {
+	position: fixed;
+	z-index: 40;
+	min-width: 168px;
+	padding: 6px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: rgb(255 255 255 / 0.97);
+	backdrop-filter: blur(20px);
+	box-shadow:
+		0 18px 40px -14px rgb(53 29 90 / 0.34),
+		0 2px 6px rgb(53 29 90 / 0.06);
+	animation: rise 180ms var(--ease) both;
+}
+
+.row-menu__item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 40px;
+	padding: 0 10px;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--prose);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	text-align: left;
+	transition: background var(--swift);
+}
+
+.row-menu__item:hover {
+	background: var(--wash-6);
+}
+
+.row-menu__item svg {
+	flex-shrink: 0;
+	color: var(--quiet);
+}
+
 .history-item {
 	width: 100%;
 	min-height: 44px;
 	text-align: left;
-	padding: 9px 10px;
+	/* Right padding leaves the overflow trigger somewhere to sit without the
+	   title running underneath it. */
+	padding: 9px 38px 9px 10px;
 	border: none;
 	border-radius: 12px;
 	background: transparent;
@@ -705,17 +812,6 @@ body {
 	transition: background var(--morph);
 }
 
-.topbar {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	flex-shrink: 0;
-	height: 64px;
-	padding: 0 22px;
-	color: var(--chrome);
-	border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent);
-	transition: color var(--morph);
-}
 
 /* Chrome controls read against both the purple gradient and the white panel by
    deriving every colour from the inherited text colour. */
@@ -740,16 +836,7 @@ body {
 	background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
-.chip-btn--model {
-	padding: 0 12px 0 8px;
-	font-size: 0.84375rem;
-	font-weight: 600;
-	background: color-mix(in srgb, currentColor 7%, transparent);
-}
 
-.chip-btn--model:hover {
-	background: color-mix(in srgb, currentColor 13%, transparent);
-}
 
 .chip-btn--square {
 	min-width: 36px;
@@ -757,20 +844,7 @@ body {
 	justify-content: center;
 }
 
-.topbar__caption {
-	font-size: 0.78125rem;
-	opacity: 0.78;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
 
-.topbar__end {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-left: auto;
-}
 
 /* ── Stage ──────────────────────────────────────────────────────────────── */
 
@@ -782,6 +856,13 @@ body {
 	transition: grid-template-rows var(--morph);
 }
 
+/* The thread now runs to the top of the viewport — there is no bar above it to
+   stop against. Two things follow.
+   Padding, so the first message clears the window edge and the floating drawer
+   trigger instead of colliding with them. And a mask, so a message scrolling
+   out dissolves into the top edge rather than being cut in half by it. The
+   fade is only as tall as the padding, so nothing that is meant to be read is
+   ever dimmed at rest. */
 .thread {
 	display: flex;
 	flex-direction: column;
@@ -789,6 +870,21 @@ body {
 	overflow-y: auto;
 	overflow-x: hidden;
 	overscroll-behavior: contain;
+	padding-top: 68px;
+	mask-image: linear-gradient(
+		to bottom,
+		transparent 0,
+		#000 56px,
+		#000 100%
+	);
+}
+
+/* The landing hero is vertically composed and centred in the stage; the same
+   top padding there would push it off balance, and there is nothing scrolling
+   out to dissolve. */
+.app[data-phase="landing"] .thread {
+	padding-top: 0;
+	mask-image: none;
 }
 
 /* Anchors short conversations to the bottom so the first reply rises out of
@@ -862,7 +958,7 @@ body {
    readable; 300 at 16px is thin enough that the strokes themselves start
    losing against a moving background. The vignette above does the rest. */
 .hero__sub {
-	margin: 0 0 30px;
+	margin: 0 0 8px;
 	/* Padding, not just max-width: at 390px the copy ran to a 12px gutter. */
 	max-width: 520px;
 	padding: 0 20px;
@@ -870,6 +966,22 @@ body {
 	font-weight: 400;
 	line-height: 1.6;
 	color: #fff;
+	text-wrap: pretty;
+}
+
+/* Was the top bar's caption. Quieter than the subtitle above it: this is who
+   is speaking and where from, which you read once, not the invitation to ask,
+   which is the thing to act on. */
+.hero__identity {
+	margin: 0 0 30px;
+	padding: 0 20px;
+	font-size: 0.78125rem;
+	font-weight: 400;
+	letter-spacing: 0.01em;
+	/* 0.92, not 0.86: measured against the painted gradient the dimmer value
+	   came in at 4.81:1, which clears AA by 0.31 and would not survive a small
+	   change to the gradient underneath it. */
+	color: rgb(255 255 255 / 0.92);
 	text-wrap: pretty;
 }
 
@@ -1542,8 +1654,11 @@ body {
 
 /* ── Voice options menu ──────────────────────────────────────────────────── */
 
-.topbar__model {
+
+/* Anchors the settings panel to the composer's tool row. */
+.voice-settings {
 	position: relative;
+	display: flex;
 }
 
 .voice-menu {
@@ -1562,6 +1677,77 @@ body {
 		0 2px 6px rgb(53 29 90 / 0.06);
 	color: var(--ink);
 	animation: rise 220ms var(--ease) both;
+}
+
+/* Opens upward. It used to hang below a top bar; anchored to the composer it
+   has to go the other way, or it would open straight down off the screen.
+   Left-aligned to its trigger, and `max-height` plus its own scroll so a short
+   viewport clips the panel rather than letting it run past the top edge. */
+.voice-menu--up {
+	top: auto;
+	bottom: calc(100% + 10px);
+	max-height: min(70vh, 520px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	animation: rise-up 220ms var(--ease) both;
+}
+
+/* `rise` travels downward, which reads as falling when the panel is above its
+   trigger. Same duration, same easing, opposite direction. */
+@keyframes rise-up {
+	from {
+		opacity: 0;
+		transform: translateY(-12px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* Below the drawer breakpoint it is a bottom sheet, not a floating panel:
+   pinned to the bottom edge, full width, and reachable with a thumb. */
+.voice-menu--up[data-sheet] {
+	position: fixed;
+	z-index: 60;
+	inset: auto 0 0 0;
+	width: auto;
+	max-height: min(78dvh, 560px);
+	padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+	border-width: 1px 0 0;
+	border-radius: 22px 22px 0 0;
+	animation: sheet-up 260ms var(--ease) both;
+}
+
+@keyframes sheet-up {
+	from {
+		opacity: 0;
+		transform: translateY(16px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.voice-sheet-scrim {
+	position: fixed;
+	inset: 0;
+	z-index: 55;
+	padding: 0;
+	border: none;
+	background: rgb(30 10 55 / 0.34);
+	backdrop-filter: blur(2px);
+	animation: fade-in 200ms var(--ease) both;
+}
+
+/* The settings trigger: icon-only at every width, so it never competes with
+   the plain-words chip for room on a narrow screen. */
+.tool-btn--icon {
+	min-width: 36px;
+	padding: 0;
+	justify-content: center;
+	flex-shrink: 0;
 }
 
 .voice-menu__label {
@@ -2282,6 +2468,57 @@ body {
 }
 
 /* Dismiss layer behind the drawer. Only mounted while the drawer is open. */
+/* The drawer trigger, floating over the thread now that the bar is gone.
+   It is not the sidebar's collapse toggle -- that still lives in the sidebar.
+   This is the only way to reach conversations whenever the rail is a drawer,
+   and on the landing screen it is the only route to them at all. */
+.rail-open {
+	position: absolute;
+	z-index: 12;
+	top: 14px;
+	left: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+	border-radius: 12px;
+	background: rgb(255 255 255 / 0.82);
+	backdrop-filter: blur(12px);
+	color: var(--chrome);
+	box-shadow: 0 4px 14px rgb(53 29 90 / 0.14);
+	transition:
+		background var(--swift),
+		color var(--morph);
+}
+
+.rail-open::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, 44px);
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
+}
+
+.rail-open:hover {
+	background: rgb(255 255 255 / 0.95);
+}
+
+/* On the landing screen it sits on the gradient, where a white-on-white pill
+   would vanish. */
+.app[data-phase="landing"] .rail-open {
+	background: rgb(255 255 255 / 0.16);
+	color: #fff;
+	border-color: rgb(255 255 255 / 0.28);
+}
+
+.app[data-phase="landing"] .rail-open:hover {
+	background: rgb(255 255 255 / 0.26);
+}
+
 .rail-scrim {
 	position: absolute;
 	inset: 0;
@@ -3230,15 +3467,6 @@ body {
 		box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
 	}
 
-	.topbar {
-		padding: 0 14px;
-		gap: 8px;
-	}
-
-	.topbar__caption {
-		display: none;
-	}
-
 	.transcript {
 		width: calc(100% - 32px);
 	}
@@ -3336,10 +3564,6 @@ body {
 	.app[data-phase="chat"] {
 		--composer-min: 96px;
 		--input-h: 44px;
-	}
-
-	.topbar {
-		height: 52px;
 	}
 
 	.starters__row {

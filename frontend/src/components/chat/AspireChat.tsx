@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MenuIcon } from "#/components/icons";
 import { downloadTranscript } from "#/lib/aspire/export";
 import {
 	fetchGameState,
@@ -12,7 +13,6 @@ import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { Composer } from "./Composer";
 import { Rail } from "./Rail";
-import { TopBar } from "./TopBar";
 import { Transcript } from "./Transcript";
 import { VoiceConsent, VoiceNote } from "./Voice";
 
@@ -231,12 +231,21 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		reset();
 	}, [reset, stopPlayback]);
 
-	const handleSaveChat = useCallback(
-		() => downloadTranscript(messages),
-		[messages],
+	/**
+	 * Writes out one conversation from the rail.
+	 *
+	 * Prefers the live transcript when the row is the open thread, because that
+	 * one can be a turn ahead of storage — a conversation is persisted once its
+	 * answer settles, so an answer still revealing is not in there yet.
+	 * Otherwise the stored copy is the whole of it.
+	 */
+	const handleSaveConversation = useCallback(
+		(conversation: StoredConversation) => {
+			const live = conversation.threadId === threadId && messages.length > 0;
+			downloadTranscript(live ? messages : conversation.messages);
+		},
+		[messages, threadId],
 	);
-	// Nothing to save until an answer has actually landed.
-	const canSave = messages.some((message) => message.role === "assistant");
 
 	return (
 		<div
@@ -260,6 +269,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					onToggle={toggleRail}
 					onNewChat={handleNewChat}
 					onOpenPast={handleOpenPast}
+					onSaveConversation={handleSaveConversation}
 				/>
 
 				{drawerModal ? (
@@ -273,15 +283,27 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 				) : null}
 
 				<main className="workspace" inert={drawerModal || undefined}>
-					<TopBar
-						phase={phase}
-						drawerMode={drawerMode}
-						hasHistory={hasHistory}
-						drawerOpen={drawerOpen}
-						onOpenRail={openDrawer}
-						onSaveChat={canSave ? handleSaveChat : null}
-						voice={voice}
-					/>
+					{/* The top bar is gone. Its three pieces moved: voice settings to
+					    the composer, Save chat to each conversation's row in the rail,
+					    and the identity line into the empty state.
+
+					    This control did not move, because it was never the bar's — it
+					    is the only way to open the rail whenever the rail is a drawer,
+					    and on the landing screen it is the only route to conversations
+					    saved on this device. Deleting the bar around it would have put
+					    that dead end back. It floats over the thread instead. */}
+					{drawerMode && (phase === "chat" || hasHistory) ? (
+						<button
+							type="button"
+							className="rail-open"
+							onClick={openDrawer}
+							aria-controls="aspire-rail"
+							aria-expanded={drawerOpen}
+						>
+							<MenuIcon />
+							<span className="sr-only">Open conversations</span>
+						</button>
+					) : null}
 
 					<div className="stage">
 						<div className="thread" ref={threadRef}>
@@ -294,6 +316,14 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 									<p className="hero__sub">
 										Ask me about investing, your ASPIRE modules, or the
 										programme itself.
+									</p>
+									{/* Was the top bar's caption, where it sat through every
+									    conversation saying the same thing. It is identity and
+									    regional grounding, which is worth most on first contact
+									    and worth nothing on the fortieth turn — so it lives in
+									    the empty state now and goes away once you start. */}
+									<p className="hero__identity">
+										Financial literacy assistant · St. Kitts and Nevis
 									</p>
 								</div>
 
