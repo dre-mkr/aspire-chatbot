@@ -291,3 +291,105 @@ Sharpest from the critique, none of them answerable by a detector:
 2. **What if the composer *were* the whole product on landing, and the hero were the placeholder?** The hero spends `min(380px, 44vh)` asking "What do you want to learn about money today?" while the composer's placeholder says "Ask me anything" and the composer itself is ~120px of empty space. Two elements are doing one job.
 3. **Should sources be a disclosure at all?** A collapsed "2 sources" chip is a thing a designer opens and a child ignores. What if the count were an inline marker on the sentence it supports, so evidence attaches to the claim?
 4. **Why does the microphone live in the composer instead of being the composer?** If reading ability must not be a barrier, the current answer is a 40px icon beside a text field. For a child who reads poorly, what does this screen look like if voice is the default input?
+
+---
+
+# Round 2 — raising the score
+
+Re-opened after the first round, with the two P0 business-logic fixes authorised.
+
+## Score movement
+
+| Stage | Score | Band |
+|---|---:|---|
+| Round-2 baseline (fresh assessor) | **23/40** | Acceptable |
+| After steps 1–4 | **26/40** | Acceptable |
+| After the Stop regression fix | **28/40** | **Good** — first run out of Acceptable |
+| After the final hardening commit | *not re-measured* | — |
+
+**On the numbers.** Three assessors scored the *same* build at 27, then 23. The
+variance between assessors (±4) is wider than a 2-point step gate, so each step
+below is judged on the specific defects it closes — objective and measurable —
+with the score reported alongside as a secondary indicator.
+
+## Per-step record
+
+| # | Step | Commit | Defects closed | Score delta |
+|---|---|---|---|---|
+| 1 | `layout` | `c7e7e64` | Sources panel CSS leak — `.answer li` (0,1,1) beat `.source` (0,1,0), so every snippet was a flex row with a prose bullet and "Risk" painted 11px wide over 4 lines at 390px | H4 +1, H8 +1 |
+| 2 | `harden` | `e9120ab` | `regenerate()` destroyed the wrong turn; truncation now consented to with a named count; in-flight guard + stop control | H3 +1, H5 +1 |
+| 3 | `harden` | `f8a7708` | History unreachable from `landing` — a refresh was a dead end | H3/H6/H7 |
+| 4 | `colorize` + `harden` | `2d6c0ad` | `.voice-choice[aria-pressed]` 4.41:1 → 11.68:1; `t`/`f` on `window` (WCAG 2.1.4 Level A) scoped to the card | H4, H6 |
+| 5 | `fix` | `1925772` | **Regression I introduced**: Stop submitted the composer draft; stopped turns left no trace | H3 +1, H5 +1 |
+| 6 | `harden` | `f9ab2d6` | **Two more of my own**: Stop did not stop mid-reveal; Stop threw focus to `<body>`; T/F hint named keys a phone lacks | not re-measured |
+
+## Steps not run, and why
+
+The requested sequence was `typeset → colorize → harden → onboard → clarify →
+layout → distill → animate → polish`. Seven of nine were predicted under the
+2-point gate and were not run:
+
+- **`typeset` (+0)** — the type system is already a deliberate three-face
+  assignment with a stated job per face. Nothing to fix.
+- **`distill` (+0)** — fully overlapped by `layout`.
+- **`animate` (+0)** — motion is already authored, scoped, and reduced-motion
+  correct.
+- **`polish` (+0.5)**, **`onboard` (+1)**, **`clarify` (+1)** — the two that
+  would have moved were declined or unapproved (see below).
+
+The reason is structural: H3 and H5 were the two lowest scores and both are
+failures of state management and destructive-action design. No CSS command
+reaches them. That is why the authorised business-logic work carried this round.
+
+## Decisions taken this round
+
+- **`detect` on the rendered URL: option (a)** — source stays at exit 0; the ~20
+  URL findings are triaged individually rather than suppressed. Reaching exit 0
+  would require `ignoreRules` for all five firing rules, project-wide, including
+  source scans. Assessment B traced the cause to two defects in the detector
+  itself: `resolveGradientStops` has no positional awareness (so white hero text
+  is judged against the `#ffffff` stop that paints 700px lower), and
+  `resolveBackground` discards its `overlays[]` when it bails to `null`.
+  **28 of 28 `low-contrast` findings are false positives.**
+- **Starters stay as enrolment questions** — explicitly chosen. Not changed.
+- **Voice-chip relabel and a landing "What can you do?" disclosure** — left
+  alone; both alter IA and neither was approved.
+- **Per-item delete/rename** — held back as a new feature rather than a fix.
+
+## AI-slop rules firing
+
+| Rule | Where | Status |
+|---|---|---|
+| `ai-color-palette` ×5 | rendered URL | Trigger genuinely met — every flagged gradient measures hue 264–322. It is the brand. |
+| `nested-cards` ×2 | chat phase only | The CLI never reaches this state |
+| `gpt-thin-border-wide-shadow` | chat phase only | Advisory — does not affect exit code |
+| `overused-font`, `bounce-easing` ×2 | source | Waived with inline reasons |
+
+## Regression suite
+
+`.impeccable/verify.mjs` — contrast ground truth (blanks every glyph,
+screenshots, reads the painted pixel under each glyph run, skips subtrees under
+zero-opacity/zero-size/`inert` ancestors, and skips runs the element is not the
+painted owner of), effective hit areas by hit-testing, document overflow,
+follow-up reachability, sources layout. **30/30 across 3 breakpoints × 2
+phases.** Now tracked in git; only generated output is ignored.
+
+## Still open
+
+**P1 — `game__leave` has no confirm.** The one destructive action left unguarded.
+
+**P2 — 200%/400% zoom is a dead end** (WCAG 1.4.4 / 1.4.10). At 640×400
+`--hero-max: 0` deletes the only `h1`; at 320×200 `.app { height: 100dvh;
+overflow: hidden }` prevents reflow. Structural — it means letting the landing
+phase scroll.
+
+**P2 — six choices at one decision point** on a settled answer (Play, Copy, Ask
+again, Sources, and two follow-ups) against a stated ≤4 target.
+
+**Unchanged from round 1:** `persona` never wired; no delete/rename; voice
+settings behind the "ASPIRE AI" chip; mic disabled-not-hidden; CORS collapses
+into the offline message; `<output>` receives whole answers rather than discrete
+events.
+
+**Corrected from round 1:** `.rail { transition: width }` is *not* dead — measured
+272 → 78px over ~315ms. That earlier note was wrong.
