@@ -1860,6 +1860,15 @@ body {
 	color: var(--danger);
 }
 
+/* Stopping is a decision, not a fault. Same neutral wash the rest of the
+   product uses for "nothing is wrong here", so a child who stops an answer is
+   not shown a red panel for having done exactly what the button offered. */
+.answer .failure[data-tone="stopped"] {
+	border-color: var(--wash-18);
+	background: var(--wash-6);
+	color: var(--slate);
+}
+
 .answer .failure svg {
 	flex-shrink: 0;
 	margin-top: 2px;

@@ -20,7 +20,18 @@ export type ChatMessage =
 			followUps: Array<string>;
 			sources: Array<Source>;
 	  }
-	| { id: number; role: "error"; text: string; canRetry: boolean };
+	| {
+			id: number;
+			role: "error";
+			text: string;
+			canRetry: boolean;
+			/**
+			 * "stopped" is the reader's own decision, not a fault, and is drawn
+			 * accordingly — the same reason a wrong game answer is amber and not
+			 * red. Absent means a real failure.
+			 */
+			tone?: "stopped";
+	  };
 
 /**
  * The answer currently being revealed, held apart from `messages`.
@@ -373,8 +384,33 @@ export function useConversation({
 	 */
 	const stop = useCallback(() => {
 		turnToken.current += 1;
-		if (cursor.current) finishStream();
+
+		// Something was already on screen: settle it. The words are there to be
+		// read, and deleting them as you read is its own small betrayal.
+		if (cursor.current) {
+			finishStream();
+			setIsThinking(false);
+			return;
+		}
+
+		// Nothing had arrived yet, so stopping would otherwise leave the question
+		// sitting there forever with no answer and no explanation — the same
+		// orphan this control exists to prevent. Say what happened, and offer the
+		// way back.
 		setIsThinking(false);
+		setMessages((current) => {
+			if (current.at(-1)?.role !== "user") return current;
+			return [
+				...current,
+				{
+					id: nextId.current++,
+					role: "error",
+					text: "You stopped this answer.",
+					canRetry: true,
+					tone: "stopped",
+				},
+			];
+		});
 	}, [finishStream]);
 
 	/** Persist a finished exchange so the rail can reopen it. */

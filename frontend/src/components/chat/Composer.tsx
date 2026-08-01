@@ -193,17 +193,33 @@ export function Composer({
 							{/* While a reply is in flight the send button becomes a
 							    stop, rather than sitting there enabled and quietly
 							    orphaning the question already running. */}
+							{/* The keys matter. Without them React sees one <button> in
+							    one position and reuses the DOM node, mutating `type`
+							    from "button" to "submit" during the flush inside click
+							    dispatch. The browser then runs its post-dispatch default
+							    action against the *new* type, so a click on Stop fired a
+							    submit -- sending whatever was in the box as a fresh
+							    question and orphaning the one being stopped. That is the
+							    exact failure this control was added to prevent.
+							    Distinct keys make React unmount and mount instead. */}
 							{busy ? (
 								<button
+									key="stop"
 									type="button"
 									className="composer__send composer__send--stop"
-									onClick={onStop}
+									onClick={(event) => {
+										// Belt and braces: this button lives inside the form,
+										// so nothing it does should ever reach the submit path.
+										event.preventDefault();
+										onStop();
+									}}
 								>
 									<StopIcon />
 									<span className="sr-only">Stop generating</span>
 								</button>
 							) : (
 								<button
+									key="send"
 									type="submit"
 									className="composer__send"
 									disabled={!canSend}

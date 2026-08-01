@@ -209,6 +209,29 @@ export function TrueFalse({
 	// the off switch the rule asks for.
 	const asking = settled === null && !complete;
 	const cardRef = useRef<HTMLElement>(null);
+	// Whether the shortcut can actually fire right now, so the hint can stop
+	// claiming otherwise.
+	const [keyboardArmed, setKeyboardArmed] = useState(false);
+
+	useEffect(() => {
+		const card = cardRef.current;
+		if (!card) return;
+
+		const onIn = () => setKeyboardArmed(true);
+		// `focusout` fires before focus lands, so `document.activeElement` is
+		// still <body> here — `relatedTarget` is where it is actually going.
+		const onOut = (event: FocusEvent) =>
+			setKeyboardArmed(card.contains(event.relatedTarget as Node | null));
+
+		setKeyboardArmed(card.contains(document.activeElement));
+		card.addEventListener("focusin", onIn);
+		card.addEventListener("focusout", onOut);
+		return () => {
+			card.removeEventListener("focusin", onIn);
+			card.removeEventListener("focusout", onOut);
+		};
+	}, []);
+
 	useEffect(() => {
 		if (!asking || busy) return;
 		const card = cardRef.current;
@@ -334,7 +357,15 @@ export function TrueFalse({
 							>
 								{copy.skip}
 							</button>
-							<span className="game__count tf__hint">{copy.inputHint}</span>
+							{/* Only claimed while it is true. The shortcut lives on the
+							    card, so before anything here has focus the composer has
+							    it and "t" just types a letter — advertising the key in
+							    that state is a promise the code does not keep. */}
+							{keyboardArmed ? (
+								<span className="game__count tf__hint">
+									{copy.inputHint}
+								</span>
+							) : null}
 						</div>
 					</>
 				)}

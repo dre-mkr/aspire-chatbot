@@ -9,6 +9,7 @@ import {
 	SourcesIcon,
 	SparkIcon,
 	SpeakerIcon,
+	StopIcon,
 } from "#/components/icons";
 import type { Source } from "#/lib/aspire/api";
 import type { GamePersona, GameState } from "#/lib/aspire/games";
@@ -88,6 +89,7 @@ export function Transcript({
 							key={message.id}
 							text={message.text}
 							canRetry={message.canRetry}
+							tone={message.tone}
 							onRetry={() => onRegenerate(message.id)}
 						/>
 					);
@@ -344,12 +346,15 @@ function Sources({ sources }: { sources: Array<Source> }) {
 function Failure({
 	text,
 	canRetry,
+	tone,
 	onRetry,
 }: {
 	text: string;
 	canRetry: boolean;
+	tone?: "stopped";
 	onRetry: () => void;
 }) {
+	const stopped = tone === "stopped";
 	return (
 		<div className="turn turn--assistant">
 			<div className="orb orb--muted" aria-hidden="true" />
@@ -357,15 +362,17 @@ function Failure({
 				{/* No role="alert" here. AspireChat already routes the newest error
 				    into the transcript's own live region, and a role="alert" on the
 				    same text makes a screen reader read every failure twice. */}
-				<p className="failure">
-					<AlertIcon />
+				<p className="failure" data-tone={tone}>
+					{stopped ? <StopIcon /> : <AlertIcon />}
 					<span>{text}</span>
 				</p>
 				{canRetry ? (
 					<div className="answer-actions">
 						<button type="button" className="text-btn" onClick={onRetry}>
 							<RetryIcon />
-							Try again
+							{/* Nothing went wrong, so it is not "Try again" — the
+							    question is simply still there to be asked. */}
+							{stopped ? "Ask again" : "Try again"}
 						</button>
 					</div>
 				) : null}
