@@ -83,9 +83,17 @@ async function contrast(page) {
 				if (n.nodeType !== 3 || !n.textContent.trim()) continue;
 				const r = document.createRange();
 				r.selectNodeContents(n);
+				// Anything crossing the title bar is deliberately obscured: the bar
+				// is translucent and blurred precisely so passing content turns to
+				// mush. Measuring those pixels reports the bar's own white as the
+				// text's background and calls an intended effect a contrast defect.
+				const bar = document.querySelector(".titlebar");
+				const barBottom = bar ? bar.getBoundingClientRect().bottom : 0;
+
 				for (const q of r.getClientRects()) {
 					if (q.width <= 1 || q.height <= 1) continue;
 					if (q.top >= innerHeight || q.bottom <= 0 || q.left >= innerWidth || q.right <= 0) continue;
+					if (q.top < barBottom) continue;
 					// Scrolled under the topbar or behind the composer still counts
 					// as inside the viewport, but the pixel there belongs to
 					// whatever is on top -- measuring it reports that layer's

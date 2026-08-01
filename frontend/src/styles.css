@@ -970,9 +970,19 @@ body {
 }
 
 /* The bar overlays the thread, so the thread's own top padding has to clear it
-   rather than the floating trigger it was sized for. */
+   rather than the floating trigger it was sized for -- and the fade has to
+   start where the bar ends. Left at the top of the container it sat entirely
+   underneath the 52px bar and was never once visible, which made the comment
+   claiming it softened the edge simply untrue. */
 .app[data-phase="chat"] .thread {
 	padding-top: 72px;
+	mask-image: linear-gradient(
+		to bottom,
+		transparent 0,
+		transparent 52px,
+		#000 78px,
+		#000 100%
+	);
 }
 
 /* Renaming inline in the rail. Same box as the row it replaces, so the list
@@ -3773,6 +3783,7 @@ body {
 	.voice-consent,
 	.voice-note,
 	.voice-menu,
+	.titlebar__text,
 	.rail-scrim,
 	.game,
 	.tile--tray,

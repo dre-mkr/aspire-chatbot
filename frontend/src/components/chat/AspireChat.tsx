@@ -10,6 +10,7 @@ import {
 	displayTitle,
 	loadConversations,
 	type StoredConversation,
+	titleFor,
 } from "#/lib/aspire/history";
 import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
 import { useConversation } from "#/lib/aspire/use-conversation";
@@ -260,10 +261,19 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	 */
 	// biome-ignore lint/correctness/useExhaustiveDependencies: history is the trigger
 	const activeTitle = useMemo(() => {
-		if (!threadId) return "";
-		const stored = loadConversations().find((c) => c.threadId === threadId);
-		return stored ? displayTitle(stored) : "";
-	}, [threadId, history]);
+		const stored = threadId
+			? loadConversations().find((c) => c.threadId === threadId)
+			: undefined;
+		if (stored) return displayTitle(stored);
+
+		// Nothing is stored yet -- the first answer is still arriving, so there is
+		// no thread id and no record. Falling through to "" left the bar blank
+		// for the whole of the first reply, with an 8px-tall invisible rename
+		// button stretched across it. The question just asked is the right thing
+		// to show, and it is the same string the fallback ladder would land on.
+		const firstQuestion = messages.find((m) => m.role === "user");
+		return firstQuestion?.role === "user" ? titleFor(firstQuestion.text) : "";
+	}, [threadId, history, messages]);
 
 	// Browser tabs and history entries should say which chat this is.
 	useEffect(() => {
@@ -469,8 +479,8 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					<output className="sr-only">{announcement}</output>
 
 					<p className="disclaimer">
-						ASPIRE AI can make mistakes.{" "}
-						<strong>Check important info with your mentor.</strong>
+						ASPIRE AI can
+						<strong>make mistakes</strong>
 					</p>
 				</main>
 			</div>

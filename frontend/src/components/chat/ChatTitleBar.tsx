@@ -31,6 +31,17 @@ export function ChatTitleBar({
 }: ChatTitleBarProps) {
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(title);
+	/**
+	 * The title as it stood when the editor opened.
+	 *
+	 * `commit` used to diff the draft against the *current* title -- which moves
+	 * when the generated name lands. Opening the box during generation and then
+	 * pressing Enter without typing therefore looked like an edit, wrote the
+	 * stale truncated question back, and locked it `manual` so regeneration
+	 * could never fix it. Diffing against the value the user actually saw makes
+	 * "changed nothing" a no-op however the title moved underneath.
+	 */
+	const openedWith = useRef(title);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	/**
@@ -60,7 +71,7 @@ export function ChatTitleBar({
 	function commit() {
 		const next = draft.trim();
 		setEditing(false);
-		if (next && next !== title) onRename(next);
+		if (next && next !== openedWith.current) onRename(next);
 	}
 
 	return (
@@ -105,6 +116,7 @@ export function ChatTitleBar({
 					title={title}
 					onClick={() => {
 						setDraft(title);
+						openedWith.current = title;
 						setEditing(true);
 					}}
 				>

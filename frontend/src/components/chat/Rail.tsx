@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
 	ClockIcon,
 	DeviceIcon,
@@ -203,17 +203,40 @@ function HistoryRow({
 		inputRef.current?.select();
 	}, [renaming]);
 
+	const menuRef = useRef<HTMLDivElement>(null);
+
 	const place = () => {
 		const trigger = triggerRef.current;
 		if (!trigger) return;
 		const r = trigger.getBoundingClientRect();
-		const MENU_H = 56;
-		const below = window.innerHeight - r.bottom;
 		setAt({
-			top: below < MENU_H + 12 ? r.top - MENU_H - 4 : r.bottom + 4,
+			top: r.bottom + 4,
 			left: Math.min(r.right - 168, window.innerWidth - 176),
 		});
 	};
+
+	/**
+	 * Corrects the position against the menu's real height, once it exists.
+	 *
+	 * `place` used to flip against a hardcoded 56px. The menu carries three
+	 * items now and measures ~134px, so the estimate was 78px short: on the last
+	 * row at 320x568 it overshot the viewport by 53.8px and "Save chat" sat
+	 * below the fold, unreachable, because a fixed element cannot be scrolled
+	 * to. Measuring removes the constant that has to be remembered.
+	 */
+	useLayoutEffect(() => {
+		const menu = menuRef.current;
+		const trigger = triggerRef.current;
+		if (!open || !menu || !trigger || !at) return;
+
+		const h = menu.getBoundingClientRect().height;
+		const r = trigger.getBoundingClientRect();
+		const wanted =
+			r.bottom + 4 + h > window.innerHeight - 8
+				? Math.max(8, r.top - h - 4)
+				: r.bottom + 4;
+		if (Math.abs(wanted - at.top) > 1) setAt({ ...at, top: wanted });
+	}, [open, at]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -300,6 +323,7 @@ function HistoryRow({
 			{open && at ? (
 				<div
 					className="row-menu"
+					ref={menuRef}
 					id={menuId}
 					role="group"
 					aria-label={`Actions for ${label}`}
