@@ -803,7 +803,11 @@ body {
 
 /* ── Workspace ──────────────────────────────────────────────────────────── */
 
+/* Positioned so the title bar and the landing drawer trigger anchor to the
+   conversation column rather than to `.frame` — which spans the rail too, and
+   would put the bar straight across the sidebar's logo. */
 .workspace {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -846,6 +850,149 @@ body {
 
 
 
+/* ── Title bar ───────────────────────────────────────────────────────────── */
+
+/* Thin, quiet, and translucent so the transcript scrolls under it -- which is
+   what keeps the thread's top fade meaningful. A solid bar would have left a
+   mask dissolving content into an opaque edge, which is a fade doing nothing.
+   Chat phase only; the empty state carries the product identity itself. */
+.titlebar {
+	position: absolute;
+	z-index: 12;
+	inset: 0 0 auto 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 52px;
+	padding: 0 14px;
+	background: rgb(255 255 255 / 0.72);
+	backdrop-filter: blur(14px);
+	border-bottom: 1px solid var(--hairline);
+}
+
+.titlebar__menu {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	flex-shrink: 0;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--prose);
+	transition: background var(--swift);
+}
+
+.titlebar__menu::after,
+.titlebar__title::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 100%;
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
+}
+
+.titlebar__menu {
+	position: relative;
+}
+
+.titlebar__menu:hover {
+	background: var(--wash-6);
+}
+
+/* Click to rename, so it is a button -- but it has to read as a title, not as
+   a control sitting in a bar. */
+.titlebar__title {
+	position: relative;
+	display: grid;
+	min-width: 0;
+	flex: 1;
+	padding: 4px 8px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.90625rem;
+	font-weight: 500;
+	text-align: left;
+	transition: background var(--swift);
+}
+
+.titlebar__title:hover {
+	background: var(--wash-6);
+}
+
+/* Both layers share one grid cell, so a title arriving cannot move the bar or
+   the thread under it. */
+.titlebar__text {
+	grid-area: 1 / 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	animation: fade-in 300ms var(--ease) both;
+}
+
+/* The outgoing title, on its way out underneath the incoming one. */
+.titlebar__text--out {
+	animation: fade-out 300ms var(--ease) both;
+}
+
+@keyframes fade-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+.titlebar__input {
+	flex: 1;
+	min-width: 0;
+	padding: 4px 8px;
+	border: 1px solid var(--wash-32);
+	border-radius: 8px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.90625rem;
+	font-weight: 500;
+}
+
+.titlebar__input:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 1px;
+}
+
+/* The bar overlays the thread, so the thread's own top padding has to clear it
+   rather than the floating trigger it was sized for. */
+.app[data-phase="chat"] .thread {
+	padding-top: 72px;
+}
+
+/* Renaming inline in the rail. Same box as the row it replaces, so the list
+   does not jump while a title is being typed. */
+.history-item--input {
+	min-height: 44px;
+	padding: 9px 10px;
+	border: 1px solid var(--wash-32);
+	border-radius: 12px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.8125rem;
+}
+
+.history-item--input:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 1px;
+}
+
 /* ── Stage ──────────────────────────────────────────────────────────────── */
 
 .stage {
@@ -879,18 +1026,13 @@ body {
 	);
 }
 
-/* 68px only where the floating drawer trigger actually renders — it is absent
-   above this width, so the extra clearance was buying nothing there.
-   The fade is 24px rather than 56px for the same reason it exists at all: at
-   56px a line arriving into the viewport sat 24px inside the band and lost
-   half its contrast (5.36:1 against 11.52:1 measured on the same ink), which
-   is the opposite of "nothing that is meant to be read is ever dimmed". 24px
-   dissolves the line leaving without touching the line arriving. */
-@media (max-width: 860px) {
-	.thread {
-		padding-top: 68px;
-	}
-}
+/* The fade is 24px, not 56px: at 56px a line arriving into the viewport sat
+   24px inside the band and lost half its contrast (5.36:1 against 11.52:1
+   measured on the same ink), which is the opposite of "nothing that is meant
+   to be read is ever dimmed". 24px dissolves the line leaving without touching
+   the line arriving. The chat phase overrides the padding to clear the bar;
+   the floating trigger it used to clear now only exists on landing, where the
+   padding is 0 anyway. */
 
 /* The landing hero is vertically composed and centred in the stage; the same
    top padding there would push it off balance, and there is nothing scrolling

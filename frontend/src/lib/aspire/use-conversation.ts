@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type AskResult, AspireError, askAspire, type Source } from "./api";
 import {
+	clearTitleLock,
 	groupByRecency,
 	type HistoryGroup,
 	loadConversations,
@@ -539,6 +540,46 @@ export function useConversation({
 		});
 	}, [messages, threadId]);
 
+	/**
+	 * Renames a conversation by hand.
+	 *
+	 * Marks it "manual", which is what stops a generated title from ever
+	 * replacing it — including a title already in flight for this thread.
+	 */
+	const renameChat = useCallback((id: string, title: string) => {
+		titledThreads.current.add(id);
+		setHistory(groupByRecency(retitleConversation(id, title, "manual")));
+	}, []);
+
+	/**
+	 * Asks for a fresh title for one conversation.
+	 *
+	 * Clears the manual lock first, so an explicit regenerate is the one thing
+	 * that may overwrite a hand-typed name — and only for the chat it was asked
+	 * for. Reads that conversation's own opening exchange from storage, so it
+	 * works on any row in the rail, not just the one that is open.
+	 */
+	const regenerateTitle = useCallback((id: string) => {
+		const stored = loadConversations().find((c) => c.threadId === id);
+		if (!stored) return;
+
+		const question = stored.messages.find((m) => m.role === "user");
+		const answer = stored.messages.find((m) => m.role === "assistant");
+		if (question?.role !== "user" || answer?.role !== "assistant") return;
+
+		setHistory(groupByRecency(clearTitleLock(id)));
+		titledThreads.current.add(id);
+
+		void requestTitle({
+			message: question.text,
+			answer: answerToText(answer.blocks),
+			language: getLanguageRef.current(),
+		}).then((title) => {
+			if (!title) return;
+			setHistory(groupByRecency(retitleConversation(id, title, "generated")));
+		});
+	}, []);
+
 	/** Reopens a stored conversation; everything lands already finished. */
 	const openPast = useCallback(
 		(conversation: StoredConversation) => {
@@ -600,5 +641,7 @@ export function useConversation({
 		stop,
 		openPast,
 		reset,
+		renameChat,
+		regenerateTitle,
 	};
 }

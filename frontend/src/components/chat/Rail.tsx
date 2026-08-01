@@ -5,9 +5,15 @@ import {
 	DownloadIcon,
 	MoreIcon,
 	PanelLeftIcon,
+	PencilIcon,
 	PlusIcon,
+	RetryIcon,
 } from "#/components/icons";
-import type { HistoryGroup, StoredConversation } from "#/lib/aspire/history";
+import {
+	displayTitle,
+	type HistoryGroup,
+	type StoredConversation,
+} from "#/lib/aspire/history";
 
 interface RailProps {
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
@@ -25,6 +31,8 @@ interface RailProps {
 	onOpenPast: (conversation: StoredConversation) => void;
 	/** Writes one conversation out as a text file — any of them, not just the open one. */
 	onSaveConversation: (conversation: StoredConversation) => void;
+	onRenameConversation: (conversation: StoredConversation, title: string) => void;
+	onRegenerateTitle: (conversation: StoredConversation) => void;
 }
 
 export function Rail({
@@ -36,6 +44,8 @@ export function Rail({
 	onNewChat,
 	onOpenPast,
 	onSaveConversation,
+	onRenameConversation,
+	onRegenerateTitle,
 }: RailProps) {
 	// Anything folded away has to leave the tab order too, or focus lands on
 	// controls nobody can see.
@@ -116,6 +126,8 @@ export function Rail({
 										active={conversation.threadId === activeThreadId}
 										onOpen={onOpenPast}
 										onSave={onSaveConversation}
+										onRename={onRenameConversation}
+										onRegenerate={onRegenerateTitle}
 									/>
 								))}
 							</section>
@@ -155,11 +167,15 @@ function HistoryRow({
 	active,
 	onOpen,
 	onSave,
+	onRename,
+	onRegenerate,
 }: {
 	conversation: StoredConversation;
 	active: boolean;
 	onOpen: (conversation: StoredConversation) => void;
 	onSave: (conversation: StoredConversation) => void;
+	onRename: (conversation: StoredConversation, title: string) => void;
+	onRegenerate: (conversation: StoredConversation) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	/**
@@ -172,9 +188,20 @@ function HistoryRow({
 	 * against its trigger, flipping above when there is no room below.
 	 */
 	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+	const [renaming, setRenaming] = useState(false);
 	const menuId = useId();
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
+
+	// The same stored title the bar reads, with the same fallback applied.
+	const label = displayTitle(conversation);
+
+	useEffect(() => {
+		if (!renaming) return;
+		inputRef.current?.focus();
+		inputRef.current?.select();
+	}, [renaming]);
 
 	const place = () => {
 		const trigger = triggerRef.current;
@@ -221,14 +248,39 @@ function HistoryRow({
 
 	return (
 		<div className="history-row" ref={wrapRef} data-open={open || undefined}>
-			<button
-				type="button"
-				className="history-item"
-				aria-current={active}
-				onClick={() => onOpen(conversation)}
-			>
-				{conversation.title}
-			</button>
+			{renaming ? (
+				<input
+					ref={inputRef}
+					className="history-item history-item--input"
+					defaultValue={label}
+					maxLength={60}
+					aria-label={`Rename ${label}`}
+					onBlur={(event) => {
+						setRenaming(false);
+						const next = event.target.value.trim();
+						if (next && next !== label) onRename(conversation, next);
+					}}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							event.currentTarget.blur();
+						} else if (event.key === "Escape") {
+							event.preventDefault();
+							setRenaming(false);
+						}
+					}}
+				/>
+			) : (
+				<button
+					type="button"
+					className="history-item"
+					aria-current={active}
+					title={label}
+					onClick={() => onOpen(conversation)}
+				>
+					{label}
+				</button>
+			)}
 
 			<button
 				type="button"
@@ -236,7 +288,7 @@ function HistoryRow({
 				className="history-more"
 				aria-expanded={open}
 				aria-controls={menuId}
-				aria-label={`Actions for ${conversation.title}`}
+				aria-label={`Actions for ${label}`}
 				onClick={() => {
 					if (!open) place();
 					setOpen((value) => !value);
@@ -250,9 +302,31 @@ function HistoryRow({
 					className="row-menu"
 					id={menuId}
 					role="group"
-					aria-label={`Actions for ${conversation.title}`}
+					aria-label={`Actions for ${label}`}
 					style={{ top: at.top, left: at.left }}
 				>
+					<button
+						type="button"
+						className="row-menu__item"
+						onClick={() => {
+							setOpen(false);
+							setRenaming(true);
+						}}
+					>
+						<PencilIcon />
+						Rename
+					</button>
+					<button
+						type="button"
+						className="row-menu__item"
+						onClick={() => {
+							setOpen(false);
+							onRegenerate(conversation);
+						}}
+					>
+						<RetryIcon />
+						Regenerate title
+					</button>
 					<button
 						type="button"
 						className="row-menu__item"

@@ -171,6 +171,15 @@ export function SendIcon(props: IconProps) {
 	);
 }
 
+export function PencilIcon(props: IconProps) {
+	return (
+		<Icon size={16} {...props}>
+			<path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5z" />
+			<path d="M13.5 7.5 16.5 10.5" />
+		</Icon>
+	);
+}
+
 /* The per-conversation overflow trigger in the rail. Filled dots rather than
    stroked circles: at 17px a 1.8px stroke on a 1.6px radius closes up into a
    smudge. */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MenuIcon } from "#/components/icons";
 import { downloadTranscript } from "#/lib/aspire/export";
 import {
@@ -6,11 +6,16 @@ import {
 	type GamePersona,
 	type GameState,
 } from "#/lib/aspire/games";
-import type { StoredConversation } from "#/lib/aspire/history";
+import {
+	displayTitle,
+	loadConversations,
+	type StoredConversation,
+} from "#/lib/aspire/history";
 import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
 import { useConversation } from "#/lib/aspire/use-conversation";
 import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
+import { ChatTitleBar } from "./ChatTitleBar";
 import { Composer } from "./Composer";
 import { Rail } from "./Rail";
 import { Transcript } from "./Transcript";
@@ -52,6 +57,8 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		stop,
 		openPast,
 		reset,
+		renameChat,
+		regenerateTitle,
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
 		persona,
@@ -244,6 +251,28 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	 * answer settles, so an answer still revealing is not in there yet.
 	 * Otherwise the stored copy is the whole of it.
 	 */
+	/**
+	 * What the open conversation is called.
+	 *
+	 * Read from the same stored record the rail reads, so the bar and the list
+	 * can never disagree about a chat's name. `history` is the dependency
+	 * because it changes every time a title is written.
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: history is the trigger
+	const activeTitle = useMemo(() => {
+		if (!threadId) return "";
+		const stored = loadConversations().find((c) => c.threadId === threadId);
+		return stored ? displayTitle(stored) : "";
+	}, [threadId, history]);
+
+	// Browser tabs and history entries should say which chat this is.
+	useEffect(() => {
+		if (typeof document === "undefined") return;
+		document.title = activeTitle
+			? `${activeTitle} · ASPIRE AI`
+			: "ASPIRE AI · Financial literacy assistant";
+	}, [activeTitle]);
+
 	const handleSaveConversation = useCallback(
 		(conversation: StoredConversation) => {
 			const live = conversation.threadId === threadId && messages.length > 0;
@@ -275,6 +304,12 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					onNewChat={handleNewChat}
 					onOpenPast={handleOpenPast}
 					onSaveConversation={handleSaveConversation}
+					onRenameConversation={(conversation, title) =>
+						renameChat(conversation.threadId, title)
+					}
+					onRegenerateTitle={(conversation) =>
+						regenerateTitle(conversation.threadId)
+					}
 				/>
 
 				{drawerModal ? (
@@ -297,7 +332,10 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					    and on the landing screen it is the only route to conversations
 					    saved on this device. Deleting the bar around it would have put
 					    that dead end back. It floats over the thread instead. */}
-					{drawerMode && (phase === "chat" || hasHistory) ? (
+					{/* Only on the landing screen, where there is no bar to hold it.
+					    In the chat phase the bar carries it, so it is never
+					    duplicated. */}
+					{phase === "landing" && hasHistory ? (
 						<button
 							type="button"
 							className="rail-open"
@@ -308,6 +346,21 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 							<MenuIcon />
 							<span className="sr-only">Open conversations</span>
 						</button>
+					) : null}
+
+					{/* No bar on the empty state: the hero already carries the
+					    product's identity, and a bar saying "New chat" above it would
+					    be chrome announcing nothing. */}
+					{phase === "chat" ? (
+						<ChatTitleBar
+							title={activeTitle}
+							showDrawerTrigger={drawerMode}
+							drawerOpen={drawerOpen}
+							onOpenRail={openDrawer}
+							onRename={(title) => {
+								if (threadId) renameChat(threadId, title);
+							}}
+						/>
 					) : null}
 
 					<div className="stage">
