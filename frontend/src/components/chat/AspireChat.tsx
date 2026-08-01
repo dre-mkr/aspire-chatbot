@@ -102,8 +102,18 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		};
 	}, [threadId, messages.length, settled]);
 
-	const railClosed = compact ? !drawerOpen : railCollapsed;
-	const drawerModal = compact && drawerOpen && phase === "chat";
+	// The rail is a drawer whenever it has nowhere to sit as a column: on a
+	// narrow screen, and on the landing screen at any width, where `--rail-w` is
+	// 0 so the gradient can run full-bleed.
+	//
+	// It used to be simply unreachable on landing, which made a refresh a dead
+	// end: `phase` resets to `landing`, so a returning user saw the hero with no
+	// route to the conversations the rail advertises are saved on this device —
+	// and on a phone no control rendered at all until they asked something new.
+	const drawerMode = compact || phase === "landing";
+	const railClosed = drawerMode ? !drawerOpen : railCollapsed;
+	const drawerModal = drawerMode && drawerOpen;
+	const hasHistory = history.length > 0;
 
 	// Announce discrete events, not the stream. A live region around the
 	// transcript itself would read every four-word tick out loud.
@@ -168,9 +178,9 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	}, [drawerModal]);
 
 	const toggleRail = useCallback(() => {
-		if (compact) setDrawerOpen((open) => !open);
+		if (drawerMode) setDrawerOpen((open) => !open);
 		else setRailCollapsed((collapsed) => !collapsed);
-	}, [compact]);
+	}, [drawerMode]);
 
 	// Asking something new, reopening a conversation, or starting a fresh one all
 	// make whatever is being read aloud irrelevant, so audio stops with them.
@@ -244,7 +254,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 			<div className="frame">
 				<Rail
 					collapsed={railClosed}
-					unreachable={phase === "landing" || (compact && railClosed)}
+					unreachable={drawerMode && !drawerOpen}
 					history={history}
 					activeThreadId={threadId}
 					onToggle={toggleRail}
@@ -265,7 +275,8 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 				<main className="workspace" inert={drawerModal || undefined}>
 					<TopBar
 						phase={phase}
-						compact={compact}
+						drawerMode={drawerMode}
+						hasHistory={hasHistory}
 						drawerOpen={drawerOpen}
 						onOpenRail={openDrawer}
 						onSaveChat={canSave ? handleSaveChat : null}

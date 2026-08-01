@@ -11,7 +11,9 @@ import type { VoiceLanguage } from "#/lib/aspire/voice";
 interface TopBarProps {
 	phase: Phase;
 	/** Rail is a drawer, so the bar owns the control that opens it. */
-	compact: boolean;
+	drawerMode: boolean;
+	/** No conversations yet means no reason to show a way back to them. */
+	hasHistory: boolean;
 	drawerOpen: boolean;
 	onOpenRail: () => void;
 	/** Writes the conversation out as a text file. Absent with nothing to save. */
@@ -37,7 +39,8 @@ const LANGUAGES: Array<{ code: VoiceLanguage; name: string }> = [
 
 export function TopBar({
 	phase,
-	compact,
+	drawerMode,
+	hasHistory,
 	drawerOpen,
 	onOpenRail,
 	onSaveChat,
@@ -68,7 +71,11 @@ export function TopBar({
 
 	return (
 		<header className="topbar">
-			{compact && inChat ? (
+			{/* The only route to the rail whenever it is a drawer — including on
+			    the landing screen, where it is how a returning user reaches the
+			    conversations this device has saved. Hidden until there is
+			    something to reach, so a first run stays uncluttered. */}
+			{drawerMode && (inChat || hasHistory) ? (
 				<button
 					type="button"
 					className="chip-btn chip-btn--square"

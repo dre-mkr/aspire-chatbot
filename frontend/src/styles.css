@@ -215,6 +215,31 @@ body {
 	--rail-w: var(--rail-shut);
 }
 
+/* On the landing screen the rail is a drawer at every width, not a column.
+   `--rail-w` stays 0 so the gradient runs full-bleed and the hero keeps the
+   whole frame; the rail lifts out of flow and slides over it when asked for.
+   Without this it was simply unreachable on landing, which made a refresh a
+   dead end — `phase` resets to `landing`, so a returning user had no route to
+   the conversations the rail says are saved on this device. */
+.app[data-phase="landing"] .rail {
+	position: absolute;
+	inset: 0 auto 0 0;
+	z-index: 20;
+	width: var(--rail-open);
+	min-width: var(--rail-open);
+	transform: translateX(-100%);
+	transition: transform 320ms var(--ease);
+}
+
+.app[data-phase="landing"][data-rail="expanded"] .rail {
+	transform: none;
+	pointer-events: auto;
+}
+
+.app[data-phase="landing"][data-rail="collapsed"] .rail {
+	pointer-events: none;
+}
+
 /* ── Atmosphere ─────────────────────────────────────────────────────────── */
 
 .atmosphere {
@@ -3195,6 +3220,12 @@ body {
 
 	.app[data-phase="chat"][data-rail="collapsed"] .rail {
 		pointer-events: none;
+	}
+
+	/* The landing rail is already a drawer at every width (see below); inside
+	   this breakpoint it only needs the heavier drawer shadow. */
+	.app[data-phase="landing"] .rail {
+		box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
 	}
 
 	.topbar {
