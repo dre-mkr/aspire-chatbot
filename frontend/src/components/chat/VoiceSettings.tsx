@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { InfoIcon, SlidersIcon } from "#/components/icons";
-import { useMediaQuery } from "#/lib/use-media-query";
 import type { VoiceLanguage } from "#/lib/aspire/voice";
+import { useMediaQuery } from "#/lib/use-media-query";
 
 /**
  * Voice and language settings, and the control that opens them.
@@ -51,6 +52,13 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 	const panelRef = useRef<HTMLDivElement>(null);
 	const compact = useMediaQuery(COMPACT);
 
+	// The portal only exists on the client; rendering it during SSR would look
+	// for a document that is not there.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+
+	const close = () => setOpen(false);
+
 	// Escape closes and hands focus back; a pointer outside closes without
 	// stealing it. Both were true in the top bar and both still have to be.
 	useEffect(() => {
@@ -83,8 +91,13 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 			}
 		};
 
+		// The sheet is portalled out of this subtree, so "inside" has to mean
+		// either the trigger's wrapper or the panel itself.
 		const onPointer = (event: PointerEvent) => {
-			if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+			const target = event.target as Node;
+			if (wrapRef.current?.contains(target)) return;
+			if (panelRef.current?.contains(target)) return;
+			setOpen(false);
 		};
 
 		window.addEventListener("keydown", onKey, true);
@@ -102,6 +115,93 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 		panelRef.current?.querySelector<HTMLElement>("button")?.focus();
 	}, [open]);
 
+	/*
+	 * A plain group, not role="menu". An ARIA menu promises its children are
+	 * menuitems and that arrow keys move between them; these are a switch, two
+	 * sets of toggle buttons and a link, and announcing them as a menu describes
+	 * a structure that is not there. The heading names the group instead.
+	 *
+	 * Defined once and rendered in one of two places, so the desktop popover and
+	 * the mobile sheet can never drift apart.
+	 */
+	const panel = (
+		<div
+			className="voice-menu voice-menu--up"
+			id={panelId}
+			ref={panelRef}
+			role="group"
+			aria-label="Voice settings"
+			data-sheet={compact || undefined}
+		>
+			<p className="voice-menu__label">Voice</p>
+
+			<div className="voice-menu__row">
+				<span className="voice-menu__copy">
+					<span className="voice-menu__title">Read answers aloud</span>
+					<span className="voice-menu__sub">Starts as each answer arrives.</span>
+				</span>
+				<button
+					type="button"
+					className="voice-switch"
+					role="switch"
+					aria-checked={voice.autoSpeak}
+					aria-label="Read answers aloud"
+					disabled={!voice.available}
+					onClick={voice.toggleAutoSpeak}
+				>
+					<span className="voice-switch__knob" />
+				</button>
+			</div>
+
+			<hr className="voice-menu__rule" />
+
+			<p className="voice-menu__label">Speed</p>
+			<div className="voice-menu__choices">
+				{SPEEDS.map((option) => (
+					<button
+						key={option}
+						type="button"
+						className="voice-choice"
+						aria-pressed={voice.speed === option}
+						onClick={() => voice.setSpeed(option)}
+					>
+						{option}×
+					</button>
+				))}
+			</div>
+
+			<p className="voice-menu__label">Language</p>
+			<div className="voice-menu__choices">
+				{LANGUAGES.map((option) => (
+					<button
+						key={option.code}
+						type="button"
+						className="voice-choice voice-choice--lang"
+						aria-pressed={voice.language === option.code}
+						onClick={() => voice.setLanguage(option.code)}
+					>
+						<span className="voice-choice__code">
+							{option.code.toUpperCase()}
+						</span>
+						<span className="voice-choice__name">{option.name}</span>
+					</button>
+				))}
+			</div>
+
+			<button
+				type="button"
+				className="voice-menu__link"
+				onClick={() => {
+					setOpen(false);
+					voice.reviewConsent();
+				}}
+			>
+				<InfoIcon />
+				What we do with your voice
+			</button>
+		</div>
+	);
+
 	return (
 		<div className="voice-settings" ref={wrapRef}>
 			<button
@@ -117,104 +217,34 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 				<SlidersIcon />
 			</button>
 
-			{open ? (
-				<>
-					{/* The sheet needs something to dismiss against on touch, where
-					    there is no pointer to click "outside" with as reliably. */}
-					{compact ? (
-						<button
-							type="button"
-							className="voice-sheet-scrim"
-							onClick={() => setOpen(false)}
-						>
-							<span className="sr-only">Close voice settings</span>
-						</button>
-					) : null}
+			{/* Desktop: anchored to the trigger, so it stays in the subtree. */}
+			{open && !compact ? panel : null}
 
-					{/* A plain group, not role="menu". An ARIA menu promises its
-					    children are menuitems and that arrow keys move between them;
-					    these are a switch, two sets of toggle buttons and a link, and
-					    announcing them as a menu describes a structure that is not
-					    there. The heading names the group instead. */}
-					<div
-						className="voice-menu voice-menu--up"
-						id={panelId}
-						ref={panelRef}
-						role="group"
-						aria-label="Voice settings"
-						data-sheet={compact || undefined}
-					>
-						<p className="voice-menu__label">Voice</p>
-
-						<div className="voice-menu__row">
-							<span className="voice-menu__copy">
-								<span className="voice-menu__title">Read answers aloud</span>
-								<span className="voice-menu__sub">
-									Starts as each answer arrives.
-								</span>
-							</span>
+			{/* Sheet: portalled to the body.
+			    `.composer` carries `backdrop-filter: blur(20px)`, which makes it
+			    the containing block for every `position: fixed` descendant — so a
+			    sheet declaring `inset: auto 0 0 0` resolved against the composer's
+			    366px box instead of the viewport. It floated 47px above the bottom
+			    edge, 26px narrow, with square unbordered corners in mid-air, and
+			    its scrim covered 14.4% of the screen instead of all of it. The
+			    composer is also the backdrop root, so the sheet's own blur did
+			    nothing and the transcript ghosted through it sharp. Leaving the
+			    subtree fixes all of that at once. */}
+			{open && compact && mounted
+				? createPortal(
+						<>
 							<button
 								type="button"
-								className="voice-switch"
-								role="switch"
-								aria-checked={voice.autoSpeak}
-								aria-label="Read answers aloud"
-								disabled={!voice.available}
-								onClick={voice.toggleAutoSpeak}
+								className="voice-sheet-scrim"
+								onClick={close}
 							>
-								<span className="voice-switch__knob" />
+								<span className="sr-only">Close voice settings</span>
 							</button>
-						</div>
-
-						<hr className="voice-menu__rule" />
-
-						<p className="voice-menu__label">Speed</p>
-						<div className="voice-menu__choices">
-							{SPEEDS.map((option) => (
-								<button
-									key={option}
-									type="button"
-									className="voice-choice"
-									aria-pressed={voice.speed === option}
-									onClick={() => voice.setSpeed(option)}
-								>
-									{option}×
-								</button>
-							))}
-						</div>
-
-						<p className="voice-menu__label">Language</p>
-						<div className="voice-menu__choices">
-							{LANGUAGES.map((option) => (
-								<button
-									key={option.code}
-									type="button"
-									className="voice-choice voice-choice--lang"
-									aria-pressed={voice.language === option.code}
-									onClick={() => voice.setLanguage(option.code)}
-								>
-									<span className="voice-choice__code">
-										{option.code.toUpperCase()}
-									</span>
-									<span className="voice-choice__name">{option.name}</span>
-								</button>
-							))}
-						</div>
-
-						<button
-							type="button"
-							className="voice-menu__link"
-							onClick={() => {
-								setOpen(false);
-								voice.reviewConsent();
-							}}
-						>
-							<InfoIcon />
-							What we do with your voice
-						</button>
-					</div>
-				</>
-			) : null}
+							{panel}
+						</>,
+						document.body,
+					)
+				: null}
 		</div>
 	);
 }

@@ -870,13 +870,26 @@ body {
 	overflow-y: auto;
 	overflow-x: hidden;
 	overscroll-behavior: contain;
-	padding-top: 68px;
+	padding-top: 28px;
 	mask-image: linear-gradient(
 		to bottom,
 		transparent 0,
-		#000 56px,
+		#000 24px,
 		#000 100%
 	);
+}
+
+/* 68px only where the floating drawer trigger actually renders — it is absent
+   above this width, so the extra clearance was buying nothing there.
+   The fade is 24px rather than 56px for the same reason it exists at all: at
+   56px a line arriving into the viewport sat 24px inside the band and lost
+   half its contrast (5.36:1 against 11.52:1 measured on the same ink), which
+   is the opposite of "nothing that is meant to be read is ever dimmed". 24px
+   dissolves the line leaving without touching the line arriving. */
+@media (max-width: 860px) {
+	.thread {
+		padding-top: 68px;
+	}
 }
 
 /* The landing hero is vertically composed and centred in the stage; the same
