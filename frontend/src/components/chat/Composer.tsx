@@ -1,7 +1,11 @@
 import { type KeyboardEvent, useState } from "react";
 import { MicIcon, SendIcon, SparkIcon } from "#/components/icons";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
+import { useMediaQuery } from "#/lib/use-media-query";
 import { VoiceListening, VoiceTranscribing } from "./Voice";
+
+/** No hover means no pointer to hover with, which here means no Space key. */
+const TOUCH = "(hover: none)";
 
 interface ComposerProps {
 	onSend: (text: string) => void;
@@ -40,6 +44,7 @@ export function Composer({
 }: ComposerProps) {
 	const canSend = draft.trim().length > 0;
 	const [spaceHeld, setSpaceHeld] = useState(false);
+	const touch = useMediaQuery(TOUCH);
 
 	const listening = voice.phase === "listening";
 	const transcribing = voice.phase === "transcribing";
@@ -91,13 +96,19 @@ export function Composer({
 		if (listening) voice.stop();
 	}
 
+	// The Space hint is the only thing that tells anyone hold-to-talk exists, but
+	// it is addressed to a keyboard. On a phone — the device this is mostly used
+	// on — it named a key that is not there and pointed away from the mic button
+	// that does the same job.
 	const placeholder = listening
 		? "Speak now — your words appear here"
 		: transcribing
 			? "Transcribing…"
-			: holdToTalk
-				? "Ask me anything, or hold Space to talk"
-				: "Ask me anything...";
+			: !holdToTalk
+				? "Ask me anything..."
+				: touch
+					? "Ask me anything, or tap the mic to talk"
+					: "Ask me anything, or hold Space to talk";
 
 	return (
 		<div className="composer-slot">
@@ -141,13 +152,23 @@ export function Composer({
 						{/* The label collapses to the icon on a narrow screen rather than
 						    the whole control disappearing — this is the plain-words
 						    toggle, and it has no other entry point. */}
+						{/* The title carries the label when the visible one is hidden
+						    under 620px — otherwise this is a bare sparkle whose only
+						    state cue is a tint. */}
 						<button
 							type="button"
 							className="tool-btn"
 							aria-pressed={simpleMode}
 							onClick={onToggleSimpleMode}
+							title={
+								simpleMode
+									? "Explain it simply: on"
+									: "Explain it simply: off"
+							}
 						>
 							<SparkIcon />
+							{/* Clipped, not removed, under 620px — so it still names the
+							    button for a screen reader at every width. */}
 							<span className="tool-btn__label">Explain it simply</span>
 						</button>
 

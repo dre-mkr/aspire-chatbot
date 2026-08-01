@@ -46,8 +46,16 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			//                              where the glyphs are measurement
 			//   Sora 300-700             — 300 .hero__sub, 700 <strong>, rest are UI
 			// display=swap paints text in the fallback immediately and swaps on load.
+			//
+			// The detector flags Instrument Serif as a saturated face. Kept
+			// deliberately: it is the display voice for exactly one element
+			// (.hero__title), paired with Sora for UI and JetBrains Mono for
+			// measurement, so it is a considered three-face system rather than a
+			// default body font. Reviewed 2026-08-01; revisit if it starts
+			// appearing outside the hero.
 			{
 				rel: "stylesheet",
+				// impeccable-disable-next-line overused-font -- deliberate display face, see above
 				href: "https://fonts.googleapis.com/css2?family=Instrument+Serif&family=JetBrains+Mono:wght@400&family=Sora:wght@300;400;500;600;700&display=swap",
 			},
 			{ rel: "stylesheet", href: appCss },

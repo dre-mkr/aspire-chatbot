@@ -54,6 +54,38 @@ export function ClockIcon(props: IconProps) {
 	);
 }
 
+/** A wrong answer that taught something. A bulb, not a cross. */
+export function LampIcon(props: IconProps) {
+	return (
+		<Icon size={16} {...props}>
+			<path d="M9 18h6" />
+			<path d="M10 22h4" />
+			<path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" />
+		</Icon>
+	);
+}
+
+/** An answer asked for rather than attempted. */
+export function EyeIcon(props: IconProps) {
+	return (
+		<Icon size={16} {...props}>
+			<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+			<circle cx="12" cy="12" r="3" />
+		</Icon>
+	);
+}
+
+/** Leaving a game — a door with an arrow through it. */
+export function ExitIcon(props: IconProps) {
+	return (
+		<Icon size={15} strokeWidth={1.9} {...props}>
+			<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+			<path d="M16 17l5-5-5-5" />
+			<path d="M21 12H9" />
+		</Icon>
+	);
+}
+
 export function DownloadIcon(props: IconProps) {
 	return (
 		<Icon size={15} {...props}>
@@ -113,6 +145,19 @@ export function SparkIcon(props: IconProps) {
 	return (
 		<Icon size={15} {...props}>
 			<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+		</Icon>
+	);
+}
+
+/** Re-orders the letter tray. Crossed arrows, the shuffle convention. */
+export function ShuffleIcon(props: IconProps) {
+	return (
+		<Icon size={16} strokeWidth={1.9} {...props}>
+			<path d="M16 3h5v5" />
+			<path d="M4 20 21 3" />
+			<path d="M21 16v5h-5" />
+			<path d="m15 15 6 6" />
+			<path d="M4 4l5 5" />
 		</Icon>
 	);
 }

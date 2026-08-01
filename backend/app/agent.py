@@ -18,9 +18,11 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
 from app.config import Settings, get_settings
+from app.games import GAME_TOOLS, games_enabled
 from app.prompts import (
     ASPIRE_SYSTEM_PROMPT,
     FOLLOW_UP_PROMPT,
+    GAMES_INSTRUCTIONS,
     RETRIEVER_TOOL_DESCRIPTION,
     RETRIEVER_TOOL_NAME,
     SIMPLE_MODE_INSTRUCTIONS,
@@ -75,20 +77,30 @@ def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
     if simple_mode:
         system_prompt += SIMPLE_MODE_INSTRUCTIONS
 
+    # Games are additive: the tools and their prompt section appear together or
+    # not at all, so a disabled module leaves no instructions describing tools
+    # the agent does not have.
+    tools = [retriever_tool]
+    if games_enabled():
+        tools.extend(GAME_TOOLS)
+        system_prompt += GAMES_INSTRUCTIONS
+
     # In-memory checkpointer: multi-turn memory per thread_id, cleared on restart.
     # Phase 1 only -- swap for a persistent saver when conversations must survive.
     agent = create_agent(
         model=model,
-        tools=[retriever_tool],
+        tools=tools,
         system_prompt=system_prompt,
         checkpointer=_CHECKPOINTER,
     )
 
     logger.info(
-        "Agent ready (model=%s, k=%d, simple_mode=%s)",
+        "Agent ready (model=%s, k=%d, simple_mode=%s, games=%s, tools=%d)",
         settings.chat_model,
         settings.retriever_k,
         simple_mode,
+        games_enabled(),
+        len(tools),
     )
     return agent
 

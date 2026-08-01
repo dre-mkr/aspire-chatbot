@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { downloadTranscript } from "#/lib/aspire/export";
+import {
+	fetchGameState,
+	type GamePersona,
+	type GameState,
+} from "#/lib/aspire/games";
 import type { StoredConversation } from "#/lib/aspire/history";
 import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
 import { useConversation } from "#/lib/aspire/use-conversation";
@@ -16,7 +21,19 @@ const COMPACT = "(max-width: 860px)";
 /** How far from the bottom still counts as "following along". */
 const STICK_THRESHOLD_PX = 160;
 
-export function AspireChat() {
+interface AspireChatProps {
+	/**
+	 * Which ASPIRE audience this is: "stella", "orion", "aurora" or "nova".
+	 *
+	 * Nothing selects one yet, so it defaults to unknown — which the service
+	 * treats as permissive rather than as any particular persona. Wire a picker
+	 * to this prop and the games gate, the voice, and the card's whole scale
+	 * follow with no further change.
+	 */
+	persona?: GamePersona | null;
+}
+
+export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	// Read-aloud has to start the moment an answer lands, but the voice layer
 	// needs the thread id the conversation owns. The ref breaks that cycle: the
 	// conversation calls through it, and the effect below keeps it current.
@@ -36,6 +53,7 @@ export function AspireChat() {
 		reset,
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
+		persona,
 	});
 
 	const compact = useMediaQuery(COMPACT);
@@ -56,6 +74,32 @@ export function AspireChat() {
 	}, [voice.autoSpeak, voice.available, voice.play]);
 
 	const threadRef = useRef<HTMLDivElement>(null);
+
+	// The game lives on the server, keyed by this thread. The browser holds none
+	// of it, which is what makes a refresh mid-word a non-event — and it is also
+	// how the card learns the assistant started a game through its own tools,
+	// without the chat response needing a field for it.
+	const [game, setGame] = useState<GameState | null>(null);
+	const settled = !isThinking && !streaming;
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: refetch trigger
+	useEffect(() => {
+		if (!threadId || !settled) return;
+		let live = true;
+		void fetchGameState(threadId)
+			.then((state) => {
+				// Only ever adopt a game from the server; never clear one here. A
+				// finished game has no session left, but its card is still showing
+				// the child what they just learned, and it closes on their say-so.
+				if (live && state) setGame(state);
+			})
+			// Games are additive. If the endpoint is off or unreachable, the card
+			// simply does not appear and the conversation is unaffected.
+			.catch(() => undefined);
+		return () => {
+			live = false;
+		};
+	}, [threadId, messages.length, settled]);
 
 	const railClosed = compact ? !drawerOpen : railCollapsed;
 	const drawerModal = compact && drawerOpen && phase === "chat";
@@ -146,10 +190,14 @@ export function AspireChat() {
 		regenerate(simpleMode);
 	}, [regenerate, simpleMode, stopPlayback]);
 
+	// Reopening or starting a conversation moves to a different thread, and a
+	// game belongs to the thread it was played in. Clear it locally; the effect
+	// above refetches whatever the new thread actually has.
 	const handleOpenPast = useCallback(
 		(conversation: StoredConversation) => {
 			stopPlayback();
 			setDrawerOpen(false);
+			setGame(null);
 			openPast(conversation);
 		},
 		[openPast, stopPlayback],
@@ -158,6 +206,7 @@ export function AspireChat() {
 	const handleNewChat = useCallback(() => {
 		stopPlayback();
 		setDrawerOpen(false);
+		setGame(null);
 		reset();
 	}, [reset, stopPlayback]);
 
@@ -240,6 +289,16 @@ export function AspireChat() {
 											pausedId: voice.pausedId,
 											play: voice.play,
 										}}
+										game={
+											game && threadId
+												? {
+														threadId,
+														persona,
+														state: game,
+														onChanged: setGame,
+													}
+												: null
+										}
 									/>
 								</section>
 							</div>

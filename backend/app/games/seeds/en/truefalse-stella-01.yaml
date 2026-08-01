@@ -1,0 +1,156 @@
+# ASPIRE true or false — Stella set (holders 5–11)
+#
+# Source: the ASPIRE design project, "ASPIRE True or False". Same five ideas as
+# the Orion set, written natively for Stella's band rather than simplified from
+# it at runtime — a reworded statement is a different statement, and the verdict
+# has to be checked against the new wording.
+#
+# The engine picks whichever set has items for the player's persona, so these
+# two never collide.
+
+id: truefalse-stella-01
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE design project — True or False (Stella)
+
+closing:
+  lead: Save first. Spread it out. Let it grow.
+  text: >-
+    All five are about the same thing. Keep some money back before you spend.
+    Put it in more than one place. Then leave it alone so interest can make it
+    bigger.
+
+entries:
+  - id: tfs-01-risk-return
+    statement: When you invest, you want your money to grow as little as possible.
+    answer: false
+    topic: Risk and growing money
+    topic_line: " — money that can grow fast can also go down."
+    takeaway: Investing is about growing money, not shrinking it.
+    explanation: >-
+      Investing means putting your money somewhere so it can grow bigger. You
+      want more, not less. Every way of growing money has some risk. Money in the
+      bank is very safe, but it grows slowly. Buying a piece of a business can
+      grow faster, but it can also go down. You get to choose how much risk feels
+      right for you.
+    paragraphs:
+      - >-
+        Investing means putting your money somewhere so it can grow bigger. You
+        want more, not less.
+      - >-
+        Every way of growing money has some risk. Money in the bank is very safe,
+        but it grows slowly. Buying a piece of a business can grow faster, but it
+        can also go down.
+      - You get to choose how much risk feels right for you.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-02-interest
+    statement: Interest is money the bank gives you for keeping your money there.
+    answer: true
+    topic: Interest
+    topic_line: " — extra money the bank gives you for saving."
+    takeaway: The bank pays you a little for keeping your money.
+    explanation: >-
+      When your money sits in the bank, the bank lets other people borrow it. To
+      say thank you, the bank pays you a little extra. That extra is interest. If
+      you put in ten dollars, next year you might have a bit more than ten
+      dollars. You did not have to do anything. You just waited.
+    paragraphs:
+      - >-
+        When your money sits in the bank, the bank lets other people borrow it.
+        To say thank you, the bank pays you a little extra. That extra is
+        interest.
+      - >-
+        If you put in ten dollars, next year you might have a bit more than ten
+        dollars. You did not have to do anything. You just waited.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-03-formula
+    statement: >-
+      In the 10-20-30-40 money plan, the 40 means you can spend 40 out of every
+      100 dollars on things you need each month.
+    answer: false
+    topic: The money plan
+    topic_line: " — how to split your money into four parts."
+    takeaway: The 40 is for saving, not for spending.
+    explanation: >-
+      The 40 is the biggest part, so it is easy to think it is for spending. It
+      is not. Here is the whole plan: 10% give, 20% keep close, 30% spend, 40%
+      grow. The things you buy each month are the 30. You save first, then you
+      spend what is left.
+    paragraphs:
+      - >-
+        The 40 is the biggest part, so it is easy to think it is for spending. It
+        is not. Here is the whole plan:
+    bullets:
+      - marker: 10%
+        label: "Give. "
+        text: Share some with family or people who need it.
+      - marker: 20%
+        label: "Keep close. "
+        text: Money you can get quickly if something happens.
+      - marker: 30%
+        label: "Spend. "
+        text: Food, the bus, and things you need each month.
+      - marker: 40%
+        label: "Grow. "
+        text: The biggest part. You save it so it gets bigger.
+    after: >-
+      The things you buy each month are the 30. You save first, then you spend
+      what is left.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-04-diversification
+    statement: Putting all your money in one place is safer than putting it in a few places.
+    answer: false
+    topic: Not putting it all in one place
+    topic_line: " — keep your money in a few places, not one."
+    takeaway: A few places is safer than one place.
+    explanation: >-
+      If you put all your money in one place and that one place has a bad year,
+      all of your money has a bad year. If you put it in a few different places,
+      one bad year does not take everything. That is why people spread their
+      money out.
+    paragraphs:
+      - >-
+        If you put all your money in one place and that one place has a bad year,
+        all of your money has a bad year.
+      - >-
+        If you put it in a few different places, one bad year does not take
+        everything. That is why people spread their money out.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-05-credit-unions
+    statement: A credit union belongs to the people who save with it.
+    answer: true
+    topic: Credit unions
+    topic_line: " — the people who save there own it."
+    takeaway: When you save at a credit union, you are an owner.
+    explanation: >-
+      A credit union is a place to keep money, like a bank. The difference is who
+      owns it. The people who save there are the owners. When it does well, they
+      all share it. You can start with a small amount.
+    paragraphs:
+      - >-
+        A credit union is a place to keep money, like a bank. The difference is
+        who owns it.
+      - >-
+        The people who save there are the owners. When it does well, they all
+        share it. You can start with a small amount.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False

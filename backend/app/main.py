@@ -13,6 +13,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 
 from app.agent import get_agent, suggest_follow_ups
 from app.config import get_settings
+from app.games import games_enabled, games_router
 from app.ingest import ingest_if_empty
 from app.rag import count_documents, get_vector_store
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, Source
@@ -76,6 +77,12 @@ app.add_middleware(
 
 if get_voice_settings().voice_enabled:
     app.include_router(voice_router)
+
+# The game card talks to these directly rather than through the agent: a tapped
+# answer must be graded now, not after a model round trip. Same engine, same
+# server-side session as the tools, so the two never disagree.
+if games_enabled():
+    app.include_router(games_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -150,7 +157,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
     try:
         result = await get_agent(request.simple_mode).ainvoke(
             {"messages": [HumanMessage(content=request.message)]},
-            config={"configurable": {"thread_id": thread_id}},
+            # `configurable` is how per-request context reaches the tools. The
+            # agent itself is process-wide and cached, so a tool cannot close
+            # over the caller -- it reads thread_id and persona from here. Both
+            # are injected by LangChain and stay out of the schema the model
+            # sees, so the model can neither read nor forge them.
+            config={
+                "configurable": {"thread_id": thread_id, "persona": request.persona}
+            },
         )
     except Exception:
         # Log the traceback server-side; return something generic to the client.

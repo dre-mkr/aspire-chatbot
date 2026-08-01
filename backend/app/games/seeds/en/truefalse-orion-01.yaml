@@ -1,0 +1,205 @@
+# ASPIRE true or false — Orion set (holders 12–18)
+#
+# Source: the ASPIRE design project, "ASPIRE True or False" — authored content
+# with a full Orion/Stella pair for every item. This is NOT the 18-item ECCB
+# quiz document, which is still pending and sits in `truefalse-01.yaml` as a
+# draft with TODO explanations.
+#
+# `explanation` is the flat authoritative text — the paragraphs joined. The
+# fields under it are the same words laid out: a line to lead with, the
+# paragraphs it breaks into, and a numbered list where one belongs. A client
+# that ignores the layout still has the whole explanation.
+
+id: truefalse-orion-01
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE design project — True or False (Orion)
+
+closing:
+  lead: Save first, spread it out, let time do the work.
+  text: >-
+    Every statement here points the same way: decide what your money is for
+    before you spend it, never let one decision carry all of it, and give the
+    growth enough time to compound. The numbers change from person to person —
+    the order does not.
+
+entries:
+  - id: tfo-01-risk-return
+    statement: The objective of investing is to minimise returns and minimise risks.
+    answer: false
+    topic: Risk and return
+    topic_line: " — bigger possible gains always carry bigger possible losses."
+    takeaway: Investing aims for the best return you can get for the risk you accept.
+    explanation: >-
+      Half of that is right, which is what makes it a good trap. Investors do try
+      to keep risk down — but the whole reason to invest instead of leaving cash
+      under a mattress is to grow what you have. Minimising returns is the
+      opposite of the goal. Risk and return travel together. A savings account at
+      a credit union barely moves and barely grows. A share in a hotel group can
+      climb faster and can also fall. Neither one is the correct answer for
+      everybody. So the real skill is not avoiding risk. It is deciding how much
+      risk suits your goal and how long you have before you need the money — then
+      taking no more than that.
+    paragraphs:
+      - >-
+        Half of that is right, which is what makes it a good trap. Investors do
+        try to keep risk down — but the whole reason to invest instead of leaving
+        cash under a mattress is to grow what you have. Minimising returns is the
+        opposite of the goal.
+      - >-
+        Risk and return travel together. A savings account at a credit union
+        barely moves and barely grows. A share in a hotel group can climb faster
+        and can also fall. Neither one is the correct answer for everybody.
+      - >-
+        So the real skill is not avoiding risk. It is deciding how much risk
+        suits your goal and how long you have before you need the money — then
+        taking no more than that.
+    difficulty_band: core
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-02-interest
+    statement: Interest is the money a bank pays you for keeping your savings with them.
+    answer: true
+    topic: Interest
+    topic_line: " — what the bank pays you for leaving money with it."
+    takeaway: Interest is rent. The bank is paying you for the use of your money.
+    explanation: >-
+      While your savings sit in the account, the bank lends that money out to
+      other people. Interest is your share of that arrangement — payment for the
+      use of your money. Put EC$500 in an account paying 5% a year and leave it
+      alone: after twelve months you have EC$525. The year after that, the 5% is
+      calculated on EC$525, not EC$500. That second part is compounding, and it
+      is why starting at 15 beats starting at 30. Interest runs the other way
+      too. On a loan or a credit card, you are the one paying it — which is why
+      the same word shows up in the borrowing lessons.
+    paragraphs:
+      - >-
+        While your savings sit in the account, the bank lends that money out to
+        other people. Interest is your share of that arrangement — payment for
+        the use of your money.
+      - >-
+        Put EC$500 in an account paying 5% a year and leave it alone: after
+        twelve months you have EC$525. The year after that, the 5% is calculated
+        on EC$525, not EC$500. That second part is compounding, and it is why
+        starting at 15 beats starting at 30.
+      - >-
+        Interest runs the other way too. On a loan or a credit card, you are the
+        one paying it — which is why the same word shows up in the borrowing
+        lessons.
+    difficulty_band: core
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-03-formula
+    statement: >-
+      In the 10-20-30-40 budgeting formula, the 40 tells us that no more than 40%
+      of our net income should be allocated to monthly living expenses.
+    answer: false
+    topic: The 10-20-30-40 formula
+    topic_line: " — every dollar of net income gets a job before it is spent."
+    takeaway: The 40 is the biggest slice, and it is the one you do not spend.
+    explanation: >-
+      It is a fair guess — 40 is the biggest number, and living expenses feel
+      like the biggest cost. But the formula gives every dollar of net income a
+      job, and the largest job is your future: 10% giving, 20% short-term
+      savings, 30% living expenses, 40% long-term savings and investment. Living
+      expenses are the 30, not the 40. The order is the lesson: the formula asks
+      you to pay your future first and fit your spending into what is left,
+      rather than saving whatever survives the month.
+    paragraphs:
+      - >-
+        It is a fair guess — 40 is the biggest number, and living expenses feel
+        like the biggest cost. But the formula gives every dollar of net income a
+        job, and the largest job is your future:
+    bullets:
+      - marker: 10%
+        label: "Giving. "
+        text: Family, church, community — the part that leaves your hands on purpose.
+      - marker: 20%
+        label: "Short-term savings. "
+        text: Your emergency money, kept somewhere you can reach it this week.
+      - marker: 30%
+        label: "Living expenses. "
+        text: Food, transport, phone, and the everyday costs of the month.
+      - marker: 40%
+        label: "Long-term savings and investment. "
+        text: The part you put to work so it grows without you.
+    after: >-
+      Living expenses are the 30, not the 40. The order is the lesson: the
+      formula asks you to pay your future first and fit your spending into what
+      is left, rather than saving whatever survives the month.
+    difficulty_band: advanced
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-04-diversification
+    statement: >-
+      Putting all of your savings into one company is safer than spreading them
+      across several.
+    answer: false
+    topic: Spreading your money
+    topic_line: " — one bad result should never be able to sink everything."
+    takeaway: One company can fail. Several rarely fail on the same day.
+    explanation: >-
+      This is diversification, and it is the closest thing investing has to a
+      free lunch. Spreading your money means no single bad result can take all of
+      it. The Caribbean detail worth knowing: some things move together. A hotel
+      group and an airline both live on tourism — if visitors stop coming, both
+      fall in the same week. A credit union and an agriculture company earn from
+      very different places, so they do not. A useful rule for your simulated
+      portfolio: no more than 25% in any one sector. Then watch what the next
+      market event does to your total.
+    paragraphs:
+      - >-
+        This is diversification, and it is the closest thing investing has to a
+        free lunch. Spreading your money means no single bad result can take all
+        of it.
+      - >-
+        The Caribbean detail worth knowing: some things move together. A hotel
+        group and an airline both live on tourism — if visitors stop coming, both
+        fall in the same week. A credit union and an agriculture company earn
+        from very different places, so they do not.
+      - >-
+        A useful rule for your simulated portfolio: no more than 25% in any one
+        sector. Then watch what the next market event does to your total.
+    difficulty_band: core
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-05-credit-unions
+    statement: A credit union is owned by the members who save with it.
+    answer: true
+    topic: Credit unions
+    topic_line: " — owned by members, so the profit comes back to members."
+    takeaway: You are not a customer at a credit union. You are an owner.
+    explanation: >-
+      A commercial bank answers to shareholders, and the profit goes to them. A
+      credit union has no outside shareholders — the members are the owners, so
+      the profit comes back as dividends, lower loan rates or better savings
+      rates. It also means you get a vote. Members elect the board, one member
+      one vote, whether you hold EC$50 or EC$50,000. For a first savings account
+      in St. Kitts and Nevis this is usually the friendliest place to start.
+      Compare the fees and the minimum balance before you choose one.
+    paragraphs:
+      - >-
+        A commercial bank answers to shareholders, and the profit goes to them. A
+        credit union has no outside shareholders — the members are the owners, so
+        the profit comes back as dividends, lower loan rates or better savings
+        rates.
+      - >-
+        It also means you get a vote. Members elect the board, one member one
+        vote, whether you hold EC$50 or EC$50,000.
+      - >-
+        For a first savings account in St. Kitts and Nevis this is usually the
+        friendliest place to start. Compare the fees and the minimum balance
+        before you choose one.
+    difficulty_band: core
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False

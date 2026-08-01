@@ -87,7 +87,7 @@ export function TopBar({
 					className="chip-btn chip-btn--model"
 					onClick={() => setMenuOpen((open) => !open)}
 					aria-expanded={menuOpen}
-					aria-haspopup="menu"
+					aria-controls="aspire-voice-settings"
 				>
 					<span className="model-dot" aria-hidden="true" />
 					ASPIRE AI
@@ -95,7 +95,17 @@ export function TopBar({
 				</button>
 
 				{menuOpen ? (
-					<div className="voice-menu" role="menu">
+					/* A plain group, not role="menu". An ARIA menu promises its
+					   children are menuitems and that arrow keys move between them;
+					   these are a switch, two sets of toggle buttons and a link, and
+					   announcing them as a menu describes a structure that is not
+					   there. The heading names the group instead. */
+					<div
+						className="voice-menu"
+						id="aspire-voice-settings"
+						role="group"
+						aria-label="Voice settings"
+					>
 						<p className="voice-menu__label">Voice</p>
 
 						<div className="voice-menu__row">

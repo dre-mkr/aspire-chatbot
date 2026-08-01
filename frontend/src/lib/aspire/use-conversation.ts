@@ -102,9 +102,14 @@ export interface UseConversationOptions {
 	 * the answer arrives rather than after it has finished being drawn.
 	 */
 	onAnswer?: (id: number, text: string) => void;
+	/** Who is talking. Null means unknown, which the service treats as permissive. */
+	persona?: string | null;
 }
 
-export function useConversation({ onAnswer }: UseConversationOptions = {}) {
+export function useConversation({
+	onAnswer,
+	persona = null,
+}: UseConversationOptions = {}) {
 	const [phase, setPhase] = useState<Phase>("landing");
 	const [messages, setMessages] = useState<Array<ChatMessage>>([]);
 	const [streaming, setStreaming] = useState<StreamingAnswer | null>(null);
@@ -242,6 +247,7 @@ export function useConversation({ onAnswer }: UseConversationOptions = {}) {
 					message: question,
 					threadId,
 					simpleMode,
+					persona,
 				});
 
 				if (turnToken.current !== token) return; // the turn was abandoned
@@ -270,7 +276,7 @@ export function useConversation({ onAnswer }: UseConversationOptions = {}) {
 				]);
 			}
 		},
-		[beginStream, threadId],
+		[beginStream, persona, threadId],
 	);
 
 	const send = useCallback(

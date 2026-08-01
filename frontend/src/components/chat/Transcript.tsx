@@ -11,6 +11,7 @@ import {
 	SpeakerIcon,
 } from "#/components/icons";
 import type { Source } from "#/lib/aspire/api";
+import type { GamePersona, GameState } from "#/lib/aspire/games";
 import {
 	type AnswerBlock,
 	answerToText,
@@ -21,7 +22,9 @@ import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
+import { TrueFalse } from "./TrueFalse";
 import { PlayingStars } from "./Voice";
+import { WordScramble } from "./WordScramble";
 
 /** Read-aloud controls, threaded down to each finished answer. */
 export interface Playback {
@@ -29,6 +32,20 @@ export interface Playback {
 	playingId: number | null;
 	pausedId: number | null;
 	play: (id: number, text: string) => void;
+}
+
+/**
+ * A running game, threaded down so the card renders inside the conversation.
+ *
+ * It sits in the transcript rather than on a screen of its own because that is
+ * the whole point of it: the lesson happens where the talking happens, and a
+ * question mid-word is still just the next message.
+ */
+export interface ActiveGame {
+	threadId: string;
+	persona: GamePersona | null;
+	state: GameState;
+	onChanged: (state: GameState | null) => void;
 }
 
 interface TranscriptProps {
@@ -40,6 +57,7 @@ interface TranscriptProps {
 	onRegenerate: () => void;
 	onAsk: (question: string) => void;
 	playback: Playback;
+	game: ActiveGame | null;
 }
 
 export function Transcript({
@@ -50,6 +68,7 @@ export function Transcript({
 	onRegenerate,
 	onAsk,
 	playback,
+	game,
 }: TranscriptProps) {
 	return (
 		<div className="transcript">
@@ -84,6 +103,36 @@ export function Transcript({
 			})}
 
 			{streaming ? <StreamingAnswer answer={streaming} /> : null}
+
+			{/* The card is an assistant turn: same orb, same column, so a game
+			    reads as something the assistant is doing with you rather than a
+			    mode the conversation switched into.
+
+			    Which card is decided by the prompt's kind, not by the game's
+			    name, so a third game type slots in here without the transcript
+			    learning anything about it. */}
+			{game ? (
+				<div className="turn turn--assistant">
+					<div className="orb" aria-hidden="true" />
+					<div className="answer">
+						{game.state.prompt.kind === "statement" ? (
+							<TrueFalse
+								threadId={game.threadId}
+								persona={game.persona}
+								state={game.state}
+								onChanged={game.onChanged}
+							/>
+						) : (
+							<WordScramble
+								threadId={game.threadId}
+								persona={game.persona}
+								state={game.state}
+								onChanged={game.onChanged}
+							/>
+						)}
+					</div>
+				</div>
+			) : null}
 
 			{isThinking ? (
 				<div className="thinking">
@@ -239,7 +288,25 @@ function Sources({ sources }: { sources: Array<Source> }) {
 	if (sources.length === 0) return null;
 
 	return (
-		<details className="sources">
+		// Opening this grows the thread by the height of the panel, and the
+		// transcript's scroll-follow only runs when a message settles — so the
+		// evidence appears and pushes the answer's action row and the follow-up
+		// chips under the composer with nothing to say they moved.
+		//
+		// Scrolling the panel itself is no help: `block: "nearest"` does nothing
+		// when the panel is already on screen, which is the usual case, and the
+		// content that got displaced is what fell off. So scroll the end of the
+		// transcript instead — the follow-ups when there are any, the answer's
+		// own last row otherwise.
+		<details
+			className="sources"
+			onToggle={(event) => {
+				if (!event.currentTarget.open) return;
+				const end =
+					event.currentTarget.closest(".transcript")?.lastElementChild;
+				end?.scrollIntoView({ block: "end", behavior: "smooth" });
+			}}
+		>
 			<summary className="sources__toggle">
 				<SourcesIcon />
 				<span>
@@ -278,7 +345,10 @@ function Failure({
 		<div className="turn turn--assistant">
 			<div className="orb orb--muted" aria-hidden="true" />
 			<div className="answer">
-				<p className="failure" role="alert">
+				{/* No role="alert" here. AspireChat already routes the newest error
+				    into the transcript's own live region, and a role="alert" on the
+				    same text makes a screen reader read every failure twice. */}
+				<p className="failure">
 					<AlertIcon />
 					<span>{text}</span>
 				</p>

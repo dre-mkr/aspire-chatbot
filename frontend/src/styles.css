@@ -44,6 +44,11 @@
 	--color-success: #16a34a;
 	/* 5.9:1 on the page surface — a failure has to be readable, not just red. */
 	--color-danger: #b3261e;
+	/* A wrong guess in a game is not an error. Amber says "not yet" where red
+	   would say "you broke something", and #b45309 carries the text at 5.1:1
+	   where the #d97706 line colour would only reach 3.1:1. */
+	--color-warn: #d97706;
+	--color-warn-ink: #b45309;
 }
 
 :root {
@@ -90,6 +95,12 @@
 	--danger-tint: rgb(179 38 30 / 0.1);
 	--danger-line: rgb(179 38 30 / 0.18);
 	--danger-line-strong: rgb(179 38 30 / 0.2);
+
+	--warn: var(--color-warn);
+	--warn-ink: var(--color-warn-ink);
+	--warn-wash: rgb(217 119 6 / 0.07);
+	--warn-tint: rgb(217 119 6 / 0.16);
+	--warn-line: rgb(217 119 6 / 0.32);
 
 	--ease: cubic-bezier(0.4, 0, 0.2, 1);
 	--morph: 560ms var(--ease);
@@ -443,10 +454,12 @@ body {
 	text-wrap: pretty;
 }
 
+/* 12px, the documented body floor: "Today" and "Yesterday" are read as words,
+   not scanned as a tracked label. */
 .rail__group-title {
 	margin: 0;
 	padding: 0 10px 6px;
-	font-size: 0.6875rem;
+	font-size: 0.75rem;
 	font-weight: 600;
 	color: var(--quiet);
 	letter-spacing: 0.04em;
@@ -487,9 +500,9 @@ body {
 }
 
 /* Sans, not mono: this is a sentence about where things are kept, not a
-   measurement. */
+   measurement. And a sentence gets the 12px body floor. */
 .rail__note {
-	font-size: 0.71875rem;
+	font-size: 0.75rem;
 	color: var(--quiet);
 	white-space: nowrap;
 }
@@ -553,7 +566,10 @@ body {
 .voice-choice,
 .sources__toggle,
 .composer__mic,
-.composer__send {
+.composer__send,
+.follow-up,
+.tool-btn,
+.voice-switch {
 	position: relative;
 }
 
@@ -563,7 +579,10 @@ body {
 .voice-choice::after,
 .sources__toggle::after,
 .composer__mic::after,
-.composer__send::after {
+.composer__send::after,
+.follow-up::after,
+.tool-btn::after,
+.voice-switch::after {
 	content: "";
 	position: absolute;
 	top: 50%;
@@ -573,10 +592,14 @@ body {
 	transform: translate(-50%, -50%);
 }
 
-/* These sit alone or with wide gaps, so they can grow in both axes. */
+/* These sit alone or with wide gaps, so they can grow in both axes.
+   `.tool-btn` qualifies because the composer's tool row is `space-between`:
+   it is hard left with the mic and send pair hard right. It needs the width
+   most of all — under 620px its label is hidden and it paints 36x36. */
 .chip-btn--square::after,
 .composer__mic::after,
-.composer__send::after {
+.composer__send::after,
+.tool-btn::after {
 	width: max(100%, 44px);
 }
 
@@ -618,9 +641,13 @@ body {
 	color: var(--faint);
 }
 
+/* Real height rather than the 44px overlay the other controls use: history
+   rows are stacked with no gap, so an overlay would have neighbours
+   overlapping by 6px and stealing each other's taps — the exact failure the
+   overlay was introduced to avoid. */
 .history-item {
 	width: 100%;
-	min-height: 38px;
+	min-height: 44px;
 	text-align: left;
 	padding: 9px 10px;
 	border: none;
@@ -755,6 +782,7 @@ body {
 /* ── Hero ───────────────────────────────────────────────────────────────── */
 
 .hero {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -766,6 +794,35 @@ body {
 	transition:
 		opacity 380ms var(--ease),
 		max-height var(--morph);
+}
+
+/* A soft plum vignette under the hero copy.
+   The subtitle is white over the 36–67% band of the page gradient — its
+   lightest, most magenta stretch — and measured 3.0:1 against 16px/300 text
+   where AA wants 4.5:1. Lifting the text alone cannot close that: pure white
+   on the sampled background tops out near 3.7:1. So the background comes down
+   instead. Reaching transparent at 78% keeps the falloff inside the hero's own
+   box, so `overflow: hidden` never cuts a hard edge across it, and it reads as
+   the hero being lit rather than as a panel sitting on the gradient. */
+.hero::before {
+	content: "";
+	position: absolute;
+	inset: -8% -6%;
+	z-index: 0;
+	background: radial-gradient(
+		ellipse 74% 80% at 50% 44%,
+		rgb(41 20 74 / 0.42) 0%,
+		rgb(41 20 74 / 0.3) 46%,
+		transparent 78%
+	);
+	pointer-events: none;
+}
+
+/* `.hero::before` is positioned, so without this it would paint over the
+   static children it exists to sit behind. */
+.hero > * {
+	position: relative;
+	z-index: 1;
 }
 
 .hero__title {
@@ -781,13 +838,19 @@ body {
 	text-wrap: pretty;
 }
 
+/* Full white at 400, not 82% at 300. Diluting white on a mid-tone gradient
+   buys a little elegance and costs the contrast that makes the sentence
+   readable; 300 at 16px is thin enough that the strokes themselves start
+   losing against a moving background. The vignette above does the rest. */
 .hero__sub {
 	margin: 0 0 30px;
+	/* Padding, not just max-width: at 390px the copy ran to a 12px gutter. */
 	max-width: 520px;
+	padding: 0 20px;
 	font-size: 1rem;
-	font-weight: 300;
+	font-weight: 400;
 	line-height: 1.6;
-	color: rgb(255 255 255 / 0.82);
+	color: #fff;
 	text-wrap: pretty;
 }
 
@@ -903,6 +966,10 @@ body {
 	align-items: flex-end;
 }
 
+/* `overflow-wrap: anywhere` because the content is whatever a child typed or
+   dictated. A pasted URL or a long unbroken run has no break opportunity, and
+   without this the bubble clips it at its own right edge — leaving them unable
+   to read back the question they just asked. */
 .bubble {
 	max-width: 74%;
 	padding: 13px 18px;
@@ -913,6 +980,7 @@ body {
 	line-height: 1.6;
 	box-shadow: 0 6px 18px rgb(72 41 119 / 0.22);
 	text-wrap: pretty;
+	overflow-wrap: anywhere;
 }
 
 .turn--assistant {
@@ -929,6 +997,15 @@ body {
 	flex: 1;
 	min-width: 0;
 	padding-top: 1px;
+}
+
+/* Same reason as .bubble, and more urgent here: the assistant is the side that
+   emits URLs. `.thread` is `overflow-x: hidden`, so an unbroken run does not
+   produce a scrollbar — it is simply cut off and unrecoverable. Measured 1058px
+   of answer in a 736px column before this. */
+.answer p,
+.answer li {
+	overflow-wrap: anywhere;
 }
 
 .answer p {
@@ -986,17 +1063,38 @@ body {
 	width: min(780px, 100%);
 }
 
+/* Step the hero back while the consent panel is up.
+   The panel is opaque now, which is the point — but on a short viewport it
+   overlaps the headline and, being opaque, slices it through the middle of a
+   word instead of letting it bleed through. Dimming the hero makes the overlap
+   read as focus moving to the panel rather than as a broken clip. `:has` is a
+   progressive enhancement: where it is unsupported nothing happens and the
+   panel is still perfectly readable. */
+.stage:has(.voice-consent) .hero {
+	opacity: 0.28;
+	transition: opacity var(--settle);
+}
+
 /* ── Consent ─────────────────────────────────────────────────────────────── */
 
+/* Carries its own opaque surface rather than a wash.
+   `--wash-3` is a 3% plum tint, which only reads as a panel when something
+   white is already behind it. This panel's whole job happens in the landing
+   phase, where `--panel-bg` is transparent and the parent is the raw brand
+   gradient — so the wash put the microphone promises straight onto the magenta
+   band at roughly 2.5:1, and the line telling a guardian where to turn voice
+   off was invisible. Same surface as .composer, for the same reason. */
 .voice-consent {
 	display: flex;
 	flex-direction: column;
 	gap: 11px;
 	margin-bottom: 14px;
 	padding: 15px 16px;
-	border: 1px solid var(--wash-12);
+	border: 1px solid var(--wash-14);
 	border-radius: 18px;
-	background: var(--wash-3);
+	background: rgb(255 255 255 / 0.96);
+	backdrop-filter: blur(20px);
+	box-shadow: 0 12px 32px -12px rgb(53 29 90 / 0.28);
 	animation: rise 300ms var(--ease) both;
 }
 
@@ -1131,15 +1229,19 @@ body {
 
 /* ── Notes ───────────────────────────────────────────────────────────────── */
 
+/* Opaque for the same reason as .voice-consent: the mic-denied and no-speech
+   notes are shown in the landing phase, over the gradient. */
 .voice-note {
 	display: flex;
 	align-items: center;
 	gap: 12px;
 	margin-bottom: 14px;
 	padding: 12px 14px;
-	border: 1px solid var(--wash-12);
+	border: 1px solid var(--wash-14);
 	border-radius: 18px;
-	background: var(--wash-3);
+	background: rgb(255 255 255 / 0.96);
+	backdrop-filter: blur(20px);
+	box-shadow: 0 12px 32px -12px rgb(53 29 90 / 0.28);
 	font-size: 0.84375rem;
 	line-height: 1.55;
 	color: var(--prose);
@@ -1190,9 +1292,14 @@ body {
 
 /* Tone carries the meaning; the icon and copy carry it too, so colour is never
    the only signal. */
+/* Each tone keeps its tint but paints it over the opaque base rather than
+   replacing it — a 7% wash alone is transparent, and these notes appear in the
+   landing phase where the layer behind them is the brand gradient. */
 .voice-note[data-tone="bad"] {
 	border-color: var(--danger-line-strong);
-	background: var(--danger-wash);
+	background:
+		linear-gradient(var(--danger-wash), var(--danger-wash)),
+		rgb(255 255 255 / 0.96);
 }
 
 .voice-note[data-tone="bad"] .voice-note__icon {
@@ -1202,7 +1309,9 @@ body {
 
 .voice-note[data-tone="warn"] {
 	border-color: var(--wash-m-22);
-	background: var(--wash-m-6);
+	background:
+		linear-gradient(var(--wash-m-6), var(--wash-m-6)),
+		rgb(255 255 255 / 0.96);
 }
 
 .voice-note[data-tone="warn"] .voice-note__icon {
@@ -1212,7 +1321,9 @@ body {
 
 .voice-note[data-tone="brand"] {
 	border-color: var(--wash-18);
-	background: var(--wash-6);
+	background:
+		linear-gradient(var(--wash-6), var(--wash-6)),
+		rgb(255 255 255 / 0.96);
 }
 
 /* ── Listening and transcribing ──────────────────────────────────────────── */
@@ -1875,11 +1986,27 @@ body {
 		box-shadow var(--swift);
 }
 
+/* The focus ring has to be visible, not just present.
+   The textarea sets `outline: none` and delegates its focus indicator to this
+   rule, so this ring is the only thing a keyboard user has to go on for the
+   product's primary control. It was drawn in `--hairline` — plum at 10% — which
+   lands near 1.1:1 against the panel and is effectively invisible. `--plum` at
+   full strength carries it, and the deepened border gives the ring an edge to
+   sit against so it reads as one control, not a halo. */
 .composer:focus-within {
-	border-color: var(--wash-32);
+	border-color: var(--plum);
 	box-shadow:
 		0 20px 44px -14px rgb(53 29 90 / 0.34),
-		0 0 0 3px var(--hairline);
+		0 0 0 3px rgb(72 41 119 / 0.45);
+}
+
+/* Windows High Contrast strips box-shadow, so the ring above disappears
+   exactly where it is needed most. `outline` survives forced colours. */
+@media (forced-colors: active) {
+	.composer:focus-within {
+		outline: 3px solid Highlight;
+		outline-offset: 2px;
+	}
 }
 
 /* The input grows and shrinks with the phase. Sizing the track rather than the
@@ -1939,10 +2066,21 @@ body {
 	color: var(--plum);
 }
 
+/* Filled, not just tinted. Under 620px the label is clipped and this button
+   becomes a bare sparkle, so a 10% wash was the only thing distinguishing
+   "plain words on" from "off" — and colour alone is not a state cue. */
 .tool-btn[aria-pressed="true"] {
-	border-color: var(--wash-m-32);
-	background: var(--wash-m-10);
-	color: var(--magenta);
+	border-color: transparent;
+	background: linear-gradient(135deg, var(--plum), var(--magenta));
+	color: #fff;
+	box-shadow: 0 2px 8px rgb(194 47 153 / 0.32);
+}
+
+@media (forced-colors: active) {
+	.tool-btn[aria-pressed="true"] {
+		border-color: Highlight;
+		border-width: 2px;
+	}
 }
 
 .composer__send {
@@ -2022,6 +2160,12 @@ body {
 
 /* ── Disclaimer ─────────────────────────────────────────────────────────── */
 
+/* `--slate` rather than `--quiet`: measured at 390px in the chat phase this
+   line sits on the panel's lavender tint rather than on white, where `--quiet`
+   fell to 4.21:1 — under AA for 12.5px text. `--slate` clears it on both
+   surfaces. The bottom padding is a safe-area inset because the text was
+   flush to the viewport edge, which on a phone puts the one sentence telling a
+   child to check with their mentor under the home indicator. */
 .disclaimer {
 	display: flex;
 	align-items: center;
@@ -2030,15 +2174,15 @@ body {
 	gap: 6px;
 	flex-shrink: 0;
 	min-height: 46px;
-	padding: 0 16px;
+	padding: 0 16px env(safe-area-inset-bottom, 0px);
 	font-size: 0.78125rem;
-	color: var(--quiet);
+	color: var(--slate);
 	text-align: center;
 }
 
 .disclaimer strong {
-	font-weight: 500;
-	color: var(--slate);
+	font-weight: 600;
+	color: var(--ink);
 }
 
 /* ── Model dot ──────────────────────────────────────────────────────────── */
@@ -2091,6 +2235,904 @@ body {
 	}
 	to {
 		opacity: 1;
+	}
+}
+
+/* ── Word scramble ──────────────────────────────────────────────────────────
+   The game card, rendered inside an assistant turn rather than as a screen of
+   its own: the point of it is that the lesson never leaves the conversation.
+
+   One component, two scales. Everything sized below reads from the custom
+   properties on `.game`, and `[data-scale="stella"]` moves the whole set at
+   once — tiles, type, targets and padding — because a five-year-old and a
+   seventeen-year-old need different hit areas, not a different card. */
+
+.game {
+	--tile: 52px;
+	--tile-radius: 14px;
+	--letter: 1.5rem;
+	--tile-gap: 8px;
+	--stack: 16px;
+	--head-pad: 14px 16px;
+	--body-pad: 20px;
+	--badge: 28px;
+	--step: 26px;
+	--btn-h: 40px;
+	--btn-fs: 0.875rem;
+	--lead-fs: 1.0625rem;
+	--meaning-word: 2.25rem;
+	--meaning-fs: 1.09375rem;
+	--pill-h: 34px;
+
+	margin: 2px 0 4px;
+	border: 1px solid var(--wash-14);
+	border-radius: 24px;
+	background: #fff;
+	box-shadow:
+		0 10px 30px -12px rgb(53 29 90 / 0.28),
+		0 2px 6px rgb(53 29 90 / 0.05);
+	overflow: hidden;
+	animation: pop-in 240ms var(--ease) both;
+}
+
+.game[data-scale="stella"] {
+	--tile: 64px;
+	--tile-radius: 18px;
+	--letter: 1.875rem;
+	--tile-gap: 10px;
+	--stack: 18px;
+	--head-pad: 16px 18px;
+	--body-pad: 22px;
+	--badge: 32px;
+	--step: 28px;
+	--btn-h: 52px;
+	--btn-fs: 0.96875rem;
+	--lead-fs: 1.25rem;
+	--meaning-word: 2.625rem;
+	--meaning-fs: 1.1875rem;
+	--pill-h: 38px;
+}
+
+@keyframes pop-in {
+	from {
+		opacity: 0;
+		transform: scale(0.94);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* ── Card header ─────────────────────────────────────────────────────────── */
+
+.game__head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: var(--head-pad);
+	border-bottom: 1px solid var(--hairline);
+	background: linear-gradient(135deg, var(--wash-6), var(--wash-m-6));
+}
+
+.game__badge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: var(--badge);
+	height: var(--badge);
+	border-radius: 10px;
+	background: var(--wash-12);
+	color: var(--plum);
+}
+
+.game__title {
+	font-size: 0.9375rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.game[data-scale="stella"] .game__title {
+	font-size: 1.0625rem;
+}
+
+.game__sub {
+	flex: 1;
+	min-width: 0;
+	font-size: 0.8125rem;
+	color: var(--slate);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.game__steps {
+	display: flex;
+	gap: 5px;
+	flex-shrink: 0;
+}
+
+.game__step {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--step);
+	height: var(--step);
+	border: 1px solid var(--wash-18);
+	border-radius: 999px;
+	background: #fff;
+	color: var(--plum);
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+.game__step[data-state="now"] {
+	border: 2px solid var(--plum);
+}
+
+.game__step[data-state="done"] {
+	border-color: transparent;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+}
+
+.game__leave {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex-shrink: 0;
+	min-height: var(--btn-h);
+	padding: 0 13px;
+	border: 1px solid var(--wash-14);
+	border-radius: 12px;
+	background: rgb(255 255 255 / 0.7);
+	color: var(--plum);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift);
+}
+
+.game__leave:hover:not(:disabled) {
+	background: #fff;
+	border-color: var(--wash-30);
+}
+
+/* ── Card body ───────────────────────────────────────────────────────────── */
+
+.game__body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--stack);
+	padding: var(--body-pad);
+}
+
+.game__lead {
+	margin: 0;
+	font-size: var(--lead-fs);
+	font-weight: 600;
+	line-height: 1.5;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.game__help,
+.game__count {
+	margin: 0;
+	font-size: 0.8125rem;
+	line-height: 1.6;
+	color: var(--slate);
+}
+
+.game__failure {
+	margin: 0;
+	padding: 11px 14px;
+	border: 1px solid var(--danger-line);
+	border-radius: 14px;
+	background: var(--danger-wash);
+	font-size: 0.875rem;
+	color: var(--danger);
+}
+
+/* ── Tiles ───────────────────────────────────────────────────────────────
+   The tray sits at slight angles so it reads as loose letters rather than a
+   keyboard; the slots are square to the baseline so the word being built stays
+   legible as a word. */
+
+.game__tray,
+.game__slots,
+.game__answer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--tile-gap);
+}
+
+.tile {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: var(--tile);
+	height: var(--tile);
+	border-radius: var(--tile-radius);
+	font: inherit;
+	font-size: var(--letter);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	transition:
+		transform var(--settle),
+		box-shadow var(--settle),
+		border-color var(--swift),
+		background var(--swift);
+}
+
+.tile--tray {
+	border: 1.5px solid var(--wash-m-22);
+	border-color: rgb(72 41 119 / 0.22);
+	background: #fff;
+	color: var(--plum);
+	box-shadow:
+		0 2px 0 var(--wash-14),
+		0 4px 10px rgb(53 29 90 / 0.08);
+	cursor: pointer;
+	transform: rotate(var(--rot, 0deg));
+	/* The one overshoot in the product, and it is load-bearing: a letter tile
+	   landing for a child is the single place the interface is meant to feel
+	   physical. Everything else uses --ease. Documented as a deliberate
+	   exception in DESIGN.md, and collapsed to its final frame under
+	   prefers-reduced-motion. */
+	animation: tile-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; /* impeccable-disable-line bounce-easing -- deliberate, see note above */
+}
+
+.tile--tray:hover:not(:disabled) {
+	transform: translateY(-3px) rotate(0deg);
+	box-shadow: 0 8px 18px rgb(53 29 90 / 0.2);
+}
+
+.tile--tray:active:not(:disabled) {
+	transform: scale(0.94);
+}
+
+/* A spent tile keeps its place in the row so the tray does not reflow under
+   the child's finger mid-word. */
+.tile--tray[data-spent] {
+	border: 1.5px dashed var(--wash-18);
+	background: var(--wash-3);
+	color: transparent;
+	box-shadow: none;
+	transform: none;
+	cursor: default;
+}
+
+.tile--slot {
+	border: 2px dashed var(--wash-30);
+	background: var(--wash-3);
+	color: transparent;
+	cursor: default;
+}
+
+.tile--slot[data-filled] {
+	border: 2px solid rgb(72 41 119 / 0.4);
+	background: #fff;
+	color: var(--plum);
+	box-shadow: 0 2px 0 var(--wash-12);
+	cursor: pointer;
+}
+
+.tile--slot:not([data-filled]):hover {
+	border-color: rgb(72 41 119 / 0.45);
+}
+
+.tile--slot[data-filled][data-wrong] {
+	border-color: var(--warn);
+	background: #fffaf1;
+	color: var(--warn-ink);
+	box-shadow: 0 2px 0 rgb(217 119 6 / 0.22);
+}
+
+.tile--answer {
+	border: 2px solid var(--wash-m-22);
+	background: var(--wash-12);
+	color: var(--plum);
+	/* Same deliberate overshoot as .tile--tray; see the note there. */
+	animation: tile-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both; /* impeccable-disable-line bounce-easing -- deliberate, see .tile--tray */
+}
+
+/* Earned, not given: a word you solved gets the brand gradient. */
+.tile--answer[data-earned] {
+	border-color: transparent;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+	box-shadow: 0 5px 14px rgb(72 41 119 / 0.3);
+}
+
+@keyframes tile-in {
+	from {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.9);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* The row shakes once on a wrong guess — the letters are all still there, and
+   the shake says "these, in another order" faster than a sentence does. */
+.game__slots[data-shake] {
+	animation: nudge 400ms var(--ease);
+}
+
+@keyframes nudge {
+	0%,
+	100% {
+		transform: translateX(0);
+	}
+	20% {
+		transform: translateX(-5px);
+	}
+	40% {
+		transform: translateX(5px);
+	}
+	60% {
+		transform: translateX(-3px);
+	}
+	80% {
+		transform: translateX(3px);
+	}
+}
+
+/* ── Callouts ────────────────────────────────────────────────────────────── */
+
+.game__wrong,
+.game__clue {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	margin: 0;
+	padding: 13px 16px;
+	border-radius: 16px;
+	font-size: 0.9375rem;
+	line-height: 1.6;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+/* The tone is carried by the fill and the icon, not by a 4px coloured tab down
+   the left edge — that stripe is generic callout furniture and it was the only
+   thing separating these two callouts from each other. A wrong guess is amber
+   throughout; a clue is plum throughout. */
+.game__wrong {
+	border: 1px solid var(--warn-line);
+	background: var(--warn-wash);
+}
+
+.game__wrong svg {
+	flex-shrink: 0;
+	margin-top: 3px;
+	color: var(--warn-ink);
+}
+
+.game__clues {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.game__clue {
+	border: 1px dashed var(--wash-30);
+	background: var(--wash-6);
+}
+
+.game__clue-label {
+	flex-shrink: 0;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: var(--wash-12);
+	color: var(--plum);
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────── */
+
+.game__actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 9px;
+}
+
+.game__btn {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--btn-h);
+	padding: 0 16px;
+	border: 1px solid transparent;
+	border-radius: 14px;
+	font: inherit;
+	font-size: var(--btn-fs);
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		color var(--swift),
+		transform var(--settle),
+		box-shadow var(--settle);
+}
+
+.game__btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.game__btn--clue {
+	border-color: var(--wash-18);
+	background: var(--wash-3);
+	color: var(--plum);
+}
+
+.game__btn--clue:hover:not(:disabled) {
+	background: var(--wash-9);
+}
+
+.game__btn--quiet {
+	border-color: var(--wash-12);
+	background: transparent;
+	color: var(--slate);
+}
+
+.game__btn--quiet:hover:not(:disabled),
+.game__btn--ghost:hover:not(:disabled) {
+	background: var(--wash-7);
+	color: var(--plum);
+}
+
+.game__btn--ghost {
+	background: transparent;
+	color: var(--slate);
+}
+
+.game__btn--go {
+	margin-left: auto;
+	padding: 0 22px;
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+	color: #fff;
+	font-weight: 600;
+	box-shadow: 0 5px 16px rgb(72 41 119 / 0.28);
+}
+
+.game__btn--go:hover:not(:disabled) {
+	transform: translateY(-1px);
+	box-shadow: 0 9px 22px rgb(72 41 119 / 0.36);
+}
+
+.game__btn--go:active:not(:disabled) {
+	transform: scale(0.97);
+}
+
+/* ── Resolved and complete ───────────────────────────────────────────────── */
+
+.game__result {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 0;
+	font-size: var(--lead-fs);
+	font-weight: 600;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.game__result-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: var(--badge);
+	height: var(--badge);
+	border-radius: 999px;
+	background: var(--wash-12);
+	color: var(--plum);
+}
+
+.game__result[data-correct] .game__result-icon {
+	background: rgb(22 163 74 / 0.14);
+	color: var(--success);
+}
+
+.game__stars {
+	display: flex;
+	gap: 8px;
+	flex-shrink: 0;
+	color: var(--magenta);
+}
+
+.game__stars svg {
+	animation: twinkle 2.4s ease-in-out infinite;
+}
+
+@keyframes twinkle {
+	0%,
+	100% {
+		opacity: 0.25;
+		transform: scale(0.85);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+.game__meaning {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 18px 20px;
+	border: 1px solid rgb(72 41 119 / 0.2);
+	border-radius: 20px;
+	background: linear-gradient(135deg, var(--wash-6), var(--wash-m-6));
+}
+
+.game[data-scale="stella"] .game__meaning {
+	padding: 20px 22px;
+}
+
+.game__meaning-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--quiet);
+}
+
+.game__meaning-label svg {
+	color: var(--magenta);
+}
+
+/* The word gets the display face — it is the thing being taught, and the serif
+   is the only place this product uses one. */
+.game__meaning-word {
+	font-family: var(--font-display);
+	font-size: var(--meaning-word);
+	line-height: 1.05;
+	letter-spacing: 0.01em;
+	color: var(--plum-deep);
+}
+
+.game__meaning-text {
+	margin: 0;
+	font-size: var(--meaning-fs);
+	line-height: 1.55;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.game__pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.game__pill {
+	display: flex;
+	align-items: center;
+	min-height: var(--pill-h);
+	padding: 0 16px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+	font-size: 0.875rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	box-shadow: 0 4px 12px rgb(72 41 119 / 0.26);
+}
+
+/* ── True or false ──────────────────────────────────────────────────────────
+   Shares the card shell above — header, steps, leave, buttons, meaning panel —
+   and adds only what a statement needs. The two games should read as the same
+   object with a different job, not as two cards that happen to sit together. */
+
+.tf {
+	--stmt: 1.3125rem;
+	--quiet-stmt: 0.9375rem;
+	--choice-h: 64px;
+	--choice-fs: 1.4375rem;
+	--pill-h: 50px;
+	--pill-fs: 1.0625rem;
+	--takeaway: 1.6875rem;
+	--expl: 1.0625rem;
+	--chip-w: 48px;
+	--chip-h: 26px;
+	--chip-fs: 0.78125rem;
+	--nest-pad: 14px 16px;
+}
+
+.game[data-scale="stella"].tf {
+	--stmt: 1.5625rem;
+	--quiet-stmt: 1.03125rem;
+	--choice-h: 78px;
+	--choice-fs: 1.6875rem;
+	--pill-h: 58px;
+	--pill-fs: 1.1875rem;
+	--takeaway: 1.9375rem;
+	--expl: 1.125rem;
+	--chip-w: 52px;
+	--chip-h: 28px;
+	--chip-fs: 0.84375rem;
+	--nest-pad: 16px 18px;
+}
+
+.tf__label {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--quiet);
+}
+
+.tf__rule {
+	flex: 1;
+	height: 1px;
+	background: var(--hairline);
+}
+
+/* The statement is the thing being judged, so it gets the weight — and a
+   measure short enough that judging it does not become reading it twice. */
+.tf__statement {
+	margin: 0;
+	max-width: 60ch;
+	font-size: var(--stmt);
+	font-weight: 500;
+	line-height: 1.45;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+/* Once answered it steps back: still there to re-read, no longer the subject. */
+.tf__statement--quiet {
+	max-width: 68ch;
+	font-size: var(--quiet-stmt);
+	font-weight: 400;
+	line-height: 1.55;
+	color: var(--prose);
+}
+
+.tf__settled {
+	display: flex;
+	flex-direction: column;
+	gap: var(--stack);
+	animation: rise 300ms var(--ease) both;
+}
+
+.tf__choices {
+	display: flex;
+	gap: 12px;
+}
+
+/* Deliberately large. This is the whole interaction, and on a phone it should
+   be reachable with a thumb without looking. */
+.tf__choice {
+	flex: 1 1 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: var(--choice-h);
+	border: 1.5px solid rgb(72 41 119 / 0.22);
+	border-radius: 16px;
+	background: #fff;
+	color: var(--plum);
+	font: inherit;
+	font-size: var(--choice-fs);
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	cursor: pointer;
+	box-shadow:
+		0 2px 0 var(--wash-12),
+		0 4px 12px rgb(53 29 90 / 0.07);
+	transition:
+		transform var(--settle),
+		box-shadow var(--settle),
+		border-color var(--swift),
+		background var(--swift);
+}
+
+.tf__choice:hover:not(:disabled) {
+	background: var(--wash-6);
+	border-color: rgb(72 41 119 / 0.4);
+	transform: translateY(-2px);
+	box-shadow: 0 8px 20px rgb(53 29 90 / 0.16);
+}
+
+.tf__choice:active:not(:disabled) {
+	transform: scale(0.98);
+}
+
+.tf__choice:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.tf__hint {
+	margin-left: auto;
+}
+
+/* Both verdicts, side by side: the right one marked, and the one they picked
+   marked too. The correction is visible without a sentence saying "wrong". */
+.tf__pills {
+	display: flex;
+	gap: 12px;
+}
+
+.tf__pill-slot {
+	flex: 1 1 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.tf__pill {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 9px;
+	min-height: var(--pill-h);
+	border: 1.5px solid var(--wash-14);
+	border-radius: 16px;
+	background: var(--wash-3);
+	color: var(--faint);
+	font-size: var(--pill-fs);
+	font-weight: 600;
+	letter-spacing: 0.05em;
+}
+
+.tf__pill[data-answer] {
+	border: 2px solid transparent;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+	box-shadow: 0 5px 16px rgb(72 41 119 / 0.28);
+}
+
+.tf__pill[data-mine] {
+	border: 2px solid rgb(217 119 6 / 0.42);
+	background: var(--warn-wash);
+	color: var(--warn-ink);
+}
+
+/* 12px rather than the 11px the other tracked labels use. This one names which
+   pill is the right answer and which one the child picked, at the moment they
+   find out whether they were right — the worst moment to make someone squint.
+   The tracking keeps it compact enough that the extra pixel costs no line. */
+.tf__pill-tag {
+	min-height: 1em;
+	text-align: center;
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--plum);
+}
+
+.tf__pill-tag[data-mine] {
+	color: var(--warn-ink);
+}
+
+/* The takeaway is a sentence, not a word, so it wraps where the scramble's
+   single word never had to. */
+.tf__takeaway {
+	max-width: 26ch;
+	font-size: var(--takeaway);
+	line-height: 1.14;
+	text-wrap: pretty;
+}
+
+.tf .game__meaning-text {
+	max-width: 66ch;
+	font-size: var(--expl);
+	line-height: 1.66;
+}
+
+/* A numbered breakdown, for teaching that a paragraph cannot carry — the
+   10-20-30-40 shares only mean anything read against each other. */
+.tf__bullets {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: var(--nest-pad);
+	border: 1px solid var(--wash-14);
+	border-radius: 16px;
+	background: rgb(255 255 255 / 0.72);
+}
+
+.tf__topics {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.tf__bullet {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.tf__chip {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	min-width: var(--chip-w);
+	height: var(--chip-h);
+	padding: 0 8px;
+	border-radius: 999px;
+	background: var(--wash-12);
+	color: var(--plum);
+	font-family: var(--font-mono);
+	font-size: var(--chip-fs);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.tf__bullet-text {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--expl);
+	line-height: 1.6;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.tf__bullet-text b {
+	font-weight: 600;
+	color: var(--ink);
+}
+
+/* A wrong answer is amber, not red: it resolved the statement and taught
+   something. Only a skipped one is neutral. */
+.game__result[data-outcome="correct"] .game__result-icon {
+	background: rgb(22 163 74 / 0.14);
+	color: var(--success);
+}
+
+.game__result[data-outcome="incorrect"] .game__result-icon {
+	background: var(--warn-tint);
+	color: var(--warn-ink);
+}
+
+/* On a phone the action row stacks rather than letting the primary button drift
+   away from the one beside it. */
+@media (max-width: 620px) {
+	.game__btn--go {
+		margin-left: 0;
+		width: 100%;
+		justify-content: center;
+	}
+
+	.game__sub {
+		display: none;
+	}
+
+	.tf__hint {
+		margin-left: 0;
 	}
 }
 
@@ -2181,6 +3223,37 @@ body {
 	.hero__sub {
 		font-size: 0.9375rem;
 	}
+
+	/* One scrolling row instead of four stacked ones.
+	   At 390px each chip takes a full line, so the four of them ran past the
+	   space the grid gives `.starters` and the last one — "Does it cost
+	   anything to join?" — overlapped the disclaimer. Measured 238x5px of
+	   collision, and it was still clickable, so a child could tap the chip and
+	   the safety line at once. A single row keeps all four reachable, hands
+	   ~140px back to the hero and composer, and the half-visible second chip
+	   is its own affordance that there is more to the right. */
+	.starters__row {
+		flex-wrap: nowrap;
+		justify-content: flex-start;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		scroll-snap-type: x proximity;
+		padding: 14px 16px 14px;
+		/* Without this, snapping to `start` eats the row's own left padding and
+		   the first chip rests 1px from the viewport edge while the composer
+		   directly above it keeps a 16px inset. */
+		scroll-padding-left: 16px;
+		scrollbar-width: none;
+	}
+
+	.starters__row::-webkit-scrollbar {
+		display: none;
+	}
+
+	.starter {
+		flex: 0 0 auto;
+		scroll-snap-align: start;
+	}
 }
 
 /* Short viewports — a phone in landscape, a small window, or a soft keyboard
@@ -2246,7 +3319,8 @@ body {
 	.orb--hero,
 	.orb--hero::before,
 	.orb--thinking,
-	.voice-stars--play path {
+	.voice-stars--play path,
+	.game__stars svg {
 		animation: none !important;
 	}
 
@@ -2256,8 +3330,22 @@ body {
 	.voice-consent,
 	.voice-note,
 	.voice-menu,
-	.rail-scrim {
+	.rail-scrim,
+	.game,
+	.tile--tray,
+	.tile--answer {
 		animation-duration: 1ms !important;
+	}
+
+	/* The wrong-guess shake is the one motion here that carries meaning, so it
+	   is replaced rather than removed: the tiles recolour to amber and the
+	   sentence beside them says the same thing. */
+	.game__slots[data-shake] {
+		animation: none !important;
+	}
+
+	.tile--tray:hover:not(:disabled) {
+		transform: rotate(var(--rot, 0deg));
 	}
 
 	*,

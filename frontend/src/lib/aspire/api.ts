@@ -35,6 +35,14 @@ export interface AskInput {
 	/** Null starts a new conversation; pass the returned id to continue one. */
 	threadId: string | null;
 	simpleMode: boolean;
+	/**
+	 * Who is talking: "stella", "orion", "aurora" or "nova".
+	 *
+	 * Null means "we do not know", which the backend treats as permissive rather
+	 * than as any particular persona — an unknown caller can still play the
+	 * games, where an explicit parent account cannot.
+	 */
+	persona?: string | null;
 }
 
 /**
@@ -64,6 +72,7 @@ export async function askAspire({
 	message,
 	threadId,
 	simpleMode,
+	persona = null,
 }: AskInput): Promise<AskResult> {
 	// AbortSignal.timeout is unavailable in older Safari; a controller is not.
 	const controller = new AbortController();
@@ -78,6 +87,7 @@ export async function askAspire({
 				message,
 				thread_id: threadId,
 				simple_mode: simpleMode,
+				persona,
 			}),
 			signal: controller.signal,
 		});

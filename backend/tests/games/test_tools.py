@@ -1,0 +1,161 @@
+"""The tool layer: what the agent can and cannot do.
+
+Tool descriptions are prompt text — the agent reasons over them — so a few of
+these assert on wording rather than behaviour. That is deliberate: "never offer
+a game unprompted" is a product rule, and if someone edits it out of the
+description the rule is gone with no other test failing.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.games import games_proactive_suggest
+from app.games import tools as tools_module
+from app.games.engine import GameEngine
+
+# Matches the value in conftest; kept local because tests/ is not a package.
+SESSION = "thread-under-test"
+
+
+@pytest.fixture(autouse=True)
+def wire_tools(engine: GameEngine, monkeypatch):
+    monkeypatch.setattr(tools_module, "get_engine", lambda: engine)
+    return engine
+
+
+def cfg(persona: str | None = None, thread_id: str = SESSION, language: str | None = None):
+    configurable = {"thread_id": thread_id, "persona": persona}
+    if language:
+        configurable["language"] = language
+    return {"configurable": configurable}
+
+
+# --- the six tools exist, named as specified -------------------------------
+
+
+def test_the_expected_tools_are_exposed():
+    assert {t.name for t in tools_module.GAME_TOOLS} == {
+        "start_game",
+        "submit_answer",
+        "get_hint",
+        "skip_word",
+        "quit_game",
+        "list_games",
+    }
+
+
+def test_list_games_describes_what_actually_exists(engine):
+    payload = tools_module.list_games.invoke({}, config=cfg())
+    # The fixture engine carries word scramble only; the true/false set that
+    # ships is a draft and reports nothing until its real content lands.
+    assert payload["games"] == [
+        {
+            "id": "word_scramble",
+            "name": "Unscramble These Words",
+            "items": 4,
+            "supports_hints": True,
+            "languages": ["en"],
+        }
+    ]
+
+
+# --- persona gating, through the config the request supplies ---------------
+
+
+@pytest.mark.parametrize("persona", ["stella", "orion"])
+def test_account_holders_may_start(persona):
+    payload = tools_module.start_game.invoke({}, config=cfg(persona))
+    assert payload["ok"] is True
+    assert payload["text"] == "NOEYM"
+
+
+@pytest.mark.parametrize("persona", ["aurora", "nova"])
+def test_parents_and_newcomers_are_declined_with_a_reason(persona):
+    payload = tools_module.start_game.invoke({}, config=cfg(persona))
+    assert payload["ok"] is False
+    assert payload["reason"] == "not_available_for_persona"
+    # The agent needs something to say, not just a flag.
+    assert payload["detail"]
+
+
+def test_an_unknown_persona_is_allowed_rather_than_locked_out():
+    assert tools_module.start_game.invoke({}, config=cfg(None))["ok"] is True
+
+
+def test_a_nonsense_persona_is_ignored_not_fatal():
+    payload = tools_module.start_game.invoke({}, config=cfg("teacher"))
+    assert payload["ok"] is True
+
+
+# --- declines are structured, never exceptions ------------------------------
+
+
+def test_starting_twice_declines_cleanly():
+    tools_module.start_game.invoke({}, config=cfg())
+    payload = tools_module.start_game.invoke({}, config=cfg())
+    assert payload == {
+        "ok": False,
+        "reason": "already_running",
+        "detail": "A game is already running here.",
+    }
+
+
+def test_an_unauthored_language_declines_cleanly():
+    payload = tools_module.start_game.invoke({"language": "es"}, config=cfg())
+    assert payload["ok"] is False
+    assert payload["reason"] == "no_set_for_language"
+
+
+def test_acting_without_a_game_declines_cleanly():
+    for tool, args in (
+        (tools_module.submit_answer, {"answer": "money"}),
+        (tools_module.get_hint, {}),
+        (tools_module.skip_word, {}),
+        (tools_module.quit_game, {}),
+    ):
+        payload = tool.invoke(args, config=cfg())
+        assert payload["ok"] is False, tool.name
+        assert payload["reason"] == "no_game_running", tool.name
+
+
+def test_an_unknown_game_declines_cleanly():
+    payload = tools_module.start_game.invoke({"game_type": "sudoku"}, config=cfg())
+    assert payload["ok"] is False
+    assert payload["reason"] == "unknown_game"
+
+
+# --- the rules the agent is told ------------------------------------------
+
+
+def test_proactive_suggestion_is_off_by_default():
+    assert games_proactive_suggest() is False
+
+
+def test_start_game_tells_the_agent_not_to_offer_unprompted():
+    description = tools_module.start_game.description.lower()
+    assert "only when the user has asked" in description
+    assert "never offer a game unprompted" in description
+
+
+def test_submit_answer_tells_the_agent_it_does_not_judge():
+    description = tools_module.submit_answer.description.lower()
+    assert "you do not decide whether an answer is right" in description
+    assert "do not guess at it" in description
+
+
+def test_quit_game_tells_the_agent_to_accept_any_exit_signal():
+    description = tools_module.quit_game.description.lower()
+    assert "any clear signal" in description
+    assert "never require a particular word" in description
+
+
+def test_the_games_prompt_section_forbids_inventing_content():
+    from app.prompts import GAMES_INSTRUCTIONS
+
+    text = GAMES_INSTRUCTIONS.lower()
+    assert "never invent a word" in text
+    assert "you do not know the answers" in text
+    assert "start a game only when someone asks" in text
+    # Mid-game questions must still be answered.
+    assert "a question mid-game is still a question" in text

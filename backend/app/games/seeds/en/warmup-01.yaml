@@ -1,0 +1,61 @@
+# ASPIRE word scramble — warm-up set 1
+#
+# Source: ECCB printed handout, "Unscramble These Words".
+# The scrambles below are the client's own. Do NOT re-scramble them: the printed
+# sheet and the chat game should show a child the same puzzle.
+#
+# The handout closes with "raise your hand and state your name clearly". That is
+# a classroom instruction with no chat equivalent, and it is deliberately absent.
+#
+# Editing this file:
+#   word        the answer, uppercase. Never leaves the server until revealed.
+#   scramble    must be an anagram of `word` — CI asserts this on every entry.
+#   hint        a CATEGORY nudge, not a definition. It becomes hint level 2,
+#               shown as "<n> letters — <hint>". Keep it from giving the word away.
+#   definition  plain, roughly grade-2 reading level. It is hint level 3, and it
+#               is what the assistant teaches from after a correct answer.
+#
+# Adding a set: copy this file, change `id`, keep `language` matching the folder.
+
+id: warmup-01
+game_type: word_scramble
+language: en
+title: Unscramble These Words
+source: ECCB printed handout, warm-up activity
+
+entries:
+  - id: warmup-01-money
+    language: en
+    word: MONEY
+    scramble: NOEYM
+    hint: a thing rather than an action — you can hold it
+    definition: what we use to buy the things we need
+    difficulty_band: warmup
+    persona_bands: [stella, orion]
+
+  - id: warmup-01-interest
+    language: en
+    word: INTEREST
+    scramble: STERINTE
+    hint: a word you will hear at the bank
+    definition: extra money the bank pays you for keeping your savings there
+    difficulty_band: warmup
+    persona_bands: [stella, orion]
+
+  - id: warmup-01-invest
+    language: en
+    word: INVEST
+    scramble: SNEVIT
+    hint: an action word — it is about growing money, not keeping it
+    definition: putting money into something so it can grow over time
+    difficulty_band: warmup
+    persona_bands: [stella, orion]
+
+  - id: warmup-01-save
+    language: en
+    word: SAVE
+    scramble: EASV
+    hint: an action word — it is about keeping money, not spending it
+    definition: putting money aside now so you have it later
+    difficulty_band: warmup
+    persona_bands: [stella, orion]
