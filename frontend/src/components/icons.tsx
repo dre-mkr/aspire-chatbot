@@ -171,6 +171,17 @@ export function SendIcon(props: IconProps) {
 	);
 }
 
+/* Filled rather than stroked, unlike its neighbours: stop is the one control
+   here that halts something already running, and the solid mark is the
+   universal shape for it. Same 24px grid, same currentColor. */
+export function StopIcon(props: IconProps) {
+	return (
+		<Icon size={16} {...props}>
+			<rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" />
+		</Icon>
+	);
+}
+
 export function MenuIcon(props: IconProps) {
 	return (
 		<Icon size={17} {...props}>

@@ -1864,9 +1864,19 @@ body {
 	font: inherit;
 	font-size: 0.78125rem;
 	font-weight: 500;
+	text-align: left;
 	transition:
 		background var(--swift),
 		color var(--swift);
+}
+
+/* Armed state for a press that discards later messages. Amber, matching the
+   game's "not yet" rather than the red reserved for failures — nothing has
+   gone wrong, the button is just asking whether you meant it. */
+.text-btn[data-confirming] {
+	background: var(--warn-wash);
+	color: var(--warn-ink);
+	font-weight: 600;
 }
 
 .text-btn:hover {
@@ -2111,6 +2121,20 @@ body {
 .composer__send:hover:not(:disabled) {
 	transform: translateY(-1px);
 	box-shadow: 0 9px 22px rgb(72 41 119 / 0.42);
+}
+
+/* The stop state. Same footprint and position as send, so the control does not
+   jump when a reply starts; magenta because that is already the recording and
+   in-progress colour in this palette, and it reads as "something is running"
+   rather than as an error. */
+.composer__send--stop {
+	background: linear-gradient(90deg, var(--magenta), var(--magenta-light));
+	box-shadow: 0 5px 16px rgb(194 47 153 / 0.35);
+}
+
+.composer__send--stop:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 9px 22px rgb(194 47 153 / 0.42);
 }
 
 .composer__send:active:not(:disabled) {

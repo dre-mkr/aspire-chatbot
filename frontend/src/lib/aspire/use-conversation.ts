@@ -127,11 +127,25 @@ export function useConversation({
 	 * "New chat" or a second question while the first is still in flight.
 	 */
 	const turnToken = useRef(0);
+	/**
+	 * Mirrors `isThinking` for the in-flight guard in `send`.
+	 *
+	 * A ref rather than the state value because `send` is deliberately stable —
+	 * depending on `isThinking` would rebuild the whole send pipeline on every
+	 * turn.
+	 */
+	const isThinkingRef = useRef(false);
 	// Held in a ref so a changing callback never re-creates the send pipeline.
 	const onAnswerRef = useRef(onAnswer);
 	useEffect(() => {
 		onAnswerRef.current = onAnswer;
 	}, [onAnswer]);
+
+	// Commits before any later click can be dispatched, so the guard in `send`
+	// never reads a stale value.
+	useEffect(() => {
+		isThinkingRef.current = isThinking;
+	}, [isThinking]);
 
 	// localStorage is unavailable during SSR, so history loads after mount.
 	useEffect(() => setHistory(groupByRecency(loadConversations())), []);
@@ -283,6 +297,12 @@ export function useConversation({
 		(raw: string, simpleMode = false) => {
 			const text = raw.trim();
 			if (!text) return;
+			// A second question while the first is still in flight used to bump
+			// the turn token, so the first reply was discarded on arrival and its
+			// user bubble sat in the transcript forever with no answer and no
+			// error. The composer disables send while busy; this is the guard
+			// behind it.
+			if (isThinkingRef.current || cursor.current) return;
 
 			dropStream();
 			lastQuestion.current = text;
@@ -300,26 +320,62 @@ export function useConversation({
 		[ask, dropStream],
 	);
 
-	/** Drops the last answer and asks the same question again. */
+	/**
+	 * Re-asks the question behind one specific answer, replacing that answer.
+	 *
+	 * Takes the id of the message the button was rendered next to. It used to
+	 * take no argument at all: it re-asked `lastQuestion` — whatever was asked
+	 * most recently — and dropped `messages.at(-1)`. Since the same handler is
+	 * rendered under every answer, pressing "Try again" on the first of three
+	 * silently destroyed the third and re-ran the third question. There is no
+	 * undo, so that was unrecoverable.
+	 */
 	const regenerate = useCallback(
-		(simpleMode = false) => {
-			if (!lastQuestion.current) return;
+		(messageId: number, simpleMode = false) => {
+			const index = messages.findIndex((m) => m.id === messageId);
+			if (index === -1) return;
+
+			// The question this answer came from is the nearest user turn above
+			// it, not the newest one in the transcript.
+			let question = "";
+			for (let i = index - 1; i >= 0; i -= 1) {
+				const previous = messages[i];
+				if (previous.role === "user") {
+					question = previous.text;
+					break;
+				}
+			}
+			if (!question) return;
 
 			dropStream();
 			const token = ++turnToken.current;
+			lastQuestion.current = question;
 
+			// Re-found inside the updater so a turn that settled between the
+			// click and this point cannot make the index cut in the wrong place.
 			setMessages((current) => {
-				const tail = current.at(-1);
-				return tail?.role === "assistant" || tail?.role === "error"
-					? current.slice(0, -1)
-					: current;
+				const at = current.findIndex((m) => m.id === messageId);
+				return at === -1 ? current : current.slice(0, at);
 			});
 			setIsThinking(true);
 
-			void ask(lastQuestion.current, simpleMode, token);
+			void ask(question, simpleMode, token);
 		},
-		[ask, dropStream],
+		[ask, dropStream, messages],
 	);
+
+	/**
+	 * Abandons the turn in flight.
+	 *
+	 * Bumping the token makes `ask` discard the reply when it lands. A partly
+	 * revealed answer is settled rather than thrown away — the words are already
+	 * on screen and deleting them as you read is its own small betrayal.
+	 */
+	const stop = useCallback(() => {
+		turnToken.current += 1;
+		if (cursor.current) finishStream();
+		setIsThinking(false);
+	}, [finishStream]);
 
 	/** Persist a finished exchange so the rail can reopen it. */
 	useEffect(() => {
@@ -401,6 +457,7 @@ export function useConversation({
 		threadId,
 		send,
 		regenerate,
+		stop,
 		openPast,
 		reset,
 	};

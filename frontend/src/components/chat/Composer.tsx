@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useState } from "react";
-import { MicIcon, SendIcon, SparkIcon } from "#/components/icons";
+import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { VoiceListening, VoiceTranscribing } from "./Voice";
@@ -9,6 +9,9 @@ const TOUCH = "(hover: none)";
 
 interface ComposerProps {
 	onSend: (text: string) => void;
+	/** A reply is in flight: send is unavailable and becomes a stop control. */
+	busy: boolean;
+	onStop: () => void;
 	/** "Explain it simply" — asks for the plain-words version of every answer. */
 	simpleMode: boolean;
 	onToggleSimpleMode: () => void;
@@ -36,13 +39,15 @@ const MIC_TITLE: Record<MicState, string> = {
 
 export function Composer({
 	onSend,
+	busy,
+	onStop,
 	simpleMode,
 	onToggleSimpleMode,
 	draft,
 	onDraftChange,
 	voice,
 }: ComposerProps) {
-	const canSend = draft.trim().length > 0;
+	const canSend = draft.trim().length > 0 && !busy;
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const touch = useMediaQuery(TOUCH);
 
@@ -185,14 +190,28 @@ export function Composer({
 								<span className="sr-only">{MIC_TITLE[voice.micState]}</span>
 							</button>
 
-							<button
-								type="submit"
-								className="composer__send"
-								disabled={!canSend}
-							>
-								<SendIcon />
-								<span className="sr-only">Send message</span>
-							</button>
+							{/* While a reply is in flight the send button becomes a
+							    stop, rather than sitting there enabled and quietly
+							    orphaning the question already running. */}
+							{busy ? (
+								<button
+									type="button"
+									className="composer__send composer__send--stop"
+									onClick={onStop}
+								>
+									<StopIcon />
+									<span className="sr-only">Stop generating</span>
+								</button>
+							) : (
+								<button
+									type="submit"
+									className="composer__send"
+									disabled={!canSend}
+								>
+									<SendIcon />
+									<span className="sr-only">Send message</span>
+								</button>
+							)}
 						</div>
 					</div>
 				)}

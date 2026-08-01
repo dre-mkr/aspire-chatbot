@@ -54,7 +54,8 @@ interface TranscriptProps {
 	streaming: Streaming | null;
 	isThinking: boolean;
 	followUps: Array<string>;
-	onRegenerate: () => void;
+	/** Takes the id of the message being retried, so it replaces that one. */
+	onRegenerate: (messageId: number) => void;
 	onAsk: (question: string) => void;
 	playback: Playback;
 	game: ActiveGame | null;
@@ -72,7 +73,7 @@ export function Transcript({
 }: TranscriptProps) {
 	return (
 		<div className="transcript">
-			{messages.map((message) => {
+			{messages.map((message, index) => {
 				if (message.role === "user") {
 					return (
 						<div key={message.id} className="turn turn--user">
@@ -87,7 +88,7 @@ export function Transcript({
 							key={message.id}
 							text={message.text}
 							canRetry={message.canRetry}
-							onRetry={onRegenerate}
+							onRetry={() => onRegenerate(message.id)}
 						/>
 					);
 				}
@@ -98,6 +99,11 @@ export function Transcript({
 						message={message}
 						onRegenerate={onRegenerate}
 						playback={playback}
+						// How much of the conversation asking again would discard.
+						// The reveal always renders at the tail, so re-asking an
+						// older question necessarily drops what came after it —
+						// that is coherent, but it has to be consented to.
+						discards={messages.length - index - 1}
 					/>
 				);
 			})}
@@ -188,10 +194,12 @@ function Answer({
 	message,
 	onRegenerate,
 	playback,
+	discards,
 }: {
 	message: Extract<ChatMessage, { role: "assistant" }>;
-	onRegenerate: () => void;
+	onRegenerate: (messageId: number) => void;
 	playback: Playback;
+	discards: number;
 }) {
 	return (
 		<article className="turn turn--assistant">
@@ -208,6 +216,7 @@ function Answer({
 					onRegenerate={onRegenerate}
 					playback={playback}
 					messageId={message.id}
+					discards={discards}
 				/>
 			</div>
 		</article>
@@ -370,13 +379,18 @@ function AnswerActions({
 	onRegenerate,
 	playback,
 	messageId,
+	discards,
 }: {
 	text: string;
-	onRegenerate: () => void;
+	onRegenerate: (messageId: number) => void;
 	playback: Playback;
 	messageId: number;
+	discards: number;
 }) {
 	const [copied, setCopied] = useState(false);
+	// Two-step only when something would actually be lost. Asking again on the
+	// newest answer discards nothing, so it stays a single press.
+	const [confirming, setConfirming] = useState(false);
 	const playing = playback.playingId === messageId;
 	const paused = playback.pausedId === messageId;
 
@@ -385,6 +399,22 @@ function AnswerActions({
 		const timer = setTimeout(() => setCopied(false), 2000);
 		return () => clearTimeout(timer);
 	}, [copied]);
+
+	// A confirm left armed is a trap for the next person to press the button.
+	useEffect(() => {
+		if (!confirming) return;
+		const timer = setTimeout(() => setConfirming(false), 5000);
+		return () => clearTimeout(timer);
+	}, [confirming]);
+
+	function askAgain() {
+		if (discards > 0 && !confirming) {
+			setConfirming(true);
+			return;
+		}
+		setConfirming(false);
+		onRegenerate(messageId);
+	}
 
 	async function copy() {
 		try {
@@ -419,9 +449,20 @@ function AnswerActions({
 				</span>
 			</button>
 
-			<button type="button" className="text-btn" onClick={onRegenerate}>
+			{/* "Ask again", not "Try again": under a successful answer the latter
+			    reads as "you got it wrong", which is the last thing a child sees
+			    on every correct answer. "Try again" now belongs to the error
+			    state only, where it means what it says. */}
+			<button
+				type="button"
+				className="text-btn"
+				data-confirming={confirming || undefined}
+				onClick={askAgain}
+			>
 				<RetryIcon />
-				Try again
+				{confirming
+					? `Ask again and drop the ${discards} ${discards === 1 ? "message" : "messages"} after it?`
+					: "Ask again"}
 			</button>
 		</div>
 	);

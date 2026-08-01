@@ -49,6 +49,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		threadId,
 		send,
 		regenerate,
+		stop,
 		openPast,
 		reset,
 	} = useConversation({
@@ -185,10 +186,20 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		[send, simpleMode, stopPlayback],
 	);
 
-	const handleRegenerate = useCallback(() => {
+	// Carries the id of the answer being retried, so it replaces that one
+	// rather than whatever happens to be last in the transcript.
+	const handleRegenerate = useCallback(
+		(messageId: number) => {
+			stopPlayback();
+			regenerate(messageId, simpleMode);
+		},
+		[regenerate, simpleMode, stopPlayback],
+	);
+
+	const handleStop = useCallback(() => {
 		stopPlayback();
-		regenerate(simpleMode);
-	}, [regenerate, simpleMode, stopPlayback]);
+		stop();
+	}, [stop, stopPlayback]);
 
 	// Reopening or starting a conversation moves to a different thread, and a
 	// game belongs to the thread it was played in. Clear it locally; the effect
@@ -322,6 +333,8 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 
 						<Composer
 							onSend={ask}
+							busy={!settled}
+							onStop={handleStop}
 							simpleMode={simpleMode}
 							onToggleSimpleMode={() => setSimpleMode((on) => !on)}
 							draft={draft}
