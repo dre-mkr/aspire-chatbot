@@ -17,6 +17,7 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
+import { useMediaQuery } from "#/lib/use-media-query";
 
 /**
  * True or false, played in the thread.
@@ -212,6 +213,11 @@ export function TrueFalse({
 	// Whether the shortcut can actually fire right now, so the hint can stop
 	// claiming otherwise.
 	const [keyboardArmed, setKeyboardArmed] = useState(false);
+	// And never on a device with no keys to press. Naming T and F on a phone is
+	// the same mistake the composer's Space hint used to make, and showing it
+	// there also wrapped the action row, growing the card by ~30px the moment
+	// the child touched it.
+	const touch = useMediaQuery("(hover: none)");
 
 	useEffect(() => {
 		const card = cardRef.current;
@@ -361,7 +367,7 @@ export function TrueFalse({
 							    card, so before anything here has focus the composer has
 							    it and "t" just types a letter — advertising the key in
 							    that state is a promise the code does not keep. */}
-							{keyboardArmed ? (
+							{keyboardArmed && !touch ? (
 								<span className="game__count tf__hint">
 									{copy.inputHint}
 								</span>

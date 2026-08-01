@@ -382,24 +382,52 @@ export function useConversation({
 	 * revealed answer is settled rather than thrown away — the words are already
 	 * on screen and deleting them as you read is its own small betrayal.
 	 */
+	/**
+	 * Settles only what has actually been revealed.
+	 *
+	 * Deliberately not `finishStream`, which appends `state.answer` — the whole
+	 * reply, including the words the reveal had not reached. Calling that from
+	 * `stop` made the stop button a reveal-everything button for the entire
+	 * length of the typewriter, which is the opposite of what it says.
+	 *
+	 * Follow-ups are dropped: they belong to an answer that finished.
+	 */
+	const settleRevealed = useCallback(() => {
+		clearTimers();
+		const state = cursor.current;
+		cursor.current = undefined;
+		setStreaming(null);
+		if (!state) return;
+
+		const revealed = state.built.filter(Boolean);
+		if (revealed.length === 0) return;
+
+		setMessages((current) => [
+			...current,
+			{
+				id: state.id,
+				role: "assistant",
+				blocks: revealed,
+				followUps: [],
+				sources: state.sources,
+			},
+		]);
+	}, [clearTimers]);
+
 	const stop = useCallback(() => {
 		turnToken.current += 1;
 
-		// Something was already on screen: settle it. The words are there to be
-		// read, and deleting them as you read is its own small betrayal.
-		if (cursor.current) {
-			finishStream();
-			setIsThinking(false);
-			return;
-		}
-
-		// Nothing had arrived yet, so stopping would otherwise leave the question
-		// sitting there forever with no answer and no explanation — the same
-		// orphan this control exists to prevent. Say what happened, and offer the
-		// way back.
+		// Keep whatever is already on screen — the words are there to be read,
+		// and deleting them as you read is its own small betrayal — but keep only
+		// those, not the rest of the reply.
+		if (cursor.current) settleRevealed();
 		setIsThinking(false);
+
+		// Then say what happened, in both branches. Without this a stop before
+		// the first word left the question sitting there forever with no answer
+		// and no explanation: the same orphan this control exists to prevent.
 		setMessages((current) => {
-			if (current.at(-1)?.role !== "user") return current;
+			if (current.at(-1)?.role === "error") return current;
 			return [
 				...current,
 				{
@@ -411,7 +439,7 @@ export function useConversation({
 				},
 			];
 		});
-	}, [finishStream]);
+	}, [settleRevealed]);
 
 	/** Persist a finished exchange so the rail can reopen it. */
 	useEffect(() => {

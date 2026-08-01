@@ -11,4 +11,11 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
-.impeccable/
+# Design-review tooling is tracked (it is the regression suite); its generated
+# output is not. An agent cleaning up "temporary files" deleted the whole
+# directory once -- gitignoring the scripts is how that became unrecoverable.
+.impeccable/shots/
+.impeccable/*.json
+.impeccable/*.err
+.impeccable/*.txt
+.impeccable/*.png

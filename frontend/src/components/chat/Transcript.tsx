@@ -359,6 +359,10 @@ function Failure({
 		<div className="turn turn--assistant">
 			<div className="orb orb--muted" aria-hidden="true" />
 			<div className="answer">
+				{/* Every other assistant turn carries this, so heading navigation
+				    skipped precisely the turns where "who is speaking" is least
+				    obvious. */}
+				<h2 className="sr-only">ASPIRE AI</h2>
 				{/* No role="alert" here. AspireChat already routes the newest error
 				    into the transcript's own live region, and a role="alert" on the
 				    same text makes a screen reader read every failure twice. */}

@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
@@ -50,6 +50,22 @@ export function Composer({
 	const canSend = draft.trim().length > 0 && !busy;
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const touch = useMediaQuery(TOUCH);
+	const fieldRef = useRef<HTMLTextAreaElement>(null);
+
+	/**
+	 * Stop, then put focus somewhere real.
+	 *
+	 * The stop and send buttons carry distinct keys so React unmounts rather
+	 * than reusing the node — which is what stopped a click on Stop from
+	 * submitting the form. The cost is that the button being pressed
+	 * disappears, so focus falls to <body> and a keyboard user is dropped out
+	 * of the tab ring at the exact moment they asked for an exit. The composer
+	 * is where they were and where they are most likely to go next.
+	 */
+	function handleStop() {
+		onStop();
+		fieldRef.current?.focus();
+	}
 
 	const listening = voice.phase === "listening";
 	const transcribing = voice.phase === "transcribing";
@@ -130,6 +146,7 @@ export function Composer({
 				<div className="composer__field">
 					<textarea
 						id="aspire-composer"
+						ref={fieldRef}
 						value={draft}
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleKeyDown}
@@ -211,7 +228,7 @@ export function Composer({
 										// Belt and braces: this button lives inside the form,
 										// so nothing it does should ever reach the submit path.
 										event.preventDefault();
-										onStop();
+										handleStop();
 									}}
 								>
 									<StopIcon />
