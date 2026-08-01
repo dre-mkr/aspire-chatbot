@@ -11,12 +11,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 
-from app.agent import get_agent, suggest_follow_ups
+from app.agent import get_agent, suggest_follow_ups, suggest_title
 from app.config import get_settings
 from app.games import games_enabled, games_router
 from app.ingest import ingest_if_empty
 from app.rag import count_documents, get_vector_store
-from app.schemas import ChatRequest, ChatResponse, HealthResponse, Source
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    Source,
+    TitleRequest,
+    TitleResponse,
+)
 from app.voice import get_voice_settings, validate_registry, voice_router
 
 logger = logging.getLogger(__name__)
@@ -186,3 +193,22 @@ async def chat(request: ChatRequest) -> ChatResponse:
         sources=_extract_sources(messages),
         follow_ups=await suggest_follow_ups(request.message, reply),
     )
+
+
+@app.post("/api/title", response_model=TitleResponse)
+async def title(request: TitleRequest) -> TitleResponse:
+    """Name a conversation from its opening exchange.
+
+    Separate from /chat on purpose. That call streams and is RAG-grounded, and
+    asking it to also produce a title risks the title appearing in the answer the
+    user is reading. This one is small, non-streaming, and fired once per chat
+    after the first reply has landed.
+
+    Never fails in a way the client has to handle: a model error or a
+    non-substantive opening message both come back as `title: null`, and the
+    client keeps its own fallback.
+    """
+    generated = await suggest_title(
+        request.message, request.answer, request.language
+    )
+    return TitleResponse(title=generated)

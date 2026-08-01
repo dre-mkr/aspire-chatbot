@@ -4,12 +4,19 @@ import {
 	groupByRecency,
 	type HistoryGroup,
 	loadConversations,
+	retitleConversation,
 	type StoredConversation,
 	type StoredMessage,
 	saveConversation,
 	titleFor,
 } from "./history";
-import { type Answer, type AnswerBlock, parseAnswer } from "./knowledge";
+import { requestTitle } from "./title";
+import {
+	type Answer,
+	type AnswerBlock,
+	answerToText,
+	parseAnswer,
+} from "./knowledge";
 
 export type ChatMessage =
 	| { id: number; role: "user"; text: string }
@@ -108,6 +115,13 @@ function toStored(messages: Array<ChatMessage>): Array<StoredMessage> {
 
 export interface UseConversationOptions {
 	/**
+	 * Which language to name the conversation in.
+	 *
+	 * A getter because the voice layer that owns this setting is constructed
+	 * after this hook. Read at call time, once, when a title is requested.
+	 */
+	getLanguage?: () => string;
+	/**
 	 * Fired the moment a reply lands, with the whole text — before the
 	 * typewriter starts revealing it. Read-aloud uses this so audio begins as
 	 * the answer arrives rather than after it has finished being drawn.
@@ -120,6 +134,7 @@ export interface UseConversationOptions {
 export function useConversation({
 	onAnswer,
 	persona = null,
+	getLanguage = () => "en",
 }: UseConversationOptions = {}) {
 	const [phase, setPhase] = useState<Phase>("landing");
 	const [messages, setMessages] = useState<Array<ChatMessage>>([]);
@@ -139,6 +154,13 @@ export function useConversation({
 	 */
 	const turnToken = useRef(0);
 	/**
+	 * Threads this session has already tried to name.
+	 *
+	 * A ref, not state, so a re-render cannot fire a second call. Keyed by
+	 * thread so reopening a past conversation never re-titles it.
+	 */
+	const titledThreads = useRef(new Set<string>());
+	/**
 	 * Mirrors `isThinking` for the in-flight guard in `send`.
 	 *
 	 * A ref rather than the state value because `send` is deliberately stable —
@@ -151,6 +173,14 @@ export function useConversation({
 	useEffect(() => {
 		onAnswerRef.current = onAnswer;
 	}, [onAnswer]);
+
+	// Same reason as onAnswer: the voice layer is created after this hook (it
+	// needs the thread id this hook owns), so the language reaches the title
+	// call through a ref rather than a prop.
+	const getLanguageRef = useRef(getLanguage);
+	useEffect(() => {
+		getLanguageRef.current = getLanguage;
+	}, [getLanguage]);
 
 	// Commits before any later click can be dispatched, so the guard in `send`
 	// never reads a stale value.
@@ -451,16 +481,62 @@ export function useConversation({
 		const firstQuestion = messages.find((m) => m.role === "user");
 		if (firstQuestion?.role !== "user") return;
 
+		// Whatever this conversation is already called wins over a fresh
+		// truncation: a generated or hand-typed title must survive every later
+		// turn, and this effect runs on all of them.
+		const existing = loadConversations().find((c) => c.threadId === threadId);
+
 		setHistory(
 			groupByRecency(
 				saveConversation({
 					threadId,
-					title: titleFor(firstQuestion.text),
+					title: existing?.title || titleFor(firstQuestion.text),
+					titleSource: existing?.titleSource,
 					updatedAt: Date.now(),
 					messages: toStored(messages),
 				}),
 			),
 		);
+	}, [messages, threadId]);
+
+	/**
+	 * Name the conversation, once, after its first answer has landed.
+	 *
+	 * Fire-and-forget by construction: nothing awaits it, nothing renders
+	 * differently until it resolves, and every failure path ends in the title
+	 * staying exactly as it was. `titledThreads` is a ref rather than state so a
+	 * re-render cannot fire a second call, and it is keyed by thread so
+	 * reopening a past conversation never re-titles it.
+	 */
+	useEffect(() => {
+		if (!threadId || titledThreads.current.has(threadId)) return;
+
+		const tail = messages.at(-1);
+		if (tail?.role !== "assistant") return;
+
+		const firstQuestion = messages.find((m) => m.role === "user");
+		if (firstQuestion?.role !== "user") return;
+
+		// Only the opening exchange names the chat, so a conversation that
+		// already has more than one answer was restored, not just started.
+		const answers = messages.filter((m) => m.role === "assistant");
+		if (answers.length !== 1) return;
+
+		const stored = loadConversations().find((c) => c.threadId === threadId);
+		if (stored?.titleSource) return; // already named, or named by hand
+
+		titledThreads.current.add(threadId);
+
+		void requestTitle({
+			message: firstQuestion.text,
+			answer: answerToText(tail.blocks),
+			language: getLanguageRef.current(),
+		}).then((title) => {
+			// Null means the service declined — a greeting, gibberish, or a
+			// failed call. The truncated first message stays.
+			if (!title) return;
+			setHistory(groupByRecency(retitleConversation(threadId, title, "generated")));
+		});
 	}, [messages, threadId]);
 
 	/** Reopens a stored conversation; everything lands already finished. */

@@ -119,3 +119,27 @@ under about eight words, and must not repeat what was already answered. If the \
 assistant said it had no information on the topic, suggest questions about \
 related things it clearly does cover.\
 """
+
+
+TITLE_PROMPT = """\
+You name a conversation with ASPIRE's assistant, for a list of past chats.
+
+Write a title of 3 to 6 words, at most 48 characters, in sentence case. No \
+quotation marks, no trailing punctuation, no emoji, and no preamble such as \
+"Chat about", "Discussion of" or "User asks".
+
+Name the SPECIFIC thing the person wanted to know, not the general subject. \
+Almost every conversation here is about the ASPIRE programme, so a title like \
+"ASPIRE Programme" or "About ASPIRE" is useless -- it does not tell anyone which \
+chat this is. Titles are read side by side in a list and have to be told apart \
+from one another. Prefer "Completion certificate details", "Eligibility \
+requirements", "How to apply", "Interest on a savings account".
+
+If the first message is not a real question -- a greeting, a test, keyboard \
+mashing, a single word with no topic -- reply with exactly NO_TITLE and nothing \
+else. Do not invent a subject that is not there. "hi", "test", "dfghjkl;" and \
+"???" all get NO_TITLE.
+
+Write the title in the language named below. If that language is Spanish or \
+French, the title is in Spanish or French.\
+"""

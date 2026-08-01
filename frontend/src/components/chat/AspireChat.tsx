@@ -55,6 +55,11 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
 		persona,
+		// Titles are written in the language the interface is set to, read from
+		// the existing voice setting rather than detected separately. A getter
+		// because `voice` is constructed below — it needs the thread id this
+		// hook returns.
+		getLanguage: () => voice.language,
 	});
 
 	const compact = useMediaQuery(COMPACT);

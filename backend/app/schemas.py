@@ -41,6 +41,24 @@ class ChatResponse(BaseModel):
     follow_ups: list[str] = Field(default_factory=list)
 
 
+class TitleRequest(BaseModel):
+    """Names one conversation, once, from its opening exchange."""
+
+    message: str = Field(min_length=1, max_length=8000)
+    answer: str = Field(min_length=1, max_length=20000)
+    # Which language to write the title in. Comes from the client's existing
+    # voice/language setting rather than being detected here, so the title
+    # agrees with the rest of the interface. Unrecognised values mean English.
+    language: str = Field(default="en", max_length=8)
+
+
+class TitleResponse(BaseModel):
+    # Null when the opening message carried no real subject, or when the call
+    # failed. Either way the client keeps its own fallback -- this endpoint
+    # never invents a title and never returns an error the user would see.
+    title: str | None = None
+
+
 class HealthResponse(BaseModel):
     status: str
 

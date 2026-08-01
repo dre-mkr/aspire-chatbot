@@ -27,7 +27,23 @@ export type StoredMessage =
 
 export interface StoredConversation {
 	threadId: string;
+	/**
+	 * What this conversation is called, everywhere.
+	 *
+	 * The single source of truth for both the top bar and the rail — they never
+	 * derive their own. Falls back through: generated title → truncated first
+	 * message → "New chat".
+	 */
 	title: string;
+	/**
+	 * Where the title came from, which decides whether it may be replaced.
+	 *
+	 * Absent means it is still the truncated first message and generation is
+	 * welcome to improve it. "generated" means the model named it, and it is
+	 * only replaced on an explicit regenerate. "manual" means a person typed it,
+	 * and generation must never touch it again.
+	 */
+	titleSource?: "generated" | "manual";
 	updatedAt: number;
 	messages: Array<StoredMessage>;
 }
@@ -89,10 +105,28 @@ export function saveConversation(
 	return next;
 }
 
-/** First question asked, which is what the rail lists it under. */
+/** Shown when there is nothing better — never "Untitled", never empty. */
+export const FALLBACK_TITLE = "New chat";
+
+/**
+ * The middle rung of the fallback ladder: the first question, truncated.
+ *
+ * Only ever a placeholder. Nearly every conversation here opens with a question
+ * about ASPIRE, so a list built from these reads as a column of near-identical
+ * entries — which is the problem generated titles exist to solve. An opening
+ * message with no words in it gets the fallback instead.
+ */
 export function titleFor(question: string) {
 	const clean = question.trim().replace(/\s+/g, " ");
+	if (!clean) return FALLBACK_TITLE;
 	return clean.length > TITLE_MAX ? `${clean.slice(0, TITLE_MAX - 1)}…` : clean;
+}
+
+/** What any surface should render for a conversation, fallbacks applied. */
+export function displayTitle(conversation: {
+	title?: string | null;
+}): string {
+	return conversation.title?.trim() || FALLBACK_TITLE;
 }
 
 /** Buckets conversations the way the rail groups them. */
@@ -122,4 +156,57 @@ export function groupByRecency(
 	}
 
 	return groups.filter((group) => group.items.length > 0);
+}
+
+/**
+ * Renames one conversation in place.
+ *
+ * Separate from `saveConversation` because a rename must not touch the
+ * transcript or the timestamp — reordering the rail because a title arrived
+ * would move a row out from under the reader's cursor.
+ *
+ * A manual title is never overwritten by a generated one; that is the whole
+ * point of the flag. An explicit regenerate clears it first.
+ */
+export function retitleConversation(
+	threadId: string,
+	title: string,
+	source: "generated" | "manual",
+): Array<StoredConversation> {
+	const clean = title.trim().slice(0, TITLE_MAX);
+	if (!clean) return loadConversations();
+
+	const next = loadConversations().map((conversation) => {
+		if (conversation.threadId !== threadId) return conversation;
+		if (source === "generated" && conversation.titleSource === "manual") {
+			return conversation;
+		}
+		return { ...conversation, title: clean, titleSource: source };
+	});
+
+	if (canStore()) {
+		try {
+			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+		} catch {
+			// Same reasoning as saveConversation: history is a convenience.
+		}
+	}
+	return next;
+}
+
+/** Drops the manual flag so a regenerate is allowed to replace the title. */
+export function clearTitleLock(threadId: string): Array<StoredConversation> {
+	const next = loadConversations().map((conversation) =>
+		conversation.threadId === threadId
+			? { ...conversation, titleSource: undefined }
+			: conversation,
+	);
+	if (canStore()) {
+		try {
+			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+		} catch {
+			// As above.
+		}
+	}
+	return next;
 }

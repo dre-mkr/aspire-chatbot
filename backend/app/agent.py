@@ -26,6 +26,7 @@ from app.prompts import (
     RETRIEVER_TOOL_DESCRIPTION,
     RETRIEVER_TOOL_NAME,
     SIMPLE_MODE_INSTRUCTIONS,
+    TITLE_PROMPT,
 )
 from app.rag import build_retriever, get_vector_store
 
@@ -142,3 +143,66 @@ async def suggest_follow_ups(question: str, answer: str) -> list[str]:
         return []
 
     return [q.strip() for q in result.questions if q.strip()][:2]
+
+
+# Languages the title call will write in, mapped to the name the prompt uses.
+# Mirrors the client's voice language options; anything unrecognised is English.
+_TITLE_LANGUAGES = {"en": "English", "es": "Spanish", "fr": "French"}
+
+# The model is asked for this exactly when the opening message carries no topic.
+NO_TITLE = "NO_TITLE"
+
+
+class _Title(BaseModel):
+    """Structured shape for the conversation-title call."""
+
+    title: str = PydanticField(
+        description=(
+            "3 to 6 words naming the specific thing asked, in sentence case, "
+            f"at most 48 characters -- or exactly {NO_TITLE} if the opening "
+            "message has no real subject."
+        ),
+    )
+
+
+@lru_cache(maxsize=1)
+def _title_model():
+    return build_chat_model().with_structured_output(_Title)
+
+
+async def suggest_title(question: str, answer: str, language: str = "en") -> str | None:
+    """Name a conversation for the history list and the top bar.
+
+    A separate, small, non-streaming call, deliberately kept off the /chat path:
+    that response streams and is RAG-grounded, and a title leaking into the
+    visible answer is worse than a title arriving late.
+
+    Best effort in exactly the same way as `suggest_follow_ups`. Returns None
+    when there is no usable title -- the model said NO_TITLE, the call failed, or
+    the result came back empty -- and the client keeps its own fallback.
+    """
+    spoken = _TITLE_LANGUAGES.get(language, "English")
+    try:
+        result = await _title_model().ainvoke(
+            [
+                {"role": "system", "content": TITLE_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Language for the title: {spoken}\n\n"
+                        f"User asked: {question}\n\n"
+                        f"Assistant answered: {answer}"
+                    ),
+                },
+            ]
+        )
+    except Exception:
+        logger.warning("Title suggestion failed; falling back.", exc_info=True)
+        return None
+
+    title = (result.title or "").strip().strip("\"'").rstrip(".!?,;:")
+    if not title or title.upper().replace(" ", "_") == NO_TITLE:
+        return None
+    # The prompt asks for 48; enforce it here too, because a prompt is a request
+    # and this is the thing the layout actually depends on.
+    return title[:48].strip()
