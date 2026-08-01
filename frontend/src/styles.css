@@ -1016,7 +1016,14 @@ body {
 	text-wrap: pretty;
 }
 
-.answer ul {
+/* Scoped off the sources panel, which is also a <ul> of <li>s inside .answer.
+   `.answer li` is specificity (0,1,1) and `.source` is (0,1,0), so `.source`'s
+   own `display: block` never won: every snippet became a flex row, the label
+   collapsed to its min-content width, and at 390px "Risk" rendered 11px wide
+   as R/i/s/k stacked vertically — with a prose bullet in front of it. The
+   evidence panel, whose whole job is to be readable, was the most broken thing
+   on the screen. These three rules are for answer prose only. */
+.answer ul:not(.sources__list) {
 	display: flex;
 	flex-direction: column;
 	gap: 9px;
@@ -1025,7 +1032,7 @@ body {
 	list-style: none;
 }
 
-.answer li {
+.answer li:not(.source) {
 	display: flex;
 	gap: 11px;
 	font-size: 0.9375rem;
@@ -1034,7 +1041,7 @@ body {
 	text-wrap: pretty;
 }
 
-.answer li::before {
+.answer li:not(.source)::before {
 	content: "";
 	flex-shrink: 0;
 	width: 6px;
