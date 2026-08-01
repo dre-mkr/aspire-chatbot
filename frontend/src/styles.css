@@ -176,9 +176,6 @@ body {
 	--rail-w: 0px;
 	--rail-events: none;
 	--rail-border: transparent;
-	--frame-inset: 0px;
-	--frame-radius: 0px;
-	--frame-shadow: none;
 	--panel-bg: transparent;
 	--chrome: rgb(255 255 255 / 0.95);
 	--hero-opacity: 1;
@@ -199,9 +196,6 @@ body {
 	--rail-w: var(--rail-open);
 	--rail-events: auto;
 	--rail-border: var(--hairline);
-	--frame-inset: 16px;
-	--frame-radius: 28px;
-	--frame-shadow: 0 30px 70px -20px rgb(30 10 55 / 0.55);
 	--panel-bg: rgb(255 255 255 / 0.97);
 	--chrome: var(--prose);
 	--hero-opacity: 0;
@@ -338,6 +332,13 @@ body {
 
 /* ── Frame ──────────────────────────────────────────────────────────────── */
 
+/* The shell's flex row: rail beside workspace, edge to edge.
+   It used to inset itself by 16px in the chat phase with a 28px radius and a
+   drop shadow, so the app read as a floating card on the gradient. The frame is
+   gone; the surface fills the viewport. Nothing here paints — `.app` owns the
+   background and `.workspace` owns the panel — so this is layout only.
+   No transition either: the three properties it animated were the frame's, and
+   animating `margin` was two of the detector's `layout-transition` findings. */
 .frame {
 	position: relative;
 	z-index: 1;
@@ -345,13 +346,6 @@ body {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	margin: var(--frame-inset);
-	border-radius: var(--frame-radius);
-	box-shadow: var(--frame-shadow);
-	transition:
-		margin var(--morph),
-		border-radius var(--morph),
-		box-shadow var(--morph);
 }
 
 /* ── Rail ───────────────────────────────────────────────────────────────── */
@@ -3211,12 +3205,6 @@ body {
 /* Below this width the rail stops being a column and becomes an overlay, so
    the conversation keeps the full reading width on a phone. */
 @media (max-width: 860px) {
-	.app[data-phase="chat"] {
-		--frame-inset: 0px;
-		--frame-radius: 0px;
-		--frame-shadow: none;
-	}
-
 	.app[data-phase="chat"] .rail {
 		position: absolute;
 		inset: 0 auto 0 0;
