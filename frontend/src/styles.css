@@ -1640,10 +1640,15 @@ body {
 	color: var(--plum);
 }
 
+/* `--magenta` on this wash measured 4.41:1 at 12.5px/500 — just under AA, and
+   this is the only indication of which speed and which language are active.
+   `--plum-deep` on the same wash clears it comfortably; the magenta border
+   still carries the "selected" signal, so nothing changes at a glance. */
 .voice-choice[aria-pressed="true"] {
 	border-color: var(--wash-m-32);
 	background: var(--wash-m-10);
-	color: var(--magenta);
+	color: var(--plum-deep);
+	font-weight: 600;
 }
 
 .voice-choice--lang {

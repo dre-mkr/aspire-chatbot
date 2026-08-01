@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	CheckIcon,
 	ExitIcon,
@@ -198,11 +198,22 @@ export function TrueFalse({
 
 	const advance = () => setSettled(null);
 
-	// T and F answer the statement, as the design specifies. Ignored while a
-	// field has focus, so typing a question in the composer still types.
+	// T and F answer the statement, as the design specifies.
+	//
+	// Scoped to the card rather than bound to the window. A bare single-key
+	// shortcut listening on the whole document is a WCAG 2.1.4 failure — it
+	// fires wherever focus happens to be, and skipping TEXTAREA/INPUT is not
+	// enough: after clicking a follow-up chip, a starter, or any button on the
+	// page, typing "t" answered a game question. Keeping it on the card means
+	// the shortcut only exists where it is advertised, and moving focus away is
+	// the off switch the rule asks for.
 	const asking = settled === null && !complete;
+	const cardRef = useRef<HTMLElement>(null);
 	useEffect(() => {
 		if (!asking || busy) return;
+		const card = cardRef.current;
+		if (!card) return;
+
 		const onKey = (event: KeyboardEvent) => {
 			const tag = (event.target as HTMLElement | null)?.tagName;
 			if (tag === "TEXTAREA" || tag === "INPUT") return;
@@ -212,14 +223,24 @@ export function TrueFalse({
 			event.preventDefault();
 			void choose(key === "t" ? "true" : "false");
 		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
+
+		card.addEventListener("keydown", onKey);
+		return () => card.removeEventListener("keydown", onKey);
 	}, [asking, busy, choose]);
 
 	const label = `Statement ${state.prompt.position} of ${state.prompt.total}`;
 
 	return (
-		<section className="game tf" data-scale={scale} aria-label={label}>
+		// tabIndex -1 so a click anywhere on the card puts focus inside it, which
+		// is what arms the T/F shortcut scoped above. Not reachable by Tab —
+		// the answer buttons already are.
+		<section
+			className="game tf"
+			data-scale={scale}
+			aria-label={label}
+			ref={cardRef}
+			tabIndex={-1}
+		>
 			<header className="game__head">
 				<span className="game__badge" aria-hidden="true">
 					<SparkIcon />
