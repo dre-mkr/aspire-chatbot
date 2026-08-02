@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { MenuIcon } from "#/components/icons";
+import {
+	clearEligibilityResult,
+	type EligibilityState,
+	fetchEligibilityState,
+	loadEligibilityResult,
+} from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
 import {
 	fetchGameState,
@@ -22,10 +36,20 @@ import { Rail } from "./Rail";
 import { Transcript } from "./Transcript";
 import { VoiceConsent, VoiceNote } from "./Voice";
 
+/** The one route that carries a conversation id. */
+const CHAT_PREFIX = "/chat/";
 /** Below this the rail stops being a column and becomes a modal drawer. */
 const COMPACT = "(max-width: 860px)";
 /** How far from the bottom still counts as "following along". */
 const STICK_THRESHOLD_PX = 160;
+/**
+ * The playback id the eligibility card speaks under.
+ *
+ * Negative so it can never collide with a message id, which are minted from
+ * zero upwards. Playback is keyed by id so that pressing the speaker twice
+ * pauses rather than restarts, and the card needs one that is not a turn.
+ */
+const ELIGIBILITY_SPEECH_ID = -1;
 
 interface AspireChatProps {
 	/**
@@ -45,6 +69,40 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	// conversation calls through it, and the effect below keeps it current.
 	const speakArrival = useRef<(id: number, text: string) => void>(() => {});
 
+	const navigate = useNavigate();
+	/**
+	 * Which conversation the URL is pointing at, or undefined at `/`.
+	 *
+	 * Derived from the committed pathname rather than from `useParams`, and that
+	 * is not a stylistic choice. Read as a param, `chatId` goes
+	 * undefined → minted → undefined → minted across a single navigation, because
+	 * for one render the new match is resolving and the old one is gone. The
+	 * reconciler below reads "no chat id" as "the user is at the empty state" and
+	 * resets — so a conversation was being wiped and then restored from the
+	 * half-written storage record one tick after it was sent, which replaced the
+	 * answer that was streaming in with the never-got-an-answer recovery turn.
+	 *
+	 * One atomic string cannot have that gap: the location is either `/` or a
+	 * chat, and it changes exactly once per navigation.
+	 */
+	const pathname = useRouterState({ select: (s) => s.location.pathname });
+	const chatId = pathname.startsWith(CHAT_PREFIX)
+		? decodeURIComponent(pathname.slice(CHAT_PREFIX.length))
+		: undefined;
+
+	/**
+	 * A chat that has been minted and navigated to, but whose URL has not landed.
+	 *
+	 * `send` mints an id and asks for the navigation synchronously; the router
+	 * commits it a tick later. In that gap `chatId` is still undefined while a
+	 * live conversation exists, and the reconciler below would read that as "the
+	 * user is at the empty state" and reset the chat that was just started. This
+	 * holds the gap open until the address catches up.
+	 */
+	const awaitingUrl = useRef<string | null>(null);
+	/** One press of "New chat" is one navigation, however fast it is repeated. */
+	const startingNew = useRef(false);
+
 	const {
 		phase,
 		messages,
@@ -53,6 +111,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		followUps,
 		history,
 		threadId,
+		animateAfterId,
 		send,
 		regenerate,
 		stop,
@@ -68,6 +127,44 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		// because `voice` is constructed below — it needs the thread id this
 		// hook returns.
 		getLanguage: () => voice.language,
+		// The first message of a chat gives it an address. `replace`, not push:
+		// `/` and `/chat/:id` are the same conversation at two ages, not two
+		// places, so Back from a chat you just started belongs to whatever you
+		// were doing before it — not to a stale empty version of itself.
+		// A game turn carries no text, so the card is the whole of it. Fetched
+		// rather than taken from the chat response because the games endpoint is
+		// the one authority on session state -- the same state a refresh restores
+		// from, so the card is identical whether it just appeared or was reloaded.
+		onGameStart: (id) => {
+			setGame(null);
+			void fetchGameState(id)
+				.then((state) => {
+					if (state) setGame(state);
+				})
+				.catch(() => undefined);
+		},
+		// The card carries the whole turn, so it is fetched rather than taken
+		// from the chat response: the eligibility endpoint is the one authority
+		// on the flow's state, and it is the same state a refresh restores from.
+		// A new check replaces any stored result for this thread — the old
+		// verdict answered a question that is being asked again.
+		onEligibilityStart: (id, language) => {
+			clearEligibilityResult(id);
+			setEligibility(null);
+			void fetchEligibilityState(id, language)
+				.then((state) => {
+					if (state.active) setEligibility(state);
+				})
+				.catch(() => undefined);
+		},
+		onThreadStart: (id) => {
+			awaitingUrl.current = id;
+			void navigate({
+				to: "/chat/$chatId",
+				params: { chatId: id },
+				replace: true,
+			});
+		},
 	});
 
 	const compact = useMediaQuery(COMPACT);
@@ -94,6 +191,16 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	// how the card learns the assistant started a game through its own tools,
 	// without the chat response needing a field for it.
 	const [game, setGame] = useState<GameState | null>(null);
+	/**
+	 * The eligibility card's state.
+	 *
+	 * Comes from the server while the flow is running, and from device storage
+	 * once it has finished — the server deletes the session in the same call
+	 * that produces the result, so there is nothing left to fetch. That is the
+	 * design, not a gap: a minor's answers were always meant to stay on this
+	 * device, and the result is derived from them.
+	 */
+	const [eligibility, setEligibility] = useState<EligibilityState | null>(null);
 	const settled = !isThinking && !streaming;
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: refetch trigger
@@ -110,6 +217,54 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 			// Games are additive. If the endpoint is off or unreachable, the card
 			// simply does not appear and the conversation is unaffected.
 			.catch(() => undefined);
+		return () => {
+			live = false;
+		};
+	}, [threadId, messages.length, settled]);
+
+	/**
+	 * Restores the eligibility card, from whichever half still holds it.
+	 *
+	 * Two sources, and which one applies says where the flow got to:
+	 *
+	 * - The server, while questions are still being answered. This is what makes
+	 *   a refresh mid-flow a non-event.
+	 * - Device storage, once a verdict exists. The server deleted the session
+	 *   the moment it produced the result, so this is the only copy — and it is
+	 *   the copy that should exist, since the answers behind it were never
+	 *   supposed to leave this device.
+	 *
+	 * The server is asked first because a running flow outranks a stored result
+	 * from a check that was restarted.
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: refetch trigger
+	useEffect(() => {
+		if (!threadId || !settled) return;
+		let live = true;
+
+		void fetchEligibilityState(threadId, voice.language)
+			.then((state) => {
+				if (!live) return;
+				if (state.active) {
+					setEligibility(state);
+					return;
+				}
+				const stored = loadEligibilityResult(threadId);
+				if (!stored) return;
+				setEligibility({
+					active: false,
+					language: stored.language,
+					question: null,
+					result: stored.result,
+					answered: 0,
+					total: 0,
+					labels: stored.labels,
+				});
+			})
+			// Additive, exactly like games: an endpoint that is off or unreachable
+			// means no card, and the conversation is unaffected.
+			.catch(() => undefined);
+
 		return () => {
 			live = false;
 		};
@@ -134,11 +289,31 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const announcement =
 		isThinking || streaming
 			? "ASPIRE AI is writing a reply."
-			: latest?.role === "error"
-				? latest.text
-				: latest?.role === "assistant"
-					? answerToText(latest.blocks)
-					: "";
+			: latest?.role === "game"
+				? "A game has started. The game card is below."
+				: latest?.role === "eligibility"
+					? "The ASPIRE eligibility check has started. The card is below."
+					: latest?.role === "error"
+						? latest.text
+						: latest?.role === "assistant"
+							? answerToText(latest.blocks)
+							: "";
+
+	/**
+	 * Where each conversation was left, keyed by thread.
+	 *
+	 * Deliberately a ref and deliberately not persisted: it should survive
+	 * switching between chats in one sitting, which is when losing your place is
+	 * infuriating, and it should not survive a reload, where restoring someone
+	 * to the middle of a transcript they have not seen this session is worse
+	 * than showing them the end of it.
+	 */
+	const scrollTops = useRef(new Map<string, number>());
+	/** `""` is the new chat, which has no id and cannot collide with one. */
+	const scrollKey = threadId ?? "";
+
+	/** Which thread the follow-the-stream effect is currently chasing. */
+	const following = useRef<string | null>(null);
 
 	// Follow the answer as it streams, but only while the reader is already at
 	// the bottom — scrolling up to re-read something should not get yanked back.
@@ -149,12 +324,61 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		const thread = threadRef.current;
 		if (!thread || phase !== "chat") return;
 
+		// A different conversation just arrived. Its messages changed, but they
+		// did not *stream* in — they were read out of storage, and the effect
+		// below has already put the reader back where they left off. Chasing the
+		// bottom here would undo that on every chat switch.
+		if (following.current !== threadId) {
+			following.current = threadId;
+			return;
+		}
+
 		const distance =
 			thread.scrollHeight - thread.scrollTop - thread.clientHeight;
 		if (distance < STICK_THRESHOLD_PX) {
 			thread.scrollTop = thread.scrollHeight;
 		}
-	}, [messages, streaming, isThinking, phase]);
+	}, [messages, streaming, isThinking, phase, threadId]);
+
+	// Restore before paint, so a reopened conversation is never briefly shown at
+	// the wrong offset. A thread with no remembered position — anything opened
+	// for the first time this session — starts at its newest message.
+	//
+	// Only ever for a real conversation. Running this on the empty state scrolled
+	// the landing thread to its end, which carries the hero up over the lightest,
+	// most magenta band of the gradient — and that is measurably the wrong place
+	// for it to be: `.hero__sub` dropped from 5.68:1 to 3.67:1 at 1280, back
+	// under AA and back into a defect this review had already fixed once.
+	useLayoutEffect(() => {
+		const thread = threadRef.current;
+		if (!thread || !threadId) return;
+		const saved = scrollTops.current.get(threadId);
+		thread.scrollTop = saved ?? thread.scrollHeight;
+	}, [threadId]);
+
+	/**
+	 * One unsent draft per conversation.
+	 *
+	 * Typing half a question, going to check something in another chat, and
+	 * coming back to find the box empty is a small theft that both reference
+	 * products avoid. The draft belongs to the conversation, not to the app.
+	 */
+	const drafts = useRef(new Map<string, string>());
+	const draftKey = useRef("");
+	const liveDraft = useRef(draft);
+
+	// Declared before the swap below so that, on the commit where the thread
+	// changes, the value being banked is the one that was actually in the box.
+	useEffect(() => {
+		liveDraft.current = draft;
+	}, [draft]);
+
+	useEffect(() => {
+		if (scrollKey === draftKey.current) return;
+		drafts.current.set(draftKey.current, liveDraft.current);
+		draftKey.current = scrollKey;
+		setDraft(drafts.current.get(scrollKey) ?? "");
+	}, [scrollKey]);
 
 	// Captured when the drawer is opened, not when the effect runs: by then the
 	// workspace is already inert and the browser has blurred the button, so
@@ -224,25 +448,128 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		stop();
 	}, [stop, stopPlayback]);
 
-	// Reopening or starting a conversation moves to a different thread, and a
-	// game belongs to the thread it was played in. Clear it locally; the effect
-	// above refetches whatever the new thread actually has.
+	/**
+	 * Bumped whenever the composer should take the cursor.
+	 *
+	 * Starts at 1 rather than 0 so the initial render already counts as a
+	 * request: landing on the empty state puts you in the box with nothing to
+	 * click.
+	 */
+	const [focusSignal, setFocusSignal] = useState(1);
+	const focusComposer = useCallback(() => setFocusSignal((n) => n + 1), []);
+
+	/**
+	 * Makes the conversation match the URL, in one direction only.
+	 *
+	 * The address is the single source of truth for which chat is open, so every
+	 * way of changing chats — a sidebar row, "New chat", the back button, a
+	 * pasted link, a refresh — is one navigation and this one reconciler, rather
+	 * than each entry point doing its own loading and hoping they agree.
+	 */
+	useEffect(() => {
+		// A chat has been started but the router has not committed its URL yet.
+		// Doing anything here would act on an address that is one tick stale.
+		if (awaitingUrl.current) {
+			if (chatId === awaitingUrl.current) awaitingUrl.current = null;
+			return;
+		}
+
+		if (!chatId) {
+			startingNew.current = false;
+			if (threadId || messages.length > 0) {
+				stopPlayback();
+				setGame(null);
+				setEligibility(null);
+				reset();
+			}
+			return;
+		}
+
+		if (chatId === threadId) return;
+
+		const stored = loadConversations().find((c) => c.threadId === chatId);
+		if (stored) {
+			stopPlayback();
+			setGame(null);
+			// Cleared rather than carried across: the restore effect above reads
+			// the new thread's own card, and showing the previous conversation's
+			// verdict for a frame would be showing it to the wrong person.
+			setEligibility(null);
+			openPast(stored);
+			return;
+		}
+
+		// An address for a conversation this browser does not have: a link from
+		// another device, cleared storage, a hand-typed id. History lives in
+		// localStorage and nothing can be fetched for it, so the honest answer is
+		// the empty state — and `replace` so Back does not walk into the same
+		// dead id again.
+		void navigate({ to: "/", replace: true });
+	}, [
+		chatId,
+		threadId,
+		messages.length,
+		navigate,
+		openPast,
+		reset,
+		stopPlayback,
+	]);
+
 	const handleOpenPast = useCallback(
 		(conversation: StoredConversation) => {
-			stopPlayback();
 			setDrawerOpen(false);
-			setGame(null);
-			openPast(conversation);
+			void navigate({
+				to: "/chat/$chatId",
+				params: { chatId: conversation.threadId },
+			});
 		},
-		[openPast, stopPlayback],
+		[navigate],
 	);
 
-	const handleNewChat = useCallback(() => {
+	const startNewChat = useCallback(() => {
+		// Already on an empty new chat: this is a no-op with a cursor. No second
+		// navigation, no second history entry, and above all no clearing of a
+		// draft someone is part-way through typing — pressing "New chat" when you
+		// are already in a new chat should never cost you a sentence.
+		if (!chatId && messages.length === 0) {
+			setDrawerOpen(false);
+			focusComposer();
+			return;
+		}
+		if (startingNew.current) return;
+		startingNew.current = true;
+
+		// A deliberate move to the empty state outranks a first send that is
+		// still settling, so the gap-holder is dropped rather than left to skip
+		// the reconciler forever.
+		awaitingUrl.current = null;
 		stopPlayback();
 		setDrawerOpen(false);
-		setGame(null);
-		reset();
-	}, [reset, stopPlayback]);
+		void navigate({ to: "/" });
+		focusComposer();
+	}, [chatId, messages.length, focusComposer, navigate, stopPlayback]);
+
+	/**
+	 * Cmd/Ctrl+Shift+O — the same binding both reference products use.
+	 *
+	 * Checked against everything already bound here before taking it: the only
+	 * other window-level listeners are three Escape handlers (the drawer, the
+	 * row menu, the voice sheet), and the games card's T/F keys are scoped to
+	 * the card and already ignore modifiers. Nothing collides.
+	 *
+	 * `event.code` rather than `event.key`, because with Shift held the
+	 * character a layout produces is not reliably "O".
+	 */
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+			if (event.code !== "KeyO") return;
+			event.preventDefault();
+			startNewChat();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [startNewChat]);
 
 	/**
 	 * Writes out one conversation from the rail.
@@ -311,7 +638,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					history={history}
 					activeThreadId={threadId}
 					onToggle={toggleRail}
-					onNewChat={handleNewChat}
+					onNewChat={startNewChat}
 					onOpenPast={handleOpenPast}
 					onSaveConversation={handleSaveConversation}
 					onRenameConversation={(conversation, title) =>
@@ -374,7 +701,19 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					) : null}
 
 					<div className="stage">
-						<div className="thread" ref={threadRef}>
+						<div
+							className="thread"
+							ref={threadRef}
+							// Banked continuously rather than on the way out: a chat can
+							// also be left by the back button or a keyboard shortcut, and
+							// there is no single exit to hook.
+							onScroll={(event) => {
+								scrollTops.current.set(
+									scrollKey,
+									event.currentTarget.scrollTop,
+								);
+							}}
+						>
 							<div className="thread__inner">
 								<div className="hero" inert={phase === "chat" || undefined}>
 									<div className="orb orb--hero" aria-hidden="true" />
@@ -385,14 +724,6 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 										Ask me about investing, your ASPIRE modules, or the
 										programme itself.
 									</p>
-									{/* Was the top bar's caption, where it sat through every
-									    conversation saying the same thing. It is identity and
-									    regional grounding, which is worth most on first contact
-									    and worth nothing on the fortieth turn — so it lives in
-									    the empty state now and goes away once you start. */}
-									<p className="hero__identity">
-										Financial literacy assistant · St. Kitts and Nevis
-									</p>
 								</div>
 
 								<section aria-label="Conversation">
@@ -401,6 +732,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 										streaming={streaming}
 										isThinking={isThinking}
 										followUps={followUps}
+										animateAfterId={animateAfterId}
 										onRegenerate={handleRegenerate}
 										onAsk={ask}
 										playback={{
@@ -413,9 +745,25 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 											game && threadId
 												? {
 														threadId,
-														persona,
 														state: game,
 														onChanged: setGame,
+													}
+												: null
+										}
+										eligibility={
+											eligibility && threadId
+												? {
+														threadId,
+														state: eligibility,
+														onChanged: setEligibility,
+														// Speaks the question, or the verdict. Never
+														// the option labels: read aloud, a list of
+														// things to choose between becomes a wall of
+														// speech that has to be held in memory to be
+														// any use.
+														onSpeak: (text) =>
+															voice.play(ELIGIBILITY_SPEECH_ID, text),
+														speakAvailable: voice.available,
 													}
 												: null
 										}
@@ -448,6 +796,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 							onToggleSimpleMode={() => setSimpleMode((on) => !on)}
 							draft={draft}
 							onDraftChange={setDraft}
+							focusSignal={focusSignal}
 							voice={voice}
 						/>
 

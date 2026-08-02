@@ -2830,10 +2830,15 @@ body {
    The game card, rendered inside an assistant turn rather than as a screen of
    its own: the point of it is that the lesson never leaves the conversation.
 
-   One component, two scales. Everything sized below reads from the custom
-   properties on `.game`, and `[data-scale="stella"]` moves the whole set at
-   once — tiles, type, targets and padding — because a five-year-old and a
-   seventeen-year-old need different hit areas, not a different card. */
+   Everything sized below reads from the custom properties on `.game`, so the
+   card's whole scale — tiles, type, targets and padding — moves from one place.
+
+   There used to be a second `[data-scale="stella"]` set here for younger
+   players. It was unreachable: the scale came from a `persona` prop on
+   `AspireChat` that nothing has ever passed, so the card rendered at the orion
+   scale even when the server's own session said stella. Removed rather than
+   left as a scale nobody could see. Re-add it against `GameState.persona`,
+   which the service already returns, if a persona picker ships. */
 
 .game {
 	--tile: 52px;
@@ -2861,24 +2866,6 @@ body {
 		0 2px 6px rgb(53 29 90 / 0.05);
 	overflow: hidden;
 	animation: pop-in 240ms var(--ease) both;
-}
-
-.game[data-scale="stella"] {
-	--tile: 64px;
-	--tile-radius: 18px;
-	--letter: 1.875rem;
-	--tile-gap: 10px;
-	--stack: 18px;
-	--head-pad: 16px 18px;
-	--body-pad: 22px;
-	--badge: 32px;
-	--step: 28px;
-	--btn-h: 52px;
-	--btn-fs: 0.96875rem;
-	--lead-fs: 1.25rem;
-	--meaning-word: 2.625rem;
-	--meaning-fs: 1.1875rem;
-	--pill-h: 38px;
 }
 
 @keyframes pop-in {
@@ -2920,10 +2907,6 @@ body {
 	font-size: 0.9375rem;
 	font-weight: 600;
 	color: var(--ink);
-}
-
-.game[data-scale="stella"] .game__title {
-	font-size: 1.0625rem;
 }
 
 .game__sub {
@@ -3373,10 +3356,6 @@ body {
 	background: linear-gradient(135deg, var(--wash-6), var(--wash-m-6));
 }
 
-.game[data-scale="stella"] .game__meaning {
-	padding: 20px 22px;
-}
-
 .game__meaning-label {
 	display: flex;
 	align-items: center;
@@ -3448,21 +3427,6 @@ body {
 	--chip-h: 26px;
 	--chip-fs: 0.78125rem;
 	--nest-pad: 14px 16px;
-}
-
-.game[data-scale="stella"].tf {
-	--stmt: 1.5625rem;
-	--quiet-stmt: 1.03125rem;
-	--choice-h: 78px;
-	--choice-fs: 1.6875rem;
-	--pill-h: 58px;
-	--pill-fs: 1.1875rem;
-	--takeaway: 1.9375rem;
-	--expl: 1.125rem;
-	--chip-w: 52px;
-	--chip-h: 28px;
-	--chip-fs: 0.84375rem;
-	--nest-pad: 16px 18px;
 }
 
 .tf__label {

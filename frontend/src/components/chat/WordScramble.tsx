@@ -8,7 +8,6 @@ import {
 } from "#/components/icons";
 import {
 	GameError,
-	type GamePersona,
 	type GameState,
 	type GameSummary,
 	quitGame,
@@ -28,55 +27,42 @@ import {
  * the word just resolved with what it means, and the set finished.
  */
 
-/** Stella's tiles are bigger and her words are shorter. One card, two scales. */
-type Scale = "stella" | "orion";
+/* Counts come from the set, never from the copy.
+   These read "4 words", "See all four" and "…all four" while the body renders
+   `word {position} of {total}` and draws `total` pips. They happen to agree
+   today because the warm-up set is four words, and they would quietly stop
+   agreeing the moment anyone authored a set of a different length -- the header
+   would say four while five pips sat beside it. Exactly the defect TrueFalse
+   already carries a note about; this is the same fix.
 
+   There was a second `stella` dictionary here, in simpler words, selected by a
+   `persona` prop that nothing ever passed. Every player read this one. Removed
+   rather than left as copy no reader could reach. */
 const COPY = {
-	stella: {
-		title: "Word game",
-		sub: "4 words",
-		leave: "Stop playing",
-		close: "Close",
-		lead: "Make a word with these letters.",
-		help: "Tap a letter to move it down. Tap it again to send it back.",
-		clue: "Help me",
-		noClues: "No more help",
-		shuffle: "Mix them up",
-		skip: "Show me the word",
-		check: "Check",
-		wrong: "Not yet. Move the letters around and try again.",
-		meaning: "What it means",
-		next: "Next word",
-		last: "See all four",
-		revealed: (word: string) => `That is okay. The word was ${word}.`,
-		completeLead: "You did all four words.",
-		together: "Put them together",
-		exit: "All done",
-		exitNote: "Ask me about any word any time.",
-	},
-	orion: {
-		title: "Word scramble",
-		sub: "Warm-up set · 4 words",
-		leave: "Leave game",
-		close: "Close",
-		lead: "Unscramble these letters.",
-		help: "Click a letter to place it, or drag it into a slot.",
-		clue: "Clue",
-		noClues: "No clues left",
-		shuffle: "Shuffle",
-		skip: "Skip this word",
-		check: "Check it",
-		wrong: "Same letters, different order — take one out and try another spot.",
-		meaning: "What it means in ASPIRE terms",
-		next: "Next word",
-		last: "See all four",
-		revealed: (word: string) => `No trouble — the word was ${word}.`,
-		completeLead: "That is the set — all four.",
-		together: "What they mean together",
-		exit: "Back to chat",
-		exitNote: "Ask me about any of these words whenever you want.",
-	},
+	title: "Word scramble",
+	sub: (total: number) =>
+		`Warm-up set · ${total} ${total === 1 ? "word" : "words"}`,
+	leave: "Leave game",
+	close: "Close",
+	lead: "Unscramble these letters.",
+	help: "Click a letter to place it, or drag it into a slot.",
+	clue: "Clue",
+	noClues: "No clues left",
+	shuffle: "Shuffle",
+	skip: "Skip this word",
+	check: "Check it",
+	wrong: "Same letters, different order — take one out and try another spot.",
+	meaning: "What it means in ASPIRE terms",
+	next: "Next word",
+	last: (total: number) => `See all ${total}`,
+	revealed: (word: string) => `No trouble — the word was ${word}.`,
+	completeLead: (total: number) => `That is the set — all ${total}.`,
+	together: "What they mean together",
+	exit: "Back to chat",
+	exitNote: "Ask me about any of these words whenever you want.",
 } as const;
+
+type Copy = typeof COPY;
 
 /** Tiles sit at slight angles so the tray reads as loose letters, not a keyboard. */
 const ROTATIONS = [
@@ -104,7 +90,6 @@ interface Learned {
 
 interface WordScrambleProps {
 	threadId: string;
-	persona: GamePersona | null;
 	/** Current server state. The parent owns fetching it. */
 	state: GameState;
 	/** Fires whenever the server state moves on; null once the game is over. */
@@ -113,12 +98,10 @@ interface WordScrambleProps {
 
 export function WordScramble({
 	threadId,
-	persona,
 	state,
 	onChanged,
 }: WordScrambleProps) {
-	const scale: Scale = persona === "stella" ? "stella" : "orion";
-	const copy = COPY[scale];
+	const copy = COPY;
 
 	const [tray, setTray] = useState<Array<string>>([]);
 	const [used, setUsed] = useState<Array<boolean>>([]);
@@ -306,7 +289,6 @@ export function WordScramble({
 	return (
 		<section
 			className="game"
-			data-scale={scale}
 			aria-label={`${copy.title}, word ${state.prompt.position} of ${state.prompt.total}`}
 		>
 			<header className="game__head">
@@ -314,7 +296,7 @@ export function WordScramble({
 					<SparkIcon />
 				</span>
 				<span className="game__title">{copy.title}</span>
-				<span className="game__sub">{copy.sub}</span>
+				<span className="game__sub">{copy.sub(state.prompt.total)}</span>
 
 				{/* Decorative: the section's own label already announces which word
 				    this is, and four unlabelled dots read as noise after it. */}
@@ -359,6 +341,7 @@ export function WordScramble({
 						copy={copy}
 						learned={learned}
 						summary={summary}
+						total={state.prompt.total}
 						onExit={leave}
 					/>
 				) : resolved ? (
@@ -514,7 +497,7 @@ function ResolvedPanel({
 	total,
 	onNext,
 }: {
-	copy: (typeof COPY)[Scale];
+	copy: Copy;
 	resolved: Learned;
 	isLast: boolean;
 	solved: number;
@@ -560,7 +543,7 @@ function ResolvedPanel({
 					className="game__btn game__btn--go"
 					onClick={onNext}
 				>
-					{isLast ? copy.last : copy.next}
+					{isLast ? copy.last(total) : copy.next}
 				</button>
 				<span className="game__count">
 					{solved} of {total} solved
@@ -574,11 +557,14 @@ function CompletePanel({
 	copy,
 	learned,
 	summary,
+	total,
 	onExit,
 }: {
-	copy: (typeof COPY)[Scale];
+	copy: Copy;
 	learned: Array<Learned>;
 	summary: GameSummary | null;
+	/** From the set, not from `learned`: a skipped word is still part of it. */
+	total: number;
 	onExit: () => void;
 }) {
 	return (
@@ -593,7 +579,7 @@ function CompletePanel({
 						/>
 					))}
 				</span>
-				{copy.completeLead}
+				{copy.completeLead(total)}
 			</p>
 
 			<div className="game__pills">

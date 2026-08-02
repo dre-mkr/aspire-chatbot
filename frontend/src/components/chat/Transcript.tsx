@@ -12,7 +12,8 @@ import {
 	StopIcon,
 } from "#/components/icons";
 import type { Source } from "#/lib/aspire/api";
-import type { GamePersona, GameState } from "#/lib/aspire/games";
+import type { EligibilityState } from "#/lib/aspire/eligibility";
+import type { GameState } from "#/lib/aspire/games";
 import {
 	type AnswerBlock,
 	answerToText,
@@ -23,6 +24,7 @@ import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
+import { EligibilityCheck } from "./EligibilityCheck";
 import { TrueFalse } from "./TrueFalse";
 import { PlayingStars } from "./Voice";
 import { WordScramble } from "./WordScramble";
@@ -44,9 +46,25 @@ export interface Playback {
  */
 export interface ActiveGame {
 	threadId: string;
-	persona: GamePersona | null;
 	state: GameState;
 	onChanged: (state: GameState | null) => void;
+}
+
+/**
+ * A running or finished eligibility check, threaded down the same way.
+ *
+ * Unlike a game, this one can be finished and still worth showing: the verdict,
+ * the document checklist and the application steps are the whole point, and
+ * they are read over days rather than in one sitting. So the card stays until
+ * it is closed, and its state comes from device storage once the server-side
+ * flow is over.
+ */
+export interface ActiveEligibility {
+	threadId: string;
+	state: EligibilityState;
+	onChanged: (state: EligibilityState | null) => void;
+	onSpeak?: (text: string) => void;
+	speakAvailable: boolean;
 }
 
 interface TranscriptProps {
@@ -60,6 +78,15 @@ interface TranscriptProps {
 	onAsk: (question: string) => void;
 	playback: Playback;
 	game: ActiveGame | null;
+	eligibility: ActiveEligibility | null;
+	/**
+	 * Below this id, a message is being read back rather than arriving.
+	 *
+	 * Entry animations belong to messages that were just sent. Restoring a
+	 * conversation used to replay `rise` across every turn in it, so opening a
+	 * chat from last week looked like it was being delivered live.
+	 */
+	animateAfterId: number;
 }
 
 export function Transcript({
@@ -71,14 +98,107 @@ export function Transcript({
 	onAsk,
 	playback,
 	game,
+	eligibility,
+	animateAfterId,
 }: TranscriptProps) {
+	// There is only ever one live session, so only the NEWEST game turn can show
+	// it. Without this, leaving a game and starting another rendered the same
+	// card twice -- once at each game turn's position -- because both asked the
+	// same `game` prop for their content.
+	//
+	// Older game turns render nothing at all: the session they belonged to is
+	// finished, and there is no server state left to draw.
+	const liveGameIndex = messages.reduce(
+		(latest, message, index) => (message.role === "game" ? index : latest),
+		-1,
+	);
+
+	// Same rule, same reason: one check per conversation, drawn at the newest
+	// turn that opened one.
+	const liveCheckIndex = messages.reduce(
+		(latest, message, index) =>
+			message.role === "eligibility" ? index : latest,
+		-1,
+	);
+
 	return (
 		<div className="transcript">
 			{messages.map((message, index) => {
+				const arriving = message.id >= animateAfterId;
+
 				if (message.role === "user") {
 					return (
-						<div key={message.id} className="turn turn--user">
+						<div
+							key={message.id}
+							className="turn turn--user"
+							data-enter={arriving || undefined}
+						>
 							<p className="bubble">{message.text}</p>
+						</div>
+					);
+				}
+
+				// A game turn is the card and nothing else. It renders HERE, at its
+				// own place in the conversation, rather than being appended after
+				// the transcript — a card pinned to the end floated below every
+				// question asked after it.
+				//
+				// `game` is the live session from the server and there is only ever
+				// one, so an older game turn in a long conversation has nothing
+				// left to show and renders nothing. That is correct: the session it
+				// belonged to is over.
+				if (message.role === "game") {
+					if (!game || index !== liveGameIndex) return null;
+					return (
+						<div
+							key={message.id}
+							className="turn turn--assistant"
+							data-enter={arriving || undefined}
+						>
+							<div className="orb" aria-hidden="true" />
+							<div className="answer">
+								<h2 className="sr-only">ASPIRE AI</h2>
+								{game.state.prompt.kind === "statement" ? (
+									<TrueFalse
+										threadId={game.threadId}
+										state={game.state}
+										onChanged={game.onChanged}
+									/>
+								) : (
+									<WordScramble
+										threadId={game.threadId}
+										state={game.state}
+										onChanged={game.onChanged}
+									/>
+								)}
+							</div>
+						</div>
+					);
+				}
+
+				// An eligibility turn is the card and nothing else — no prose, no
+				// copy / Play / Ask again row. "Ask again" in particular would
+				// restart a flow someone is part-way through, and there is nothing
+				// to copy: the card is the answer.
+				if (message.role === "eligibility") {
+					if (!eligibility || index !== liveCheckIndex) return null;
+					return (
+						<div
+							key={message.id}
+							className="turn turn--assistant"
+							data-enter={arriving || undefined}
+						>
+							<div className="orb" aria-hidden="true" />
+							<div className="answer">
+								<h2 className="sr-only">ASPIRE AI</h2>
+								<EligibilityCheck
+									threadId={eligibility.threadId}
+									state={eligibility.state}
+									onChanged={eligibility.onChanged}
+									onSpeak={eligibility.onSpeak}
+									speakAvailable={eligibility.speakAvailable}
+								/>
+							</div>
 						</div>
 					);
 				}
@@ -90,6 +210,7 @@ export function Transcript({
 							text={message.text}
 							canRetry={message.canRetry}
 							tone={message.tone}
+							arriving={arriving}
 							onRetry={() => onRegenerate(message.id)}
 						/>
 					);
@@ -101,6 +222,7 @@ export function Transcript({
 						message={message}
 						onRegenerate={onRegenerate}
 						playback={playback}
+						arriving={arriving}
 						// How much of the conversation asking again would discard.
 						// The reveal always renders at the tail, so re-asking an
 						// older question necessarily drops what came after it —
@@ -111,36 +233,6 @@ export function Transcript({
 			})}
 
 			{streaming ? <StreamingAnswer answer={streaming} /> : null}
-
-			{/* The card is an assistant turn: same orb, same column, so a game
-			    reads as something the assistant is doing with you rather than a
-			    mode the conversation switched into.
-
-			    Which card is decided by the prompt's kind, not by the game's
-			    name, so a third game type slots in here without the transcript
-			    learning anything about it. */}
-			{game ? (
-				<div className="turn turn--assistant">
-					<div className="orb" aria-hidden="true" />
-					<div className="answer">
-						{game.state.prompt.kind === "statement" ? (
-							<TrueFalse
-								threadId={game.threadId}
-								persona={game.persona}
-								state={game.state}
-								onChanged={game.onChanged}
-							/>
-						) : (
-							<WordScramble
-								threadId={game.threadId}
-								persona={game.persona}
-								state={game.state}
-								onChanged={game.onChanged}
-							/>
-						)}
-					</div>
-				</div>
-			) : null}
 
 			{isThinking ? (
 				<div className="thinking">
@@ -178,7 +270,7 @@ export function Transcript({
  */
 function StreamingAnswer({ answer }: { answer: Streaming }) {
 	return (
-		<article className="turn turn--assistant" aria-busy="true">
+		<article className="turn turn--assistant" data-enter aria-busy="true">
 			<div className="orb" aria-hidden="true" />
 			<div className="answer">
 				<h2 className="sr-only">ASPIRE AI</h2>
@@ -197,14 +289,19 @@ function Answer({
 	onRegenerate,
 	playback,
 	discards,
+	arriving,
 }: {
 	message: Extract<ChatMessage, { role: "assistant" }>;
 	onRegenerate: (messageId: number) => void;
 	playback: Playback;
 	discards: number;
+	arriving: boolean;
 }) {
 	return (
-		<article className="turn turn--assistant">
+		<article
+			className="turn turn--assistant"
+			data-enter={arriving || undefined}
+		>
 			<div className="orb" aria-hidden="true" />
 			<div className="answer">
 				<h2 className="sr-only">ASPIRE AI</h2>
@@ -348,15 +445,17 @@ function Failure({
 	canRetry,
 	tone,
 	onRetry,
+	arriving,
 }: {
 	text: string;
 	canRetry: boolean;
 	tone?: "stopped";
 	onRetry: () => void;
+	arriving: boolean;
 }) {
 	const stopped = tone === "stopped";
 	return (
-		<div className="turn turn--assistant">
+		<div className="turn turn--assistant" data-enter={arriving || undefined}>
 			<div className="orb orb--muted" aria-hidden="true" />
 			<div className="answer">
 				{/* Every other assistant turn carries this, so heading navigation

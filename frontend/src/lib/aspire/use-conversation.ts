@@ -11,13 +11,13 @@ import {
 	saveConversation,
 	titleFor,
 } from "./history";
-import { requestTitle } from "./title";
 import {
 	type Answer,
 	type AnswerBlock,
 	answerToText,
 	parseAnswer,
 } from "./knowledge";
+import { requestTitle } from "./title";
 
 export type ChatMessage =
 	| { id: number; role: "user"; text: string }
@@ -28,6 +28,22 @@ export type ChatMessage =
 			followUps: Array<string>;
 			sources: Array<Source>;
 	  }
+	/**
+	 * A turn that started a game. The card is its entire content.
+	 *
+	 * A real position in the array rather than something appended after it: a
+	 * conversation carries on past a game, and a card pinned to the end would
+	 * float below every later question.
+	 */
+	| { id: number; role: "game"; gameType: string }
+	/**
+	 * A turn that opened the eligibility check. The card is its entire content.
+	 *
+	 * A real position in the array for the same reason a game turn is: the
+	 * conversation carries on past it, and a card pinned to the end would float
+	 * below every later question.
+	 */
+	| { id: number; role: "eligibility" }
 	| {
 			id: number;
 			role: "error";
@@ -81,6 +97,80 @@ function prefersReducedMotion() {
 	);
 }
 
+/**
+ * Mints the id for a conversation, in the browser, before anything is sent.
+ *
+ * This used to come back on the `/chat` response, which made the id an outcome
+ * of the round trip — and a URL cannot become `/chat/:id` a beat before an id
+ * exists. Minting here is what lets the address bar, the sidebar row and the
+ * title bar all arrive with the user's own message rather than trailing the
+ * server by a second or more.
+ *
+ * Safe to do: the backend takes `thread_id or uuid4()`, so a supplied id is
+ * already authoritative, and the games endpoints accept any string. Nothing
+ * downstream ever parsed this value.
+ *
+ * `randomUUID` needs a secure context, which a plain-HTTP staging box is not.
+ * The fallback is not for cryptography — it only has to not collide inside one
+ * browser's history.
+ */
+function newThreadId(): string {
+	const uuid = globalThis.crypto?.randomUUID?.();
+	if (uuid) return uuid;
+	return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * What to call a conversation that opened with a game.
+ *
+ * A game turn has no assistant prose, so there is nothing for the title model to
+ * read and the chat would keep the truncated question ("Can we play the word
+ * scramble?") forever. These are deterministic rather than generated: the title
+ * is known the moment the game starts, so a model call would add a failure mode
+ * and a delay for a string we can already write correctly.
+ *
+ * The server's `display_name` is not used because it is authored per set and is
+ * currently English in every language directory — deriving the title from it
+ * would put an English name on a Spanish chat.
+ */
+const GAME_TITLES: Record<string, Record<string, string>> = {
+	word_scramble: {
+		en: "Word scramble practice",
+		es: "Práctica de palabras revueltas",
+		fr: "Entraînement de mots mêlés",
+	},
+	true_false: {
+		en: "True or false round",
+		es: "Ronda de verdadero o falso",
+		fr: "Tour de vrai ou faux",
+	},
+};
+
+function gameTitle(gameType: string, language: string): string | null {
+	const byLanguage = GAME_TITLES[gameType];
+	if (!byLanguage) return null;
+	return byLanguage[language] ?? byLanguage.en;
+}
+
+/**
+ * What to call a conversation that opened with the eligibility check.
+ *
+ * Same problem as a game turn: no assistant prose means nothing for the title
+ * model to read, so the chat would keep the truncated question ("Am I too old
+ * for ASPIRE?") for good. Deterministic rather than generated — the title is
+ * known the moment the card opens, and it must never be derived from the
+ * answers.
+ */
+const ELIGIBILITY_TITLES: Record<string, string> = {
+	en: "ASPIRE eligibility check",
+	es: "Consulta de elegibilidad de ASPIRE",
+	fr: "Vérification d'admissibilité ASPIRE",
+};
+
+function eligibilityTitle(language: string): string {
+	return ELIGIBILITY_TITLES[language] ?? ELIGIBILITY_TITLES.en;
+}
+
 function completed(
 	answer: Answer,
 	sources: Array<Source>,
@@ -101,6 +191,10 @@ function toStored(messages: Array<ChatMessage>): Array<StoredMessage> {
 	for (const message of messages) {
 		if (message.role === "user")
 			stored.push({ role: "user", text: message.text });
+		else if (message.role === "game")
+			stored.push({ role: "game", gameType: message.gameType });
+		else if (message.role === "eligibility")
+			stored.push({ role: "eligibility" });
 		else if (message.role === "assistant") {
 			stored.push({
 				role: "assistant",
@@ -130,12 +224,39 @@ export interface UseConversationOptions {
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
 	persona?: string | null;
+	/**
+	 * Fired synchronously inside `send`, the instant a conversation is minted.
+	 *
+	 * Carries the brand-new thread id, in the same commit as the optimistic user
+	 * bubble and the storage write. The shell uses it to replace `/` with
+	 * `/chat/:id`, which is why the address bar never lags the message.
+	 */
+	onThreadStart?: (threadId: string) => void;
+	/**
+	 * Fired when a turn started a game instead of answering.
+	 *
+	 * The shell responds by loading the game's authoritative state. Separate
+	 * from `onAnswer` on purpose: this turn has no text, and everything hung off
+	 * `onAnswer` (read-aloud, most obviously) must not run for it.
+	 */
+	onGameStart?: (threadId: string) => void;
+	/**
+	 * Fired when a turn opened the eligibility check instead of answering.
+	 *
+	 * Separate from `onAnswer` for the same reason `onGameStart` is: this turn
+	 * has no text, so read-aloud must not fire for it. The card speaks its own
+	 * question when asked to.
+	 */
+	onEligibilityStart?: (threadId: string, language: string) => void;
 }
 
 export function useConversation({
 	onAnswer,
 	persona = null,
 	getLanguage = () => "en",
+	onThreadStart,
+	onGameStart,
+	onEligibilityStart,
 }: UseConversationOptions = {}) {
 	const [phase, setPhase] = useState<Phase>("landing");
 	const [messages, setMessages] = useState<Array<ChatMessage>>([]);
@@ -143,6 +264,19 @@ export function useConversation({
 	const [isThinking, setIsThinking] = useState(false);
 	const [history, setHistory] = useState<Array<HistoryGroup>>([]);
 	const [threadId, setThreadId] = useState<string | null>(null);
+	/**
+	 * The oldest message id allowed to play its entry animation.
+	 *
+	 * `.turn` animates `rise` on mount, which is right for a message that was
+	 * just sent and wrong for forty that were just read out of storage —
+	 * reopening a conversation replayed the whole transcript's arrival, so a
+	 * chat from last week looked like it was being typed at you again.
+	 *
+	 * Ids are monotonic, so "everything from here up is new" is a single number.
+	 * Restoring parks it past the restored block; sending leaves it alone,
+	 * because the message being sent is always above it.
+	 */
+	const [animateAfterId, setAnimateAfterId] = useState(0);
 
 	const nextId = useRef(0);
 	const streamTimer = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -182,6 +316,33 @@ export function useConversation({
 	useEffect(() => {
 		getLanguageRef.current = getLanguage;
 	}, [getLanguage]);
+
+	// Same again: `send` has to stay stable, and the shell's navigate callback
+	// is not.
+	const onThreadStartRef = useRef(onThreadStart);
+	useEffect(() => {
+		onThreadStartRef.current = onThreadStart;
+	}, [onThreadStart]);
+
+	const onGameStartRef = useRef(onGameStart);
+	useEffect(() => {
+		onGameStartRef.current = onGameStart;
+	}, [onGameStart]);
+
+	const onEligibilityStartRef = useRef(onEligibilityStart);
+	useEffect(() => {
+		onEligibilityStartRef.current = onEligibilityStart;
+	}, [onEligibilityStart]);
+
+	/**
+	 * The thread the next request belongs to, readable synchronously.
+	 *
+	 * `send` mints an id and `ask` runs in the same tick, so the state setter has
+	 * not landed yet and a closure over `threadId` would still say null — which
+	 * would have the backend mint a *second* conversation for a chat the URL was
+	 * already pointing at. The ref is the value; the state is for rendering.
+	 */
+	const threadRef = useRef<string | null>(null);
 
 	// Commits before any later click can be dispatched, so the guard in `send`
 	// never reads a stale value.
@@ -301,14 +462,131 @@ export function useConversation({
 			try {
 				const result: AskResult = await askAspire({
 					message: question,
-					threadId,
+					// Read now, not closed over: see `threadRef`. This is also why
+					// `ask` no longer depends on `threadId` — the send pipeline used
+					// to be rebuilt on every turn for a value it can read directly.
+					threadId: threadRef.current,
 					simpleMode,
 					persona,
+					// Read at call time for the same reason the title call does: the
+					// voice layer that owns this setting is built after this hook.
+					// It decides which language the eligibility card opens in.
+					language: getLanguageRef.current(),
 				});
 
 				if (turnToken.current !== token) return; // the turn was abandoned
 
-				setThreadId(result.threadId);
+				// Adopt the server's id only when we had none to begin with.
+				//
+				// Once this browser mints an id, that id *is* the conversation: it
+				// is in the address bar, it is the storage key, and it is what the
+				// sidebar row and the games session are filed under. Overwriting it
+				// with a different value from the response leaves all four pointing
+				// at a thread that no longer exists — the reconciler sees the open
+				// chat stop matching the URL, reloads the half-written record from
+				// storage, and replaces the answer arriving on screen with the
+				// never-got-an-answer recovery turn.
+				//
+				// The real service echoes `request.thread_id`, so this only ever
+				// differs if something upstream rewrites it. When it does, the
+				// address the user is looking at wins.
+				if (!threadRef.current) {
+					threadRef.current = result.threadId;
+					setThreadId(result.threadId);
+				}
+
+				// A game turn is the card and nothing else.
+				//
+				// No assistant message is created at all — not an empty one, not a
+				// placeholder. That is what makes the rest of the requirements fall
+				// out rather than needing their own special cases: there is no
+				// text to render beside the card, no typewriter, and no copy /
+				// Play / Ask again row, because those belong to `Answer` and it
+				// never mounts. `onAnswer` never fires either, so read-aloud stays
+				// silent on a turn whose only content is a puzzle it must not read
+				// out — "Ask again" would reroll the puzzle mid-play, and speaking
+				// the word would give it away.
+				//
+				// The card itself comes from the games endpoint, which is the one
+				// authority on the session's state.
+				if (result.startedGame) {
+					setIsThinking(false);
+					setMessages((current) => [
+						...current,
+						{
+							id: nextId.current++,
+							role: "game",
+							gameType: result.startedGame?.gameType ?? "",
+						},
+					]);
+
+					// Name the chat now, while we know what it is. With no prose on
+					// this turn the title effect below never fires, so without this
+					// a chat that opened with a game would keep the truncated
+					// question as its name for good.
+					//
+					// Written as "generated" rather than "manual": an explicit
+					// regenerate should still be able to replace it later, once the
+					// conversation has some actual content to name it after.
+					const named = gameTitle(
+						result.startedGame.gameType,
+						getLanguageRef.current(),
+					);
+					if (named && !titledThreads.current.has(result.threadId)) {
+						titledThreads.current.add(result.threadId);
+						setHistory(
+							groupByRecency(
+								retitleConversation(result.threadId, named, "generated"),
+							),
+						);
+					}
+
+					onGameStartRef.current?.(result.threadId);
+					return;
+				}
+
+				// An eligibility turn is the card and nothing else, for the same
+				// reason and by the same mechanism as a game turn: no assistant
+				// message is created, so there is no text beside the card, no
+				// typewriter, and no copy / Play / Ask again row — those belong to
+				// `Answer` and it never mounts.
+				//
+				// `onAnswer` never fires either, which is what keeps read-aloud
+				// silent here. That matters more than on a game: "Ask again" would
+				// restart a flow someone is part-way through, and speaking a turn
+				// with no prose would read out nothing at all. The card speaks its
+				// own question and its own verdict, on request.
+				if (result.startedEligibility) {
+					setIsThinking(false);
+					setMessages((current) => [
+						...current,
+						{ id: nextId.current++, role: "eligibility" },
+					]);
+
+					// Name the chat now, while we know what it is. With no prose on
+					// this turn the title effect never fires, so without this a chat
+					// that opened with the check would keep the truncated question
+					// ("Am I too old for ASPIRE?") as its name for good.
+					//
+					// "generated" rather than "manual", so an explicit regenerate can
+					// still improve it once the conversation has more to name it after.
+					const named = eligibilityTitle(result.startedEligibility.language);
+					if (!titledThreads.current.has(result.threadId)) {
+						titledThreads.current.add(result.threadId);
+						setHistory(
+							groupByRecency(
+								retitleConversation(result.threadId, named, "generated"),
+							),
+						);
+					}
+
+					onEligibilityStartRef.current?.(
+						result.threadId,
+						result.startedEligibility.language,
+					);
+					return;
+				}
+
 				const id = beginStream(
 					{ blocks: parseAnswer(result.reply), followUps: result.followUps },
 					result.sources,
@@ -332,7 +610,7 @@ export function useConversation({
 				]);
 			}
 		},
-		[beginStream, persona, threadId],
+		[beginStream, persona],
 	);
 
 	const send = useCallback(
@@ -349,6 +627,42 @@ export function useConversation({
 			dropStream();
 			lastQuestion.current = text;
 			const token = ++turnToken.current;
+
+			// The first message of a conversation is the moment it becomes real:
+			// it gets an id, an address, and a row in the sidebar, all in this one
+			// synchronous block, before a single byte has gone to the server.
+			//
+			// Everything below the branch is deliberately ordered so that one
+			// React commit carries the whole change — the user's bubble, the
+			// phase morph, the history entry and the URL land together, and the
+			// 560ms transition runs through it without a stutter.
+			const opening = !threadRef.current;
+			if (opening) {
+				const minted = newThreadId();
+				threadRef.current = minted;
+				setThreadId(minted);
+
+				// Committed now, not when the answer settles. It used to be
+				// written by the persist effect below, which waits for a settled
+				// assistant turn — so the sidebar row for a brand-new chat did not
+				// appear until the request had returned *and* the typewriter had
+				// finished revealing it, seconds after the message was sent.
+				//
+				// The label is the truncated question, which is exactly the
+				// provisional title the generated one crossfades over later.
+				setHistory(
+					groupByRecency(
+						saveConversation({
+							threadId: minted,
+							title: titleFor(text),
+							updatedAt: Date.now(),
+							messages: [{ role: "user", text }],
+						}),
+					),
+				);
+
+				onThreadStartRef.current?.(minted);
+			}
 
 			setPhase("chat");
 			setIsThinking(true);
@@ -477,7 +791,17 @@ export function useConversation({
 		if (!threadId) return;
 
 		const tail = messages.at(-1);
-		if (tail?.role !== "assistant") return;
+		// A game or eligibility turn settles the exchange just as an answer
+		// does. Without it here, a conversation that opened with one was never
+		// written at all beyond its first user message -- so reopening it found
+		// a question with nothing after it and decorated it with the
+		// never-got-an-answer retry, for a card that was running fine.
+		if (
+			tail?.role !== "assistant" &&
+			tail?.role !== "game" &&
+			tail?.role !== "eligibility"
+		)
+			return;
 
 		const firstQuestion = messages.find((m) => m.role === "user");
 		if (firstQuestion?.role !== "user") return;
@@ -536,7 +860,9 @@ export function useConversation({
 			// Null means the service declined — a greeting, gibberish, or a
 			// failed call. The truncated first message stays.
 			if (!title) return;
-			setHistory(groupByRecency(retitleConversation(threadId, title, "generated")));
+			setHistory(
+				groupByRecency(retitleConversation(threadId, title, "generated")),
+			);
 		});
 	}, [messages, threadId]);
 
@@ -590,24 +916,53 @@ export function useConversation({
 				(message) =>
 					message.role === "user"
 						? { id: nextId.current++, role: "user", text: message.text }
-						: {
-								id: nextId.current++,
-								role: "assistant",
-								blocks: message.blocks,
-								followUps: message.followUps,
-								sources: message.sources,
-							},
+						: message.role === "game"
+							? {
+									id: nextId.current++,
+									role: "game" as const,
+									gameType: message.gameType,
+								}
+							: message.role === "eligibility"
+								? { id: nextId.current++, role: "eligibility" as const }
+								: {
+										id: nextId.current++,
+										role: "assistant",
+										blocks: message.blocks,
+										followUps: message.followUps,
+										sources: message.sources,
+									},
 			);
+
+			// A conversation whose last stored turn is the question is one whose
+			// first send failed: the chat was committed the moment it was sent, so
+			// it is in the sidebar, but no answer ever arrived to go under it.
+			// Reopening it used to show the question alone, with nothing to say
+			// what happened and no way to ask again — a committed chat with no
+			// route out, which is exactly what must not exist. This puts the retry
+			// back. `regenerate` walks up to the nearest user turn, which is the
+			// orphaned question, so the button re-asks the right thing.
+			if (conversation.messages.at(-1)?.role === "user") {
+				restored.push({
+					id: nextId.current++,
+					role: "error",
+					text: "This question never got an answer.",
+					canRetry: true,
+				});
+			}
 
 			const lastUser = [...conversation.messages]
 				.reverse()
 				.find((m) => m.role === "user");
 			lastQuestion.current = lastUser?.role === "user" ? lastUser.text : "";
 
+			threadRef.current = conversation.threadId;
 			setThreadId(conversation.threadId);
 			setPhase("chat");
 			setIsThinking(false);
 			setMessages(restored);
+			// Everything just restored is older than this, so none of it animates.
+			// The next message sent will be.
+			setAnimateAfterId(nextId.current);
 		},
 		[dropStream],
 	);
@@ -616,6 +971,7 @@ export function useConversation({
 		dropStream();
 		lastQuestion.current = "";
 		turnToken.current += 1;
+		threadRef.current = null;
 		setThreadId(null);
 		setPhase("landing");
 		setMessages([]);
@@ -636,6 +992,7 @@ export function useConversation({
 		followUps,
 		history,
 		threadId,
+		animateAfterId,
 		send,
 		regenerate,
 		stop,
