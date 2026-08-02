@@ -1412,7 +1412,7 @@ body {
 
 /* The child combinator is load-bearing, not tidiness.
    As `.answer p` this rule is specificity (0,1,1); every widget paragraph rule
-   -- `.tf__statement`, `.elig__label`, `.game__lead`, 22 of them -- is a single
+   -- `.tf__statement`, `.game__eyebrow`, `.game__lead`, 22 of them -- is a single
    class at (0,1,0), and every card renders inside `.answer`. So answer prose
    won on font-size, line-height, colour AND margin in all three cards at once:
    measured, every paragraph in every widget rendered at 15.5px, whatever it
@@ -2852,6 +2852,9 @@ body {
 	--step: 26px;
 	--btn-h: 40px;
 	--btn-fs: 0.875rem;
+	/* Shared by every card: the numbered step, the marker chip and the rule
+	   beside an eyebrow are one primitive each, not one per widget. */
+	--disabled: 0.45;
 	--lead-fs: 1.0625rem;
 	--meaning-word: 2.25rem;
 	--meaning-fs: 1.09375rem;
@@ -2955,10 +2958,14 @@ body {
 	align-items: center;
 	gap: 7px;
 	flex-shrink: 0;
+	/* Hard right in every card. The games get this free from `.game__sub`
+	   being `flex: 1`, but the eligibility card deliberately has no subtitle,
+	   so without this its exit control sat against the title. */
+	margin-left: auto;
 	min-height: var(--btn-h);
 	padding: 0 13px;
 	border: 1px solid var(--wash-14);
-	border-radius: 12px;
+	border-radius: 14px;
 	background: rgb(255 255 255 / 0.7);
 	color: var(--plum);
 	font: inherit;
@@ -2973,6 +2980,13 @@ body {
 .game__leave:hover:not(:disabled) {
 	background: #fff;
 	border-color: var(--wash-30);
+}
+
+/* Carries `disabled` while a request is in flight and had no disabled state at
+   all, so it stayed fully lit and read as pressable throughout. */
+.game__leave:disabled {
+	opacity: var(--disabled);
+	cursor: not-allowed;
 }
 
 /* ── Card body ───────────────────────────────────────────────────────────── */
@@ -3244,7 +3258,7 @@ body {
 }
 
 .game__btn:disabled {
-	opacity: 0.45;
+	opacity: var(--disabled);
 	cursor: not-allowed;
 }
 
@@ -3429,10 +3443,10 @@ body {
 	--nest-pad: 14px 16px;
 }
 
-.tf__label {
+.game__eyebrow {
 	display: flex;
 	align-items: center;
-	gap: 9px;
+	gap: 10px;
 	margin: 0;
 	font-size: 0.6875rem;
 	font-weight: 600;
@@ -3441,7 +3455,7 @@ body {
 	color: var(--quiet);
 }
 
-.tf__rule {
+.game__rule {
 	flex: 1;
 	height: 1px;
 	background: var(--hairline);
@@ -3489,7 +3503,7 @@ body {
 	justify-content: center;
 	min-height: var(--choice-h);
 	border: 1.5px solid rgb(72 41 119 / 0.22);
-	border-radius: 16px;
+	border-radius: 14px;
 	background: #fff;
 	color: var(--plum);
 	font: inherit;
@@ -3519,7 +3533,7 @@ body {
 }
 
 .tf__choice:disabled {
-	opacity: 0.55;
+	opacity: var(--disabled);
 	cursor: not-allowed;
 }
 
@@ -3627,7 +3641,7 @@ body {
 	gap: 12px;
 }
 
-.tf__chip {
+.game__chip {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -3708,55 +3722,24 @@ body {
 	height: 15px;
 }
 
-/* Pips rather than numbered steps: five questions is short enough that the
-   count is reassurance, not navigation, and numbers invite counting down.
+/* Progress sits on its own row in this card rather than inline: with five
+   questions the track is wider than a game's four, and the header also carries
+   a longer title. Same primitive, different placement.
 
-   On their own row rather than inline. Sharing the header line with the title,
-   the subtitle and the leave button left nothing for `.game__sub`, which is
-   `flex: 1` with an ellipsis — so "A quick pre-check, not an application"
-   rendered as "A quick pr…" at every width below about 900px. That subtitle is
-   one of the two places the card states what it is, and it is not the thing
-   that should give way. A full-width track also reads better as progress. */
-.elig__progress {
-	display: flex;
-	gap: 5px;
+   This used to be a separate bar-segment treatment (`.elig__pip`) because
+   numbered steps shared a header line with a subtitle that ellipsised at any
+   width under ~900px. The card stopped rendering that subtitle -- the banner
+   states the same thing in full -- so the reason for a second progress
+   language went with it. */
+.elig .game__steps {
 	order: 4;
 	width: 100%;
-}
-
-.elig__pip {
-	flex: 1;
-	max-width: 48px;
-	height: 4px;
-	border-radius: 999px;
-	background: var(--wash-12);
-	transition: background var(--settle);
-}
-
-.elig__pip[data-state="done"] {
-	background: var(--plum);
-}
-
-.elig__pip[data-state="now"] {
-	background: var(--magenta);
 }
 
 .elig__step {
 	display: flex;
 	flex-direction: column;
 	gap: var(--stack);
-}
-
-.elig__label {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin: 0;
-	font-size: 0.71875rem;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--quiet);
 }
 
 .elig__question {
@@ -3838,7 +3821,7 @@ body {
 }
 
 .elig__option:disabled {
-	opacity: 0.5;
+	opacity: var(--disabled);
 	cursor: not-allowed;
 }
 
@@ -4181,9 +4164,9 @@ body {
 		border-width: 3px;
 	}
 
-	.elig__pip[data-state="done"],
-	.elig__pip[data-state="now"] {
-		background: Highlight;
+	.game__step[data-state="done"],
+	.game__step[data-state="now"] {
+		border-color: Highlight;
 	}
 
 	.elig__banner,

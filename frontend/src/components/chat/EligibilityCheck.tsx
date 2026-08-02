@@ -138,21 +138,22 @@ export function EligibilityCheck({
 				<span className="game__title">{labels.title}</span>
 
 				{question ? (
-					<div className="elig__progress" aria-hidden="true">
+					/* Decorative: the card's own label announces which question this
+					   is, and five unlabelled markers read as noise after it. Same
+					   primitive the games use -- one progress language per product. */
+					<div className="game__steps" aria-hidden="true">
 						{Array.from({ length: question.total }, (_, i) => {
 							const n = i + 1;
+							const done = n < question.position;
+							const now = n === question.position;
 							return (
 								<span
 									key={n}
-									className="elig__pip"
-									data-state={
-										n < question.position
-											? "done"
-											: n === question.position
-												? "now"
-												: "next"
-									}
-								/>
+									className="game__step"
+									data-state={done ? "done" : now ? "now" : "next"}
+								>
+									{done ? <CheckIcon size={13} /> : now ? n : null}
+								</span>
 							);
 						})}
 					</div>
@@ -228,9 +229,9 @@ function QuestionPanel({
 
 	return (
 		<div className="elig__step">
-			<p className="elig__label">
+			<p className="game__eyebrow">
 				<span>{progress}</span>
-				<span className="tf__rule" aria-hidden="true" />
+				<span className="game__rule" aria-hidden="true" />
 				{/* Reads the question, and only the question. The options are a list
 				    of things to choose between — read aloud they become a wall of
 				    speech that has to be held in memory to be any use. */}
@@ -504,7 +505,7 @@ function Walkthrough({
 			<ol className="elig__steps">
 				{steps.map((step) => (
 					<li key={step.number} className="elig__step-row">
-						<span className="tf__chip" aria-hidden="true">
+						<span className="game__chip" aria-hidden="true">
 							{step.number}
 						</span>
 						<div className="elig__step-text">

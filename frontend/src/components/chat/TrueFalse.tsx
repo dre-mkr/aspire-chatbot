@@ -306,9 +306,9 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 					/>
 				) : (
 					<>
-						<p className="tf__label">
+						<p className="game__eyebrow">
 							<span>{label}</span>
-							<span className="tf__rule" aria-hidden="true" />
+							<span className="game__rule" aria-hidden="true" />
 						</p>
 
 						<p className="tf__statement">{state.prompt.text}</p>
@@ -441,9 +441,9 @@ function SettledPanel({
 
 	return (
 		<div className="tf__settled">
-			<p className="tf__label">
+			<p className="game__eyebrow">
 				<span>{label}</span>
-				<span className="tf__rule" aria-hidden="true" />
+				<span className="game__rule" aria-hidden="true" />
 			</p>
 			<p className="tf__statement tf__statement--quiet">{settled.statement}</p>
 
@@ -476,7 +476,7 @@ function SettledPanel({
 					<div className="tf__bullets">
 						{reveal.bullets.map((bullet) => (
 							<div key={bullet.marker} className="tf__bullet">
-								<span className="tf__chip">{bullet.marker}</span>
+								<span className="game__chip">{bullet.marker}</span>
 								<span className="tf__bullet-text">
 									<b>{bullet.label}</b>
 									{bullet.text}
@@ -536,7 +536,7 @@ function CompletePanel({
 			<div className="tf__topics">
 				{covered.map((entry, i) => (
 					<div key={entry.statement} className="tf__bullet">
-						<span className="tf__chip">{i + 1}</span>
+						<span className="game__chip">{i + 1}</span>
 						<span className="tf__bullet-text">
 							<b>{entry.reveal.topic ?? entry.reveal.answer}</b>
 							{entry.reveal.topic_line ?? ""}
