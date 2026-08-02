@@ -108,7 +108,10 @@
 	--settle: 300ms var(--ease);
 
 	--rail-open: 272px;
-	--rail-shut: 76px;
+	/* 40px mark + 18px padding either side + the rail's own 1px right border,
+	   plus a hair of slack. At the old 76px the border and padding left the
+	   content box at 39px and clipped the mark by a pixel. */
+	--rail-shut: 78px;
 	--reading-width: 780px;
 }
 
@@ -368,6 +371,7 @@ body {
 }
 
 .rail__head {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 12px;
@@ -375,7 +379,44 @@ body {
 	padding: 18px 18px 14px;
 }
 
+/* One cell, two marks, stacked.
+   The header used to show the A mark and the wordmark side by side — two logos
+   for one brand. Now only one is visible at a time, and because they occupy the
+   same grid cell rather than replacing each other in flow, the swap cannot
+   change the header's height or nudge "New chat" while the rail is resizing.
+   Only the rail's width moves.
+
+   Height is pinned to the A mark's 40px: the cell is the taller of the two, so
+   neither state can grow it. `overflow: hidden` keeps the wordmark from
+   spilling out of the 40px-wide content box of a collapsed rail while it fades.
+
+   `min-width: 0` lets this flex item actually shrink to the collapsed width;
+   without it the wordmark's intrinsic size would hold the header open. */
+.rail__logo {
+	position: relative;
+	display: grid;
+	flex: 1;
+	min-width: 0;
+	height: 40px;
+	overflow: hidden;
+}
+
+.rail__logo > * {
+	grid-area: 1 / 1;
+	align-self: center;
+	justify-self: start;
+	/* The rail's own chrome fades on --settle; matching it here is what makes
+	   the logo swap and the rail collapse read as one motion rather than two
+	   things happening near each other. */
+	transition: opacity var(--settle);
+}
+
+/* Expanded shows the wordmark; collapsed shows the mark. The mark is also the
+   only toggle a 76px rail has room for, so it is a real button whenever it is
+   visible -- never hover-gated, and it takes a focus ring like any other. */
 .rail__mark {
+	opacity: 0;
+	pointer-events: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -388,7 +429,22 @@ body {
 	overflow: hidden;
 	background: linear-gradient(135deg, var(--plum), var(--magenta));
 	box-shadow: 0 4px 12px rgb(72 41 119 / 0.28);
-	transition: transform var(--settle);
+	/* Both, explicitly. This rule and `.rail__logo > *` have equal specificity,
+	   so whichever comes last wins outright — declaring only `transform` here
+	   silently dropped the opacity transition the crossfade depends on, and the
+	   mark swapped in as a hard cut. */
+	transition:
+		opacity var(--settle),
+		transform var(--settle);
+}
+
+.app[data-rail="collapsed"] .rail__mark {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.app[data-rail="collapsed"] .rail__wordmark {
+	opacity: 0;
 }
 
 .rail__mark:hover {
@@ -404,7 +460,14 @@ body {
 .rail__wordmark {
 	height: 15px;
 	width: auto;
+	/* Never squashed by the shrinking header -- it fades, it does not compress. */
 	flex-shrink: 0;
+	/* It shares a grid cell with the A mark and comes after it in the DOM, so it
+	   paints on top. An image faded to zero opacity is still hit-testable, and
+	   it was swallowing every click aimed at the mark underneath -- the collapsed
+	   rail's only toggle, which therefore did nothing. It is decorative; it has
+	   no business receiving a pointer at all. */
+	pointer-events: none;
 }
 
 /* Everything that folds away when the rail collapses shares one rule, so the
@@ -431,8 +494,25 @@ body {
 	padding: 6px 18px 16px;
 }
 
-.rail__collapse {
-	margin-left: auto;
+/* Out of the flow, not merely faded.
+   It used to sit in the header's flex row with `margin-left: auto`, and it kept
+   its ~32px of space plus the 12px gap even when collapsed and invisible. In a
+   76px rail the header's content box is exactly 40px, so those 44px left the
+   logo cell with nothing: the A mark was laid out at its full 40px, clipped to a
+   zero-width container, and was neither visible nor clickable. Opacity looked
+   perfectly correct throughout, which is why it survived a first pass.
+
+   Absolute keeps the logo cell full-width in both states, so the mark has its
+   40px whatever the collapse button is doing, and the button can still fade on
+   the shared timing rather than being cut with `display: none`. */
+/* Scoped to the header, and that is not decoration: this button also carries
+   `.icon-btn`, which sets `position: relative` for its 44px hit overlay and is
+   defined later in this file. At equal specificity the later rule wins, so a
+   bare `.rail__collapse` was quietly losing and the button stayed in flow. */
+.rail__head .rail__collapse {
+	position: absolute;
+	top: 18px;
+	right: 18px;
 }
 
 .rail__section-label {
@@ -788,6 +868,32 @@ body {
 	transition:
 		background var(--swift),
 		color var(--swift);
+}
+
+/* One line of text that dissolves when it is replaced — the provisional label
+   giving way to the generated title. Both strings share a single grid cell so
+   the outgoing one cannot widen the row or push the overflow trigger while it
+   leaves. The ellipsis moves in here from `.history-item`, which is now only
+   the box around it. */
+.xfade {
+	display: grid;
+	min-width: 0;
+}
+
+.xfade > span {
+	grid-area: 1 / 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.xfade__in {
+	animation: fade-in 300ms var(--ease) both;
+}
+
+.xfade__out {
+	animation: fade-out 300ms var(--ease) both;
 }
 
 .history-item:hover {
@@ -1240,10 +1346,18 @@ body {
 	padding: 24px 0 18px;
 }
 
+/* Restored by default, arriving only when the transcript says so.
+   `rise` used to be unconditional, so every message read out of storage played
+   its own entrance — reopening a forty-turn chat animated all forty at once,
+   which read as the conversation being re-delivered rather than reopened. An
+   entrance belongs to a message that has just been sent. */
 .turn {
 	display: flex;
 	flex-direction: column;
 	margin-bottom: 30px;
+}
+
+.turn[data-enter] {
 	animation: rise 400ms var(--ease) both;
 }
 
@@ -3784,6 +3898,7 @@ body {
 	.voice-note,
 	.voice-menu,
 	.titlebar__text,
+	.xfade__in,
 	.rail-scrim,
 	.game,
 	.tile--tray,

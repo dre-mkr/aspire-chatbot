@@ -14,6 +14,7 @@ import {
 	type HistoryGroup,
 	type StoredConversation,
 } from "#/lib/aspire/history";
+import { Crossfade } from "./Crossfade";
 
 interface RailProps {
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
@@ -59,26 +60,43 @@ export function Rail({
 			inert={unreachable || undefined}
 		>
 			<div className="rail__head">
-				<button
-					type="button"
-					className="rail__mark"
-					onClick={onToggle}
-					aria-controls="aspire-rail"
-					aria-expanded={!collapsed}
-				>
-					<img src="/brand/aspire-mark.png" alt="" width={40} height={40} />
-					<span className="sr-only">
-						{collapsed ? "Expand sidebar" : "Collapse sidebar"}
-					</span>
-				</button>
+				{/* One logo at a time, but both always mounted.
+				    They share a single fixed-height cell and crossfade, so the swap
+				    cannot change the header's height while the rail's width is
+				    animating — the two would read as separate movements. */}
+				<div className="rail__logo">
+					{/* The A mark IS the toggle, and only in the collapsed rail: at
+					    76px there is no room for a control beside it. Not
+					    hover-gated — it is a real button at all times it is shown,
+					    so it is reachable by keyboard and takes a focus ring.
+					    Inert while expanded, because a control faded to zero opacity
+					    is still focusable and would be a tab stop leading nowhere. */}
+					<button
+						type="button"
+						className="rail__mark"
+						onClick={onToggle}
+						aria-controls="aspire-rail"
+						aria-expanded={!collapsed}
+						inert={!collapsed || undefined}
+					>
+						{/* alt="" on purpose: the button's own label says what it does,
+						    and the wordmark beside it is what carries the brand name.
+						    Naming both would announce ASPIRE twice. */}
+						<img src="/brand/aspire-mark.png" alt="" width={40} height={40} />
+						<span className="sr-only">Expand sidebar</span>
+					</button>
 
-				<img
-					className="rail__wordmark rail__fold"
-					src="/brand/aspire-wordmark.png"
-					alt="ASPIRE"
-					width={190}
-					height={48}
-				/>
+					{/* Opacity alone does not remove a thing from the accessibility
+					    tree, so the hidden state is stated rather than implied. */}
+					<img
+						className="rail__wordmark"
+						src="/brand/aspire-wordmark.png"
+						alt="ASPIRE"
+						width={190}
+						height={48}
+						aria-hidden={collapsed || undefined}
+					/>
+				</div>
 
 				<button
 					type="button"
@@ -301,7 +319,12 @@ function HistoryRow({
 					title={label}
 					onClick={() => onOpen(conversation)}
 				>
-					{label}
+					{/* The row is written the moment a chat is sent, carrying the
+					    truncated question, and the generated title lands on top of it
+					    seconds later. The title bar has always dissolved that swap;
+					    the row popped. Same duration, so the two surfaces change
+					    together rather than one chasing the other. */}
+					<Crossfade text={label} />
 				</button>
 			)}
 
