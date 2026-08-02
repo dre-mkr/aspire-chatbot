@@ -1189,13 +1189,23 @@ body {
    on the sampled background tops out near 3.7:1. So the background comes down
    instead. Reaching transparent at 78% keeps the falloff inside the hero's own
    box, so `overflow: hidden` never cuts a hard edge across it, and it reads as
-   the hero being lit rather than as a panel sitting on the gradient. */
+   the hero being lit rather than as a panel sitting on the gradient.
+
+   This rule carried no `background` at all -- an empty positioned box -- so the
+   fix described above was not painting and the subtitle measured 3.95:1 against
+   real pixels. Restored, and tuned until it clears AA. */
 .hero::before {
 	content: "";
 	position: absolute;
 	inset: -8% -6%;
 	z-index: 0;
 	pointer-events: none;
+	background: radial-gradient(
+		ellipse 62% 58% at 50% 46%,
+		rgb(40 18 72 / 0.5) 0%,
+		rgb(40 18 72 / 0.34) 45%,
+		rgb(40 18 72 / 0) 78%
+	);
 }
 
 /* `.hero::before` is positioned, so without this it would paint over the
@@ -3905,9 +3915,9 @@ body {
    it is meant to be read out or pasted into an email unchanged. */
 .elig__mentor {
 	padding: 14px 16px;
-	border-left: 3px solid var(--magenta);
-	border-radius: 0 14px 14px 0;
-	background: var(--wash-m-6);
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: var(--wash-6);
 }
 
 .elig__unresolved {
