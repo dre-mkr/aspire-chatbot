@@ -1174,12 +1174,9 @@ body {
 	align-items: center;
 	flex-shrink: 0;
 	text-align: center;
-	overflow: hidden;
 	opacity: var(--hero-opacity);
 	max-height: var(--hero-max);
-	transition:
-		opacity 380ms var(--ease),
-		max-height var(--morph);
+
 }
 
 /* A soft plum vignette under the hero copy.
@@ -1200,13 +1197,6 @@ body {
 	inset: -8% -6%;
 	z-index: 0;
 	pointer-events: none;
-	background: radial-gradient(
-		ellipse 66% 62% at 50% 46%,
-		rgb(38 16 70 / 0.66) 0%,
-		rgb(38 16 70 / 0.52) 40%,
-		rgb(38 16 70 / 0.26) 62%,
-		rgb(38 16 70 / 0) 78%
-	);
 }
 
 /* `.hero::before` is positioned, so without this it would paint over the
@@ -2357,6 +2347,24 @@ body {
 	animation: none;
 }
 
+/* The evidence chip and the action row, held in reserve.
+
+   They used to mount when the answer settled, which grew the turn by 53px —
+   95px with sources — at that exact instant. With the thread pinned to the
+   bottom that is not a gap opening below the answer, it is the answer itself
+   sliding up out from under the reader on the last word.
+
+   So the space is committed from the first frame of the reveal and only the
+   visibility changes. Opacity alone, deliberately: anything that animates the
+   height would put the movement back, in slow motion. */
+.answer__tail {
+	transition: opacity 220ms var(--ease);
+}
+
+.answer__tail[data-pending] {
+	opacity: 0;
+}
+
 .answer-actions {
 	display: flex;
 	align-items: center;
@@ -2455,12 +2463,23 @@ body {
 
 /* ── Follow-ups ─────────────────────────────────────────────────────────── */
 
+/* Reserved on the same terms as the answer's tail, and for the same reason:
+   these chips are the last thing in the thread, so mounting them at completion
+   pushed the whole conversation up.
+
+   `rise` is gone from here. It was an entrance, and it fired at the moment the
+   answer FINISHED rather than the moment the chips arrived — which is precisely
+   backwards. They now arrive with the answer and simply become visible. */
 .follow-ups {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 9px;
 	margin: -12px 0 26px 44px;
-	animation: rise 400ms var(--ease) both;
+	transition: opacity 220ms var(--ease);
+}
+
+.follow-ups[data-pending] {
+	opacity: 0;
 }
 
 .follow-up {
@@ -4389,9 +4408,11 @@ body {
 		animation: none !important;
 	}
 
-	/* Entrances collapse to their finished frame rather than travelling. */
+	/* Entrances collapse to their finished frame rather than travelling.
+	   `.follow-ups` is not in this list any more: it no longer has an entrance,
+	   it is reserved and revealed, and the global transition rule below covers
+	   it. */
 	.turn,
-	.follow-ups,
 	.voice-consent,
 	.voice-note,
 	.voice-menu,

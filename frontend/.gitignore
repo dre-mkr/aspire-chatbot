@@ -15,6 +15,7 @@ todos.json
 # output is not. An agent cleaning up "temporary files" deleted the whole
 # directory once -- gitignoring the scripts is how that became unrecoverable.
 .impeccable/shots/
+.impeccable/flash-out/
 .impeccable/*.json
 .impeccable/*.err
 .impeccable/*.txt

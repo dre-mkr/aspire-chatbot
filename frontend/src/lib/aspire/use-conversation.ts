@@ -70,6 +70,17 @@ export type ChatMessage =
 export interface StreamingAnswer {
 	id: number;
 	blocks: Array<AnswerBlock>;
+	/**
+	 * The finished answer's evidence and suggestions, carried from the first tick.
+	 *
+	 * Not drawn while the reveal runs — they belong to an answer that has landed,
+	 * and follow-ups in particular would appear above the text they follow. They
+	 * are here so the transcript can *lay them out* from the start and reveal
+	 * them in place, rather than mounting them at completion and growing the turn
+	 * by 53px (95px with a sources chip) under whoever is reading it.
+	 */
+	sources: Array<Source>;
+	followUps: Array<string>;
 }
 
 export type Phase = "landing" | "chat";
@@ -421,7 +432,12 @@ export function useConversation({
 			}
 		}
 
-		setStreaming({ id: state.id, blocks: [...state.built] });
+		setStreaming({
+			id: state.id,
+			blocks: [...state.built],
+			sources: state.sources,
+			followUps: state.answer.followUps,
+		});
 	}, [finishStream]);
 
 	/** Starts revealing the answer. Returns its message id. */
@@ -444,7 +460,12 @@ export function useConversation({
 				holdTicks: 0,
 				built: [],
 			};
-			setStreaming({ id, blocks: [] });
+			setStreaming({
+				id,
+				blocks: [],
+				sources,
+				followUps: answer.followUps,
+			});
 			streamTimer.current = setInterval(tick, TICK_MS);
 			return id;
 		},
