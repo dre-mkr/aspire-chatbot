@@ -9,7 +9,6 @@ import {
 import {
 	type Closing,
 	GameError,
-	type GamePersona,
 	type GameState,
 	type GameSummary,
 	quitGame,
@@ -33,50 +32,35 @@ import { useMediaQuery } from "#/lib/use-media-query";
  * explanation, and the round finished.
  */
 
-type Scale = "stella" | "orion";
-
 /* Counts come from the round, never from the copy.
    These read "5 statements", "See the five" and "…all five" while the body
    renders `Statement {position} of {total}` and draws `total` pips — so a
    four-item round said "5 statements" directly above "STATEMENT 1 OF 4". The
    closing lines are phrased without a number so they stay true at any length
-   without spelling one out. */
+   without spelling one out.
+
+   There was a second `stella` dictionary here, in simpler words, selected by a
+   `persona` prop that nothing ever passed. Every player read this one. Removed
+   rather than left as copy no reader could reach. */
 const COPY = {
-	stella: {
-		sub: (total: number) => `${total} ${total === 1 ? "statement" : "statements"}`,
-		leave: "Stop playing",
-		close: "Close",
-		skip: "I am not sure — show me",
-		inputHint: "You can also press T or F.",
-		meaning: "What it means",
-		next: "Next one",
-		last: "See them all",
-		completeLead: "You did them all.",
-		together: "The big idea",
-		exit: "All done",
-		exitNote: "Ask me about any of them any time.",
-		right: (answer: string) => `You said ${answer}. That is right.`,
-		wrong: (answer: string) => `The answer is ${answer}. Here is why.`,
-		shown: (answer: string) => `The answer is ${answer}.`,
-	},
-	orion: {
-		sub: (total: number) => `${total} ${total === 1 ? "statement" : "statements"}`,
-		leave: "Leave game",
-		close: "Close",
-		skip: "Not sure — show me the answer",
-		inputHint: "Press T or F.",
-		meaning: "What this means",
-		next: "Next statement",
-		last: "See them all",
-		completeLead: "That is all of them.",
-		together: "What ties them together",
-		exit: "Back to chat",
-		exitNote: "Ask me to go deeper on any of these whenever you want.",
-		right: (answer: string) => `You said ${answer} — that is right.`,
-		wrong: (answer: string) => `Not this one — the answer is ${answer}.`,
-		shown: (answer: string) => `Fair enough — the answer is ${answer}.`,
-	},
+	sub: (total: number) => `${total} ${total === 1 ? "statement" : "statements"}`,
+	leave: "Leave game",
+	close: "Close",
+	skip: "Not sure — show me the answer",
+	inputHint: "Press T or F.",
+	meaning: "What this means",
+	next: "Next statement",
+	last: "See them all",
+	completeLead: "That is all of them.",
+	together: "What ties them together",
+	exit: "Back to chat",
+	exitNote: "Ask me to go deeper on any of these whenever you want.",
+	right: (answer: string) => `You said ${answer} — that is right.`,
+	wrong: (answer: string) => `Not this one — the answer is ${answer}.`,
+	shown: (answer: string) => `Fair enough — the answer is ${answer}.`,
 } as const;
+
+type Copy = typeof COPY;
 
 /** How the item was settled. Skipped is not a wrong answer. */
 type Outcome = "correct" | "incorrect" | "skipped";
@@ -91,19 +75,12 @@ interface Settled {
 
 interface TrueFalseProps {
 	threadId: string;
-	persona: GamePersona | null;
 	state: GameState;
 	onChanged: (state: GameState | null) => void;
 }
 
-export function TrueFalse({
-	threadId,
-	persona,
-	state,
-	onChanged,
-}: TrueFalseProps) {
-	const scale: Scale = persona === "stella" ? "stella" : "orion";
-	const copy = COPY[scale];
+export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
+	const copy = COPY;
 
 	const [settled, setSettled] = useState<Settled | null>(null);
 	const [covered, setCovered] = useState<Array<Settled>>([]);
@@ -265,7 +242,6 @@ export function TrueFalse({
 		// the answer buttons already are.
 		<section
 			className="game tf"
-			data-scale={scale}
 			aria-label={label}
 			ref={cardRef}
 			tabIndex={-1}
@@ -330,9 +306,9 @@ export function TrueFalse({
 					/>
 				) : (
 					<>
-						<p className="tf__label">
+						<p className="game__eyebrow">
 							<span>{label}</span>
-							<span className="tf__rule" aria-hidden="true" />
+							<span className="game__rule" aria-hidden="true" />
 						</p>
 
 						<p className="tf__statement">{state.prompt.text}</p>
@@ -440,7 +416,7 @@ function SettledPanel({
 	total,
 	onNext,
 }: {
-	copy: (typeof COPY)[Scale];
+	copy: Copy;
 	label: string;
 	settled: Settled;
 	choices: Array<string>;
@@ -465,9 +441,9 @@ function SettledPanel({
 
 	return (
 		<div className="tf__settled">
-			<p className="tf__label">
+			<p className="game__eyebrow">
 				<span>{label}</span>
-				<span className="tf__rule" aria-hidden="true" />
+				<span className="game__rule" aria-hidden="true" />
 			</p>
 			<p className="tf__statement tf__statement--quiet">{settled.statement}</p>
 
@@ -500,7 +476,7 @@ function SettledPanel({
 					<div className="tf__bullets">
 						{reveal.bullets.map((bullet) => (
 							<div key={bullet.marker} className="tf__bullet">
-								<span className="tf__chip">{bullet.marker}</span>
+								<span className="game__chip">{bullet.marker}</span>
 								<span className="tf__bullet-text">
 									<b>{bullet.label}</b>
 									{bullet.text}
@@ -537,7 +513,7 @@ function CompletePanel({
 	closing,
 	onExit,
 }: {
-	copy: (typeof COPY)[Scale];
+	copy: Copy;
 	covered: Array<Settled>;
 	closing: Closing | null;
 	onExit: () => void;
@@ -560,7 +536,7 @@ function CompletePanel({
 			<div className="tf__topics">
 				{covered.map((entry, i) => (
 					<div key={entry.statement} className="tf__bullet">
-						<span className="tf__chip">{i + 1}</span>
+						<span className="game__chip">{i + 1}</span>
 						<span className="tf__bullet-text">
 							<b>{entry.reveal.topic ?? entry.reveal.answer}</b>
 							{entry.reveal.topic_line ?? ""}

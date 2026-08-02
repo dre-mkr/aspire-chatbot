@@ -53,6 +53,22 @@ export function transcriptToText(
 			lines.push(`You:  ${message.text}`, "");
 			continue;
 		}
+		// A game turn has no prose to write out, so it is named rather than
+		// skipped -- a transcript that silently omits it reads as if nobody
+		// answered.
+		if (message.role === "game") {
+			lines.push("ASPIRE AI: [started a learning game]", "");
+			continue;
+		}
+		// Named, not written out, and that is a privacy decision rather than a
+		// convenience. A saved transcript gets emailed and forwarded; the check's
+		// answers and its verdict stay in this browser, so what leaves is the
+		// fact that it happened and nothing about the person who ran it.
+		if (message.role === "eligibility") {
+			lines.push("ASPIRE AI: [ran the ASPIRE eligibility check]", "");
+			continue;
+		}
+
 		// A failed turn is not part of the conversation worth keeping.
 		if (message.role !== "assistant") continue;
 

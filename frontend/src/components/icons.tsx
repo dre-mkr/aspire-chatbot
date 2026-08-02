@@ -7,7 +7,7 @@ import type { SVGProps } from "react";
  */
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
-function Icon({ size = 18, strokeWidth = 1.8, children, ...rest }: IconProps) {
+function Icon({ size = 18, strokeWidth = 1.9, children, ...rest }: IconProps) {
 	return (
 		<svg
 			width={size}
@@ -38,7 +38,7 @@ export function PanelLeftIcon(props: IconProps) {
 
 export function PlusIcon(props: IconProps) {
 	return (
-		<Icon strokeWidth={2} {...props}>
+		<Icon {...props}>
 			<path d="M5 12h14" />
 			<path d="M12 5v14" />
 		</Icon>
@@ -78,7 +78,7 @@ export function EyeIcon(props: IconProps) {
 /** Leaving a game — a door with an arrow through it. */
 export function ExitIcon(props: IconProps) {
 	return (
-		<Icon size={15} strokeWidth={1.9} {...props}>
+		<Icon size={15} {...props}>
 			<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
 			<path d="M16 17l5-5-5-5" />
 			<path d="M21 12H9" />
@@ -109,7 +109,7 @@ export function DeviceIcon(props: IconProps) {
 
 export function ChevronDownIcon(props: IconProps) {
 	return (
-		<Icon size={14} strokeWidth={2} {...props}>
+		<Icon size={14} {...props}>
 			<path d="m6 9 6 6 6-6" />
 		</Icon>
 	);
@@ -126,7 +126,7 @@ export function CopyIcon(props: IconProps) {
 
 export function CheckIcon(props: IconProps) {
 	return (
-		<Icon size={15} strokeWidth={2.2} {...props}>
+		<Icon size={15} {...props}>
 			<path d="m4 12.5 5 5L20 6.5" />
 		</Icon>
 	);
@@ -152,7 +152,7 @@ export function SparkIcon(props: IconProps) {
 /** Re-orders the letter tray. Crossed arrows, the shuffle convention. */
 export function ShuffleIcon(props: IconProps) {
 	return (
-		<Icon size={16} strokeWidth={1.9} {...props}>
+		<Icon size={16} {...props}>
 			<path d="M16 3h5v5" />
 			<path d="M4 20 21 3" />
 			<path d="M21 16v5h-5" />
@@ -164,7 +164,7 @@ export function ShuffleIcon(props: IconProps) {
 
 export function SendIcon(props: IconProps) {
 	return (
-		<Icon size={18} strokeWidth={2.1} {...props}>
+		<Icon size={18} {...props}>
 			<path d="M12 19V5" />
 			<path d="M5 12l7-7 7 7" />
 		</Icon>
@@ -233,7 +233,7 @@ export function MenuIcon(props: IconProps) {
 
 export function MicIcon(props: IconProps) {
 	return (
-		<Icon size={18} strokeWidth={1.9} {...props}>
+		<Icon size={18} {...props}>
 			<path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z" />
 			<path d="M19 10v1a7 7 0 0 1-14 0v-1" />
 			<path d="M12 18v4" />
@@ -244,7 +244,7 @@ export function MicIcon(props: IconProps) {
 /** Reads an answer aloud. A speaker, not a media play triangle. */
 export function SpeakerIcon(props: IconProps) {
 	return (
-		<Icon size={14} strokeWidth={1.9} {...props}>
+		<Icon size={14} {...props}>
 			<path d="M11 5 6 9H3v6h3l5 4z" />
 			<path d="M16 9a4 4 0 0 1 0 6" />
 			<path d="M19 6a8 8 0 0 1 0 12" />
@@ -254,7 +254,7 @@ export function SpeakerIcon(props: IconProps) {
 
 export function PauseIcon(props: IconProps) {
 	return (
-		<Icon size={14} strokeWidth={1.9} {...props}>
+		<Icon size={14} {...props}>
 			<rect x="6" y="4" width="4" height="16" rx="1" />
 			<rect x="14" y="4" width="4" height="16" rx="1" />
 		</Icon>
@@ -263,7 +263,7 @@ export function PauseIcon(props: IconProps) {
 
 export function CloseIcon(props: IconProps) {
 	return (
-		<Icon size={16} strokeWidth={1.9} {...props}>
+		<Icon size={16} {...props}>
 			<path d="M18 6 6 18" />
 			<path d="m6 6 12 12" />
 		</Icon>

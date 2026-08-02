@@ -53,6 +53,20 @@ original design-system greys sat at 4.2 / 2.9 / 1.9:1, two of them below AA.
 A wrong guess in a game uses **amber, not red**: it says "not yet" where red
 would say "you broke something."
 
+### Gradient angles
+
+Two brand gradients, and the angle is not free choice:
+
+| Pair | Angle | Where |
+|---|---|---|
+| `--plum → --plum-light` | `90deg` | Wide controls: the send button, `.game__btn--go` |
+| `--plum → --plum-light` | `135deg` | Compact and square: user bubble, earned tiles, done steps, word pills |
+| `--plum → --magenta` | `135deg` | Identity only: the orb, the rail mark, the voice control |
+
+The split is real and was previously undocumented, so each new widget picked one
+at random. **A wide control takes `90deg`; anything roughly square takes
+`135deg`.** The plum-to-magenta pair is the product's mark and is never a button.
+
 ### The page gradient
 
 `.app` is a single 7-stop vertical gradient, `#33165c → #ffffff`, with four
@@ -80,10 +94,35 @@ for the two places that broke it.
 
 ## Space and shape
 
-- Radii: `999px` for anything pill-shaped (22 uses), `14px` / `16px` for cards,
-  `28px` for the chat frame.
-- `--reading-width: 780px` caps prose.
-- Rail is `272px` open, `76px` shut.
+**The Two Radii Rule.** Anything pill-shaped is `999px`. Everything else that a
+finger touches is `14px`. Those two cover 42 of the ~60 radii in the stylesheet;
+the rest are structural one-offs (the `26px` composer, the `24px` card, the
+asymmetric `24px 24px 8px 24px` user bubble) and each has to earn its value.
+
+This replaces a looser "`14px` / `16px` for cards" that let controls inside a
+single card run 12, 14 and 16px at once. **Inside a card there is one control
+radius and it is `14px`** — the exit button, the action buttons, the True/False
+choices and the eligibility options are all the same shape.
+
+- `--reading-width: 780px` caps prose. A widget card measures 736px inside it.
+- Rail is `272px` open, `78px` shut. (78, not 76: at 76 the rail's own border
+  and padding left the content box at 39px and clipped the 40px mark by a pixel.)
+- **There is no spacing scale.** 51 distinct `padding` values are in use and only
+  three are tokens (`--head-pad`, `--body-pad`, `--nest-pad`). This is a known
+  gap, recorded rather than papered over: do not cite a scale that does not exist.
+
+### Icons
+
+One set, `src/components/icons.tsx`, `viewBox="0 0 24 24"`, stroked not filled.
+Sizes vary by role (13 / 14 / 15 / 16 / 18). **Stroke is always `1.9`** — it is
+what makes the set read as one hand. It previously ran 1.8 through 2.2, which at
+a glance reads as blur rather than as variety.
+
+### Disabled
+
+One token, `--disabled: 0.45`, on every disabled control in a card. Before this
+there were four opacities (0.38 / 0.45 / 0.5 / 0.55) and two controls that
+carried `disabled` with no disabled styling at all.
 
 ## Motion
 
@@ -105,19 +144,59 @@ properties that every consumer transitions on its own schedule.
 
 | Property | `landing` | `chat` |
 |---|---|---|
-| `--rail-w` | `0px` | `272px` (`76px` collapsed) |
-| `--frame-inset` | `0px` | `16px` |
-| `--frame-radius` | `0px` | `28px` |
+| `--rail-w` | `0px` | `272px` (`78px` collapsed) |
 | `--hero-opacity` | `1` | `0` |
 | `--hero-max` | `min(380px, 44vh)` | `0px` |
 | `--starters-row` | `0.7fr` | `0fr` |
 | `--panel-bg` | `transparent` | `rgb(255 255 255 / 0.97)` |
+| `--composer-min` | `min(168px, 22vh)` | `112px` |
+| `--input-h` | `min(96px, 12vh)` | `46px` |
+
+`--frame-inset` and `--frame-radius` used to be in this table. **They no longer
+exist in the code** — the frame stopped insetting itself in the chat phase, and
+the `28px` this file cited as "the chat frame" radius went with it. Removed here
+rather than left as a token the next agent would try to honour.
 
 **This is why a naive scan of the rendered page is unreliable here**: on the
 landing screen the rail is zero-width but present, and in the chat phase the
 hero is `opacity: 0` but present. Both keep real text in the DOM. Any contrast
 or layout check must skip subtrees under a zero-opacity, zero-size, or `inert`
 ancestor, or it will report the layer behind them as a defect.
+
+## The card
+
+There is **one** in-thread card. The word scramble, the True/False round and the
+eligibility pre-check are the same object with different jobs, not three widgets
+that happen to sit together. Anything new that renders inside the transcript
+uses these, and adds only what its own job needs:
+
+| Primitive | Class | What it is |
+|---|---|---|
+| Container | `.game` | `24px` radius, white, 1px `--wash-14`, one shadow, `pop-in` |
+| Header | `.game__head` | badge, title, optional subtitle, progress, exit |
+| Exit | `.game__leave` | hard right in every card; the label may differ, the control may not |
+| Progress | `.game__steps` / `.game__step` | numbered circles, `done` / `now` / `next`, plum |
+| Eyebrow | `.game__eyebrow` | 11px uppercase, `0.07em`, `--quiet`, with `.game__rule` |
+| Marker | `.game__chip` | mono, tabular, pill |
+| Buttons | `.game__btn` + `--clue` / `--quiet` / `--ghost` / `--go` | `14px`, `--btn-h` |
+
+**The One Progress Rule.** "n of m" is drawn one way in this product: numbered
+circles. The eligibility card used to draw flat bar segments instead, because
+its numbered steps shared a header line with a subtitle that ellipsised. The
+card dropped that subtitle; the second progress language went with it.
+
+**The No Borrowed Namespace Rule.** A card never reaches into another card's
+classes. `.tf__*` belongs to True/False and `.elig__*` to the eligibility flow;
+anything two cards need is `.game__*`. The eligibility card previously used
+`.tf__rule` and `.tf__chip`, so restyling the quiz silently restyled it.
+
+### The card lives inside `.answer`
+
+Prose rules in the transcript are scoped with the child combinator (`.answer > p`,
+not `.answer p`) **and this is load-bearing.** `.answer p` is specificity (0,1,1)
+and every card's paragraph rules are single-class at (0,1,0), so the descendant
+form silently overrode 22 paragraph classes across all three cards at once and
+flattened every one of them to 15.5px. Do not relax that combinator.
 
 ## Accessibility commitments already made
 

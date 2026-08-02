@@ -23,7 +23,30 @@ export type StoredMessage =
 			blocks: Array<AnswerBlock>;
 			sources: Array<Source>;
 			followUps: Array<string>;
-	  };
+	  }
+	/**
+	 * A turn that started a game.
+	 *
+	 * Carries no text because there is none: the card is the turn. Stored anyway,
+	 * and this is not bookkeeping — without it a reopened conversation ends on a
+	 * user message, which the orphan check reads as "this question never got an
+	 * answer" and decorates with a retry that would re-ask a game already in
+	 * progress. It also keeps the card in its right place in the transcript when
+	 * the conversation carries on past it.
+	 */
+	| { role: "game"; gameType: string }
+	/**
+	 * A turn that opened the eligibility check.
+	 *
+	 * Carries no text and, deliberately, no answers and no verdict — those live
+	 * in `aspire.eligibility.results.v1`, keyed by thread, so a transcript
+	 * exported or copied out of here cannot carry a minor's age band with it.
+	 *
+	 * Stored for the same reason a game turn is: without it a reopened
+	 * conversation ends on a user message, which the orphan check reads as
+	 * "this question never got an answer" and decorates with a retry.
+	 */
+	| { role: "eligibility" };
 
 export interface StoredConversation {
 	threadId: string;
@@ -123,9 +146,7 @@ export function titleFor(question: string) {
 }
 
 /** What any surface should render for a conversation, fallbacks applied. */
-export function displayTitle(conversation: {
-	title?: string | null;
-}): string {
+export function displayTitle(conversation: { title?: string | null }): string {
 	return conversation.title?.trim() || FALLBACK_TITLE;
 }
 

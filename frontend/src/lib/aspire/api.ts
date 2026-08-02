@@ -23,11 +23,44 @@ export interface Source {
 	metadata: Record<string, string | number>;
 }
 
+/**
+ * The game a turn started, when it started one.
+ *
+ * Its presence is what makes a turn a game turn, and a game turn has no prose:
+ * the service sends `reply: ""` because the card the client renders IS the
+ * answer. Anything the model said alongside it would put the same puzzle on
+ * screen twice.
+ */
+export interface StartedGame {
+	gameType: string;
+	displayName: string;
+	kind: string;
+	total: number;
+}
+
+/**
+ * The eligibility check a turn opened, when it opened one.
+ *
+ * Deliberately almost empty. The card fetches its own question from the
+ * eligibility endpoint, so nothing about the flow rides on the chat response —
+ * and because nothing does, there is no field here that a person's answers
+ * could travel in. `language` is the one thing the client cannot re-derive: a
+ * running flow answers in the language it was started in.
+ */
+export interface StartedEligibility {
+	check: string;
+	language: string;
+}
+
 export interface AskResult {
 	reply: string;
 	threadId: string;
 	sources: Array<Source>;
 	followUps: Array<string>;
+	/** Null on every ordinary turn. */
+	startedGame: StartedGame | null;
+	/** Null on every ordinary turn. */
+	startedEligibility: StartedEligibility | null;
 }
 
 export interface AskInput {
@@ -43,6 +76,14 @@ export interface AskInput {
 	 * games, where an explicit parent account cannot.
 	 */
 	persona?: string | null;
+	/**
+	 * Which language the conversation is being held in.
+	 *
+	 * Already part of the response cache key server-side. It matters here
+	 * because the eligibility card opens in whatever this says: a French
+	 * speaker asking "puis-je m'inscrire ?" must not get an English flow.
+	 */
+	language?: string;
 }
 
 /**
@@ -66,6 +107,13 @@ interface ChatResponseBody {
 	thread_id: string;
 	sources?: Array<Source>;
 	follow_ups?: Array<string>;
+	game_started?: {
+		game_type?: string;
+		display_name?: string;
+		kind?: string;
+		total?: number;
+	} | null;
+	eligibility_started?: { check?: string; language?: string } | null;
 }
 
 export async function askAspire({
@@ -73,6 +121,7 @@ export async function askAspire({
 	threadId,
 	simpleMode,
 	persona = null,
+	language = "en",
 }: AskInput): Promise<AskResult> {
 	// AbortSignal.timeout is unavailable in older Safari; a controller is not.
 	const controller = new AbortController();
@@ -88,6 +137,7 @@ export async function askAspire({
 				thread_id: threadId,
 				simple_mode: simpleMode,
 				persona,
+				language,
 			}),
 			signal: controller.signal,
 		});
@@ -114,11 +164,27 @@ export async function askAspire({
 	}
 
 	const body = (await response.json()) as ChatResponseBody;
+	const started = body.game_started;
+	const check = body.eligibility_started;
 	return {
 		reply: body.reply,
 		threadId: body.thread_id,
 		sources: body.sources ?? [],
 		followUps: body.follow_ups ?? [],
+		startedGame: started
+			? {
+					gameType: started.game_type ?? "",
+					displayName: started.display_name ?? "",
+					kind: started.kind ?? "",
+					total: started.total ?? 0,
+				}
+			: null,
+		startedEligibility: check
+			? {
+					check: check.check ?? "aspire_eligibility",
+					language: check.language ?? language,
+				}
+			: null,
 	};
 }
 

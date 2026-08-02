@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
@@ -19,6 +19,8 @@ interface ComposerProps {
 	/** Draft is lifted so a transcript can land in it for review before sending. */
 	draft: string;
 	onDraftChange: (value: string) => void;
+	/** Bumped whenever the composer should take the cursor. */
+	focusSignal: number;
 	/** Recording state, plus everything the settings panel needs now it lives here. */
 	voice: VoiceSettingsProps["voice"] & {
 		phase: VoicePhase;
@@ -47,12 +49,29 @@ export function Composer({
 	onToggleSimpleMode,
 	draft,
 	onDraftChange,
+	focusSignal,
 	voice,
 }: ComposerProps) {
 	const canSend = draft.trim().length > 0 && !busy;
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const touch = useMediaQuery(TOUCH);
 	const fieldRef = useRef<HTMLTextAreaElement>(null);
+
+	/**
+	 * Put the cursor in the box so a new chat can be typed into without a click.
+	 *
+	 * Not on a touchscreen. Focusing a textarea there summons the on-screen
+	 * keyboard, which on a 320px viewport eats most of the screen — so opening
+	 * the app would bury the greeting and the suggestion chips under a keyboard
+	 * nobody asked for. The pointer is the tell, and it is read from
+	 * `matchMedia` directly rather than through `useMediaQuery`: that hook
+	 * reports `false` for the first client paint to keep hydration quiet, which
+	 * is precisely the paint this effect runs on.
+	 */
+	useEffect(() => {
+		if (window.matchMedia(TOUCH).matches) return;
+		fieldRef.current?.focus();
+	}, [focusSignal]);
 
 	/**
 	 * Stop, then put focus somewhere real.
@@ -84,6 +103,15 @@ export function Composer({
 		if (event.key === "Escape" && (listening || transcribing)) {
 			event.preventDefault();
 			voice.cancel();
+			return;
+		}
+
+		// Otherwise Escape leaves the box. Stopped from bubbling so it does not
+		// also close whatever the composer happens to sit inside.
+		if (event.key === "Escape") {
+			event.preventDefault();
+			event.stopPropagation();
+			event.currentTarget.blur();
 			return;
 		}
 
