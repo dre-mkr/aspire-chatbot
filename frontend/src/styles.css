@@ -1195,12 +1195,6 @@ body {
 	position: absolute;
 	inset: -8% -6%;
 	z-index: 0;
-	background: radial-gradient(
-		ellipse 74% 80% at 50% 44%,
-		rgb(41 20 74 / 0.42) 0%,
-		rgb(41 20 74 / 0.3) 46%,
-		transparent 78%
-	);
 	pointer-events: none;
 }
 
@@ -1286,7 +1280,6 @@ body {
 .orb--hero {
 	--orb-size: 64px;
 	margin-bottom: 20px;
-	animation: orb-float 6s ease-in-out infinite;
 }
 
 .orb--hero::after {
@@ -1309,7 +1302,6 @@ body {
 		transparent 72%
 	);
 	filter: blur(12px);
-	animation: orb-glow 4.5s ease-in-out infinite;
 }
 
 .orb--thinking {
@@ -1418,7 +1410,18 @@ body {
 	overflow-wrap: anywhere;
 }
 
-.answer p {
+/* The child combinator is load-bearing, not tidiness.
+   As `.answer p` this rule is specificity (0,1,1); every widget paragraph rule
+   -- `.tf__statement`, `.elig__label`, `.game__lead`, 22 of them -- is a single
+   class at (0,1,0), and every card renders inside `.answer`. So answer prose
+   won on font-size, line-height, colour AND margin in all three cards at once:
+   measured, every paragraph in every widget rendered at 15.5px, whatever it
+   declared. A 21px statement and its 11px eyebrow came out the same size, which
+   is the whole typographic hierarchy of the cards collapsed into one step.
+   Restricting this to direct children keeps it on the prose it was written for
+   -- `Block` renders paragraphs at the top level of `.answer` -- and lets each
+   card keep the scale it declares. */
+.answer > p {
 	margin: 0 0 19px;
 	font-size: 0.96875rem;
 	line-height: 1.72;
@@ -1426,14 +1429,19 @@ body {
 	text-wrap: pretty;
 }
 
-/* Scoped off the sources panel, which is also a <ul> of <li>s inside .answer.
-   `.answer li` is specificity (0,1,1) and `.source` is (0,1,0), so `.source`'s
-   own `display: block` never won: every snippet became a flex row, the label
-   collapsed to its min-content width, and at 390px "Risk" rendered 11px wide
-   as R/i/s/k stacked vertically — with a prose bullet in front of it. The
-   evidence panel, whose whole job is to be readable, was the most broken thing
-   on the screen. These three rules are for answer prose only. */
-.answer ul:not(.sources__list) {
+/* Scoped off every <ul>/<li> inside .answer that is not answer prose.
+
+   `.answer li` is specificity (0,1,1) and a bare class is (0,1,0), so a
+   component's own `display` never won: every item became a flex row, its first
+   child collapsed to min-content width, and a prose bullet appeared in front of
+   it. It broke the sources panel first — at 390px "Risk" rendered 11px wide as
+   R/i/s/k stacked vertically — and then the eligibility checklist in exactly
+   the same way, turning "birth certificate" into a five-line column.
+
+   The exclusion list is explicit rather than clever because the failure is
+   silent and only visible at a glance: ANY list component rendered inside an
+   answer has to be added here. These three rules are for answer prose only. */
+.answer ul:not(.sources__list, .elig__checklist) {
 	display: flex;
 	flex-direction: column;
 	gap: 9px;
@@ -1442,7 +1450,7 @@ body {
 	list-style: none;
 }
 
-.answer li:not(.source) {
+.answer li:not(.source, .elig__doc, .elig__step-row) {
 	display: flex;
 	gap: 11px;
 	font-size: 0.9375rem;
@@ -1451,7 +1459,7 @@ body {
 	text-wrap: pretty;
 }
 
-.answer li:not(.source)::before {
+.answer li:not(.source, .elig__doc, .elig__step-row)::before {
 	content: "";
 	flex-shrink: 0;
 	width: 6px;
@@ -3698,6 +3706,529 @@ body {
 	color: var(--warn-ink);
 }
 
+/* ── Eligibility check ───────────────────────────────────────────────────── */
+
+/* Built on `.game`, not beside it. The two cards are the same object in the
+   thread — a panel the conversation hands you — and giving this one its own
+   shell would make the interface look like it has two ideas about what a card
+   is. Only what genuinely differs is redeclared below. */
+
+.elig {
+	--stack: 14px;
+}
+
+/* The pre-check claim, and the single most important line on the card.
+
+   It sits between the header and the body for the whole flow, at full width, in
+   the reading column rather than beside it. Explicitly NOT a `<details>`, not a
+   footnote, and not sized down: "this is a pre-check, not a decision" is the
+   one thing somebody screenshotting this card has to take away with it. */
+.elig__banner {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	padding: 10px var(--body-pad);
+	border-bottom: 1px solid var(--warn-line);
+	background: var(--warn-wash);
+	color: var(--warn-ink);
+	font-size: 0.84375rem;
+	font-weight: 500;
+	line-height: 1.4;
+	text-wrap: pretty;
+}
+
+.elig__banner svg {
+	flex-shrink: 0;
+	width: 15px;
+	height: 15px;
+}
+
+/* Pips rather than numbered steps: five questions is short enough that the
+   count is reassurance, not navigation, and numbers invite counting down.
+
+   On their own row rather than inline. Sharing the header line with the title,
+   the subtitle and the leave button left nothing for `.game__sub`, which is
+   `flex: 1` with an ellipsis — so "A quick pre-check, not an application"
+   rendered as "A quick pr…" at every width below about 900px. That subtitle is
+   one of the two places the card states what it is, and it is not the thing
+   that should give way. A full-width track also reads better as progress. */
+.elig__progress {
+	display: flex;
+	gap: 5px;
+	order: 4;
+	width: 100%;
+}
+
+.elig__pip {
+	flex: 1;
+	max-width: 48px;
+	height: 4px;
+	border-radius: 999px;
+	background: var(--wash-12);
+	transition: background var(--settle);
+}
+
+.elig__pip[data-state="done"] {
+	background: var(--plum);
+}
+
+.elig__pip[data-state="now"] {
+	background: var(--magenta);
+}
+
+.elig__step {
+	display: flex;
+	flex-direction: column;
+	gap: var(--stack);
+}
+
+.elig__label {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	font-size: 0.71875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--quiet);
+}
+
+.elig__question {
+	margin: 0;
+	font-size: var(--lead-fs);
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.elig__help {
+	margin: -6px 0 0;
+	font-size: 0.84375rem;
+	line-height: 1.45;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.elig__speak {
+	display: flex;
+	align-items: center;
+	margin-left: auto;
+	padding: 4px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--slate);
+	cursor: pointer;
+	transition: background var(--swift), color var(--swift);
+}
+
+.elig__speak:hover {
+	background: var(--wash-9);
+	color: var(--plum);
+}
+
+/* One option per row. A grid would fit more on a wide screen and would also
+   put "I am not sure" beside "Yes" as though they were the same kind of
+   answer — and would break the moment French wrapped one of them to two
+   lines. A column reads the same at 320px and at 1280. */
+.elig__options {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.elig__option {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: var(--btn-h);
+	padding: 10px 14px;
+	border: 1px solid var(--wash-14);
+	border-radius: 14px;
+	background: #fff;
+	font: inherit;
+	font-size: var(--btn-fs);
+	font-weight: 500;
+	color: var(--ink);
+	text-align: left;
+	/* French and Spanish run 20-30% longer. Wrapping is the expected case here,
+	   not the degraded one. */
+	text-wrap: pretty;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		transform var(--settle);
+}
+
+.elig__option:hover:not(:disabled) {
+	border-color: var(--wash-30);
+	background: var(--wash-3);
+}
+
+.elig__option:active:not(:disabled) {
+	transform: scale(0.99);
+}
+
+.elig__option:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* The answer this question already has, when the reader has come back to it.
+   Marked, never re-asked from blank. */
+.elig__option[data-chosen] {
+	border-color: var(--magenta);
+	background: var(--wash-m-6);
+}
+
+.elig__tick {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+	border-radius: 999px;
+	color: var(--magenta);
+}
+
+.elig__option[data-chosen] .elig__tick {
+	background: var(--wash-m-16);
+}
+
+/* ── Result ──────────────────────────────────────────────────────────────── */
+
+.elig__result {
+	display: flex;
+	flex-direction: column;
+	gap: var(--stack);
+}
+
+.elig__verdict {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 0;
+	font-size: var(--lead-fs);
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.elig__verdict-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: var(--badge);
+	height: var(--badge);
+	border-radius: 999px;
+	background: var(--wash-12);
+	color: var(--plum);
+}
+
+.elig__verdict[data-verdict="likely_eligible"] .elig__verdict-icon {
+	background: rgb(22 163 74 / 0.14);
+	color: var(--success);
+}
+
+/* Amber, never red, and the reasoning is the same as a wrong game answer:
+   red says "you broke something". This says "not yet", which is a date, not a
+   fault — and it is the outcome most likely to be read as rejection. */
+.elig__verdict[data-verdict="not_yet"] .elig__verdict-icon,
+.elig__verdict[data-verdict="needs_confirmation"] .elig__verdict-icon {
+	background: var(--warn-tint);
+	color: var(--warn-ink);
+}
+
+.elig__body {
+	margin: 0;
+	font-size: 0.9375rem;
+	line-height: 1.55;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+/* The question to put to a person, set as a quotation because it is one —
+   it is meant to be read out or pasted into an email unchanged. */
+.elig__mentor {
+	padding: 14px 16px;
+	border-left: 3px solid var(--magenta);
+	border-radius: 0 14px 14px 0;
+	background: var(--wash-m-6);
+}
+
+.elig__unresolved {
+	margin: 0 0 10px;
+	padding-left: 18px;
+	font-size: 0.84375rem;
+	line-height: 1.5;
+	color: var(--slate);
+}
+
+.elig__mentor-question {
+	margin: 0;
+	font-size: 0.9375rem;
+	font-weight: 500;
+	line-height: 1.5;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.elig__notices {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	border-radius: 14px;
+	background: var(--wash-6);
+}
+
+.elig__notice {
+	margin: 0;
+	font-size: 0.875rem;
+	line-height: 1.45;
+	color: var(--plum);
+	text-wrap: pretty;
+}
+
+.elig__section {
+	padding-top: 4px;
+	border-top: 1px solid var(--hairline);
+}
+
+.elig__heading {
+	margin: 0 0 12px;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+/* ── Checklist ───────────────────────────────────────────────────────────── */
+
+.elig__checklist {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.elig__doc {
+	padding: 12px 14px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: var(--wash-3);
+	transition: background var(--swift), border-color var(--swift);
+}
+
+.elig__doc[data-checked] {
+	border-color: rgb(22 163 74 / 0.3);
+	background: rgb(22 163 74 / 0.05);
+}
+
+/* An alternative, tucked under the item it substitutes for so the pair reads
+   as one decision rather than two errands. Dashed, and inset, because "either
+   this or that" has to be visible before the words are read. */
+.elig__doc[data-alt] {
+	margin-top: -4px;
+	margin-left: 18px;
+	border-style: dashed;
+	background: transparent;
+}
+
+.elig__doc-title--alt {
+	margin: 0;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--slate);
+	text-wrap: pretty;
+}
+
+/* No tick box on an alternative, so nothing has to clear one. */
+.elig__doc[data-alt] .elig__doc-detail,
+.elig__doc[data-alt] .elig__doc-meta,
+.elig__doc[data-alt] .elig__doc-caveat {
+	margin-left: 0;
+}
+
+.elig__doc-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	cursor: pointer;
+}
+
+.elig__checkbox {
+	flex-shrink: 0;
+	/* 20px, and deliberately not smaller: this is tapped on a phone by someone
+	   holding a document in the other hand. */
+	width: 20px;
+	height: 20px;
+	margin: 1px 0 0;
+	accent-color: var(--plum);
+	cursor: pointer;
+}
+
+.elig__doc-title {
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.elig__doc[data-checked] .elig__doc-title {
+	text-decoration: line-through;
+	text-decoration-color: var(--wash-30);
+	color: var(--slate);
+}
+
+.elig__doc-detail {
+	margin: 6px 0 0 30px;
+	font-size: 0.84375rem;
+	line-height: 1.45;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.elig__doc-meta {
+	margin: 5px 0 0 30px;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.elig__doc-meta b {
+	font-weight: 600;
+	color: var(--slate);
+}
+
+/* The source's own hedge on a document the programme has not settled. Amber
+   rather than grey: it is a warning about the list, not a footnote to it, and
+   greying it out would be exactly how it gets skipped. */
+.elig__doc-caveat {
+	margin: 8px 0 0 30px;
+	padding: 6px 10px;
+	border-radius: 9px;
+	background: var(--warn-wash);
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	color: var(--warn-ink);
+	text-wrap: pretty;
+}
+
+.elig__note {
+	margin: 10px 0 0;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+/* ── Walkthrough ─────────────────────────────────────────────────────────── */
+
+.elig__steps {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: none;
+}
+
+.elig__step-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.elig__step-text {
+	min-width: 0;
+	font-size: 0.875rem;
+	line-height: 1.5;
+	color: var(--prose);
+}
+
+.elig__step-text b {
+	display: block;
+	margin-bottom: 2px;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.elig__step-text p {
+	margin: 0;
+	text-wrap: pretty;
+}
+
+.elig__step-text .answer-link {
+	display: inline-block;
+	margin-top: 6px;
+	/* A URL has no spaces to break at, so at 320px it is the one thing that can
+	   push the card wider than the screen. */
+	overflow-wrap: anywhere;
+}
+
+.elig__contacts {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-top: 14px;
+	border-top: 1px solid var(--hairline);
+}
+
+.elig__contact {
+	margin: 0;
+	font-size: 0.84375rem;
+	line-height: 1.5;
+	color: var(--prose);
+	overflow-wrap: anywhere;
+}
+
+/* The disclaimer again, under the verdict, where a decision would be read.
+   The header banner is not enough on its own: this is the moment somebody
+   screenshots the card and shows it to a relative. */
+.elig__disclaimer {
+	margin: 0;
+	padding: 12px 14px;
+	border: 1px solid var(--warn-line);
+	border-radius: 14px;
+	background: var(--warn-wash);
+	font-size: 0.84375rem;
+	font-weight: 500;
+	line-height: 1.45;
+	color: var(--warn-ink);
+	text-wrap: pretty;
+}
+
+/* Borders carry the state where a background tint cannot. */
+@media (forced-colors: active) {
+	.elig__option[data-chosen] {
+		border-width: 3px;
+	}
+
+	.elig__pip[data-state="done"],
+	.elig__pip[data-state="now"] {
+		background: Highlight;
+	}
+
+	.elig__banner,
+	.elig__disclaimer,
+	.elig__doc-caveat {
+		border: 1px solid CanvasText;
+	}
+}
+
 /* On a phone the action row stacks rather than letting the primary button drift
    away from the one beside it. */
 @media (max-width: 620px) {
@@ -3712,6 +4243,15 @@ body {
 	}
 
 	.tf__hint {
+		margin-left: 0;
+	}
+
+	/* The indent that keeps the checklist detail lined up under its title costs
+	   30px of a 320px screen, and French document names need every one of them.
+	   The checkbox is still the row's own affordance. */
+	.elig__doc-detail,
+	.elig__doc-meta,
+	.elig__doc-caveat {
 		margin-left: 0;
 	}
 }
