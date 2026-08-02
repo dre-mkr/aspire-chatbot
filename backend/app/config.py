@@ -84,6 +84,50 @@ class Settings(BaseSettings):
     # --- Retrieval --------------------------------------------------------
     retriever_k: int = Field(default=4, ge=1, le=20)
 
+    # --- Postgres (Neon) --------------------------------------------------
+    # MUST be the POOLED endpoint -- the host with `-pooler` in it. Neon's
+    # direct endpoint holds one Postgres backend per connection and a
+    # per-request async session pool will exhaust it; the pooled host
+    # multiplexes through pgbouncer. `db/engine.py` warns at startup if this
+    # does not look pooled.
+    #
+    # Unset means "no database", which is a fully supported state: at this step
+    # nothing in the request path reads Postgres at all, so leaving it unset
+    # changes nothing whatsoever.
+    database_url: str | None = None
+    # Neon scales to zero, so the first request after an idle period pays the
+    # wake-up. Warming one connection at startup costs nothing and keeps the
+    # overnight compute bill at zero, which disabling scale-to-zero would not.
+    database_warm_on_start: bool = True
+    db_pool_size: int = Field(default=5, ge=1, le=50)
+    db_max_overflow: int = Field(default=5, ge=0, le=50)
+
+    # --- Valkey -----------------------------------------------------------
+    # Wire-compatible with Redis 7.2, so redis-py and arq talk to it unchanged.
+    # Unset disables the response cache and the background queue; nothing else
+    # changes.
+    valkey_url: str | None = None
+    # How long a cached answer stays servable. Knowledge-base answers are stable
+    # for far longer than this, but a few hours is the point past which a
+    # corrected answer should have reached everyone.
+    response_cache_ttl_seconds: int = Field(default=6 * 3600, ge=60, le=86_400)
+    response_cache_enabled: bool = True
+
+    # --- Conversation memory ---------------------------------------------
+    # OFF by default. Enabling this changes what the model sees: the last N
+    # turns verbatim plus a running summary of everything older, instead of the
+    # whole thread. Flip it back and today's behaviour returns exactly, because
+    # the full transcript is persisted either way.
+    memory_window_enabled: bool = False
+    # How many recent messages the model sees verbatim. The single number that
+    # decides the per-turn prompt cost, which is why it is configurable.
+    memory_window_turns: int = Field(default=6, ge=1, le=50)
+    # Summarise once this many messages have fallen outside the window. Runs in
+    # arq, off the request path, always.
+    memory_summary_after_turns: int = Field(default=2, ge=1, le=50)
+    # Used only for accounting. o200k_base is the GPT-4o/5 family's encoding.
+    token_encoding: str = "o200k_base"
+
     # --- HTTP -------------------------------------------------------------
     # Permissive for local dev. Tighten to the real frontend origin before deploying.
     cors_allow_origins: list[str] = ["*"]

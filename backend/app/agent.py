@@ -18,14 +18,17 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
 from app.config import Settings, get_settings
+from app.eligibility import ELIGIBILITY_TOOLS, eligibility_enabled
 from app.games import GAME_TOOLS, games_enabled
 from app.prompts import (
     ASPIRE_SYSTEM_PROMPT,
+    ELIGIBILITY_INSTRUCTIONS,
     FOLLOW_UP_PROMPT,
     GAMES_INSTRUCTIONS,
     RETRIEVER_TOOL_DESCRIPTION,
     RETRIEVER_TOOL_NAME,
     SIMPLE_MODE_INSTRUCTIONS,
+    SUMMARY_PROMPT,
     TITLE_PROMPT,
 )
 from app.rag import build_retriever, get_vector_store
@@ -55,6 +58,17 @@ def build_chat_model(settings: Settings | None = None):
 # One checkpointer shared by every agent variant. Conversation memory belongs to
 # the thread, not to the mode, so toggling "Explain it simply" mid-conversation
 # must not strand the user in a thread the new agent has never seen.
+#
+# It replays the ENTIRE thread into the model on every turn -- including every
+# ToolMessage carrying that turn's retrieved documents -- so the prompt grows
+# without bound while the useful context does not. That is what
+# MEMORY_WINDOW_ENABLED replaces: with the flag on, the caller assembles a
+# window plus a summary itself (`app.memory.build_prompt`) and this is left out
+# of the agent entirely.
+#
+# The two are mutually exclusive and must stay that way. A checkpointer AND
+# caller-supplied history would send the saved thread plus the messages passed
+# in -- every turn duplicated.
 _CHECKPOINTER = InMemorySaver()
 
 
@@ -86,22 +100,35 @@ def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
         tools.extend(GAME_TOOLS)
         system_prompt += GAMES_INSTRUCTIONS
 
-    # In-memory checkpointer: multi-turn memory per thread_id, cleared on restart.
-    # Phase 1 only -- swap for a persistent saver when conversations must survive.
+    # Same additive shape as the games block: the tool and its prompt section
+    # appear together or not at all, so switching the module off never leaves
+    # instructions describing a tool the agent does not have.
+    if eligibility_enabled():
+        tools.extend(ELIGIBILITY_TOOLS)
+        system_prompt += ELIGIBILITY_INSTRUCTIONS
+
+    # With the window off, the checkpointer holds multi-turn memory per
+    # thread_id and the service behaves exactly as it always has. With it on,
+    # the agent is stateless and history arrives with each invocation -- see the
+    # note on _CHECKPOINTER for why it cannot be both.
+    windowed = settings.memory_window_enabled
     agent = create_agent(
         model=model,
         tools=tools,
         system_prompt=system_prompt,
-        checkpointer=_CHECKPOINTER,
+        **({} if windowed else {"checkpointer": _CHECKPOINTER}),
     )
 
     logger.info(
-        "Agent ready (model=%s, k=%d, simple_mode=%s, games=%s, tools=%d)",
+        "Agent ready (model=%s, k=%d, simple_mode=%s, games=%s, eligibility=%s, "
+        "tools=%d, memory=%s)",
         settings.chat_model,
         settings.retriever_k,
         simple_mode,
         games_enabled(),
+        eligibility_enabled(),
         len(tools),
+        "window+summary" if windowed else "full-history checkpointer",
     )
     return agent
 
@@ -206,3 +233,56 @@ async def suggest_title(question: str, answer: str, language: str = "en") -> str
     # The prompt asks for 48; enforce it here too, because a prompt is a request
     # and this is the thing the layout actually depends on.
     return title[:48].strip()
+
+
+@lru_cache(maxsize=1)
+def _summary_model():
+    return build_chat_model()
+
+
+async def summarise_conversation(
+    turns: list[tuple[str, str]], previous: str | None = None
+) -> str | None:
+    """Fold older turns into a running summary.
+
+    Called only from the arq worker, never from a request. That is what makes
+    the rolling window affordable: compression costs a model call, and a model
+    call on the request path would move the latency rather than remove it.
+
+    Best effort, like every other auxiliary call here. Returning None leaves the
+    existing summary and `summarized_through_seq` untouched, so the same turns
+    are retried on the next trigger rather than being silently lost.
+    """
+    if not turns:
+        return None
+
+    transcript = "\n\n".join(f"{role}: {content}" for role, content in turns)
+    user_content = (
+        f"Earlier summary:\n{previous}\n\nNew turns to fold in:\n{transcript}"
+        if previous
+        else f"Conversation so far:\n{transcript}"
+    )
+
+    try:
+        result = await _summary_model().ainvoke(
+            [
+                {"role": "system", "content": SUMMARY_PROMPT},
+                {"role": "user", "content": user_content},
+            ]
+        )
+    except Exception:
+        logger.warning(
+            "Conversation summarisation failed; keeping the previous summary.",
+            exc_info=True,
+        )
+        return None
+
+    content = result.content
+    if isinstance(content, list):
+        content = "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    summary = (content or "").strip()
+    return summary or None

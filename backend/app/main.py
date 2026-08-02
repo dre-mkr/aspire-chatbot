@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -11,8 +12,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 
+from app import cache as response_cache
 from app.agent import get_agent, suggest_follow_ups, suggest_title
 from app.config import get_settings
+from app.db import (
+    check_schema,
+    database_enabled,
+    dispose as dispose_database,
+    session,
+    warm,
+)
+from app.db.repository import (
+    ConversationContext,
+    append_turn,
+    ensure_conversation,
+    load_context,
+)
+from app.jobs import enqueue_summary
+from app.memory import build_prompt, log_prompt_cost
+from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
 from app.ingest import ingest_if_empty
 from app.rag import count_documents, get_vector_store
@@ -21,6 +39,7 @@ from app.schemas import (
     ChatResponse,
     HealthResponse,
     Source,
+    StartedEligibilityCheck,
     TitleRequest,
     TitleResponse,
 )
@@ -55,7 +74,28 @@ async def lifespan(app: FastAPI):
         validate_registry()
         logger.info("Voice layer enabled.")
 
+    # Neon scales to zero, so without this the first message after an idle
+    # period pays the wake-up. Warming here rather than disabling scale-to-zero
+    # keeps the overnight compute bill at zero and moves the cost to deploy
+    # time, where nobody is waiting on it.
+    if database_enabled():
+        await warm(settings)
+        # Reachable is not the same as ready. Without this an unmigrated
+        # database looks perfectly healthy until the first message of the first
+        # conversation, which then 500s on a missing table. Checking here turns
+        # a user-facing error into one loud startup log naming the command to
+        # run, and persistence simply stays off.
+        await check_schema()
+
+    # Verified at boot rather than discovered mid-request. arq and redis-py talk
+    # to Valkey unchanged -- it implements the Redis 7.2 command set -- so a
+    # failure here is a bad URL or an unreachable host, not an incompatibility.
+    if await response_cache.ping():
+        logger.info("Valkey reachable; response cache and job queue enabled.")
+
     yield
+
+    await dispose_database()
 
 
 app = FastAPI(
@@ -91,10 +131,28 @@ if get_voice_settings().voice_enabled:
 if games_enabled():
     app.include_router(games_router)
 
+# The eligibility card talks to these directly too, and for a second reason
+# beyond latency: the answers tapped into it are a minor's, and routing them
+# through /chat would put an age band into a prompt, a checkpointer and a
+# summary job. This way they reach the engine and nothing else.
+if eligibility_enabled():
+    app.include_router(eligibility_router)
+
 
 @app.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+async def health() -> HealthResponse:
+    """Liveness, plus whether the data layer actually connected.
+
+    The cache counters live here because the hit rate has to be reported from
+    somewhere, and an endpoint that already exists beats a metrics stack this
+    service does not have yet.
+    """
+    return HealthResponse(
+        status="ok",
+        database=database_enabled(),
+        cache=response_cache.cache_enabled(),
+        cache_stats=await response_cache.stats(),
+    )
 
 
 def _messages_from_this_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -138,6 +196,66 @@ def _extract_sources(messages: list[BaseMessage]) -> list[Source]:
     return sources[:MAX_SOURCES]
 
 
+def _started_game(messages: list[BaseMessage]) -> dict | None:
+    """The game this turn started, or None.
+
+    Read from the tool result rather than from the model's prose, because the
+    prose is exactly what we are about to throw away. Scoped to this turn by
+    `_messages_from_this_turn`, so a game started ten messages ago does not keep
+    reporting itself.
+
+    Only a SUCCESSFUL start counts. A decline renders no card, so that turn is
+    an ordinary answer and has to keep its text.
+    """
+    for message in _messages_from_this_turn(messages):
+        if not isinstance(message, ToolMessage) or message.name != "start_game":
+            continue
+
+        content = message.content
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(content, dict) or not content.get("started"):
+            continue
+
+        return {
+            "game_type": content.get("game"),
+            "display_name": content.get("name"),
+            "kind": content.get("kind"),
+            "total": content.get("total"),
+        }
+    return None
+
+
+def _started_eligibility(messages: list[BaseMessage]) -> dict | None:
+    """The eligibility check this turn opened, or None.
+
+    Read from the tool result rather than the model's prose, exactly as
+    `_started_game` is and for the same reason: the prose is what we are about
+    to throw away. Only a SUCCESSFUL start counts -- a decline renders no card,
+    so that turn is an ordinary answer and keeps its text.
+    """
+    for message in _messages_from_this_turn(messages):
+        if not isinstance(message, ToolMessage):
+            continue
+        if message.name != "start_eligibility_check":
+            continue
+
+        content = message.content
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(content, dict) or not content.get("started"):
+            continue
+
+        return {"check": content.get("check") or "aspire_eligibility"}
+    return None
+
+
 def _extract_reply(messages: list[BaseMessage]) -> str:
     """Text of the agent's final message."""
     if not messages:
@@ -156,21 +274,220 @@ def _extract_reply(messages: list[BaseMessage]) -> str:
     return "".join(parts).strip()
 
 
+async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMessage]:
+    """The messages for this turn.
+
+    With MEMORY_WINDOW_ENABLED off -- the default -- this is exactly what it has
+    always been: the new question alone, with the checkpointer supplying the
+    rest. Turning the flag off restores that behaviour completely, which is why
+    it is a flag rather than a rewrite.
+
+    With it on, history comes from Postgres instead: a window of recent messages
+    plus a running summary of everything older.
+    """
+    settings = get_settings()
+    if not settings.memory_window_enabled:
+        return [HumanMessage(content=request.message)]
+
+    context = ConversationContext()
+    async with session() as db:
+        if db is not None:
+            context = await load_context(
+                db, thread_id, window_turns=settings.memory_window_turns
+            )
+
+    prepared = build_prompt(request.message, context)
+    log_prompt_cost(thread_id, prepared)
+    return prepared.messages
+
+
+async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
+    """Serve a repeat question without a model call, or return None.
+
+    ONLY EVER THE FIRST TURN of a conversation. A question asked mid-thread
+    depends on everything said before it, so two identical strings in two
+    different conversations are not the same question and must not share an
+    answer. That single condition is what makes an exact-match cache safe here.
+    """
+    if request.thread_id:
+        return None
+
+    hit = await response_cache.get_answer(
+        request.message,
+        language=request.language,
+        persona=request.persona,
+        account_status=request.account_status,
+    )
+    await response_cache.record(hit is not None)
+    if hit is None:
+        return None
+
+    logger.info("cache hit on a first-turn question (language=%s)", request.language)
+    return ChatResponse(
+        reply=hit["reply"],
+        # A fresh thread id even on a hit: the answer is reusable, the
+        # conversation it starts is not.
+        thread_id=str(uuid.uuid4()),
+        sources=[Source(**source) for source in hit.get("sources", [])],
+        follow_ups=hit.get("follow_ups", []),
+    )
+
+
+def _game_history_line(game: dict) -> str:
+    """What a game turn leaves in the transcript in place of prose.
+
+    An empty assistant turn would be worse than useless: with the memory window
+    on, the model reads its own history back and would find a question followed
+    by silence, then wonder why nobody replied. This is a factual note that the
+    card was shown -- it never contains the puzzle text or the answer, so
+    re-reading history cannot leak either.
+
+    English regardless of the conversation's language, on purpose. It is context
+    for the model, not copy for the reader; nothing renders it.
+    """
+    name = game.get("display_name") or game.get("game_type") or "a game"
+    total = game.get("total")
+    items = f", {total} items" if total else ""
+    return f"[Started the {name} game{items}. The interactive card is on screen.]"
+
+
+def _eligibility_history_line() -> str:
+    """What an eligibility turn leaves in the transcript in place of prose.
+
+    Same job as `_game_history_line`: with the memory window on the model reads
+    its own history back, and a question followed by silence reads as a turn
+    that never got answered.
+
+    What it deliberately does NOT carry is the flow's outcome or any answer.
+    The verdict is not here, the age band is not here, and nothing about
+    citizenship, island or school is here. That is not caution for its own sake
+    -- this string is written to Postgres inside a transcript that identifies a
+    conversation, and the anonymised outcome row exists precisely so that the
+    two never sit together.
+
+    What it does carry is enough to stop the model re-asking: the check
+    happened, it is on screen, and it already covered those details. English
+    regardless of the conversation's language, like the games line -- it is
+    context for the model, not copy for a reader, and nothing renders it.
+    """
+    return (
+        "[Opened the ASPIRE eligibility check. The interactive card is on screen "
+        "and it asks its own questions, shows the result, the document checklist "
+        "and the application steps. I cannot see the answers or the outcome. Do "
+        "not re-ask their age, citizenship, parish or school -- the card covered "
+        "them -- and do not restate any eligibility rule.]"
+    )
+
+
+async def _persist_turn(
+    request: ChatRequest,
+    thread_id: str,
+    *,
+    reply: str,
+    sources: list[Source],
+    follow_ups: list[str],
+    game: dict | None = None,
+    eligibility: dict | None = None,
+) -> None:
+    """Write the exchange to Postgres, whole.
+
+    Called after the reply exists and immediately before it is returned, so
+    persistence cannot influence what the user is told. Nothing here is read
+    back yet -- the model's view of a conversation is unchanged by this step.
+
+    Swallows its own failures on purpose. The user has an answer; losing the
+    record of it is a problem for us, not a reason to turn their working
+    response into a 500.
+    """
+    if not database_enabled():
+        return
+
+    try:
+        async with session() as db:
+            if db is None:
+                return
+            await ensure_conversation(
+                db,
+                thread_id,
+                language=request.language,
+                persona=request.persona,
+                account_status=request.account_status,
+            )
+            await append_turn(db, thread_id, role="user", content=request.message)
+
+            # A game or eligibility turn has no prose by design, so it stores a
+            # structured record instead: enough for the model to keep the
+            # thread, and enough for counting to have an event to count.
+            if game:
+                content = _game_history_line(game)
+            elif eligibility:
+                content = _eligibility_history_line()
+            else:
+                content = reply
+
+            await append_turn(
+                db,
+                thread_id,
+                role="assistant",
+                content=content,
+                extra={
+                    "sources": [source.model_dump() for source in sources],
+                    "follow_ups": follow_ups,
+                    "simple_mode": request.simple_mode,
+                    **(
+                        {
+                            "event": "game_started",
+                            "game_type": game.get("game_type"),
+                            "display_name": game.get("display_name"),
+                            "kind": game.get("kind"),
+                            "total": game.get("total"),
+                        }
+                        if game
+                        else {}
+                    ),
+                    # The event and nothing else. No verdict, no criterion, no
+                    # answers -- see `_eligibility_history_line`.
+                    **({"event": "eligibility_started"} if eligibility else {}),
+                },
+            )
+    except Exception:
+        logger.warning(
+            "Could not persist the turn for thread %s; the answer was still served.",
+            thread_id,
+            exc_info=True,
+        )
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     # A new thread_id starts a fresh conversation; reuse it to keep context.
     thread_id = request.thread_id or str(uuid.uuid4())
 
+    cached = await _cached_reply(request)
+    if cached is not None:
+        return cached
+
+    prepared = await _prepare_messages(request, thread_id)
+
     try:
         result = await get_agent(request.simple_mode).ainvoke(
-            {"messages": [HumanMessage(content=request.message)]},
+            {"messages": prepared},
             # `configurable` is how per-request context reaches the tools. The
             # agent itself is process-wide and cached, so a tool cannot close
             # over the caller -- it reads thread_id and persona from here. Both
             # are injected by LangChain and stay out of the schema the model
             # sees, so the model can neither read nor forge them.
             config={
-                "configurable": {"thread_id": thread_id, "persona": request.persona}
+                # `language` joins thread_id and persona here so the eligibility
+                # card opens in the language the conversation is being held in.
+                # Injected the same way and for the same reason: the model can
+                # neither read it nor forge it, so it cannot start a French
+                # speaker's check in English by deciding to.
+                "configurable": {
+                    "thread_id": thread_id,
+                    "persona": request.persona,
+                    "language": request.language,
+                }
             },
         )
     except Exception:
@@ -183,15 +500,113 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     messages = result.get("messages", [])
     reply = _extract_reply(messages)
-    if not reply:
+    game = _started_game(messages)
+    eligibility = _started_eligibility(messages)
+
+    if eligibility is not None:
+        # Same rule as a game turn, for a sharper reason. The card is about to
+        # give an audited, personalised answer to "am I eligible"; anything the
+        # model says in the same turn is a second answer to that question with
+        # none of the auditing. Dropped HERE rather than hidden in the client,
+        # so it never crosses the wire, never reaches history and never reaches
+        # the chip generator.
+        #
+        # The prompt asks for silence and usually gets it. This is the half that
+        # does not depend on the model complying.
+        if reply:
+            logger.info(
+                "Dropping %d characters of narration from an eligibility turn.",
+                len(reply),
+            )
+        reply = ""
+    elif game is not None:
+        # The card is the answer. Anything the model said alongside it restates
+        # the puzzle it is already showing, so it is dropped HERE rather than
+        # hidden in the client -- the prose then never crosses the wire, never
+        # reaches history, and never reaches the chip generator.
+        #
+        # The prompt asks for silence and usually gets it; this is the half that
+        # does not depend on the model complying.
+        if reply:
+            logger.info(
+                "Dropping %d characters of narration from a game-start turn.",
+                len(reply),
+            )
+        reply = ""
+    elif not reply:
         logger.error("Agent produced an empty reply for thread %s", thread_id)
         raise HTTPException(status_code=502, detail="The assistant returned an empty response.")
+
+    sources = _extract_sources(messages)
+
+    # No chips on a game turn, and the reason is not tidiness.
+    #
+    # `suggest_follow_ups` never had access to game state -- it sees only the
+    # question and the reply. It was giving the puzzle away because the reply
+    # CONTAINED the puzzle: handed "Unscramble these letters: NOEYM" it simply
+    # solved it and suggested "Is the answer MONEY?".
+    #
+    # So the input is cut rather than the output filtered: on a game turn the
+    # call is not made at all. Filtering its suggestions would leave the model
+    # still being shown the scramble, one prompt change away from leaking it
+    # again.
+    #
+    # An eligibility turn is suppressed for a different reason: the card is
+    # asking a question and waiting for a tap, and chips underneath it offering
+    # "Am I eligible?" would be inviting someone out of the flow they just
+    # started, on the very turn they started it.
+    quiet_turn = game is not None or eligibility is not None
+    follow_ups = [] if quiet_turn else await suggest_follow_ups(request.message, reply)
+
+    await _persist_turn(
+        request,
+        thread_id,
+        reply=reply,
+        sources=sources,
+        follow_ups=follow_ups,
+        game=game,
+        eligibility=eligibility,
+    )
+
+    # Once the conversation has outgrown its window, the turns that fell out
+    # need folding into the summary. Enqueued, never awaited: compression costs
+    # a model call, and paying for it here would just move the latency.
+    settings = get_settings()
+    if settings.memory_window_enabled and database_enabled():
+        await enqueue_summary(thread_id)
+
+    # Only the opening turn is cacheable -- see `_cached_reply` -- and never a
+    # game or eligibility turn: both create server-side session state, so
+    # replaying a cached "answer" would render a card for a flow nobody started.
+    #
+    # This matters more for eligibility than for games, because "Who is eligible
+    # for ASPIRE?" is a landing-page starter chip and therefore the most
+    # cacheable string in the product. Caching that turn would serve every later
+    # asker an empty reply with no card at all.
+    if not request.thread_id and quiet_turn is False:
+        await response_cache.put_answer(
+            request.message,
+            {
+                "reply": reply,
+                "sources": [source.model_dump() for source in sources],
+                "follow_ups": follow_ups,
+            },
+            language=request.language,
+            persona=request.persona,
+            account_status=request.account_status,
+        )
 
     return ChatResponse(
         reply=reply,
         thread_id=thread_id,
-        sources=_extract_sources(messages),
-        follow_ups=await suggest_follow_ups(request.message, reply),
+        sources=sources,
+        follow_ups=follow_ups,
+        game_started=game,
+        eligibility_started=(
+            StartedEligibilityCheck(check=eligibility["check"], language=request.language)
+            if eligibility
+            else None
+        ),
     )
 
 
