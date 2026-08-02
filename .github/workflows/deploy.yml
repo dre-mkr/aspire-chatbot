@@ -1,0 +1,48 @@
+name: Deploy
+
+# Every push to main updates the VPS. The build itself happens on the box —
+# this job only opens an SSH session and runs deploy/update.sh, so the Actions
+# log is that script's output.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deploys are serialised. Cancelling an in-flight one is worse than queueing:
+# it could stop between the asset swap and the service restart.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Run the update script on the VPS
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          # Pinning the host key rather than disabling the check: a runner that
+          # accepts any key will happily hand this private key to whoever
+          # answers on that address.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/id_deploy \
+              -p "$SSH_PORT" \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=15 \
+              "$SSH_USER@$SSH_HOST" \
+              '/srv/aspire/deploy/update.sh'

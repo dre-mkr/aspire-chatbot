@@ -1,7 +1,12 @@
 # Deploying ASPIRE to a VPS
 
-Assumes Ubuntu 24.04 (Debian 12 works; note the Python step). Replace
-`aspire.example.com` with your domain throughout.
+Assumes Ubuntu 24.04 (Debian 12 works; note the Python step). The site is
+`aspire.eccugenai.app`; that hostname is already written into
+`nginx-aspire.conf`, so there is nothing to substitute.
+
+Point an `A` record (and `AAAA`, if the VPS has IPv6) at the server before
+starting section 6 — certbot proves control over the name by being reachable at
+it, so it fails until DNS resolves.
 
 ## What you are running
 
@@ -11,7 +16,7 @@ Three processes behind one hostname:
 | --- | --- | --- |
 | `aspire-api` | 127.0.0.1:8000 | FastAPI — `/chat`, `/api/voice/*` |
 | `aspire-web` | 127.0.0.1:3000 | Node — server-renders the app's HTML |
-| `nginx` | 443 | TLS, serves `dist/client/`, routes the rest |
+| `nginx` | 443 | TLS, serves `/srv/aspire-web/client/`, routes the rest |
 
 Only nginx is exposed. Both app processes bind to loopback.
 
@@ -23,7 +28,7 @@ bundle. It is not read at runtime, and setting it in a systemd unit does
 nothing. Changing it means rebuilding. Verify after every build:
 
 ```bash
-grep -o 'https://aspire.example.com' dist/client/assets/*.js | head -1
+grep -o 'https://aspire.eccugenai.app' dist/client/assets/*.js | head -1
 ```
 
 Because nginx serves the API on the same hostname, this is just your site URL.
@@ -64,7 +69,9 @@ sudo curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/
 ## 2. Get the code onto the box
 
 ```bash
-sudo -u aspire git clone <your-repo> /srv/aspire
+# The repository is public, so this needs no credentials. If you ever make it
+# private, switch to the SSH remote and add a deploy key — see section 8.
+sudo -u aspire git clone https://github.com/fraimerdev/aspire-chatbot.git /srv/aspire
 # or: rsync -av --exclude node_modules --exclude .venv --exclude dist ./ user@vps:/srv/aspire/
 ```
 
@@ -82,7 +89,7 @@ Set in `.env`:
 
 ```ini
 OPENAI_API_KEY=sk-...
-CORS_ALLOW_ORIGINS=["https://aspire.example.com"]
+CORS_ALLOW_ORIGINS=["https://aspire.eccugenai.app"]
 LOG_LEVEL=INFO
 
 # Only if you want voice. All four ids are required when this is true —
@@ -111,17 +118,27 @@ only path the unit file grants write access to.
 ```bash
 cd /srv/aspire/frontend
 sudo -u aspire bun install --frozen-lockfile
-sudo -u aspire env VITE_ASPIRE_API_URL="https://aspire.example.com" bun run build
+sudo -u aspire env VITE_ASPIRE_API_URL="https://aspire.eccugenai.app" bun run build
 ```
 
 Confirm the URL was baked in:
 
 ```bash
-grep -o 'https://aspire.example.com' dist/client/assets/*.js | head -1
+grep -o 'https://aspire.eccugenai.app' dist/client/assets/*.js | head -1
 ```
 
 Empty output means the build used the default `http://localhost:8000` and the
 deployed app will try to call the user's own machine.
+
+nginx does not serve `dist/client` directly — it serves `/srv/aspire-web/client`,
+a symlink that only moves once a build has succeeded. Publish this first build
+by hand; from then on `deploy/update.sh` does it:
+
+```bash
+sudo mkdir -p /srv/aspire-web && sudo chown aspire:aspire /srv/aspire-web
+sudo -u aspire cp -a dist/client /srv/aspire-web/client.a
+sudo -u aspire ln -sfn /srv/aspire-web/client.a /srv/aspire-web/client
+```
 
 ## 5. Services
 
@@ -168,13 +185,12 @@ curl -sI localhost:3000/ | head -1     # HTTP/1.1 200 OK
 
 ```bash
 sudo cp /srv/aspire/deploy/nginx-aspire.conf /etc/nginx/sites-available/aspire
-sudo sed -i 's/aspire.example.com/YOUR-DOMAIN/g' /etc/nginx/sites-available/aspire
 sudo ln -s /etc/nginx/sites-available/aspire /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d YOUR-DOMAIN
+sudo certbot --nginx -d aspire.eccugenai.app
 ```
 
 Certbot rewrites the listen lines and adds the HTTP redirect. Renewal is
@@ -189,12 +205,12 @@ sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
 ## 7. Verify
 
 ```bash
-curl -sI https://YOUR-DOMAIN/ | head -1                                  # 200
-curl -s https://YOUR-DOMAIN/ | grep -c 'learn about money'               # 1 → SSR works
-curl -sI https://YOUR-DOMAIN/assets/$(ls /srv/aspire/frontend/dist/client/assets/index-*.js | xargs -n1 basename) | head -1
-curl -s -X POST https://YOUR-DOMAIN/chat -H 'Content-Type: application/json' \
+curl -sI https://aspire.eccugenai.app/ | head -1                                  # 200
+curl -s https://aspire.eccugenai.app/ | grep -c 'learn about money'               # 1 → SSR works
+curl -sI https://aspire.eccugenai.app/assets/$(ls /srv/aspire-web/client/assets/index-*.js | xargs -n1 basename) | head -1
+curl -s -X POST https://aspire.eccugenai.app/chat -H 'Content-Type: application/json' \
      -d '{"message":"What is ASPIRE?","thread_id":null,"simple_mode":false}' | head -c 300
-curl -s https://YOUR-DOMAIN/api/voice/config | head -c 200               # only if VOICE_ENABLED
+curl -s https://aspire.eccugenai.app/api/voice/config | head -c 200               # only if VOICE_ENABLED
 ```
 
 Then open the site and send a real message. If voice is on, record something —
@@ -203,27 +219,155 @@ show up as "Voice is offline".
 
 ## Updating
 
+One script does the whole sequence — fetch, dependencies, migrations, build,
+publish, restart, health check:
+
 ```bash
-cd /srv/aspire && sudo -u aspire git pull
-
-cd backend && sudo -u aspire uv sync --frozen
-cd ../frontend && sudo -u aspire bun install --frozen-lockfile \
-  && sudo -u aspire env VITE_ASPIRE_API_URL="https://YOUR-DOMAIN" bun run build
-
-# pm2
-pm2 restart aspire-api aspire-web
-# or systemd
-sudo systemctl restart aspire-api aspire-web
+sudo -u aspire /srv/aspire/deploy/update.sh
 ```
 
-The rebuild is not optional. `pm2 restart` restarts the process; it does not run
-Vite, so skipping the build step above leaves the old bundle on disk and nginx
-keeps serving it.
+It is written to be safe to interrupt and safe to re-run. Two properties worth
+knowing:
+
+- It **resets** the checkout to `origin/main`. Local edits on the box are
+  discarded. It never runs `git clean`, because `backend/.env` and
+  `backend/data/` are untracked by design.
+- Nothing user-visible changes until the build has succeeded *and* the compiled
+  bundle has been checked for your domain. A failed build leaves the previous
+  version serving.
+
+It reads its settings from `/etc/aspire-deploy.env`, which lives outside the
+checkout so a deploy cannot rewrite what drives the deploy:
+
+```ini
+SITE_URL=https://aspire.eccugenai.app
+# BRANCH=main
+# REPO_DIR=/srv/aspire
+# WEB_ROOT=/srv/aspire-web
+```
+
+`SITE_URL` has no default. Without it the script refuses to build rather than
+bake in a guess.
+
+To roll back, point the checkout at the last good commit and re-run:
+
+```bash
+sudo -u aspire env TARGET=<good-sha> /srv/aspire/deploy/update.sh
+```
+
+The next push to `main` will move it forward again, so revert the commit on
+GitHub too rather than leaving the box pinned.
 
 Re-run `python -m app.ingest` only when `data/knowledge_base.csv` changed.
 Changing `EMBEDDINGS_MODEL` or `EMBEDDINGS_PROVIDER` changes the vector
 dimensions and makes the existing store unreadable — delete `data/chroma` and
 re-ingest.
+
+## 8. Deploying on every push
+
+`.github/workflows/deploy.yml` runs on every push to `main`. It does no
+building of its own — it opens an SSH session and runs the script from the
+previous section, so the Actions log *is* that script's output and a hand-run
+deploy and an automatic one are the same thing.
+
+One key is involved, in one direction — GitHub reaching the box:
+
+```
+GitHub Actions  --ssh(DEPLOY_SSH_KEY)-->  VPS as `aspire`
+VPS             --https---------------->  github.com  (public repo, no credentials)
+```
+
+### If the repository ever becomes private
+
+Skip this while it is public. The VPS would then need its own read-only key:
+generate one owned by `aspire` and add the **public** half at *Settings → Deploy
+keys → Add deploy key* (leave "Allow write access" unchecked):
+
+```bash
+sudo -u aspire ssh-keygen -t ed25519 -N '' -f /srv/aspire/.ssh/id_github
+sudo -u aspire cat /srv/aspire/.ssh/id_github.pub
+
+sudo -u aspire tee -a /srv/aspire/.ssh/config >/dev/null <<'EOF'
+Host github.com
+    IdentityFile /srv/aspire/.ssh/id_github
+    IdentitiesOnly yes
+EOF
+
+# the remote must be the SSH form for that key to be used
+sudo -u aspire git -C /srv/aspire remote set-url origin git@github.com:OWNER/REPO.git
+sudo -u aspire git -C /srv/aspire fetch origin      # accepts the host key, proves it works
+```
+
+### GitHub needs to be able to reach the VPS
+
+The `aspire` user was created with `--system`, which gives it no login shell.
+Give it one, and authorise a key that exists only for this purpose:
+
+```bash
+sudo usermod -s /bin/bash aspire
+sudo -u aspire install -d -m 700 /srv/aspire/.ssh
+
+# Generate this on your own machine, not the server: the private half has to
+# leave the box exactly once, into GitHub's secret store.
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/aspire_deploy -C 'github-actions -> aspire vps'
+```
+
+Append the **public** half to `/srv/aspire/.ssh/authorized_keys`, restricted so
+a leaked key cannot open an interactive session or forward ports:
+
+```
+restrict,command="/srv/aspire/deploy/update.sh" ssh-ed25519 AAAA... github-actions
+```
+
+Then let it restart the two units, and only those:
+
+```bash
+echo 'aspire ALL=(root) NOPASSWD: /usr/bin/systemctl restart aspire-api aspire-web' \
+  | sudo tee /etc/sudoers.d/aspire-deploy
+sudo chmod 440 /etc/sudoers.d/aspire-deploy
+sudo visudo -c
+```
+
+### Repository secrets
+
+*Settings → Secrets and variables → Actions → New repository secret:*
+
+| Secret | Value |
+| --- | --- |
+| `DEPLOY_HOST` | the server's hostname or IP |
+| `DEPLOY_USER` | `aspire` |
+| `DEPLOY_SSH_KEY` | contents of `~/.ssh/aspire_deploy` — the whole file, `BEGIN`/`END` lines included |
+| `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan -t ed25519 YOUR-HOST` |
+| `DEPLOY_PORT` | only if sshd is not on 22 |
+
+`DEPLOY_KNOWN_HOSTS` is not optional busywork. The alternative is a runner that
+accepts whatever host key it is offered, which means handing that private key to
+whoever answers at that address.
+
+### First run
+
+Push to `main`, or trigger it from *Actions → Deploy → Run workflow*. Failures
+are loud by construction: the script exits non-zero if the domain is missing
+from the built bundle, or if either service fails to answer on loopback within
+a minute, and the job goes red.
+
+If the deploy is green but the site is wrong, the box is the place to look —
+`journalctl -u aspire-api -u aspire-web -n 100 --no-pager`.
+
+### What this does not do
+
+- **Migrations run before the restart and are not rolled back.** A migration
+  that drops something the previous version needs makes rollback-by-redeploy
+  insufficient. Keep them additive.
+- **In-flight conversations are dropped on every deploy**, for the reason in
+  "Two things that will bite you". Auto-deploy means this now happens on every
+  push to `main` rather than when you chose it.
+- **Nothing gates the deploy on tests.** There is no test job in the workflow
+  yet; `main` goes to production as-is.
+- **It restarts two units.** If the arq worker (`arq app.jobs.WorkerSettings`,
+  needed once `MEMORY_WINDOW_ENABLED` is on) becomes a third service, add it to
+  the `systemctl restart` line in `update.sh` *and* to `/etc/sudoers.d/aspire-deploy`
+  — the sudo rule matches the whole command, so it will fail closed otherwise.
 
 ## Operating notes
 
