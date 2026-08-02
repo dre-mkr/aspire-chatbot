@@ -1201,10 +1201,11 @@ body {
 	z-index: 0;
 	pointer-events: none;
 	background: radial-gradient(
-		ellipse 62% 58% at 50% 46%,
-		rgb(40 18 72 / 0.5) 0%,
-		rgb(40 18 72 / 0.34) 45%,
-		rgb(40 18 72 / 0) 78%
+		ellipse 66% 62% at 50% 46%,
+		rgb(38 16 70 / 0.66) 0%,
+		rgb(38 16 70 / 0.52) 40%,
+		rgb(38 16 70 / 0.26) 62%,
+		rgb(38 16 70 / 0) 78%
 	);
 }
 
