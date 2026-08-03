@@ -13,12 +13,15 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
+import { handleChatStream } from "./fake-stream.mjs";
+
+import { createConversationStore } from "./fake-conversations.mjs";
 
 const BASE = process.argv[2] ?? "http://localhost:4173";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type",
+	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
 };
 
 let fails = 0;
@@ -35,17 +38,91 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 	const page = await browser.newPage();
 	await page.setViewport({ width, height });
 	const seen = { chat: [], title: [] };
+	// History is server state now, so the harness needs a service to be the
+	// history OF. See fake-conversations.mjs.
+	const store = createConversationStore();
 
 	await page.setRequestInterception(true);
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+
+		const answered = await store.handle(r, (status, body) =>
+			r.respond({
+				status,
+				contentType: "application/json",
+				headers: CORS,
+				body: body === null ? "" : JSON.stringify(body),
+			}),
+		);
+		if (answered) return;
+
+		// `/chat/stream` is the transport now; `/chat` stays as the fallback.
+		//
+		// This branch has to honour EVERY option the `/chat` branch honours, not
+		// just the reply text. Skipping `chatDelay` made the answer arrive before
+		// the test could look for the question, and skipping `chatStatus` turned
+		// the failed-send scenario into a successful one — both of which read as
+		// product regressions when they were gaps in the stub.
+		if (r.url().endsWith("/chat/stream")) {
+			// Recorded before the delay, exactly as the `/chat` branch does. A
+			// test that inspects the page mid-flight has to be able to see that
+			// the request was made, not only that it finished.
+			{
+				const raw = JSON.parse(r.postData() || "{}");
+				seen.chat.push({ ...raw, ...(raw.forwardedProps ?? {}) });
+			}
+			if (chatDelay) await new Promise((x) => setTimeout(x, chatDelay));
+			if (chatStatus !== 200) {
+				return r.respond({
+					status: chatStatus,
+					contentType: "application/json",
+					headers: CORS,
+					body: '{"detail":"The assistant is temporarily unavailable."}',
+				});
+			}
+			handleChatStream(
+				r,
+				(body) =>
+					r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),
+				(sent) => {
+					const id = forceThreadId || sent.thread_id || "t-server";
+					store.openConversation(id, r.headers()["x-aspire-device"] ?? null, sent.message);
+					store.recordTurn(id, null, sent.message, {
+						role: "assistant",
+						text: reply,
+						sources: [],
+						follow_ups: [],
+					});
+					return { reply };
+				},
+			);
+			return;
+		}
+
 		if (r.url().endsWith("/chat")) {
 			const sent = JSON.parse(r.postData() || "{}");
 			seen.chat.push(sent);
+			// The service opens the conversation and records the question BEFORE
+			// it tries to answer, so a failed first send still leaves a chat that
+			// can be reopened and re-asked. Mirrored here or the failure paths
+			// would test a service that does not exist.
+			store.openConversation(
+				sent.thread_id || "t-server",
+				r.headers()["x-aspire-device"] ?? null,
+				sent.message,
+			);
 			if (chatDelay) await new Promise((x) => setTimeout(x, chatDelay));
 			if (chatStatus !== 200) {
 				return r.respond({ status: chatStatus, contentType: "application/json", headers: CORS, body: '{"detail":"The assistant is temporarily unavailable."}' });
 			}
+			const threadId = forceThreadId || sent.thread_id || "t-server";
+			// The service persists the turn as it answers; so does this.
+			store.recordTurn(threadId, r.headers()["x-aspire-device"] ?? null, sent.message, {
+				role: "assistant",
+				text: reply,
+				sources: [],
+				follow_ups: [],
+			});
 			return r.respond({
 				status: 200,
 				contentType: "application/json",
@@ -54,7 +131,7 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 					reply,
 					// Echoes whatever the client sent, exactly as the real service
 					// does — unless a test deliberately makes it disagree.
-					thread_id: forceThreadId || sent.thread_id || "t-server",
+					thread_id: threadId,
 					sources: [],
 					follow_ups: [],
 				}),
@@ -71,10 +148,23 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 	await page.goto(`${BASE}/`, { waitUntil: "networkidle2" });
 	await page.evaluate(() => localStorage.clear());
 	await page.reload({ waitUntil: "networkidle2" });
-	return { page, seen };
+	return { page, seen, store };
 }
 
-const stored = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("aspire.conversations.v1") || "[]"));
+/**
+ * What history exists, read where history now lives.
+ *
+ * This used to read `localStorage["aspire.conversations.v1"]`, because that was
+ * the store. It is not any more: conversations belong to the service and the
+ * client caches them. Reading the old key would now report an empty history for
+ * a product whose rail is full — an assertion about a location rather than about
+ * behaviour, and one that fails for the wrong reason.
+ */
+const stored = (page) =>
+	page.evaluate(() => {
+		const qc = window.__TSR_ROUTER__?.options?.context?.queryClient;
+		return qc?.getQueryData(["conversations"]) ?? [];
+	});
 const path = (page) => page.evaluate(() => location.pathname);
 const focused = (page) => page.evaluate(() => document.activeElement?.id ?? "");
 const rows = (page) => page.evaluate(() => [...document.querySelectorAll(".history-item")].map((b) => b.textContent.trim()));

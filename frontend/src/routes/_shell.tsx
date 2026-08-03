@@ -27,7 +27,32 @@ import { AspireChat } from "#/components/chat/AspireChat";
  * and a layout that silently drops its children is a trap for whoever gives one
  * of them a component later.
  */
-export const Route = createFileRoute("/_shell")({ component: Shell });
+/**
+ * What the URL carries besides which conversation is open.
+ *
+ * `simple` is the plain-words toggle. It was React state inside `AspireChat`,
+ * which meant the one setting that changes what the assistant is asked to
+ * produce could not be linked to, bookmarked or handed to a teacher — "ask it
+ * like this" was unshareable.
+ *
+ * Optional rather than a boolean with a default, and deliberately so: the
+ * validator returns `{}` for the off state instead of `{ simple: false }`, so a
+ * plain `/chat/:id` stays byte-identical to the link the product produced
+ * before this existed. Only the non-default state is written down.
+ */
+export interface ShellSearch {
+	simple?: true;
+}
+
+export const Route = createFileRoute("/_shell")({
+	// Hand-written rather than a schema library: one optional flag does not
+	// justify a dependency, and this states the contract in fewer lines than
+	// configuring one would take. Anything unrecognised is dropped, so a
+	// hand-edited or truncated URL degrades to the default rather than throwing.
+	validateSearch: (search: Record<string, unknown>): ShellSearch =>
+		search.simple === true || search.simple === "true" ? { simple: true } : {},
+	component: Shell,
+});
 
 function Shell() {
 	return (

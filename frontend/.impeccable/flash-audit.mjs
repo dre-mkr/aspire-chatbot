@@ -33,6 +33,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
+import { handleChatStream } from "./fake-stream.mjs";
+
 
 const args = process.argv.slice(2);
 const BASE = args.find((a) => !a.startsWith("--")) ?? "http://localhost:4173";
@@ -45,7 +47,7 @@ mkdirSync(OUT, { recursive: true });
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type",
+	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
 };
 
 const SHORT = "Index funds spread your money across many companies at once.";
@@ -108,6 +110,16 @@ async function open({
 	await page.setRequestInterception(true);
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+		// `/chat/stream` is the transport now; `/chat` stays as the fallback.
+		// Both are served from the same fixture so they cannot drift apart.
+		if (
+			handleChatStream(r, (body) =>
+				r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),
+				{ reply, sources, followUps, gameStarted: game ? { game_type: "true_false", display_name: "True or false", kind: "statement", total: 5 } : null },
+			)
+		)
+			return;
+
 		if (r.url().endsWith("/chat")) {
 			const sent = JSON.parse(r.postData() || "{}");
 			if (chatStatus !== 200) {
@@ -582,7 +594,17 @@ for (const [name, cfg] of Object.entries(CASES)) {
 	const series = (await analyse(page, stamped)).sort((a, b) => a.t - b.t);
 
 	// Geometry either side of completion, from the sampler.
-	const beforeG = t0 == null ? null : [...geom].reverse().find((g) => g.t < t0);
+	// The last pre-completion sample that had prose in it. Without the prose
+	// condition this can land on the turn's very first frame — mounted, tail
+	// reserved, not a word revealed yet — and the typewriter subsequently
+	// growing by one line reads as a reflow at completion. On a short reply,
+	// where the whole reveal is under 160ms, that frame is often the only one
+	// there is.
+	const beforeG =
+		t0 == null
+			? null
+			: ([...geom].reverse().find((g) => g.t < t0 && g.textLayoutTop != null) ??
+				[...geom].reverse().find((g) => g.t < t0));
 	const afterG = geom.at(-1);
 
 	// A turn that ARRIVES at t0 is allowed its entrance — that is a widget or an
@@ -776,8 +798,19 @@ for (const [name, cfg] of Object.entries(CASES)) {
 		// The text can hold position and the turn still grow underneath it — the
 		// action row and the sources chip mount at completion. Everything below
 		// moves by that much, which is the reflow in the recording.
-		const grew = beforeG && afterG ? afterG.layoutHeight - beforeG.layoutHeight : 0;
-		say(`${name}: turn does not change height at completion`, Math.abs(grew) < 1, `${grew > 0 ? "+" : ""}${grew.toFixed(2)}px`);
+		// Only answerable when there is a settled "before" to compare against. A
+		// reply that reveals in under one sampled frame has none — the turn goes
+		// from empty to finished between two samples — and comparing an empty
+		// turn with a finished one measures the typewriter, not a reflow. Said
+		// out loud rather than silently skipped, and covered properly by the
+		// longer cases either side of it.
+		const measurable = beforeG?.textLayoutTop != null;
+		const grew = measurable && afterG ? afterG.layoutHeight - beforeG.layoutHeight : 0;
+		say(
+			`${name}: turn does not change height at completion`,
+			!measurable || Math.abs(grew) < 1,
+			measurable ? `${grew > 0 ? "+" : ""}${grew.toFixed(2)}px` : "no settled frame before completion to compare",
+		);
 	}
 
 	await page.close();

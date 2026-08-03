@@ -16,12 +16,14 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
+import { handleChatStream } from "./fake-stream.mjs";
+
 
 const BASE = process.argv[2] ?? "http://localhost:4173";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type",
+	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
 };
 
 const REPLY = Array.from(
@@ -52,6 +54,16 @@ async function open({ reducedMotion = false } = {}) {
 	await page.setRequestInterception(true);
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+		// `/chat/stream` is the transport now; `/chat` stays as the fallback.
+		// Both are served from the same fixture so they cannot drift apart.
+		if (
+			handleChatStream(r, (body) =>
+				r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),
+				{ reply: REPLY, sources: SOURCES, followUps: FOLLOW_UPS },
+			)
+		)
+			return;
+
 		if (r.url().endsWith("/chat")) {
 			const sent = JSON.parse(r.postData() || "{}");
 			return r.respond({

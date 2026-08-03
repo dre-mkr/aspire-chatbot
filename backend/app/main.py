@@ -7,7 +7,10 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from collections.abc import AsyncIterator
+
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
@@ -15,6 +18,8 @@ from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 from app import cache as response_cache
 from app.agent import get_agent, suggest_follow_ups, suggest_title
 from app.config import get_settings
+from app.conversations import router as conversations_router
+from app.identity import principal
 from app.db import (
     check_schema,
     database_enabled,
@@ -34,6 +39,7 @@ from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
 from app.ingest import ingest_if_empty
 from app.rag import count_documents, get_vector_store
+from app.streaming import agui_stream
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -137,6 +143,11 @@ if games_enabled():
 # summary job. This way they reach the engine and nothing else.
 if eligibility_enabled():
     app.include_router(eligibility_router)
+
+# Reading a person's own transcripts back. Registered unconditionally: the
+# routes answer 503 for themselves when there is no database, which is a
+# clearer failure than a 404 that looks like the feature was never built.
+app.include_router(conversations_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -379,6 +390,57 @@ def _eligibility_history_line() -> str:
     )
 
 
+#: Matches the client's own truncation, because the two produce the same list.
+_TITLE_MAX = 60
+
+
+def _provisional_title(question: str) -> str:
+    """The first question, tidied and truncated.
+
+    The middle rung of the fallback ladder: better than "New chat", worse than a
+    generated title, and replaced by one as soon as it arrives.
+    """
+    clean = " ".join(question.split())
+    if not clean:
+        return ""
+    if len(clean) > _TITLE_MAX:
+        return clean[: _TITLE_MAX - 1] + "…"
+    return clean
+
+
+async def _open_conversation(
+    request: ChatRequest, thread_id: str, owner_key: str | None
+) -> None:
+    """Create the conversation and record the question, before answering it.
+
+    Deliberately ahead of the agent rather than after it. A first message whose
+    answer fails must still leave a conversation behind: the client commits the
+    chat the instant it is sent -- it is in the address bar and in the rail --
+    and a chat that exists on screen with nothing behind it is a dead end with
+    no route out. Recording the question here is what lets that conversation be
+    reopened and the question asked again.
+
+    It also happens to be truer. The question *was* received; whether a reply
+    could be produced for it is a separate fact.
+
+    Swallows its own failures for the same reason `_persist_turn` does: the user
+    is owed an answer, and losing the record of the question is our problem.
+    """
+    if not database_enabled():
+        return
+
+    try:
+        async with session() as db:
+            if db is None:
+                return
+    except Exception:
+        logger.warning(
+            "Could not open conversation %s; the turn was still served.",
+            thread_id,
+            exc_info=True,
+        )
+
+
 async def _persist_turn(
     request: ChatRequest,
     thread_id: str,
@@ -388,6 +450,7 @@ async def _persist_turn(
     follow_ups: list[str],
     game: dict | None = None,
     eligibility: dict | None = None,
+    owner_key: str | None = None,
 ) -> None:
     """Write the exchange to Postgres, whole.
 
@@ -412,6 +475,14 @@ async def _persist_turn(
                 language=request.language,
                 persona=request.persona,
                 account_status=request.account_status,
+                # Recorded on creation only, so the first turn settles whose
+                # conversation this is and no later request can take it over.
+                owner_key=owner_key,
+                # The provisional name, so a conversation is never nameless. It
+                # is the same string the client used to compute for itself while
+                # history lived in the browser, and the same one a generated
+                # title crossfades over a moment later.
+                title=_provisional_title(request.message),
             )
             await append_turn(db, thread_id, role="user", content=request.message)
 
@@ -459,13 +530,21 @@ async def _persist_turn(
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest, who: str | None = Depends(principal)
+) -> ChatResponse:
+    # Anonymous callers are welcome here and always have been: asking a question
+    # has never required identifying yourself. `who` being None simply means the
+    # conversation is stored unowned and will not appear in anybody's list.
     # A new thread_id starts a fresh conversation; reuse it to keep context.
     thread_id = request.thread_id or str(uuid.uuid4())
 
     cached = await _cached_reply(request)
     if cached is not None:
         return cached
+
+    # Before the model, not after: see `_open_conversation`.
+    await _open_conversation(request, thread_id, who)
 
     prepared = await _prepare_messages(request, thread_id)
 
@@ -566,6 +645,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         follow_ups=follow_ups,
         game=game,
         eligibility=eligibility,
+        owner_key=who,
     )
 
     # Once the conversation has outgrown its window, the turns that fell out
@@ -607,6 +687,142 @@ async def chat(request: ChatRequest) -> ChatResponse:
             if eligibility
             else None
         ),
+    )
+
+
+def _chat_request_from(body: dict) -> ChatRequest:
+    """Reads a `ChatRequest` out of whatever shape the caller sent.
+
+    AG-UI clients wrap application fields in `forwardedProps` and put their own
+    correlation ids at the top level; a direct caller (curl, a test, the
+    fallback path) sends the flat object `/chat` takes. Both are accepted, with
+    `forwardedProps` winning, so the endpoint is usable without pulling a
+    client library in to talk to it.
+    """
+    forwarded = body.get("forwardedProps")
+    merged = {**body, **(forwarded if isinstance(forwarded, dict) else {})}
+    return ChatRequest.model_validate(merged)
+
+
+@app.post("/chat/stream")
+async def chat_stream(
+    body: dict, who: str | None = Depends(principal)
+) -> StreamingResponse:
+    """The same turn as `/chat`, delivered as AG-UI server-sent events.
+
+    Additive. `/chat` is unchanged and remains the fallback -- a client that
+    cannot stream, or a caller that would rather have one JSON object, still
+    gets exactly what it always did.
+
+    The post-processing is deliberately identical to `/chat`'s, and shares its
+    helpers rather than reimplementing them: the same reply extraction, the same
+    dropping of prose on a card turn, the same sources, the same follow-ups, the
+    same persistence. Two code paths that answer the same question differently
+    is how the streaming version quietly becomes a second product.
+    """
+    request = _chat_request_from(body)
+    thread_id = request.thread_id or str(uuid.uuid4())
+
+    async def run() -> AsyncIterator[dict]:
+        # Recorded before the model runs, exactly as `/chat` does, so a turn
+        # that fails still leaves a conversation that can be reopened.
+        await _open_conversation(request, thread_id, who)
+        prepared = await _prepare_messages(request, thread_id)
+
+        collected: list[BaseMessage] = []
+        last_message_id: str | None = None
+        try:
+            async for chunk, _meta in get_agent(request.simple_mode).astream(
+                {"messages": prepared},
+                config={
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "persona": request.persona,
+                        "language": request.language,
+                    }
+                },
+                stream_mode="messages",
+            ):
+                collected.append(chunk)
+
+                # Message boundaries, so the buffer knows when a tool-calling
+                # message has ended and the answer has begun. Without them every
+                # delta after the first tool call still looks like part of the
+                # message that requested it, and nothing is ever released.
+                chunk_id = getattr(chunk, "id", None)
+                if chunk_id is not None and chunk_id != last_message_id:
+                    last_message_id = chunk_id
+                    yield {"message": chunk_id}
+
+                # A tool call names what kind of turn this is. Forwarded first so
+                # the buffer can silence a card turn before any of its prose is
+                # released.
+                for call in getattr(chunk, "tool_call_chunks", None) or []:
+                    yield {"tool": call.get("name")}
+                for call in getattr(chunk, "tool_calls", None) or []:
+                    yield {"tool": call.get("name")}
+
+                text = getattr(chunk, "content", "")
+                if isinstance(text, str) and text:
+                    yield {"delta": text}
+        except Exception:
+            logger.exception("Agent stream failed for thread %s", thread_id)
+            yield {"error": "The assistant is temporarily unavailable. Please try again."}
+            return
+
+        game = _started_game(collected)
+        eligibility = _started_eligibility(collected)
+        reply = _extract_reply(collected)
+        # The card is the whole turn; anything said beside it is dropped here,
+        # for the same reasons set out in `/chat`.
+        if game is not None or eligibility is not None:
+            reply = ""
+
+        sources = _extract_sources(collected)
+        quiet_turn = game is not None or eligibility is not None
+        follow_ups = [] if quiet_turn else await suggest_follow_ups(request.message, reply)
+
+        await _persist_turn(
+            request,
+            thread_id,
+            reply=reply,
+            sources=sources,
+            follow_ups=follow_ups,
+            game=game,
+            eligibility=eligibility,
+            owner_key=who,
+        )
+
+        settings = get_settings()
+        if settings.memory_window_enabled and database_enabled():
+            await enqueue_summary(thread_id)
+
+        yield {
+            "done": {
+                "reply": reply,
+                "thread_id": thread_id,
+                "sources": [source.model_dump() for source in sources],
+                "follow_ups": follow_ups,
+                "game_started": game,
+                "eligibility_started": (
+                    {"check": eligibility["check"], "language": request.language}
+                    if eligibility
+                    else None
+                ),
+            }
+        }
+
+    return StreamingResponse(
+        agui_stream(thread_id=thread_id, run_events=run()),
+        media_type="text/event-stream",
+        headers={
+            # Long-lived response through a proxy: without this nginx buffers the
+            # whole thing and delivers it at once, which is the one outcome that
+            # makes streaming pointless.
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 

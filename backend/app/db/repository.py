@@ -42,12 +42,19 @@ async def ensure_conversation(
     language: str = "en",
     persona: str | None = None,
     account_status: str | None = None,
+    owner_key: str | None = None,
+    title: str | None = None,
 ) -> None:
     """Create the row on the first turn, leave it alone afterwards.
 
     An upsert rather than select-then-insert: two requests for a brand-new
     thread can race, and losing that race must not become an error the user
     sees.
+
+    `owner_key` is written once, on creation, and never updated here. That is
+    the point: a conversation's owner is settled by whoever started it, so a
+    later request carrying a different device id cannot quietly take one over
+    by asking a question in it.
     """
     await db.execute(
         insert(Conversation)
@@ -56,9 +63,57 @@ async def ensure_conversation(
             language=language,
             persona=persona,
             account_status=account_status,
+            owner_key=owner_key,
+            title=title,
         )
         .on_conflict_do_nothing(index_elements=[Conversation.id])
     )
+
+
+async def list_conversations(
+    db: AsyncSession, owner_key: str, *, limit: int = 200
+) -> list[Conversation]:
+    """This principal's conversations, newest first.
+
+    Scoped by owner and by nothing else. There is deliberately no "all
+    conversations" variant: the only caller is a person asking for their own,
+    and an unscoped version of this query is one autocomplete away from being
+    the bug that hands somebody else's chats over.
+    """
+    result = await db.execute(
+        select(Conversation)
+        .where(Conversation.owner_key == owner_key)
+        .order_by(Conversation.updated_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def load_transcript(
+    db: AsyncSession, conversation_id: str, owner_key: str
+) -> list[Message] | None:
+    """Every turn of one conversation, oldest first, or None.
+
+    Ownership is part of the WHERE clause rather than a check afterwards, so
+    "not yours" and "does not exist" are the same answer and the caller cannot
+    accidentally reveal which by handling them differently. A conversation id is
+    guessable in principle; this makes guessing one worth nothing.
+    """
+    owns = await db.scalar(
+        select(Conversation.id).where(
+            Conversation.id == conversation_id,
+            Conversation.owner_key == owner_key,
+        )
+    )
+    if owns is None:
+        return None
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.seq)
+    )
+    return list(result.scalars().all())
 
 
 async def append_turn(

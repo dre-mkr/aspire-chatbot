@@ -1,4 +1,5 @@
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import {
 	useCallback,
 	useEffect,
@@ -11,25 +12,27 @@ import { MenuIcon } from "#/components/icons";
 import {
 	clearEligibilityResult,
 	type EligibilityState,
-	fetchEligibilityState,
 	loadEligibilityResult,
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
-import {
-	fetchGameState,
-	type GamePersona,
-	type GameState,
-} from "#/lib/aspire/games";
+import type { GamePersona, GameState } from "#/lib/aspire/games";
 import {
 	displayTitle,
-	loadConversations,
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
 import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
+import {
+	conversationQuery,
+	eligibilityStateQuery,
+	gameStateQuery,
+	invalidateAfterTurn,
+	readConversation,
+} from "#/lib/aspire/queries";
 import { useConversation } from "#/lib/aspire/use-conversation";
 import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
+import type { ShellSearch } from "#/routes/_shell";
 import { ChatTitleBar } from "./ChatTitleBar";
 import { Composer } from "./Composer";
 import { Rail } from "./Rail";
@@ -70,6 +73,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const speakArrival = useRef<(id: number, text: string) => void>(() => {});
 
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 	/**
 	 * Which conversation the URL is pointing at, or undefined at `/`.
 	 *
@@ -137,7 +141,15 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		// from, so the card is identical whether it just appeared or was reloaded.
 		onGameStart: (id) => {
 			setGame(null);
-			void fetchGameState(id)
+			// Through the cache rather than around it, so the query above finds
+			// this rather than asking again a moment later.
+			//
+			// `staleTime: 0` overrides the query's own infinite staleness for this
+			// one read, and it is load-bearing: the cache may well hold a null from
+			// before this game existed, and "never stale" would hand that back and
+			// the card would never appear.
+			void queryClient
+				.fetchQuery({ ...gameStateQuery(id), staleTime: 0 })
 				.then((state) => {
 					if (state) setGame(state);
 				})
@@ -151,7 +163,9 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		onEligibilityStart: (id, language) => {
 			clearEligibilityResult(id);
 			setEligibility(null);
-			void fetchEligibilityState(id, language)
+			// Same treatment, same reason as the game turn above.
+			void queryClient
+				.fetchQuery({ ...eligibilityStateQuery(id, language), staleTime: 0 })
 				.then((state) => {
 					if (state.active) setEligibility(state);
 				})
@@ -162,6 +176,11 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 			void navigate({
 				to: "/chat/$chatId",
 				params: { chatId: id },
+				// Carried, not dropped. A navigation without this resets the
+				// search to the route's default, so asking the first question of a
+				// chat in plain-words mode would have silently turned it off at the
+				// exact moment the answer was being composed.
+				search: (previous: ShellSearch) => previous,
 				replace: true,
 			});
 		},
@@ -170,7 +189,26 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const compact = useMediaQuery(COMPACT);
 	const [railCollapsed, setRailCollapsed] = useState(false);
 	const [drawerOpen, setDrawerOpen] = useState(false);
-	const [simpleMode, setSimpleMode] = useState(false);
+
+	/**
+	 * The plain-words toggle, read from the address rather than from state.
+	 *
+	 * It changes what the assistant is asked to produce, which makes it part of
+	 * the question and not part of the session — so it belongs somewhere it can
+	 * be linked to and handed on. `replace` on the way in because toggling it is
+	 * an adjustment to the current view, not a place: it never added a history
+	 * entry when it lived in `useState`, and it must not start now.
+	 */
+	const { simple } = useSearch({ from: "/_shell" });
+	const simpleMode = simple === true;
+	const toggleSimpleMode = useCallback(() => {
+		void navigate({
+			to: ".",
+			search: (previous: ShellSearch): ShellSearch =>
+				previous.simple ? {} : { simple: true },
+			replace: true,
+		});
+	}, [navigate]);
 	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
 
@@ -203,24 +241,22 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const [eligibility, setEligibility] = useState<EligibilityState | null>(null);
 	const settled = !isThinking && !streaming;
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: refetch trigger
+	/**
+	 * The server's answer for this thread's game, cached by Query.
+	 *
+	 * Query owns the fetching. It does not own what is on screen: `game` above
+	 * is the card being displayed, and the two are deliberately not the same
+	 * thing. A finished game has no session left on the server, so this query
+	 * correctly goes null — but the card is still showing a child what they just
+	 * learned, and it closes on their say-so, not on a cache transition.
+	 */
+	const gameQuery = useQuery(gameStateQuery(threadId, settled));
+
+	// Adopt, never clear. This is the whole of the rule above, and it is why the
+	// effect reads the query rather than the query driving the render.
 	useEffect(() => {
-		if (!threadId || !settled) return;
-		let live = true;
-		void fetchGameState(threadId)
-			.then((state) => {
-				// Only ever adopt a game from the server; never clear one here. A
-				// finished game has no session left, but its card is still showing
-				// the child what they just learned, and it closes on their say-so.
-				if (live && state) setGame(state);
-			})
-			// Games are additive. If the endpoint is off or unreachable, the card
-			// simply does not appear and the conversation is unaffected.
-			.catch(() => undefined);
-		return () => {
-			live = false;
-		};
-	}, [threadId, messages.length, settled]);
+		if (gameQuery.data) setGame(gameQuery.data);
+	}, [gameQuery.data]);
 
 	/**
 	 * Restores the eligibility card, from whichever half still holds it.
@@ -237,38 +273,58 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	 * The server is asked first because a running flow outranks a stored result
 	 * from a check that was restarted.
 	 */
-	// biome-ignore lint/correctness/useExhaustiveDependencies: refetch trigger
+	const eligibilityQuery = useQuery(
+		eligibilityStateQuery(threadId, voice.language, settled),
+	);
+
+	/**
+	 * The completion handoff.
+	 *
+	 * The streaming layer knows when a turn is over; Query knows what that could
+	 * have changed. This effect is the entire contract between them, and it fires
+	 * on the transition into settled rather than on `settled` being true — a
+	 * re-render while already settled must not re-ask the server.
+	 *
+	 * Watching the transition covers every way a turn can end: the reveal
+	 * finishing, the reader stopping it part-way, a failure, and the two turns
+	 * that are a card and nothing else. Hanging it off `finishStream` alone would
+	 * have covered only the first.
+	 *
+	 * This replaces the `settled` dependency the two fetch effects used to carry.
+	 * The trigger is unchanged; what changed is that it is now stated once, in
+	 * terms of what became invalid, instead of twice in terms of what to refetch.
+	 */
+	const wasSettled = useRef(settled);
 	useEffect(() => {
-		if (!threadId || !settled) return;
-		let live = true;
+		const justSettled = settled && !wasSettled.current;
+		wasSettled.current = settled;
+		if (justSettled) invalidateAfterTurn(queryClient, threadId);
+	}, [settled, threadId, queryClient]);
 
-		void fetchEligibilityState(threadId, voice.language)
-			.then((state) => {
-				if (!live) return;
-				if (state.active) {
-					setEligibility(state);
-					return;
-				}
-				const stored = loadEligibilityResult(threadId);
-				if (!stored) return;
-				setEligibility({
-					active: false,
-					language: stored.language,
-					question: null,
-					result: stored.result,
-					answered: 0,
-					total: 0,
-					labels: stored.labels,
-				});
-			})
-			// Additive, exactly like games: an endpoint that is off or unreachable
-			// means no card, and the conversation is unaffected.
-			.catch(() => undefined);
+	useEffect(() => {
+		const state = eligibilityQuery.data;
+		if (!state || !threadId) return;
 
-		return () => {
-			live = false;
-		};
-	}, [threadId, messages.length, settled]);
+		if (state.active) {
+			setEligibility(state);
+			return;
+		}
+
+		// Server says no session. That means either the check finished — in which
+		// case the verdict is on this device and nowhere else — or there never was
+		// one, in which case there is nothing to show and the card stays absent.
+		const stored = loadEligibilityResult(threadId);
+		if (!stored) return;
+		setEligibility({
+			active: false,
+			language: stored.language,
+			question: null,
+			result: stored.result,
+			answered: 0,
+			total: 0,
+			labels: stored.labels,
+		});
+	}, [eligibilityQuery.data, threadId]);
 
 	// The rail is a drawer whenever it has nowhere to sit as a column: on a
 	// narrow screen, and on the landing screen at any width, where `--rail-w` is
@@ -487,24 +543,48 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 
 		if (chatId === threadId) return;
 
-		const stored = loadConversations().find((c) => c.threadId === chatId);
-		if (stored) {
+		// Read from the cache first, and that is not an optimisation. Switching
+		// chats used to be synchronous because history was localStorage, and the
+		// route loader keeps it that way by having the transcript in hand before
+		// the navigation commits. Only a link opened cold falls through to the
+		// fetch below.
+		const cached = readConversation(queryClient, chatId);
+		if (cached && cached.messages.length > 0) {
 			stopPlayback();
 			setGame(null);
 			// Cleared rather than carried across: the restore effect above reads
 			// the new thread's own card, and showing the previous conversation's
 			// verdict for a frame would be showing it to the wrong person.
 			setEligibility(null);
-			openPast(stored);
+			openPast(cached);
 			return;
 		}
 
-		// An address for a conversation this browser does not have: a link from
-		// another device, cleared storage, a hand-typed id. History lives in
-		// localStorage and nothing can be fetched for it, so the honest answer is
-		// the empty state — and `replace` so Back does not walk into the same
-		// dead id again.
-		void navigate({ to: "/", replace: true });
+		let live = true;
+		void queryClient
+			.ensureQueryData(conversationQuery(chatId))
+			.then((stored) => {
+				if (!live) return;
+				stopPlayback();
+				setGame(null);
+				setEligibility(null);
+				openPast(stored);
+			})
+			.catch(() => {
+				// An address for a conversation this account does not have: a link
+				// from another device, a cleared identity, a hand-typed id. The
+				// honest answer is the empty state, and `replace` so Back does not
+				// walk into the same dead id again.
+				if (!live) return;
+				void navigate({
+					to: "/",
+					search: (previous: ShellSearch) => previous,
+					replace: true,
+				});
+			});
+		return () => {
+			live = false;
+		};
 	}, [
 		chatId,
 		threadId,
@@ -513,6 +593,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		openPast,
 		reset,
 		stopPlayback,
+		queryClient,
 	]);
 
 	const handleOpenPast = useCallback(
@@ -521,6 +602,9 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 			void navigate({
 				to: "/chat/$chatId",
 				params: { chatId: conversation.threadId },
+				// The setting belongs to the reader, not to the conversation, so it
+				// survives moving between them — exactly as it did as component state.
+				search: (previous: ShellSearch) => previous,
 			});
 		},
 		[navigate],
@@ -545,7 +629,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		awaitingUrl.current = null;
 		stopPlayback();
 		setDrawerOpen(false);
-		void navigate({ to: "/" });
+		void navigate({ to: "/", search: (previous: ShellSearch) => previous });
 		focusComposer();
 	}, [chatId, messages.length, focusComposer, navigate, stopPlayback]);
 
@@ -589,7 +673,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: history is the trigger
 	const activeTitle = useMemo(() => {
 		const stored = threadId
-			? loadConversations().find((c) => c.threadId === threadId)
+			? readConversation(queryClient, threadId)
 			: undefined;
 		if (stored) return displayTitle(stored);
 
@@ -793,7 +877,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 							busy={!settled}
 							onStop={handleStop}
 							simpleMode={simpleMode}
-							onToggleSimpleMode={() => setSimpleMode((on) => !on)}
+							onToggleSimpleMode={toggleSimpleMode}
 							draft={draft}
 							onDraftChange={setDraft}
 							focusSignal={focusSignal}

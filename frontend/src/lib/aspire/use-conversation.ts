@@ -1,16 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { type AskResult, AspireError, askAspire, type Source } from "./api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type AskResult, AspireError, type Source } from "./api";
+import { streamAspire } from "./stream";
+import { claimConversations, renameConversation } from "./conversations";
+import { deviceId } from "./device";
 import {
-	clearTitleLock,
 	groupByRecency,
-	type HistoryGroup,
 	loadConversations,
-	retitleConversation,
 	type StoredConversation,
 	type StoredMessage,
-	saveConversation,
 	titleFor,
 } from "./history";
+import {
+	clearTitleLockInCache,
+	conversationQuery,
+	keys,
+	conversationsQuery,
+	readConversation,
+	retitleInCache,
+	upsertConversation,
+} from "./queries";
 import {
 	type Answer,
 	type AnswerBlock,
@@ -273,7 +282,21 @@ export function useConversation({
 	const [messages, setMessages] = useState<Array<ChatMessage>>([]);
 	const [streaming, setStreaming] = useState<StreamingAnswer | null>(null);
 	const [isThinking, setIsThinking] = useState(false);
-	const [history, setHistory] = useState<Array<HistoryGroup>>([]);
+	const queryClient = useQueryClient();
+
+	/**
+	 * Every conversation this browser owns.
+	 *
+	 * Server state now, not device state. It used to be read out of localStorage,
+	 * which quietly made a conversation a property of a browser: the transcripts
+	 * were already in Postgres, but nothing recorded whose they were, so nothing
+	 * could read them back.
+	 */
+	const conversations = useQuery(conversationsQuery());
+	const history = useMemo(
+		() => groupByRecency(conversations.data ?? []),
+		[conversations.data],
+	);
 	const [threadId, setThreadId] = useState<string | null>(null);
 	/**
 	 * The oldest message id allowed to play its entry animation.
@@ -361,8 +384,58 @@ export function useConversation({
 		isThinkingRef.current = isThinking;
 	}, [isThinking]);
 
-	// localStorage is unavailable during SSR, so history loads after mount.
-	useEffect(() => setHistory(groupByRecency(loadConversations())), []);
+	/**
+	 * Adopt the conversations this browser started before ownership existed.
+	 *
+	 * Runs once. Every transcript written before the owner column is readable by
+	 * nobody, and this browser is the only thing left that knows their ids —
+	 * presenting one is the strongest claim available in a product with no
+	 * accounts. The service only ever adopts rows that are currently unowned, so
+	 * replaying somebody else's ids takes nothing.
+	 *
+	 * Failure is silent and harmless: those conversations stay unreadable, which
+	 * is exactly where they were a moment ago.
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once, on mount
+	useEffect(() => {
+		if (!deviceId()) return;
+		const stranded = loadConversations().map((c) => c.threadId);
+		if (stranded.length === 0) return;
+		void claimConversations(stranded)
+			.then((claimed) => {
+				if (claimed > 0) {
+					void queryClient.invalidateQueries({
+						queryKey: conversationsQuery().queryKey,
+					});
+				}
+			})
+			.catch(() => undefined);
+	}, []);
+
+	/**
+	 * Names a conversation, in the cache and on the server.
+	 *
+	 * Cache first so the rail changes now rather than after a round trip — a
+	 * title crossfading in is a deliberate moment in this product, and putting a
+	 * network hop in front of it would turn it into a stutter. The PATCH is
+	 * fire-and-forget for the same reason every title path here is: a name that
+	 * fails to save is worth strictly less than the answer the reader is looking
+	 * at, and must never interrupt it.
+	 */
+	const nameConversation = useCallback(
+		(id: string, title: string, source: "generated" | "manual") => {
+			retitleInCache(queryClient, id, title, source);
+			void renameConversation(id, title, source)
+				// Only once the service has it. The completion handoff invalidates
+				// the list at almost exactly this moment, and a refetch that started
+				// before the rename landed answers with the old name — which would
+				// put the truncated question back a beat after the generated title
+				// crossfaded in. Re-asking after the write is what settles it.
+				.then(() => queryClient.invalidateQueries({ queryKey: keys.conversations() }))
+				.catch(() => undefined);
+		},
+		[queryClient],
+	);
 
 	const clearTimers = useCallback(() => {
 		clearInterval(streamTimer.current);
@@ -481,7 +554,11 @@ export function useConversation({
 	const ask = useCallback(
 		async (question: string, simpleMode: boolean, token: number) => {
 			try {
-				const result: AskResult = await askAspire({
+				// Streamed now, over `/chat/stream`. It resolves with the same whole
+				// answer `askAspire` did, and falls back to `/chat` if the stream
+				// never opens — so nothing below this line can tell the difference,
+				// and the reveal is the one we have always had.
+				const result: AskResult = await streamAspire({
 					message: question,
 					// Read now, not closed over: see `threadRef`. This is also why
 					// `ask` no longer depends on `threadId` — the send pipeline used
@@ -555,11 +632,7 @@ export function useConversation({
 					);
 					if (named && !titledThreads.current.has(result.threadId)) {
 						titledThreads.current.add(result.threadId);
-						setHistory(
-							groupByRecency(
-								retitleConversation(result.threadId, named, "generated"),
-							),
-						);
+						nameConversation(result.threadId, named, "generated");
 					}
 
 					onGameStartRef.current?.(result.threadId);
@@ -594,11 +667,7 @@ export function useConversation({
 					const named = eligibilityTitle(result.startedEligibility.language);
 					if (!titledThreads.current.has(result.threadId)) {
 						titledThreads.current.add(result.threadId);
-						setHistory(
-							groupByRecency(
-								retitleConversation(result.threadId, named, "generated"),
-							),
-						);
+						nameConversation(result.threadId, named, "generated");
 					}
 
 					onEligibilityStartRef.current?.(
@@ -631,7 +700,10 @@ export function useConversation({
 				]);
 			}
 		},
-		[beginStream, persona],
+		// `nameConversation` and `queryClient` are both stable references, so
+		// naming them here does not rebuild the send pipeline every turn — which
+		// is the property these dependency lists have always been protecting.
+		[beginStream, persona, nameConversation],
 	);
 
 	const send = useCallback(
@@ -671,16 +743,16 @@ export function useConversation({
 				//
 				// The label is the truncated question, which is exactly the
 				// provisional title the generated one crossfades over later.
-				setHistory(
-					groupByRecency(
-						saveConversation({
-							threadId: minted,
-							title: titleFor(text),
-							updatedAt: Date.now(),
-							messages: [{ role: "user", text }],
-						}),
-					),
-				);
+				// Optimistic, and that is the whole point: the row has always
+				// appeared in the same commit as the user's own bubble, before a
+				// byte has gone to the server. The completion handoff invalidates
+				// the list a moment later, so the service's version wins.
+				upsertConversation(queryClient, {
+					threadId: minted,
+					title: titleFor(text),
+					updatedAt: Date.now(),
+					messages: [{ role: "user", text }],
+				});
 
 				onThreadStartRef.current?.(minted);
 			}
@@ -694,7 +766,7 @@ export function useConversation({
 
 			void ask(text, simpleMode, token);
 		},
-		[ask, dropStream],
+		[ask, dropStream, queryClient],
 	);
 
 	/**
@@ -807,7 +879,15 @@ export function useConversation({
 		});
 	}, [settleRevealed]);
 
-	/** Persist a finished exchange so the rail can reopen it. */
+	/**
+	 * Keep the rail's row in step with the exchange that just settled.
+	 *
+	 * This no longer *persists* anything -- the service wrote the turn as it
+	 * answered, which is why a transcript survives a browser being cleared now.
+	 * What is left is the optimistic half: move the row to the top with the
+	 * turns it has, so the rail is right in the same commit rather than after a
+	 * round trip. The completion handoff refetches immediately behind it.
+	 */
 	useEffect(() => {
 		if (!threadId) return;
 
@@ -830,20 +910,16 @@ export function useConversation({
 		// Whatever this conversation is already called wins over a fresh
 		// truncation: a generated or hand-typed title must survive every later
 		// turn, and this effect runs on all of them.
-		const existing = loadConversations().find((c) => c.threadId === threadId);
+		const existing = readConversation(queryClient, threadId);
 
-		setHistory(
-			groupByRecency(
-				saveConversation({
-					threadId,
-					title: existing?.title || titleFor(firstQuestion.text),
-					titleSource: existing?.titleSource,
-					updatedAt: Date.now(),
-					messages: toStored(messages),
-				}),
-			),
-		);
-	}, [messages, threadId]);
+		upsertConversation(queryClient, {
+			threadId,
+			title: existing?.title || titleFor(firstQuestion.text),
+			titleSource: existing?.titleSource,
+			updatedAt: Date.now(),
+			messages: toStored(messages),
+		});
+	}, [messages, threadId, queryClient]);
 
 	/**
 	 * Name the conversation, once, after its first answer has landed.
@@ -868,7 +944,7 @@ export function useConversation({
 		const answers = messages.filter((m) => m.role === "assistant");
 		if (answers.length !== 1) return;
 
-		const stored = loadConversations().find((c) => c.threadId === threadId);
+		const stored = readConversation(queryClient, threadId);
 		if (stored?.titleSource) return; // already named, or named by hand
 
 		titledThreads.current.add(threadId);
@@ -881,11 +957,9 @@ export function useConversation({
 			// Null means the service declined — a greeting, gibberish, or a
 			// failed call. The truncated first message stays.
 			if (!title) return;
-			setHistory(
-				groupByRecency(retitleConversation(threadId, title, "generated")),
-			);
+			nameConversation(threadId, title, "generated");
 		});
-	}, [messages, threadId]);
+	}, [messages, threadId, queryClient, nameConversation]);
 
 	/**
 	 * Renames a conversation by hand.
@@ -893,10 +967,13 @@ export function useConversation({
 	 * Marks it "manual", which is what stops a generated title from ever
 	 * replacing it — including a title already in flight for this thread.
 	 */
-	const renameChat = useCallback((id: string, title: string) => {
-		titledThreads.current.add(id);
-		setHistory(groupByRecency(retitleConversation(id, title, "manual")));
-	}, []);
+	const renameChat = useCallback(
+		(id: string, title: string) => {
+			titledThreads.current.add(id);
+			nameConversation(id, title, "manual");
+		},
+		[nameConversation],
+	);
 
 	/**
 	 * Asks for a fresh title for one conversation.
@@ -906,26 +983,34 @@ export function useConversation({
 	 * for. Reads that conversation's own opening exchange from storage, so it
 	 * works on any row in the rail, not just the one that is open.
 	 */
-	const regenerateTitle = useCallback((id: string) => {
-		const stored = loadConversations().find((c) => c.threadId === id);
-		if (!stored) return;
+	const regenerateTitle = useCallback(
+		(id: string) => {
+			// The rail's rows carry no transcripts, so the opening exchange is
+			// fetched rather than read off the row. Cached afterwards, so asking
+			// twice costs one round trip.
+			void queryClient
+				.ensureQueryData(conversationQuery(id))
+				.then((stored) => {
+					const question = stored.messages.find((m) => m.role === "user");
+					const answer = stored.messages.find((m) => m.role === "assistant");
+					if (question?.role !== "user" || answer?.role !== "assistant") return;
 
-		const question = stored.messages.find((m) => m.role === "user");
-		const answer = stored.messages.find((m) => m.role === "assistant");
-		if (question?.role !== "user" || answer?.role !== "assistant") return;
+					clearTitleLockInCache(queryClient, id);
+					titledThreads.current.add(id);
 
-		setHistory(groupByRecency(clearTitleLock(id)));
-		titledThreads.current.add(id);
-
-		void requestTitle({
-			message: question.text,
-			answer: answerToText(answer.blocks),
-			language: getLanguageRef.current(),
-		}).then((title) => {
-			if (!title) return;
-			setHistory(groupByRecency(retitleConversation(id, title, "generated")));
-		});
-	}, []);
+					return requestTitle({
+						message: question.text,
+						answer: answerToText(answer.blocks),
+						language: getLanguageRef.current(),
+					}).then((title) => {
+						if (!title) return;
+						nameConversation(id, title, "generated");
+					});
+				})
+				.catch(() => undefined);
+		},
+		[queryClient, nameConversation],
+	);
 
 	/** Reopens a stored conversation; everything lands already finished. */
 	const openPast = useCallback(

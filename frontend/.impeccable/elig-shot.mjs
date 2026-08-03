@@ -7,7 +7,7 @@ const API = "http://localhost:8000";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type",
+	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
 };
 
 const b = await puppeteer.launch({ headless: "new" });

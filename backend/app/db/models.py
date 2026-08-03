@@ -119,7 +119,27 @@ class Conversation(Base):
     # table and nothing else.
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
 
+    # Whose conversation this is, as a namespaced principal:
+    #
+    #     device:9f1c...   an anonymous browser that has never signed in
+    #     user:1042        a signed-in account, once accounts exist
+    #
+    # One column rather than a users table, so that adding accounts later is a
+    # new prefix and a backfill instead of a schema change to a live table. The
+    # anonymous form is a bearer credential and nothing more: whoever holds the
+    # device id can read those chats, which is the same trust boundary the
+    # browser's own storage had before this existed.
+    #
+    # Nullable because every row written before 0005 predates ownership. Those
+    # stay invisible to the list endpoint, which is correct — nobody can show
+    # they own them.
+    owner_key: Mapped[str | None] = mapped_column(String(160))
+
     title: Mapped[str | None] = mapped_column(Text)
+    # "generated" | "manual" | None. None means the title is still the truncated
+    # first question and generation is welcome to improve it; "manual" means a
+    # person typed it and generation must never touch it again.
+    title_source: Mapped[str | None] = mapped_column(String(16))
     language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
     persona: Mapped[str | None] = mapped_column(String(32))
     account_status: Mapped[str | None] = mapped_column(String(32))
