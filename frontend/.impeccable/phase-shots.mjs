@@ -29,7 +29,7 @@ const BASE = "http://localhost:4173";
 const OUT = fileURLToPath(new URL("./flash-out/shots", import.meta.url));
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+	"Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
 	"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 };
 

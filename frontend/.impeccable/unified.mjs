@@ -1,7 +1,7 @@
 /** Confirms the extracted primitives actually landed, measured in the browser. */
 import puppeteer from "puppeteer";
 const API="http://localhost:8000", BASE="http://localhost:4173";
-const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type"};
+const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,PATCH,DELETE,OPTIONS","Access-Control-Allow-Headers":"Content-Type, Authorization, X-Aspire-Device"};
 const b=await puppeteer.launch({headless:"new"});
 async function card(kind,gameType){
   const p=await b.newPage(); await p.setViewport({width:1280,height:1400});

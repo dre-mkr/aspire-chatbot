@@ -21,9 +21,10 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
+import { serveStream } from "./fake-stream.mjs";
 
 const BASE = process.argv[2] ?? "http://localhost:4173/";
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device" };
 const ANSWER = {
 	reply: "An **index fund** holds a little of every company on a list.\n\n- You own a slice of hundreds at once\n- Fees are low",
 	thread_id: "t",
@@ -46,6 +47,9 @@ async function open(w, h, answered) {
 	await page.setRequestInterception(true);
 	page.on("request", (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+		// The real transport. Without this the client falls back to `/chat`,
+		// and this suite only passes while nothing is listening on :8000.
+		if (serveStream(r, CORS, (sent) => { void sent; return { reply: ANSWER.reply, sources: ANSWER.sources, followUps: ANSWER.follow_ups }; })) return;
 		if (r.url().endsWith("/chat")) return r.respond({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(ANSWER) });
 		if (r.url().includes("/api/games/")) return r.respond({ status: 404, contentType: "application/json", headers: CORS, body: "{}" });
 		r.continue();

@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer";
 const [,,out,vp,mode]=process.argv; const [w,h]=vp.split("x").map(Number);
-const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type"};
+const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,PATCH,DELETE,OPTIONS","Access-Control-Allow-Headers":"Content-Type, Authorization, X-Aspire-Device"};
 const A={reply:"An index fund holds a little of every company.\n\n- One\n- Two",thread_id:"t",sources:[],follow_ups:["More?"]};
 const b=await puppeteer.launch({headless:"new"});
 const p=await b.newPage(); await p.setViewport({width:w,height:h});

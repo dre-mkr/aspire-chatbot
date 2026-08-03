@@ -21,7 +21,7 @@ import { handleChatStream } from "./fake-stream.mjs";
 const BASE = process.argv[2] ?? "http://localhost:4173";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+	"Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
 	"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 };
 const REPLY =

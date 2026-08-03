@@ -21,11 +21,12 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
+import { handleChatStream } from "./fake-stream.mjs";
 
 const BASE = process.argv[2] ?? "http://localhost:4173";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+	"Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
 	"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 };
 
@@ -44,6 +45,26 @@ async function open(path = "/") {
 	await page.setRequestInterception(true);
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+		// `/chat/stream` is the transport; `/chat` is only the fallback.
+		//
+		// This branch was missing, and the suite passed anyway — for the wrong
+		// reason. With nothing listening on the API port the stream request was
+		// refused, the client fell back to `/chat`, and the stub recorded that.
+		// So "the request carried simple_mode" was asserting the fallback carried
+		// it, and said nothing about the path every real send actually takes. Run
+		// the same suite with the service up and it fails.
+		if (r.url().endsWith("/chat/stream")) {
+			const raw = JSON.parse(r.postData() || "{}");
+			// AG-UI keeps the application's fields in `forwardedProps` and the top
+			// level for its own correlation ids.
+			seen.chat.push({ ...raw, ...(raw.forwardedProps ?? {}) });
+			handleChatStream(
+				r,
+				(body) => r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),
+				{ reply: "An index fund holds a little of every company on a list." },
+			);
+			return;
+		}
 		if (r.url().endsWith("/chat")) {
 			const sent = JSON.parse(r.postData() || "{}");
 			seen.chat.push(sent);

@@ -13,8 +13,29 @@ from app.voice.registry import (
 
 
 def _settings(**overrides) -> VoiceSettings:
-    # _env_file=None so a developer's real .env cannot influence the result.
+    """Voice settings built from nothing but what this test asks for.
+
+    `_env_file=None` stops pydantic reading the `.env` FILE and does nothing
+    about the process environment, which is where those same values usually
+    end up. This helper carried that comment and not that behaviour: with
+    `VOICE_AURORA_FR` exported, dropping `voice_aurora` left one of Aurora's
+    three languages still resolving, so the "a whole persona is missing" case
+    was quietly testing "two thirds of a persona is missing" and the count in
+    the message no longer matched.
+
+    So every voice field is named explicitly, including the per-language
+    overrides, and defaults to None. A field that has been given a value cannot
+    be filled in from the environment behind the test's back. Enumerated from
+    the model rather than listed by hand, so a new persona or language cannot
+    reintroduce the same gap.
+    """
+    blank: dict[str, str | None] = {}
+    for persona in Persona:
+        blank[f"voice_{persona.value}"] = None
+        for language in Language:
+            blank[f"voice_{persona.value}_{language.value}"] = None
     base = {
+        **blank,
         "voice_stella": "voice-stella",
         "voice_orion": "voice-orion",
         "voice_aurora": "voice-aurora",

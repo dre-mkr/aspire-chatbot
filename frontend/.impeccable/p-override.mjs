@@ -14,7 +14,7 @@ import { readFile } from "node:fs/promises";
 
 const BASE = "http://localhost:4173";
 const API = "http://localhost:8000";
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device" };
 
 /* Declared font-size per class, straight out of the stylesheet. */
 const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");

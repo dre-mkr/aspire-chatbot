@@ -222,6 +222,25 @@ export function upsertConversation(
 		conversation,
 		...(previous ?? []).filter((c) => c.threadId !== conversation.threadId),
 	]);
+
+	// And the transcript itself, which is the half that was missing.
+	//
+	// `readConversation` prefers this key and falls back to the list entry, so a
+	// stale record here shadows a current one there. The loader writes it once
+	// when a conversation is opened and nothing wrote it again: send a second
+	// message, leave, come back, and the second turn was gone. `invalidateAfterTurn`
+	// marks it stale, but the query is only ever read imperatively — it is never
+	// mounted, so nothing refetches it and staleness alone changes nothing.
+	//
+	// Written rather than refetched because the answer is already in hand at the
+	// only moment this runs, which is when a turn has settled. A refetch here
+	// would be a round trip to be told what we just watched happen.
+	if (conversation.messages.length > 0) {
+		queryClient.setQueryData<StoredConversation>(
+			keys.messages(owner(), conversation.threadId),
+			conversation,
+		);
+	}
 }
 
 /**

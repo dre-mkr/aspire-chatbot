@@ -260,18 +260,18 @@ say(
 await openRow("compound interest", firstThread);
 await new Promise((r) => setTimeout(r, 900));
 
+// Both questions, not just the one it was opened with. The transcript cache is
+// preferred over the rail's summary when reading a conversation back, and for a
+// long time only the loader ever wrote it — so a conversation reopened with the
+// turns it had when it was first cached and every later turn was silently gone.
+const turns = await page.evaluate(() => document.querySelectorAll(".turn--user").length);
+say("it reopens with every turn it had, not just the first", turns === 2, `${turns} questions`);
+
 const reopened = (await metrics())?.top ?? -1;
-known(
+say(
 	"it reopens where it was left, not at the end",
 	Math.abs(reopened - parked) < 24,
 	`parked ${Math.round(parked)} → reopened ${Math.round(reopened)}`,
-	[
-		"Pre-existing, and a race: measured at one pass in five. The offset is",
-		"banked on `scroll`, and leaving for a shorter conversation clamps the",
-		"container to 0 — which fires `scroll` and, if it lands before the route",
-		"has changed, overwrites what was banked under the thread being left.",
-		"Nothing to do with the virtualizer, which was never wired to anything.",
-	].join("\n        "),
 );
 
 // ─── the whole transcript is reachable ───────────────────────────────────────

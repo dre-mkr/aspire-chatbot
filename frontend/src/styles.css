@@ -1174,9 +1174,21 @@ body {
 	align-items: center;
 	flex-shrink: 0;
 	text-align: center;
+	/* Both of these were dropped by b75e7490 along with the transition below,
+	   leaving the blank line that used to separate them. Without `overflow`
+	   the copy spills out of a max-height that is collapsing to zero. */
+	overflow: hidden;
 	opacity: var(--hero-opacity);
 	max-height: var(--hero-max);
-
+	/* Rows 2 and 3 of ANIMATION-INVENTORY.md, and the reason the greeting fades
+	   rather than vanishing. The custom properties flip instantly on the phase
+	   change; these two make the used values travel. The stagger is the point —
+	   the hero is gone at 380ms while its height is still collapsing at 560ms,
+	   so the composer appears to settle last. `anim-check.mjs` asserts both
+	   durations against the inventory. */
+	transition:
+		opacity 380ms var(--ease),
+		max-height var(--morph);
 }
 
 /* A soft plum vignette under the hero copy.
@@ -1197,6 +1209,18 @@ body {
 	inset: -8% -6%;
 	z-index: 0;
 	pointer-events: none;
+	/* Removed by b75e7490 in the same hunk that took `.hero`'s transition and
+	   `overflow`. The comment above survived the deletion and went on describing
+	   a gradient that was no longer there, so the rule read as intentional while
+	   `.hero__sub` sat at 3.67:1 against real pixels — under AA, and the exact
+	   defect this was written to fix. `verify.mjs` measures it. */
+	background: radial-gradient(
+		ellipse 66% 62% at 50% 46%,
+		rgb(38 16 70 / 0.66) 0%,
+		rgb(38 16 70 / 0.52) 40%,
+		rgb(38 16 70 / 0.26) 62%,
+		rgb(38 16 70 / 0) 78%
+	);
 }
 
 /* `.hero::before` is positioned, so without this it would paint over the
@@ -2828,9 +2852,15 @@ body {
    would vanish. */
 .app[data-phase="landing"] .rail-open,
 .app[data-phase="landing"] .account__signin {
-	background: rgb(255 255 255 / 0.16);
+	/* A plum wash, not a white one. Both controls sit on the lightest, most
+	   magenta band of the page gradient, and a white veil there lifts the
+	   background towards the white text on top of it — "Sign in" measured
+	   3.76:1 at 1280 and 4.05:1 at 768, both under AA. Darkening the pill is
+	   the only move that helps, since the text is already pure white. The
+	   hamburger takes the same value: they are one pair and must not drift. */
+	background: rgb(38 16 70 / 0.42);
 	color: #fff;
-	border-color: rgb(255 255 255 / 0.28);
+	border-color: rgb(255 255 255 / 0.34);
 }
 
 /* Listed with the hamburger rather than given its own rule, because they are
@@ -2838,15 +2868,15 @@ body {
    two treatments must move together or they stop matching the first time one
    is adjusted. */
 .app[data-phase="landing"] .account__signin:hover {
-	background: rgb(255 255 255 / 0.26);
+	background: rgb(38 16 70 / 0.52);
 }
 
 .app[data-phase="landing"] .account__placeholder {
-	background: rgb(255 255 255 / 0.16);
+	background: rgb(38 16 70 / 0.42);
 }
 
 .app[data-phase="landing"] .rail-open:hover {
-	background: rgb(255 255 255 / 0.26);
+	background: rgb(38 16 70 / 0.52);
 }
 
 .rail-scrim {
@@ -5100,7 +5130,13 @@ body {
 
 .account-slot {
 	position: absolute;
-	z-index: 12;
+	/* Above `.titlebar`, which is also 12 and spans the full width. At equal
+	   z-index the later node wins, and the bar is later — so on any width where
+	   the rail collapses and the corner control takes over, the bar was painted
+	   across the whole control and it could not be clicked at all. The
+	   `padding-right` rule further down stops the TITLE colliding with it; it
+	   does nothing about the bar's own box, which is what was in the way. */
+	z-index: 13;
 	top: 14px;
 	right: 14px;
 	opacity: 0;
@@ -5141,6 +5177,9 @@ body {
    other end of one pair, and a second surface treatment here would read as a
    different product. */
 .account__signin {
+	/* So the 44px target below is positioned against this pill rather than
+	   whatever ancestor happens to be positioned. */
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -5159,6 +5198,20 @@ body {
 	transition:
 		background var(--swift),
 		color var(--morph);
+}
+
+/* The same trick `.rail-open` uses, and for the same reason: the pill is 40px
+   because that is what pairs with the hamburger beside it, and 40px is under
+   the 44px a finger needs. The visual size is left alone and the target is
+   grown around it. `verify.mjs` measures the target, not the border. */
+.account__signin::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, 44px);
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
 }
 
 .account__signin:hover {

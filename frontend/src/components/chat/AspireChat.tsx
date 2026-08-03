@@ -366,6 +366,15 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	 * than showing them the end of it.
 	 */
 	const scrollTops = useRef(new Map<string, number>());
+	/**
+	 * True while the restore below is assigning an offset.
+	 *
+	 * Assigning `scrollTop` fires `scroll`, and the handler that banks positions
+	 * cannot tell that event apart from a person scrolling. Without this, a
+	 * restore that the browser clamps banks the clamped value over the one being
+	 * restored, and the remembered position is lost by the act of restoring it.
+	 */
+	const restoring = useRef(false);
 	/** `""` is the new chat, which has no id and cannot collide with one. */
 	const scrollKey = threadId ?? "";
 
@@ -406,12 +415,36 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	// most magenta band of the gradient — and that is measurably the wrong place
 	// for it to be: `.hero__sub` dropped from 5.68:1 to 3.67:1 at 1280, back
 	// under AA and back into a defect this review had already fixed once.
+	//
+	// Runs on `messages` as well as `threadId`, and that is the whole fix. On
+	// `threadId` alone it fired while the PREVIOUS conversation's transcript was
+	// still in the DOM, so a remembered 399px was assigned to a container that
+	// was still only as tall as the chat being left — the browser clamped it,
+	// usually to 0, and the taller content then arrived under an offset nobody
+	// asked for. Worse, the clamp fires `scroll`, which banked that 0 over the
+	// position being restored: the offset was not merely ignored, it was
+	// destroyed on the way in. Measured at one restore in five surviving.
+	//
+	// `restoredFor` makes it once-per-conversation rather than once-per-render,
+	// so later turns in an open chat do not drag the reader anywhere.
+	const restoredFor = useRef<string | null>(null);
 	useLayoutEffect(() => {
 		const thread = threadRef.current;
 		if (!thread || !threadId) return;
+		if (restoredFor.current === threadId) return;
+		// Nothing to measure against yet; wait for the transcript to render.
+		if (messages.length === 0) return;
+
+		restoredFor.current = threadId;
 		const saved = scrollTops.current.get(threadId);
+		// Suppress the `scroll` this assignment provokes, so restoring a position
+		// cannot overwrite the position being restored.
+		restoring.current = true;
 		thread.scrollTop = saved ?? thread.scrollHeight;
-	}, [threadId]);
+		requestAnimationFrame(() => {
+			restoring.current = false;
+		});
+	}, [threadId, messages]);
 
 	/**
 	 * One unsent draft per conversation.
@@ -780,7 +813,16 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 					    visible is a matter of opacity, so the handover during the
 					    560ms morph is a cross-fade rather than one popping out as
 					    the other pops in. */}
-					<div className="account-slot" data-shown={railClosed || undefined}>
+					{/* `inert` as well as the CSS, because they cover different people.
+					    The slot fades out with `opacity: 0; pointer-events: none`, which
+					    stops a pointer and does nothing about a keyboard: the sign-in
+					    button stayed in the tab order while invisible, so tabbing across
+					    the chat screen landed focus on a control nobody could see. */}
+				<div
+						className="account-slot"
+						data-shown={railClosed || undefined}
+						inert={!railClosed || undefined}
+					>
 						<AccountControl variant="corner" />
 					</div>
 
@@ -807,6 +849,10 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 							// also be left by the back button or a keyboard shortcut, and
 							// there is no single exit to hook.
 							onScroll={(event) => {
+								// Not while a restore is mid-assignment: that event is this
+								// component's own, and banking it overwrites the position it
+								// is in the middle of putting back.
+								if (restoring.current) return;
 								scrollTops.current.set(
 									scrollKey,
 									event.currentTarget.scrollTop,
@@ -822,6 +868,16 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 									<p className="hero__sub">
 										Ask me about investing, your ASPIRE modules, or the
 										programme itself.
+									</p>
+									{/* Identity and regional grounding, worth most on first
+									    contact and worth nothing on the fortieth turn — so it
+									    lives in the empty state and goes away once you start.
+									    Deleted by a60512e, a commit about removing an unreachable
+									    voice scale; its stylesheet rule, that rule's measured
+									    contrast note, and `topbar-move.mjs` all survived and went
+									    on describing an element that was no longer rendered. */}
+									<p className="hero__identity">
+										Financial literacy assistant · St. Kitts and Nevis
 									</p>
 								</div>
 

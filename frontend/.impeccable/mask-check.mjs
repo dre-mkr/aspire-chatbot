@@ -1,5 +1,5 @@
 import puppeteer from "puppeteer";
-const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type"};
+const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,PATCH,DELETE,OPTIONS","Access-Control-Allow-Headers":"Content-Type, Authorization, X-Aspire-Device"};
 const long="The money belongs to the ASPIRE participant, the child. Parents and guardians can view the account but the balance is the child's own. ";
 const A={reply:(long+long+long),thread_id:"t",sources:[],follow_ups:[]};
 const b=await puppeteer.launch({headless:"new"});

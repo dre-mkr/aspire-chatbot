@@ -2,7 +2,7 @@
 import puppeteer from "puppeteer";
 const BASE = "http://localhost:4173";
 const API = "http://localhost:8000";
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device" };
 const [, , WIDTH = "1280"] = process.argv;
 
 const browser = await puppeteer.launch({ headless: "new" });

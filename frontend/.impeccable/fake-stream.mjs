@@ -311,3 +311,36 @@ export function startSseServer({ port = 8000 } = {}) {
 		server.listen(port, () => resolve({ server, state, port }));
 	});
 }
+
+/**
+ * Answers `/chat/stream` for a harness that only ever stubbed `/chat`.
+ *
+ * Seven suites were written before the transport moved to server-sent events
+ * and were never updated. They passed anyway, which is the part worth
+ * understanding: with nothing listening on the API port, the stream request was
+ * refused, the client fell back to `/chat`, and the stub answered that. So they
+ * were all quietly asserting against the fallback, and the moment a real
+ * service was running on :8000 — which is the normal state for anyone actually
+ * developing — they failed in ways that read as product regressions.
+ *
+ * `onSent` receives the request body already flattened (AG-UI puts the
+ * application's own fields in `forwardedProps`), so a harness records exactly
+ * what it recorded before, and returns the config for the reply — usually
+ * `{ reply }`, the same text its `/chat` branch returns.
+ *
+ * Returns true when it handled the request, so the call site reads:
+ *
+ *     if (serveStream(r, CORS, (sent) => { seen.chat.push(sent); return { reply: A.reply }; })) return;
+ */
+export function serveStream(request, cors, onSent) {
+	if (!request.url().endsWith("/chat/stream")) return false;
+	const raw = JSON.parse(request.postData() || "{}");
+	const sent = { ...raw, ...(raw.forwardedProps ?? {}) };
+	const config = onSent?.(sent) ?? {};
+	handleChatStream(
+		request,
+		(body) => request.respond({ status: 200, contentType: "text/event-stream", headers: cors, body }),
+		config,
+	);
+	return true;
+}
