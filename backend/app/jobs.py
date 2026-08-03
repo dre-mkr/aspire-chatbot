@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+from arq import cron
 from arq.connections import RedisSettings
 
 from app.agent import summarise_conversation
@@ -21,6 +22,8 @@ from app.cache import valkey_url
 from app.config import get_settings
 from app.db import Conversation, database_enabled, session
 from app.db.repository import save_summary, turns_awaiting_summary
+
+from app.retention import retention_job
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +92,13 @@ class WorkerSettings:
     """Entry point for `arq app.jobs.WorkerSettings`."""
 
     functions = [summarise_conversation_job]
+    # Nightly, at 03:15, off the request path. A read-time sweep would put a
+    # delete in front of somebody waiting for an answer, and would only ever
+    # tidy up the identities that came back — which is the set that does not
+    # need tidying.
+    cron_jobs = [
+        cron(retention_job, hour=3, minute=15, run_at_startup=False),
+    ]
     # Summarisation is best effort and the next turn triggers it again, so a
     # long retry chain would only pile up duplicate model calls for a
     # conversation nobody is waiting on.

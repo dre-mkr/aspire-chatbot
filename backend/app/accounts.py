@@ -36,6 +36,7 @@ from sqlalchemy import func, select
 from app import mail
 from app.auth import (
     ACCOUNT_ANONYMOUS,
+    chat_principal,
     ACCOUNT_REGISTERED,
     Principal,
     client_ip,
@@ -336,6 +337,38 @@ async def logout(principal: Principal = Depends(require_principal)) -> None:
         user = await db.get(User, principal.user_id)
         if user is not None:
             user.session_epoch = user.session_epoch + 1
+
+
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh(principal: Principal | None = Depends(chat_principal)) -> AuthResponse:
+    """A fresh token for a session that is still good.
+
+    Accepts a token that expired in the last few minutes — `chat_principal`
+    rather than the strict dependency — because the whole point is to renew
+    quietly rather than to make somebody sign in again for being slow. A stream
+    that is mid-reply keeps working on the token it started with, and the
+    replacement lands beside it.
+
+    Refuses anything whose epoch has moved on. Claiming an anonymous identity
+    and signing out both bump it, and neither should be undoable by presenting
+    the token they retired.
+    """
+    if not database_enabled():
+        raise _unavailable()
+    if principal is None:
+        raise HTTPException(status_code=401, detail="A valid session is required.")
+
+    async with session() as db:
+        if db is None:
+            raise _unavailable()
+        user = await db.get(User, principal.user_id)
+        if user is None or user.session_epoch != principal.session_epoch:
+            raise HTTPException(status_code=401, detail="This session is no longer valid.")
+        user.last_seen_at = datetime.now(timezone.utc)
+        token = mint_token(user.id, user.account_type, user.session_epoch)
+        response = to_session(user, token)
+
+    return AuthResponse(**response.model_dump())
 
 
 @router.post("/forgot", status_code=202)

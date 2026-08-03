@@ -27,6 +27,14 @@ export interface Session {
 	email: string | null;
 	displayName: string | null;
 	avatarUrl: string | null;
+	/**
+	 * When this token stops being accepted, in epoch milliseconds.
+	 *
+	 * Recorded so renewal can be decided without asking the server whether it
+	 * is needed. Absent on a session stored before this existed, which is read
+	 * as "unknown" and simply means the first renewal waits for a 401.
+	 */
+	expiresAt?: number;
 }
 
 const API_URL = (
@@ -176,6 +184,9 @@ export function ensureSession(): Promise<Session | null> {
 				email: body.email ?? null,
 				displayName: body.display_name ?? null,
 				avatarUrl: body.avatar_url ?? null,
+				expiresAt: body.expires_in
+					? Date.now() + Number(body.expires_in) * 1000
+					: undefined,
 			};
 			storeSession(session);
 			return session;

@@ -12,6 +12,7 @@ import {
 	type Session,
 	authHeaders,
 	clearSession,
+	currentSession,
 	resetToFreshAnonymous,
 	storeSession,
 } from "./session";
@@ -182,6 +183,47 @@ export async function completeReset(token: string, password: string): Promise<Au
 
 export async function redeemSignInLink(token: string): Promise<AuthResult> {
 	return adopt(await post<WireSession>("/api/auth/signin-link/redeem", { token }));
+}
+
+/**
+ * How close to expiry is close enough to renew.
+ *
+ * Generous on purpose. A session that renews with days to spare costs one
+ * request; one that renews with seconds to spare is a race against whatever the
+ * person is in the middle of.
+ */
+const RENEW_WITHIN_MS = 3 * 24 * 60 * 60 * 1000;
+
+let renewing: Promise<void> | null = null;
+
+/**
+ * Quietly take a fresh token when the current one is getting old.
+ *
+ * Deliberately fire-and-forget and deliberately not awaited by anything on the
+ * critical path. A reply that is mid-stream keeps using the token it opened
+ * with — the service tolerates one that expired in the last few minutes for
+ * exactly this reason — and the replacement lands beside it without touching
+ * the connection.
+ *
+ * Failure is silent. If renewal cannot happen the existing token still works
+ * until it genuinely expires, and by then there will have been many more
+ * chances to try.
+ */
+export function renewSessionIfStale(): void {
+	const session = currentSession();
+	if (!session || renewing) return;
+	// Unknown expiry means a session stored before expiry was recorded. Left
+	// alone rather than renewed on a guess.
+	if (!session.expiresAt || session.expiresAt - Date.now() > RENEW_WITHIN_MS) return;
+
+	renewing = post<WireSession>("/api/auth/refresh", {})
+		.then((wire) => {
+			adopt(wire);
+		})
+		.catch(() => undefined)
+		.finally(() => {
+			renewing = null;
+		});
 }
 
 /**

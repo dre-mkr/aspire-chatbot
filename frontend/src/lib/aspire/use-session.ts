@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { renewSessionIfStale } from "./auth";
 import { type Session, currentSession, ensureSession, subscribeToSession } from "./session";
 
 /**
@@ -43,6 +44,10 @@ export function useSession(): { session: Session | null; resolved: boolean } {
 		if (existing) {
 			setSession(existing);
 			setResolved(true);
+			// Checked once on arrival and then hourly. Renewal happens beside
+			// whatever else is going on and never blocks it; see
+			// `renewSessionIfStale`.
+			renewSessionIfStale();
 		} else {
 			void ensureSession()
 				.then((fresh) => {
@@ -58,9 +63,12 @@ export function useSession(): { session: Session | null; resolved: boolean } {
 				});
 		}
 
+		const hourly = window.setInterval(renewSessionIfStale, 60 * 60 * 1000);
+
 		return () => {
 			live = false;
 			stop();
+			window.clearInterval(hourly);
 			window.removeEventListener("storage", sync);
 		};
 	}, []);
