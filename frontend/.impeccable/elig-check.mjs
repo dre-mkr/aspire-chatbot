@@ -14,7 +14,7 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
-import { createConversationStore, serveAnonymousAuth } from "./fake-conversations.mjs";
+import { handleChatStream } from "./fake-stream.mjs";
 
 const LANG = process.argv[2] ?? "en";
 const API = "http://localhost:8000";
@@ -45,21 +45,112 @@ await page.setViewport({ width: 1280, height: 900 });
  * point of view everything downstream is the actual engine, actual rules and
  * actual copy. Stubbing the eligibility endpoints would have tested the stub.
  */
-// The conversation has to exist somewhere the app can read it back.
-// This suite reloads the page and expects the card to still be there, which
-// means the thread has to be reopened — and reopening it goes through the
-// conversations service now, not localStorage. Without a service holding the
-// thread, the reload landed on the empty state and the card never mounted.
-// Eligibility itself is still the REAL endpoint: `store.handle` only answers
-// auth and /api/conversations and passes everything else through.
-const store = createConversationStore();
+/**
+ * Conversations, held here, with authorisation deliberately ignored.
+ *
+ * This suite reloads the page and expects the card to still be there, so the
+ * thread has to be reopened — and that goes through the conversations service
+ * now rather than localStorage. Without one, the reload was handed an id it
+ * could not read and the app replaced the URL with `/`, which is exactly right
+ * for a dead id and looked like the card failing to survive.
+ *
+ * Not `fake-conversations.mjs`, and that is the point: that store mints its own
+ * session tokens, and this suite needs a REAL session because eligibility talks
+ * to the REAL service, which refuses tokens it never issued. So real auth, real
+ * eligibility, and just enough of the conversations API to reopen a thread.
+ * Ownership is not modelled because there is only ever one browser here and
+ * nothing in this file asserts anything about it.
+ */
+const conversations = new Map();
+
+const serveConversations = (r, respond) => {
+	const { pathname } = new URL(r.url());
+	if (!pathname.startsWith("/api/conversations")) return false;
+	if (pathname === "/api/conversations") {
+		respond(200, {
+			conversations: [...conversations.entries()].map(([thread_id, row]) => ({
+				thread_id,
+				title: row.title,
+				title_source: null,
+				updated_at: row.updatedAt,
+			})),
+		});
+		return true;
+	}
+	const id = decodeURIComponent(pathname.split("/").pop());
+	const row = conversations.get(id);
+	if (r.method() === "PATCH") {
+		if (row) row.title = JSON.parse(r.postData() || "{}").title;
+		respond(204, null);
+		return true;
+	}
+	if (!row) {
+		respond(404, { detail: "No such conversation." });
+		return true;
+	}
+	respond(200, {
+		thread_id: id,
+		title: row.title,
+		title_source: null,
+		updated_at: row.updatedAt,
+		messages: row.messages,
+	});
+	return true;
+};
+
+/**
+ * Records the turn the way the service does — as an ELIGIBILITY turn.
+ *
+ * The card is drawn at the newest turn whose role is "eligibility". Recorded as
+ * an ordinary assistant message, the restored transcript had nothing for the
+ * card to attach to: the verdict was in hand, off the device, and had nowhere
+ * to render.
+ */
+const recordTurn = (threadId, question) => {
+	const row = conversations.get(threadId) ?? {
+		title: question.slice(0, 60),
+		updatedAt: Date.now(),
+		messages: [],
+	};
+	row.updatedAt = Date.now();
+	row.messages.push({ role: "user", text: question }, { role: "eligibility", text: "" });
+	conversations.set(threadId, row);
+};
+
+const startRealCheck = async (threadId) => {
+	try {
+		await fetch(`${API}/api/eligibility/start`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ thread_id: threadId, language: LANG }),
+		});
+	} catch {
+		// Reported by the checks below as a missing card.
+	}
+};
+
 const installStub = async () => {
 	await page.setRequestInterception(true);
 	page.removeAllListeners("request");
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
-		if (serveAnonymousAuth(r, CORS)) return;
-		if (await store.handle(r, (status, body) => r.respond({ status, contentType: "application/json", headers: CORS, body: body === null ? "" : JSON.stringify(body) }))) return;
+		if (serveConversations(r, (status, body) => r.respond({ status, contentType: "application/json", headers: CORS, body: body === null ? "" : JSON.stringify(body) }))) return;
+		// `/chat/stream` is the transport; `/chat` below is only the fallback.
+		// Without this branch the send went straight past the stub to the real
+		// service, so nothing was recorded here and the reload had no thread.
+		if (r.url().endsWith("/chat/stream")) {
+			const raw = JSON.parse(r.postData() || "{}");
+			const sent = { ...raw, ...(raw.forwardedProps ?? {}) };
+			const threadId = sent.thread_id ?? `fallback-${Date.now()}`;
+			await startRealCheck(threadId);
+			recordTurn(threadId, sent.message ?? "");
+			handleChatStream(
+				r,
+				(body) => r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),
+				{ reply: "", eligibilityStarted: { check: "aspire_eligibility", language: LANG } },
+			);
+			return;
+		}
 		if (r.url().endsWith("/chat")) {
 			// The client mints the conversation id before sending, and the real
 			// service echoes it back — that id is the URL, the storage key and
@@ -68,17 +159,8 @@ const installStub = async () => {
 			// thread's question and post its answers to another.
 			const sent = JSON.parse(r.postData() ?? "{}");
 			const threadId = sent.thread_id ?? `fallback-${Date.now()}`;
-			try {
-				await fetch(`${API}/api/eligibility/start`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ thread_id: threadId, language: LANG }),
-				});
-			} catch {
-				// Reported by the checks below as a missing card.
-			}
-			store.openConversation(threadId, store.ownerOf(r), sent.message);
-			store.recordTurn(threadId, null, sent.message, { role: "assistant", text: "", sources: [], follow_ups: [] });
+			await startRealCheck(threadId);
+			recordTurn(threadId, sent.message ?? "");
 			return r.respond({
 				status: 200,
 				contentType: "application/json",
