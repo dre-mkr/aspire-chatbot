@@ -14,9 +14,10 @@
  * tell which transport produced it. That is the point of this step: the wire
  * changes and nothing else does.
  *
- * `onDelta` exists for the next step, where the typewriter drains text as it
- * arrives. Nothing passes it yet, and while nothing does, the reveal is
- * byte-for-byte the reveal we have always had.
+ * `onDelta` is the live drain: every token is handed to the typewriter as it
+ * arrives, and the typewriter decides what is safe to show — see `settled.ts`.
+ * The pacing is unchanged, so a reply now starts being read while its ending is
+ * still being written.
  *
  * ## Falling back
  *
@@ -108,7 +109,6 @@ export async function streamAspire(
 	let opened = false;
 	let payload: TurnPayload | null = null;
 	let failure: string | null = null;
-	let text = "";
 
 	try {
 		const connection = fetchServerSentEvents(`${API_URL}/chat/stream`, {
@@ -128,7 +128,6 @@ export async function streamAspire(
 			const event = chunk as { type?: string; delta?: string; name?: string; value?: unknown; message?: string };
 
 			if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) {
-				text += event.delta;
 				onDelta?.(event.delta);
 				continue;
 			}

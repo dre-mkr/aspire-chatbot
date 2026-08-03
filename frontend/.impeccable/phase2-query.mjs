@@ -206,9 +206,22 @@ console.log("\n── no query function returns partial or streaming data ─");
 		const keys = mid.map((e) => JSON.stringify(e.key));
 		say("cache holds only server resources", keys.every((k) => /games|eligibility|conversations/.test(k)), keys.join(" "));
 		// The reveal must not be writing to the cache on every tick.
+		//
+		// Checked as "no cache entry ever contains the answer" rather than "the
+		// cache is byte-identical". Now that the reveal starts with the first
+		// token instead of after the whole reply, ordinary server state — the
+		// conversation list loading, the turn's own invalidation — legitimately
+		// lands while text is still arriving. The rule was never "the cache is
+		// frozen during a reveal"; it is that the reveal is not in it.
 		await new Promise((r) => setTimeout(r, 300));
 		const later = await cache(page);
-		say("the cache does not change while tokens arrive", JSON.stringify(later) === JSON.stringify(mid));
+		const leaked = JSON.stringify(later).includes(revealed.slice(0, 30));
+		say("no cache entry holds the answer while tokens arrive", !leaked);
+		say(
+			"and nothing streaming-shaped appears as a new key",
+			later.every((e) => /games|eligibility|conversations/.test(JSON.stringify(e.key))),
+			later.map((e) => JSON.stringify(e.key)).join(" "),
+		);
 	}
 	await page.close();
 }

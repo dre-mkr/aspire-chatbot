@@ -111,7 +111,18 @@ async function open({
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
 		// `/chat/stream` is the transport now; `/chat` stays as the fallback.
-		// Both are served from the same fixture so they cannot drift apart.
+		// Both are served from the same fixture so they cannot drift apart —
+		// including the failure fixture. Serving a healthy stream here while
+		// `/chat` was configured to fail turned the error case into a success
+		// case, which then failed for looking nothing like an error.
+		if (r.url().endsWith("/chat/stream") && chatStatus !== 200) {
+			return r.respond({
+				status: chatStatus,
+				contentType: "application/json",
+				headers: CORS,
+				body: '{"detail":"The assistant is temporarily unavailable."}',
+			});
+		}
 		if (
 			handleChatStream(r, (body) =>
 				r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),

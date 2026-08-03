@@ -200,5 +200,51 @@ console.log("\n── and the naive approach fails, so the test can tell them ap
 	);
 }
 
+console.log("\n-- the guard: classification must not consult neighbours --");
+{
+	/**
+	 * The assumption `settled.ts` rests on, stated so it can fail.
+	 *
+	 * The one-line lag is only safe because a line's block type depends on that
+	 * line and nothing else. Every line of the corpus is classified alone, then
+	 * again surrounded by every kind of neighbour it could have; a construct
+	 * that reads its context shows up as a disagreement.
+	 *
+	 * This exists so a future richer renderer -- a real table, a fenced code
+	 * block, a setext heading -- breaks a test rather than shipping a flash.
+	 */
+	const neighbours = ["", "text", "- item", "1. item", "> quote", "```", "|a|b|", "---", "==="];
+	const lines = ADVERSARIAL.flatMap((c) => c.chunks.join("").split("\n")).filter((l) => l.trim());
+	const strip = /^\s*(?:[-*•]|\d+[.)])\s+/;
+
+	let broken = null;
+	for (const line of lines) {
+		const aloneKind = parseAnswer(line + "\n")[0]?.kind ?? "none";
+		// The parser strips bullet markers AND heading hashes, so the needle has
+		// to be stripped the same way — otherwise the guard fails on its own
+		// search text rather than on anything the parser did.
+		const needle = line.trim().replace(strip, "").replace(HEADING, "").trim();
+		if (!needle) continue;
+		for (const before of neighbours) {
+			for (const after of neighbours) {
+				const blocks = parseAnswer(before + "\n" + line + "\n" + after + "\n");
+				const found = blocks.find((b) =>
+					b.kind === "paragraph" ? b.text.includes(needle) : b.items.some((i) => i.includes(needle)),
+				);
+				const withNeighbours = found?.kind ?? "none";
+				if (withNeighbours !== aloneKind && !broken) {
+					broken = `"${line}" is ${aloneKind} alone but ${withNeighbours} between "${before}" and "${after}"`;
+				}
+			}
+		}
+	}
+	say(
+		`every line classifies the same alone as in company (${lines.length} lines, ${neighbours.length ** 2} contexts each)`,
+		broken === null,
+		broken ?? "one-line lag is sound",
+	);
+}
+
+
 console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAIL`}`);
 process.exit(fails === 0 ? 0 : 1);

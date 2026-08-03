@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AskResult, AspireError, type Source } from "./api";
+import { blockIsClosed, settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
 import { deviceId } from "./device";
@@ -101,8 +102,14 @@ const WORDS_PER_TICK = 4;
 const TICKS_PER_ITEM = 3;
 
 interface StreamCursor {
-	answer: Answer;
+	/** Everything received so far, unparsed. Grows as the service sends. */
+	buffer: string;
+	/** The blocks of `buffer` that can no longer be re-read. See `settled.ts`. */
+	settled: Array<AnswerBlock>;
+	/** The service has said the turn is over; the tail is safe to settle. */
+	ended: boolean;
 	sources: Array<Source>;
+	followUps: Array<string>;
 	id: number;
 	blockIndex: number;
 	wordIndex: number;
@@ -460,7 +467,11 @@ export function useConversation({
 		if (!state) return;
 		setMessages((current) => [
 			...current,
-			completed(state.answer, state.sources, state.id),
+			completed(
+				{ blocks: parseAnswer(state.buffer), followUps: state.followUps },
+				state.sources,
+				state.id,
+			),
 		]);
 	}, [clearTimers]);
 
@@ -468,9 +479,12 @@ export function useConversation({
 		const state = cursor.current;
 		if (!state) return;
 
-		const block = state.answer.blocks[state.blockIndex];
+		const block = state.settled[state.blockIndex];
 		if (!block) {
-			finishStream();
+			// Caught up. Whether that means "finished" or "waiting for the next
+			// token" is the difference between ending the turn and stalling it,
+			// and only the service can say which.
+			if (state.ended) finishStream();
 			return;
 		}
 
@@ -484,7 +498,12 @@ export function useConversation({
 				kind: "paragraph",
 				text: words.slice(0, state.wordIndex).join(" "),
 			};
-			if (state.wordIndex >= words.length) {
+			// Stepping past a paragraph that can still grow would strand the words
+			// that arrive after it — the typewriter would never come back.
+			if (
+				state.wordIndex >= words.length &&
+				blockIsClosed(state.blockIndex, state.settled, state.ended)
+			) {
 				state.blockIndex += 1;
 				state.wordIndex = 0;
 			}
@@ -498,7 +517,10 @@ export function useConversation({
 					kind: "list",
 					items: block.items.slice(0, state.wordIndex),
 				};
-				if (state.wordIndex >= block.items.length) {
+				if (
+					state.wordIndex >= block.items.length &&
+					blockIsClosed(state.blockIndex, state.settled, state.ended)
+				) {
 					state.blockIndex += 1;
 					state.wordIndex = 0;
 				}
@@ -509,40 +531,95 @@ export function useConversation({
 			id: state.id,
 			blocks: [...state.built],
 			sources: state.sources,
-			followUps: state.answer.followUps,
+			followUps: state.followUps,
 		});
 	}, [finishStream]);
 
-	/** Starts revealing the answer. Returns its message id. */
-	const beginStream = useCallback(
-		(answer: Answer, sources: Array<Source>) => {
-			setIsThinking(false);
-			const id = nextId.current++;
-
-			if (prefersReducedMotion()) {
-				setMessages((current) => [...current, completed(answer, sources, id)]);
-				return id;
-			}
-
+	/**
+	 * Opens a reveal for a reply that has not arrived yet.
+	 *
+	 * The typewriter used to be handed a finished answer. It is now handed an
+	 * empty buffer that fills as the service sends, which is the whole point of
+	 * the change: a long reply starts being read while its ending is still being
+	 * written, instead of after.
+	 *
+	 * The pacing is deliberately unchanged. Tokens land at whatever rate the
+	 * model produces them; the reveal still runs at four words every 40ms. The
+	 * buffer absorbs the difference in both directions -- it waits when the
+	 * service is behind, and it never races ahead when the service is early.
+	 */
+	const openStream = useCallback(
+		(id: number, sources: Array<Source>) => {
 			cursor.current = {
-				answer,
+				buffer: "",
+				settled: [],
+				ended: false,
 				sources,
+				followUps: [],
 				id,
 				blockIndex: 0,
 				wordIndex: 0,
 				holdTicks: 0,
 				built: [],
 			};
-			setStreaming({
-				id,
-				blocks: [],
-				sources,
-				followUps: answer.followUps,
-			});
 			streamTimer.current = setInterval(tick, TICK_MS);
-			return id;
 		},
 		[tick],
+	);
+
+	/** More of the reply arrived. */
+	const pushDelta = useCallback((delta: string) => {
+		const state = cursor.current;
+		if (!state || state.ended) return;
+
+		// The thinking indicator gives way to the answer on the first token, not
+		// on the first byte of the response -- the same moment it used to give
+		// way to a finished reply.
+		if (!state.buffer) {
+			setIsThinking(false);
+			setStreaming({ id: state.id, blocks: [], sources: state.sources, followUps: [] });
+		}
+
+		state.buffer += delta;
+		state.settled = settledBlocks(state.buffer, false);
+	}, []);
+
+	/**
+	 * The service has finished. The reveal has not.
+	 *
+	 * `reply` is authoritative rather than the accumulated deltas: a card turn
+	 * ends with an empty reply on purpose, and the service is the only thing
+	 * that knows a turn was a card. Where the two disagree about text already on
+	 * screen the accumulated version wins, because rewriting revealed words is
+	 * the one outcome worth more than being right about them.
+	 */
+	const closeStream = useCallback(
+		(reply: string, sources: Array<Source>, followUps: Array<string>) => {
+			const state = cursor.current;
+			if (!state) return;
+
+			// Also here, not only on the first token. A turn can finish without
+			// ever producing one — the `/chat` fallback resolves with the whole
+			// reply and no deltas at all — and leaving this to `pushDelta` left the
+			// thinking indicator up and the composer busy for good.
+			setIsThinking(false);
+
+			state.buffer = reply.startsWith(state.buffer) ? reply : state.buffer || reply;
+			state.sources = sources;
+			state.followUps = followUps;
+			state.ended = true;
+			state.settled = settledBlocks(state.buffer, true);
+		},
+		[],
+	);
+
+	/** Reveals an answer that is already whole. The reduced-motion path. */
+	const revealAtOnce = useCallback(
+		(answer: Answer, sources: Array<Source>, id: number) => {
+			setIsThinking(false);
+			setMessages((current) => [...current, completed(answer, sources, id)]);
+		},
+		[],
 	);
 
 	/**
@@ -554,10 +631,13 @@ export function useConversation({
 	const ask = useCallback(
 		async (question: string, simpleMode: boolean, token: number) => {
 			try {
-				// Streamed now, over `/chat/stream`. It resolves with the same whole
-				// answer `askAspire` did, and falls back to `/chat` if the stream
-				// never opens — so nothing below this line can tell the difference,
-				// and the reveal is the one we have always had.
+				// The reveal is opened before the request is awaited, so the first
+				// token has somewhere to land. Reduced motion skips it entirely and
+				// takes the finished answer below, exactly as it always has.
+				const live = !prefersReducedMotion();
+				const id = nextId.current++;
+				if (live) openStream(id, []);
+
 				const result: AskResult = await streamAspire({
 					message: question,
 					// Read now, not closed over: see `threadRef`. This is also why
@@ -566,13 +646,22 @@ export function useConversation({
 					threadId: threadRef.current,
 					simpleMode,
 					persona,
+					// Every token, as it arrives. This is the live drain.
+					onDelta: live ? pushDelta : undefined,
 					// Read at call time for the same reason the title call does: the
 					// voice layer that owns this setting is built after this hook.
 					// It decides which language the eligibility card opens in.
 					language: getLanguageRef.current(),
 				});
 
-				if (turnToken.current !== token) return; // the turn was abandoned
+				if (turnToken.current !== token) {
+					// The reveal was opened before the request was awaited, so every
+					// path out of here has to close it. A cursor left running is not
+					// just a stray timer: `send` treats one as "a reply is already
+					// arriving" and refuses the next question.
+					if (live) dropStream();
+					return;
+				}
 
 				// Adopt the server's id only when we had none to begin with.
 				//
@@ -635,6 +724,7 @@ export function useConversation({
 						nameConversation(result.threadId, named, "generated");
 					}
 
+					if (live) dropStream();
 					onGameStartRef.current?.(result.threadId);
 					return;
 				}
@@ -670,6 +760,7 @@ export function useConversation({
 						nameConversation(result.threadId, named, "generated");
 					}
 
+					if (live) dropStream();
 					onEligibilityStartRef.current?.(
 						result.threadId,
 						result.startedEligibility.language,
@@ -677,12 +768,18 @@ export function useConversation({
 					return;
 				}
 
-				const id = beginStream(
-					{ blocks: parseAnswer(result.reply), followUps: result.followUps },
-					result.sources,
-				);
+				if (live) {
+					closeStream(result.reply, result.sources, result.followUps);
+				} else {
+					revealAtOnce(
+						{ blocks: parseAnswer(result.reply), followUps: result.followUps },
+						result.sources,
+						id,
+					);
+				}
 				onAnswerRef.current?.(id, result.reply);
 			} catch (error) {
+				dropStream();
 				if (turnToken.current !== token) return;
 
 				setIsThinking(false);
@@ -703,7 +800,15 @@ export function useConversation({
 		// `nameConversation` and `queryClient` are both stable references, so
 		// naming them here does not rebuild the send pipeline every turn — which
 		// is the property these dependency lists have always been protecting.
-		[beginStream, persona, nameConversation],
+		[
+			openStream,
+			pushDelta,
+			closeStream,
+			revealAtOnce,
+			dropStream,
+			persona,
+			nameConversation,
+		],
 	);
 
 	const send = useCallback(
