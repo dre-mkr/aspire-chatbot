@@ -9,6 +9,7 @@ import uuid as uuid_module
 from contextlib import asynccontextmanager
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -272,22 +273,42 @@ def _started_eligibility(messages: list[BaseMessage]) -> dict | None:
     return None
 
 
+def message_text(content: Any) -> str:
+    """Prose from a message's content, whatever shape the provider used.
+
+    One function because there are two readers -- the whole-turn path and the
+    streaming path -- and they disagreed. The streaming path tested
+    `isinstance(content, str)` and emitted anything that passed. With this
+    provider an assistant message's content is a LIST of typed blocks, so that
+    test was false for every chunk of the answer and true for exactly one thing
+    per turn: the ToolMessage carrying the retriever's output. The result was a
+    stream containing all of the context and none of the answer.
+
+    A shape that is neither a string nor a list of blocks is logged rather than
+    stringified. `str()` of a Document or a dict is exactly the kind of thing
+    that reads as content and is not, which is how this reached a user.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    logger.warning(
+        "Message content is %s, not text or content blocks; dropping it rather "
+        "than coercing it to a string.",
+        type(content).__name__,
+    )
+    return ""
+
+
 def _extract_reply(messages: list[BaseMessage]) -> str:
     """Text of the agent's final message."""
     if not messages:
         return ""
-
-    content = messages[-1].content
-    if isinstance(content, str):
-        return content.strip()
-
-    # Some providers return content as a list of typed blocks.
-    parts = [
-        block.get("text", "")
-        for block in content
-        if isinstance(block, dict) and block.get("type") == "text"
-    ]
-    return "".join(parts).strip()
+    return message_text(messages[-1].content).strip()
 
 
 async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMessage]:
@@ -737,6 +758,11 @@ async def chat_stream(
         prepared = await _prepare_messages(request, thread_id)
 
         collected: list[BaseMessage] = []
+        #: The answer as it was actually sent, for persistence and the done
+        #: payload. `_extract_reply` reads the LAST element, which on this path
+        #: is a single chunk rather than a whole message — so the turn was being
+        #: persisted, and announced, with an empty reply.
+        streamed: list[str] = []
         last_message_id: str | None = None
         try:
             async for chunk, _meta in get_agent(request.simple_mode).astream(
@@ -769,8 +795,16 @@ async def chat_stream(
                 for call in getattr(chunk, "tool_calls", None) or []:
                     yield {"tool": call.get("name")}
 
-                text = getattr(chunk, "content", "")
-                if isinstance(text, str) and text:
+                # A tool's OUTPUT is never the assistant speaking. It is kept in
+                # `collected` because that is where sources come from, and it is
+                # not a delta: streaming it put the retrieved knowledge-base rows
+                # on screen in place of the answer, whole, in one frame.
+                if isinstance(chunk, ToolMessage):
+                    continue
+
+                text = message_text(getattr(chunk, "content", ""))
+                if text:
+                    streamed.append(text)
                     yield {"delta": text}
         except Exception:
             logger.exception("Agent stream failed for thread %s", thread_id)
@@ -779,7 +813,7 @@ async def chat_stream(
 
         game = _started_game(collected)
         eligibility = _started_eligibility(collected)
-        reply = _extract_reply(collected)
+        reply = "".join(streamed).strip() or _extract_reply(collected)
         # The card is the whole turn; anything said beside it is dropped here,
         # for the same reasons set out in `/chat`.
         if game is not None or eligibility is not None:
