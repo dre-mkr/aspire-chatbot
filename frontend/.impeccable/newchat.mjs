@@ -163,7 +163,15 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 const stored = (page) =>
 	page.evaluate(() => {
 		const qc = window.__TSR_ROUTER__?.options?.context?.queryClient;
-		return qc?.getQueryData(["conversations"]) ?? [];
+		if (!qc) return [];
+		// Keyed by owner now — `["conversations", <userId>]` — so the list is
+		// found by prefix rather than by an exact key. That the owner is IN the
+		// key is what stops one identity ever reading another's.
+		const entry = qc
+			.getQueryCache()
+			.getAll()
+			.find((q) => q.queryKey[0] === "conversations" && q.queryKey.length === 2 && Array.isArray(q.state.data));
+		return entry?.state.data ?? [];
 	});
 const path = (page) => page.evaluate(() => location.pathname);
 const focused = (page) => page.evaluate(() => document.activeElement?.id ?? "");

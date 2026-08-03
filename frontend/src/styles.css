@@ -2826,10 +2826,23 @@ body {
 
 /* On the landing screen it sits on the gradient, where a white-on-white pill
    would vanish. */
-.app[data-phase="landing"] .rail-open {
+.app[data-phase="landing"] .rail-open,
+.app[data-phase="landing"] .account__signin {
 	background: rgb(255 255 255 / 0.16);
 	color: #fff;
 	border-color: rgb(255 255 255 / 0.28);
+}
+
+/* Listed with the hamburger rather than given its own rule, because they are
+   one pair: the same frosted surface at either end of the same line, and the
+   two treatments must move together or they stop matching the first time one
+   is adjusted. */
+.app[data-phase="landing"] .account__signin:hover {
+	background: rgb(255 255 255 / 0.26);
+}
+
+.app[data-phase="landing"] .account__placeholder {
+	background: rgb(255 255 255 / 0.16);
 }
 
 .app[data-phase="landing"] .rail-open:hover {
@@ -5073,4 +5086,259 @@ body {
 .auth__fieldset > legend {
 	padding: 0;
 	margin-bottom: 8px;
+}
+
+/* ─── The account control ───────────────────────────────────────────────────
+
+   One control, two placements: floating top-right opposite the hamburger, and
+   as the block at the foot of the sidebar.
+
+   Both are always mounted. Which one is visible is opacity, not presence — so
+   during the 560ms `/` → `/chat/:id` morph the handover is a cross-fade rather
+   than one popping out as the other pops in. Unmounting either would make the
+   transition stutter at exactly the moment it is meant to be seamless. */
+
+.account-slot {
+	position: absolute;
+	z-index: 12;
+	top: 14px;
+	right: 14px;
+	opacity: 0;
+	pointer-events: none;
+	/* Matched to the morph, so the two controls trade places over the same
+	   period the composer takes to travel. */
+	transition: opacity var(--morph);
+}
+
+.account-slot[data-shown] {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.account {
+	display: flex;
+}
+
+/* Holds the slot open while the session is still unknown, so nothing jumps
+   when the answer arrives. Deliberately not a spinner: the wait is usually one
+   frame, and a spinner that flashes for 16ms is worse than a quiet gap. */
+.account__placeholder {
+	width: 40px;
+	height: 40px;
+	border-radius: 12px;
+	background: rgb(255 255 255 / 0.18);
+}
+
+.account--rail .account__placeholder {
+	width: 100%;
+	height: 36px;
+	border-radius: 999px;
+	background: var(--wash-6);
+}
+
+/* The signed-out corner control. Same frosted treatment as `.rail-open`
+   opposite it: same radius, same height, same blur, same shadow — it is the
+   other end of one pair, and a second surface treatment here would read as a
+   different product. */
+.account__signin {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 40px;
+	padding: 0 16px;
+	border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+	border-radius: 12px;
+	background: rgb(255 255 255 / 0.82);
+	backdrop-filter: blur(12px);
+	color: var(--chrome);
+	font-family: inherit;
+	font-size: 0.84375rem;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgb(53 29 90 / 0.14);
+	transition:
+		background var(--swift),
+		color var(--morph);
+}
+
+.account__signin:hover {
+	background: rgb(255 255 255 / 0.95);
+}
+
+/* Signed in, the corner is the avatar and nothing else. A name beside it would
+   compete with the centred hero, which is the one thing on that screen meant to
+   hold attention. */
+.account__avatar-btn {
+	display: flex;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgb(53 29 90 / 0.18);
+	transition: transform var(--swift);
+}
+
+.account__avatar-btn:hover {
+	transform: scale(1.04);
+}
+
+.avatar {
+	display: block;
+	border-radius: 999px;
+	object-fit: cover;
+	flex-shrink: 0;
+}
+
+/* The sidebar block. Padding, gap and icon slot are the foot's own, so the
+   signed-in and signed-out states are the same shape. */
+.account--rail {
+	width: 100%;
+}
+
+.account__block {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 0;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: inherit;
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.account__block:hover .rail__name {
+	color: var(--plum);
+}
+
+/* An address is long and the rail is narrow; it may shorten but must not push
+   the row wider. */
+.account--rail .rail__note {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 15ch;
+}
+
+.account__menu {
+	position: absolute;
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 220px;
+	padding: 8px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	box-shadow: 0 18px 40px rgb(53 29 90 / 0.18);
+	animation: rise-up 220ms var(--ease) both;
+}
+
+.account__menu[data-variant="corner"] {
+	top: calc(100% + 8px);
+	right: 0;
+}
+
+/* Above the foot rather than below it: there is no room under the last row of
+   a full-height sidebar. */
+.account__menu[data-variant="rail"] {
+	bottom: calc(100% + 8px);
+	left: 8px;
+	right: 8px;
+}
+
+.account__who {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 10px 10px;
+	border-bottom: 1px solid var(--hairline);
+	margin-bottom: 4px;
+}
+
+.account__who-name {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.account__who-email {
+	font-size: 0.75rem;
+	color: var(--quiet);
+	overflow-wrap: anywhere;
+}
+
+.account__item {
+	display: flex;
+	align-items: center;
+	height: 38px;
+	padding: 0 10px;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--ink);
+	font-family: inherit;
+	font-size: 0.8125rem;
+	text-align: left;
+	cursor: pointer;
+	transition: background var(--swift);
+}
+
+.account__item:hover {
+	background: var(--wash-6);
+}
+
+.account__item--danger {
+	color: var(--danger);
+}
+
+.account__item--danger:hover {
+	background: var(--danger-wash);
+}
+
+/* One sentence, because from the menu it is not obvious what happens to the
+   conversations in the rail — and the honest answer is "nothing". */
+.account__confirm {
+	margin: 0;
+	padding: 2px 10px 8px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+/* The corner control sits over the gradient on the landing screen and over the
+   white workspace in a conversation; `--chrome` already flips between them for
+   the hamburger, and this rides the same variable. */
+
+/* The title bar and the account control share the top-right corner in a
+   conversation, and at narrow widths they collided — the chat's title ran
+   underneath the button rather than stopping before it.
+   
+   The bar reserves the room instead. This does shorten the title, which is a
+   visual change, but a title ending in an ellipsis is a great deal better than
+   one hidden behind a button. It applies only while the control is actually
+   shown, so a conversation with the sidebar expanded keeps the full width it
+   has always had.
+
+   Sized for the WIDER of the two states — the "Sign in" button, not the
+   avatar — so the title's right edge does not move when the session resolves
+   or when somebody signs in. A title that reflowed on sign-in would be the
+   auth flash wearing different clothes. */
+.app:has(.account-slot[data-shown]) .titlebar {
+	padding-right: 100px;
+}
+
+@media (max-width: 620px) {
+	.account__signin {
+		padding: 0 12px;
+	}
+
+	.app:has(.account-slot[data-shown]) .titlebar {
+		padding-right: 96px;
+	}
 }

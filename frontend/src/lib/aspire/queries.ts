@@ -31,11 +31,31 @@ import type { StoredConversation } from "./history";
  * completion handoff name a conversation rather than enumerate its resources.
  */
 export const keys = {
-	/** The rail's list of conversations. */
-	conversations: () => ["conversations"] as const,
-	conversation: (threadId: string) => ["conversations", threadId] as const,
+	/**
+	 * The rail's list, for one identity.
+	 *
+	 * The owner is IN the key, and that is the whole defence against showing one
+	 * person's conversations to the next. Clearing caches at sign-out works only
+	 * as long as somebody remembers to, and a mounted query refetches the moment
+	 * it is removed — which, before this, put the previous person's titles
+	 * straight back into the rail. Keyed by owner, the question does not arise:
+	 * a different identity is a different key, and there is no moment where one
+	 * can be read as the other.
+	 */
+	conversations: (ownerId = "anon") => ["conversations", ownerId] as const,
+	/**
+	 * The prefix every identity's list sits under.
+	 *
+	 * For clearing on the way in or out of an account, where the point is that
+	 * nothing anybody cached survives the change of owner — including the
+	 * identity being left behind.
+	 */
+	allConversations: () => ["conversations"] as const,
+	conversation: (ownerId: string, threadId: string) =>
+		["conversations", ownerId, threadId] as const,
 	/** One conversation's transcript. */
-	messages: (threadId: string) => ["conversations", threadId, "messages"] as const,
+	messages: (ownerId: string, threadId: string) =>
+		["conversations", ownerId, threadId, "messages"] as const,
 
 	/** The running game for a thread, or null once it is over. */
 	gameState: (threadId: string) => ["games", "state", threadId] as const,
@@ -53,9 +73,9 @@ export const keys = {
  * genuinely wanted: a conversation carried on in another tab should appear when
  * you come back to this one, and the list is cheap.
  */
-export const conversationsQuery = () =>
+export const conversationsQuery = (ownerId = currentSession()?.userId ?? "anon") =>
 	queryOptions({
-		queryKey: keys.conversations(),
+		queryKey: keys.conversations(ownerId),
 		queryFn: fetchConversations,
 		// Identity is client-only, so this cannot be answered during SSR.
 		enabled: Boolean(currentSession()),
@@ -73,9 +93,12 @@ export const conversationsQuery = () =>
  * change behind you, and re-reading it on every visit to a chat you are
  * flipping between would make the rail feel slower than the storage it replaced.
  */
-export const conversationQuery = (threadId: string | null) =>
+export const conversationQuery = (
+	threadId: string | null,
+	ownerId = currentSession()?.userId ?? "anon",
+) =>
 	queryOptions({
-		queryKey: keys.messages(threadId ?? ""),
+		queryKey: keys.messages(ownerId, threadId ?? ""),
 		queryFn: () => fetchConversation(threadId as string),
 		enabled: Boolean(threadId) && Boolean(currentSession()),
 		staleTime: Number.POSITIVE_INFINITY,
@@ -165,8 +188,12 @@ export const eligibilityStateQuery = (
 type Conversations = Array<StoredConversation>;
 
 /** Everything the rail currently knows, straight out of the cache. */
+function owner(): string {
+	return currentSession()?.userId ?? "anon";
+}
+
 export function readConversations(queryClient: QueryClient): Conversations {
-	return queryClient.getQueryData<Conversations>(keys.conversations()) ?? [];
+	return queryClient.getQueryData<Conversations>(keys.conversations(owner())) ?? [];
 }
 
 export function readConversation(
@@ -176,7 +203,7 @@ export function readConversation(
 	// The list carries no transcripts, so a full record is preferred when one
 	// has been loaded and the summary is the fallback.
 	return (
-		queryClient.getQueryData<StoredConversation>(keys.messages(threadId)) ??
+		queryClient.getQueryData<StoredConversation>(keys.messages(owner(), threadId)) ??
 		readConversations(queryClient).find((c) => c.threadId === threadId)
 	);
 }
@@ -190,8 +217,8 @@ export function upsertConversation(
 	// first message is sent, and it resolves with a list that does not contain
 	// the conversation being created — landing after this write and erasing the
 	// row from the rail a beat after it appeared.
-	void queryClient.cancelQueries({ queryKey: keys.conversations() }, { revert: false });
-	queryClient.setQueryData<Conversations>(keys.conversations(), (previous) => [
+	void queryClient.cancelQueries({ queryKey: keys.conversations(owner()) }, { revert: false });
+	queryClient.setQueryData<Conversations>(keys.conversations(owner()), (previous) => [
 		conversation,
 		...(previous ?? []).filter((c) => c.threadId !== conversation.threadId),
 	]);
@@ -217,12 +244,12 @@ export function retitleInCache(
 
 	// Same reason as the optimistic insert: a list fetch already in flight
 	// answers with the old name and would land on top of this one.
-	void queryClient.cancelQueries({ queryKey: keys.conversations() }, { revert: false });
-	queryClient.setQueryData<Conversations>(keys.conversations(), (previous) =>
+	void queryClient.cancelQueries({ queryKey: keys.conversations(owner()) }, { revert: false });
+	queryClient.setQueryData<Conversations>(keys.conversations(owner()), (previous) =>
 		(previous ?? []).map(apply),
 	);
 	queryClient.setQueryData<StoredConversation>(
-		keys.messages(threadId),
+		keys.messages(owner(), threadId),
 		(previous) => (previous ? apply(previous) : previous),
 	);
 }
@@ -232,7 +259,7 @@ export function clearTitleLockInCache(
 	queryClient: QueryClient,
 	threadId: string,
 ) {
-	queryClient.setQueryData<Conversations>(keys.conversations(), (previous) =>
+	queryClient.setQueryData<Conversations>(keys.conversations(owner()), (previous) =>
 		(previous ?? []).map((conversation) =>
 			conversation.threadId === threadId
 				? { ...conversation, titleSource: undefined }
@@ -268,6 +295,6 @@ export function invalidateAfterTurn(
 	});
 	// Reaches this conversation's transcript too: `["conversations", id]` is a
 	// prefix of `["conversations", id, "messages"]`.
-	void queryClient.invalidateQueries({ queryKey: keys.conversation(threadId) });
-	void queryClient.invalidateQueries({ queryKey: keys.conversations() });
+	void queryClient.invalidateQueries({ queryKey: keys.conversation(owner(), threadId) });
+	void queryClient.invalidateQueries({ queryKey: keys.conversations(owner()) });
 }

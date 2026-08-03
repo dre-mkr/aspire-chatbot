@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { AccountControl } from "#/components/auth/AccountControl";
 import { MenuIcon } from "#/components/icons";
 import {
 	clearEligibilityResult,
@@ -768,6 +769,20 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 							<span className="sr-only">Open conversations</span>
 						</button>
 					) : null}
+
+					{/* The way into an account, whenever the sidebar is not there to
+					    carry it. Keyed on the sidebar rather than on the route: a
+					    conversation with the rail collapsed needs this just as much
+					    as the landing screen does, and the landing screen with the
+					    drawer open does not.
+
+					    Both this and the sidebar block stay mounted; which one is
+					    visible is a matter of opacity, so the handover during the
+					    560ms morph is a cross-fade rather than one popping out as
+					    the other pops in. */}
+					<div className="account-slot" data-shown={railClosed || undefined}>
+						<AccountControl variant="corner" />
+					</div>
 
 					{/* No bar on the empty state: the hero already carries the
 					    product's identity, and a bar saying "New chat" above it would

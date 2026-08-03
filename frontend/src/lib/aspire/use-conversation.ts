@@ -5,6 +5,7 @@ import { blockIsClosed, settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
 import { ensureSession } from "./session";
+import { useSession } from "./use-session";
 import {
 	groupByRecency,
 	loadConversations,
@@ -299,7 +300,11 @@ export function useConversation({
 	 * were already in Postgres, but nothing recorded whose they were, so nothing
 	 * could read them back.
 	 */
-	const conversations = useQuery(conversationsQuery());
+	// Subscribed to the session, so a sign-in or sign-out re-renders this and
+	// the query picks up the new owner's key. Without it the hook would keep
+	// asking for the previous identity's list.
+	const { session } = useSession();
+	const conversations = useQuery(conversationsQuery(session?.userId ?? "anon"));
 	const history = useMemo(
 		() => groupByRecency(conversations.data ?? []),
 		[conversations.data],
@@ -448,7 +453,7 @@ export function useConversation({
 				// before the rename landed answers with the old name — which would
 				// put the truncated question back a beat after the generated title
 				// crossfaded in. Re-asking after the write is what settles it.
-				.then(() => queryClient.invalidateQueries({ queryKey: keys.conversations() }))
+				.then(() => queryClient.invalidateQueries({ queryKey: keys.allConversations() }))
 				.catch(() => undefined);
 		},
 		[queryClient],

@@ -61,7 +61,7 @@ function SignIn() {
 	 * what must not happen.
 	 */
 	function resetScopedCaches() {
-		queryClient.removeQueries({ queryKey: keys.conversations() });
+		queryClient.removeQueries({ queryKey: keys.allConversations() });
 		queryClient.removeQueries({ queryKey: ["games"] });
 		queryClient.removeQueries({ queryKey: ["eligibility"] });
 	}
@@ -77,7 +77,7 @@ function SignIn() {
 			resetScopedCaches();
 			// The claimed conversations have to appear without a manual reload,
 			// so the list is asked for again the moment the identity changes.
-			await queryClient.invalidateQueries({ queryKey: keys.conversations() });
+			await queryClient.invalidateQueries({ queryKey: keys.allConversations() });
 			// Checked again here, deliberately. The validator on the route is the
 			// first line, but the value that matters is the one handed to
 			// `navigate`, and an unchecked redirect target is how a sign-in page

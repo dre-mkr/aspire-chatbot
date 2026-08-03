@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { AccountControl } from "#/components/auth/AccountControl";
 import {
 	ClockIcon,
-	DeviceIcon,
 	DownloadIcon,
 	MoreIcon,
 	PanelLeftIcon,
@@ -154,16 +154,11 @@ export function Rail({
 				</div>
 			</div>
 
-			{/* There is no account yet, so the foot says where the transcript
-			    actually lives rather than dressing up a signed-in user. */}
+			{/* One block, two states: signed out it invites you in, signed in it
+			    is the avatar, the name and the address. Same padding, same icon
+			    slot, same two lines either way — see `AccountControl`. */}
 			<div className="rail__foot">
-				<span className="rail__device" aria-hidden="true">
-					<DeviceIcon />
-				</span>
-				<span className="rail__identity rail__fold">
-					<span className="rail__name">Not signed in</span>
-					<span className="rail__note">Chats are saved on this device</span>
-				</span>
+				<AccountControl variant="rail" />
 			</div>
 		</aside>
 	);

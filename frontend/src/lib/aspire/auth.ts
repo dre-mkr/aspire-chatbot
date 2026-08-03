@@ -191,13 +191,23 @@ export async function redeemSignInLink(token: string): Promise<AuthResult> {
  * identity rather than resurrecting the one from before signing in. On a shared
  * device, signing out should not leave a thread back to who was there.
  */
-export async function signOut(): Promise<void> {
+export async function signOut(afterCleared?: () => void): Promise<void> {
 	try {
+		// While the token is still in hand, so the service can retire it.
 		await post<void>("/api/auth/logout", {});
 	} catch {
 		// The local session is cleared either way. A token the server has not
 		// heard about is still useless once this browser has forgotten it.
 	}
+
 	clearSession();
+
+	// Dropped here, in the gap where this browser has no identity at all, and
+	// the ordering is the whole point. Removing a mounted query makes it
+	// refetch immediately: doing that before the token was cleared re-fetched
+	// the person who had just signed out, and put their conversation titles
+	// straight back into the rail.
+	afterCleared?.();
+
 	await resetToFreshAnonymous();
 }
