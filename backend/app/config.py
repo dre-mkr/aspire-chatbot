@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     # PRIVACY.md; enforced by the retention job.
     anonymous_retention_days: int = 180
 
+    # Where the browser reaches this product. Used to build the links in reset
+    # and sign-in emails, so it must be the address a person can actually open.
+    public_web_url: str = "http://localhost:3000"
+
+    # Mail. Unset means the console provider: links are written to the log,
+    # which keeps development and the test suite off the network entirely.
+    resend_api_key: str = ""
+    mail_from: str = "ASPIRE <no-reply@aspire.kn>"
+
     # --- Chat model -------------------------------------------------------
     # Passed straight to init_chat_model, so the "provider:model" form selects
     # the provider. Swap to "anthropic:claude-sonnet-4-6" etc. without touching code.

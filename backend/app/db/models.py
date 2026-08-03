@@ -15,11 +15,13 @@ Two concerns live here and they are deliberately not the same thing:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
+    Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -144,11 +146,49 @@ class User(Base):
     )
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # What sign-up collects. All nullable: nothing in the product requires them
+    # to be filled in order to hold an account.
+    first_name: Mapped[str | None] = mapped_column(Text)
+    last_name: Mapped[str | None] = mapped_column(Text)
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    # Stored rather than recomputed on every read, so a birthday cannot change
+    # what somebody is allowed to see half-way through a session.
+    is_minor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    island: Mapped[str | None] = mapped_column(Text)
+    school: Mapped[str | None] = mapped_column(Text)
+    # Contact detail for a named adult, not a second identity. Nobody signs in
+    # with these.
+    guardian_name: Mapped[str | None] = mapped_column(Text)
+    guardian_email: Mapped[str | None] = mapped_column(Text)
+    guardian_phone: Mapped[str | None] = mapped_column(Text)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_ip_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AuthToken(Base):
+    """A one-time link: password reset, address verification, or sign-in.
+
+    Only the hash is stored. A leaked table must not be a set of working links,
+    and nothing here needs to read a token back — only to recognise one when it
+    is presented.
+    """
+
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 

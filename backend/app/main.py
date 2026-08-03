@@ -19,6 +19,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 from app import cache as response_cache
 from app.agent import get_agent, suggest_follow_ups, suggest_title
 from app.config import get_settings
+from app.accounts import router as accounts_router
 from app.conversations import router as conversations_router
 from app.auth import Principal, chat_principal
 from app.sessions import owner_id_for, router as sessions_router
@@ -151,6 +152,7 @@ if eligibility_enabled():
 # clearer failure than a 404 that looks like the feature was never built.
 app.include_router(conversations_router)
 app.include_router(sessions_router)
+app.include_router(accounts_router)
 
 
 @app.get("/health", response_model=HealthResponse)
