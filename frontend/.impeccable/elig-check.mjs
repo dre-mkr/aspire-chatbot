@@ -14,7 +14,7 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
-import { serveAnonymousAuth } from "./fake-conversations.mjs";
+import { createConversationStore, serveAnonymousAuth } from "./fake-conversations.mjs";
 
 const LANG = process.argv[2] ?? "en";
 const API = "http://localhost:8000";
@@ -45,12 +45,21 @@ await page.setViewport({ width: 1280, height: 900 });
  * point of view everything downstream is the actual engine, actual rules and
  * actual copy. Stubbing the eligibility endpoints would have tested the stub.
  */
+// The conversation has to exist somewhere the app can read it back.
+// This suite reloads the page and expects the card to still be there, which
+// means the thread has to be reopened — and reopening it goes through the
+// conversations service now, not localStorage. Without a service holding the
+// thread, the reload landed on the empty state and the card never mounted.
+// Eligibility itself is still the REAL endpoint: `store.handle` only answers
+// auth and /api/conversations and passes everything else through.
+const store = createConversationStore();
 const installStub = async () => {
 	await page.setRequestInterception(true);
 	page.removeAllListeners("request");
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
 		if (serveAnonymousAuth(r, CORS)) return;
+		if (await store.handle(r, (status, body) => r.respond({ status, contentType: "application/json", headers: CORS, body: body === null ? "" : JSON.stringify(body) }))) return;
 		if (r.url().endsWith("/chat")) {
 			// The client mints the conversation id before sending, and the real
 			// service echoes it back — that id is the URL, the storage key and
@@ -68,6 +77,8 @@ const installStub = async () => {
 			} catch {
 				// Reported by the checks below as a missing card.
 			}
+			store.openConversation(threadId, store.ownerOf(r), sent.message);
+			store.recordTurn(threadId, null, sent.message, { role: "assistant", text: "", sources: [], follow_ups: [] });
 			return r.respond({
 				status: 200,
 				contentType: "application/json",
