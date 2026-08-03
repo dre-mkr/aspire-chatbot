@@ -22,7 +22,7 @@ const BASE = process.argv[2] ?? "http://localhost:4173";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
+	"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 };
 const REPLY =
 	"An **index fund** holds a little of every company on a list.\n\nThat matters because nobody can reliably pick the winners in advance.\n\n- You own a slice of hundreds at once\n- Fees are low";

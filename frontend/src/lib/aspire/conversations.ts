@@ -14,7 +14,7 @@
  * migration nobody finishes.
  */
 
-import { deviceHeaders } from "./device";
+import { authHeaders } from "./session";
 import type { StoredConversation, StoredMessage } from "./history";
 import { parseAnswer } from "./knowledge";
 import type { Source } from "./api";
@@ -47,7 +47,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 		...init,
 		headers: {
 			"Content-Type": "application/json",
-			...deviceHeaders(),
+			...authHeaders(),
 			...(init?.headers ?? {}),
 		},
 		signal: AbortSignal.timeout(TIMEOUT_MS),

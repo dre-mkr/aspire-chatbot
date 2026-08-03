@@ -47,7 +47,7 @@ mkdirSync(OUT, { recursive: true });
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
+	"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 };
 
 const SHORT = "Index funds spread your money across many companies at once.";

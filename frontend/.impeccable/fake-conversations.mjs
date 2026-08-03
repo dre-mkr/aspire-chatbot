@@ -19,7 +19,14 @@
  * Review-only. Never built or shipped.
  */
 
-const DEVICE = "x-aspire-device";
+/**
+ * Authorisation is a bearer token now, never the device id.
+ *
+ * The header this used to read was the vulnerability: it is not a secret, so
+ * anyone holding another person's could read their conversations. The stub
+ * mirrors the real rule — a device id seeds a session and proves nothing.
+ */
+const AUTH = "authorization";
 
 /** Matches the client's own truncation, and the service's. */
 function provisionalTitle(question) {
@@ -32,10 +39,21 @@ export function createConversationStore() {
 	/** id → { ownerKey, title, titleSource, updatedAt, messages[] } */
 	const rows = new Map();
 
-	const owner = (request) => request.headers()[DEVICE] ?? null;
+	/** Sessions this stub has issued: token -> user id. */
+	const sessions = new Map();
+	let nextUser = 0;
+
+	const owner = (request) => {
+		const header = request.headers()[AUTH] ?? "";
+		const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+		return sessions.get(token) ?? null;
+	};
 
 	return {
 		rows,
+
+		/** Who a request is, for harnesses recording turns. */
+		ownerOf: (request) => owner(request),
 
 		/**
 		 * Creates the conversation and records the question, before answering.
@@ -72,13 +90,33 @@ export function createConversationStore() {
 		 * Handles a conversations request, or returns false so the caller can
 		 * carry on to its own routes.
 		 */
+		/** Issues a session. Always a NEW identity, exactly as the service does. */
+		issueSession() {
+			const token = `tok-${++nextUser}-${Math.random().toString(36).slice(2, 8)}`;
+			const userId = `user-${nextUser}`;
+			sessions.set(token, userId);
+			return { token, user_id: userId, account_type: "anonymous", expires_in: 2592000 };
+		},
+
 		async handle(request, respond) {
 			const url = new URL(request.url());
+
+			// A brand-new anonymous identity, never a lookup by device id.
+			if (url.pathname === "/api/auth/anonymous") {
+				respond(200, this.issueSession());
+				return true;
+			}
+			if (url.pathname === "/api/auth/session") {
+				const who = owner(request);
+				respond(200, who ? { token: "", user_id: who, account_type: "anonymous" } : null);
+				return true;
+			}
+
 			if (!url.pathname.startsWith("/api/conversations")) return false;
 
 			const who = owner(request);
 			if (!who) {
-				respond(401, { detail: "No device identity was supplied." });
+				respond(401, { detail: "A valid session is required." });
 				return true;
 			}
 

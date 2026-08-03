@@ -5,7 +5,7 @@
  * `askAspire()` and never sees a URL, a status code, or a fetch.
  */
 
-import { deviceHeaders } from "./device";
+import { authHeaders } from "./session";
 
 /** Where the FastAPI service lives. Override with VITE_ASPIRE_API_URL. */
 const API_URL = (
@@ -133,12 +133,11 @@ export async function askAspire({
 	try {
 		response = await fetch(`${API_URL}/chat`, {
 			method: "POST",
-			// The device header is what lets a conversation started here appear in
-			// this browser's own history later. It is recorded once, when the
-			// conversation is created, and the service is perfectly happy without
-			// it — an anonymous turn is still answered, it is simply stored
-			// unowned and shows up in nobody's list.
-			headers: { "Content-Type": "application/json", ...deviceHeaders() },
+			// The session token is what lets a conversation started here appear in
+			// this browser's own history later. The service is perfectly happy
+			// without it — an anonymous turn is still answered, it is simply
+			// stored unowned and shows up in nobody's list.
+			headers: { "Content-Type": "application/json", ...authHeaders() },
 			body: JSON.stringify({
 				message,
 				thread_id: threadId,

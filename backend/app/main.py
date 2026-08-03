@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+import uuid as uuid_module
 from contextlib import asynccontextmanager
 
 from collections.abc import AsyncIterator
@@ -19,7 +20,8 @@ from app import cache as response_cache
 from app.agent import get_agent, suggest_follow_ups, suggest_title
 from app.config import get_settings
 from app.conversations import router as conversations_router
-from app.identity import principal
+from app.auth import Principal, chat_principal
+from app.sessions import owner_id_for, router as sessions_router
 from app.db import (
     check_schema,
     database_enabled,
@@ -148,6 +150,7 @@ if eligibility_enabled():
 # routes answer 503 for themselves when there is no database, which is a
 # clearer failure than a 404 that looks like the feature was never built.
 app.include_router(conversations_router)
+app.include_router(sessions_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -409,7 +412,7 @@ def _provisional_title(question: str) -> str:
 
 
 async def _open_conversation(
-    request: ChatRequest, thread_id: str, owner_key: str | None
+    request: ChatRequest, thread_id: str, owner_id: uuid_module.UUID | None
 ) -> None:
     """Create the conversation and record the question, before answering it.
 
@@ -450,7 +453,7 @@ async def _persist_turn(
     follow_ups: list[str],
     game: dict | None = None,
     eligibility: dict | None = None,
-    owner_key: str | None = None,
+    owner_id: uuid_module.UUID | None = None,
 ) -> None:
     """Write the exchange to Postgres, whole.
 
@@ -477,7 +480,7 @@ async def _persist_turn(
                 account_status=request.account_status,
                 # Recorded on creation only, so the first turn settles whose
                 # conversation this is and no later request can take it over.
-                owner_key=owner_key,
+                owner_id=owner_id,
                 # The provisional name, so a conversation is never nameless. It
                 # is the same string the client used to compute for itself while
                 # history lived in the browser, and the same one a generated
@@ -531,13 +534,14 @@ async def _persist_turn(
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(
-    request: ChatRequest, who: str | None = Depends(principal)
+    request: ChatRequest, principal: Principal | None = Depends(chat_principal)
 ) -> ChatResponse:
     # Anonymous callers are welcome here and always have been: asking a question
     # has never required identifying yourself. `who` being None simply means the
     # conversation is stored unowned and will not appear in anybody's list.
     # A new thread_id starts a fresh conversation; reuse it to keep context.
     thread_id = request.thread_id or str(uuid.uuid4())
+    who = await owner_id_for(principal)
 
     cached = await _cached_reply(request)
     if cached is not None:
@@ -645,7 +649,7 @@ async def chat(
         follow_ups=follow_ups,
         game=game,
         eligibility=eligibility,
-        owner_key=who,
+        owner_id=who,
     )
 
     # Once the conversation has outgrown its window, the turns that fell out
@@ -706,7 +710,7 @@ def _chat_request_from(body: dict) -> ChatRequest:
 
 @app.post("/chat/stream")
 async def chat_stream(
-    body: dict, who: str | None = Depends(principal)
+    body: dict, principal: Principal | None = Depends(chat_principal)
 ) -> StreamingResponse:
     """The same turn as `/chat`, delivered as AG-UI server-sent events.
 
@@ -722,6 +726,7 @@ async def chat_stream(
     """
     request = _chat_request_from(body)
     thread_id = request.thread_id or str(uuid.uuid4())
+    who = await owner_id_for(principal)
 
     async def run() -> AsyncIterator[dict]:
         # Recorded before the model runs, exactly as `/chat` does, so a turn
@@ -790,7 +795,7 @@ async def chat_stream(
             follow_ups=follow_ups,
             game=game,
             eligibility=eligibility,
-            owner_key=who,
+            owner_id=who,
         )
 
         settings = get_settings()

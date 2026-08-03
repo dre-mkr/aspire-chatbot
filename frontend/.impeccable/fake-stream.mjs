@@ -250,7 +250,7 @@ export function startSseServer({ port = 8000 } = {}) {
 	const cors = {
 		"Access-Control-Allow-Origin": "*",
 		"Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
-		"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
+		"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 	};
 
 	const server = createServer(async (req, res) => {

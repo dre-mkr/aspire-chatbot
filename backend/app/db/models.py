@@ -108,6 +108,51 @@ class Document(Base):
     )
 
 
+class User(Base):
+    """One person, anonymous or registered.
+
+    Deliberately one table for both. An anonymous visitor and an account holder
+    differ by `account_type` and nothing structural, so conversations — and
+    anything else that belongs to a person — attach the same way for each and
+    there is no second storage path to keep in step. Registering does not move
+    a row; it fills in the empty columns.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_type: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    email: Mapped[str | None] = mapped_column(Text)
+    display_name: Mapped[str | None] = mapped_column(Text)
+    password_hash: Mapped[str | None] = mapped_column(Text)
+    avatar_url: Mapped[str | None] = mapped_column(Text)
+
+    # The seed an anonymous identity was created from, kept for abuse
+    # investigation. NOT unique and NOT a lookup key: nothing may exchange a
+    # device id for a session, which is the whole point of `auth.py`.
+    device_id: Mapped[str | None] = mapped_column(String(64))
+
+    # Bumped to kill every token already issued for this user. Claiming an
+    # anonymous identity does it, and so does signing out.
+    session_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    # Set once an anonymous identity has been merged into an account. Its
+    # presence is what makes a second claim impossible.
+    claimed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    created_ip_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Conversation(Base):
     """One chat thread, addressed by the id the browser minted for it."""
 
@@ -119,21 +164,19 @@ class Conversation(Base):
     # table and nothing else.
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
 
-    # Whose conversation this is, as a namespaced principal:
+    # Whose conversation this is.
     #
-    #     device:9f1c...   an anonymous browser that has never signed in
-    #     user:1042        a signed-in account, once accounts exist
+    # A real foreign key to a real person, anonymous or registered alike. It
+    # replaced a string principal read off a request header, which meant anyone
+    # holding somebody else's device id could read their chats. Ownership is now
+    # only ever established by a signed token — see `auth.py`.
     #
-    # One column rather than a users table, so that adding accounts later is a
-    # new prefix and a backfill instead of a schema change to a live table. The
-    # anonymous form is a bearer credential and nothing more: whoever holds the
-    # device id can read those chats, which is the same trust boundary the
-    # browser's own storage had before this existed.
-    #
-    # Nullable because every row written before 0005 predates ownership. Those
-    # stay invisible to the list endpoint, which is correct — nobody can show
-    # they own them.
-    owner_key: Mapped[str | None] = mapped_column(String(160))
+    # Nullable because a turn is answered whether or not the caller has an
+    # identity at all. An unowned conversation is readable by nobody, which is
+    # the correct outcome rather than a gap.
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
 
     title: Mapped[str | None] = mapped_column(Text)
     # "generated" | "manual" | None. None means the title is still the truncated

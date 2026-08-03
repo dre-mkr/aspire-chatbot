@@ -33,6 +33,23 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Sessions ---------------------------------------------------------
+    # HMAC key for session tokens. No default on purpose: a signing key with a
+    # fallback value is a signing key an attacker also has, and the failure mode
+    # of forgetting to set it must be a refusal at boot rather than forged
+    # sessions in production.
+    session_secret: str = ""
+
+    # How many anonymous sessions one address may create per hour. Anonymous
+    # access removes the usual lever -- there is no address to ban -- so the
+    # limit is the lever. Generous enough for a shared school connection,
+    # tight enough that scripting a thousand identities is noticed.
+    anonymous_sessions_per_ip_per_hour: int = 30
+
+    # How long an anonymous conversation is kept before deletion. Documented in
+    # PRIVACY.md; enforced by the retention job.
+    anonymous_retention_days: int = 180
+
     # --- Chat model -------------------------------------------------------
     # Passed straight to init_chat_model, so the "provider:model" form selects
     # the provider. Swap to "anthropic:claude-sonnet-4-6" etc. without touching code.

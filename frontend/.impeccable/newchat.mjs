@@ -21,7 +21,7 @@ const BASE = process.argv[2] ?? "http://localhost:4173";
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
 	"Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type, X-Aspire-Device",
+	"Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device",
 };
 
 let fails = 0;
@@ -86,7 +86,7 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 					r.respond({ status: 200, contentType: "text/event-stream", headers: CORS, body }),
 				(sent) => {
 					const id = forceThreadId || sent.thread_id || "t-server";
-					store.openConversation(id, r.headers()["x-aspire-device"] ?? null, sent.message);
+					store.openConversation(id, store.ownerOf(r), sent.message);
 					store.recordTurn(id, null, sent.message, {
 						role: "assistant",
 						text: reply,
@@ -108,7 +108,7 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 			// would test a service that does not exist.
 			store.openConversation(
 				sent.thread_id || "t-server",
-				r.headers()["x-aspire-device"] ?? null,
+				store.ownerOf(r),
 				sent.message,
 			);
 			if (chatDelay) await new Promise((x) => setTimeout(x, chatDelay));
@@ -117,7 +117,7 @@ async function open({ title = "Index fund basics", chatStatus = 200, chatDelay =
 			}
 			const threadId = forceThreadId || sent.thread_id || "t-server";
 			// The service persists the turn as it answers; so does this.
-			store.recordTurn(threadId, r.headers()["x-aspire-device"] ?? null, sent.message, {
+			store.recordTurn(threadId, store.ownerOf(r), sent.message, {
 				role: "assistant",
 				text: reply,
 				sources: [],

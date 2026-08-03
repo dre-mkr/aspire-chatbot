@@ -4,7 +4,7 @@ import { type AskResult, AspireError, type Source } from "./api";
 import { blockIsClosed, settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
-import { deviceId } from "./device";
+import { ensureSession } from "./session";
 import {
 	groupByRecency,
 	loadConversations,
@@ -405,13 +405,23 @@ export function useConversation({
 	 */
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once, on mount
 	useEffect(() => {
-		if (!deviceId()) return;
-		const stranded = loadConversations().map((c) => c.threadId);
-		if (stranded.length === 0) return;
-		void claimConversations(stranded)
-			.then((claimed) => {
+		// An identity first, because everything user-scoped is gated on having
+		// one. Anonymous and free: nobody is asked to sign up, and a failure here
+		// costs the rail its contents and nothing else — the chat still works.
+		void ensureSession()
+			.then(async (session) => {
+				if (!session) return;
+				// The queries were disabled while there was no session. Now there
+				// is one, so they may run.
+				await queryClient.invalidateQueries({
+					queryKey: conversationsQuery().queryKey,
+				});
+
+				const stranded = loadConversations().map((c) => c.threadId);
+				if (stranded.length === 0) return;
+				const claimed = await claimConversations(stranded).catch(() => 0);
 				if (claimed > 0) {
-					void queryClient.invalidateQueries({
+					await queryClient.invalidateQueries({
 						queryKey: conversationsQuery().queryKey,
 					});
 				}

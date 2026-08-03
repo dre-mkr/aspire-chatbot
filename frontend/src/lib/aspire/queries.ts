@@ -18,7 +18,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { fetchConversation, fetchConversations } from "./conversations";
-import { deviceId } from "./device";
+import { currentSession } from "./session";
 import { fetchEligibilityState } from "./eligibility";
 import { fetchGameState } from "./games";
 import type { StoredConversation } from "./history";
@@ -58,7 +58,7 @@ export const conversationsQuery = () =>
 		queryKey: keys.conversations(),
 		queryFn: fetchConversations,
 		// Identity is client-only, so this cannot be answered during SSR.
-		enabled: Boolean(deviceId()),
+		enabled: Boolean(currentSession()),
 		staleTime: 30_000,
 		// History that fails to load must never be an error in the reader's face.
 		// The rail simply shows what it has, which before the first load is
@@ -77,7 +77,7 @@ export const conversationQuery = (threadId: string | null) =>
 	queryOptions({
 		queryKey: keys.messages(threadId ?? ""),
 		queryFn: () => fetchConversation(threadId as string),
-		enabled: Boolean(threadId) && Boolean(deviceId()),
+		enabled: Boolean(threadId) && Boolean(currentSession()),
 		staleTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		retry: 1,

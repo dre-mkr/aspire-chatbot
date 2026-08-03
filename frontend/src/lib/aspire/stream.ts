@@ -40,7 +40,7 @@ import {
 	type StartedEligibility,
 	type StartedGame,
 } from "./api";
-import { deviceHeaders } from "./device";
+import { authHeaders } from "./session";
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -112,7 +112,7 @@ export async function streamAspire(
 
 	try {
 		const connection = fetchServerSentEvents(`${API_URL}/chat/stream`, {
-			headers: { "Content-Type": "application/json", ...deviceHeaders() },
+			headers: { "Content-Type": "application/json", ...authHeaders() },
 			body: {
 				message,
 				thread_id: threadId,

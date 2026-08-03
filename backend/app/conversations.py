@@ -29,6 +29,7 @@ be rewritten to read its own history is a migration nobody finishes.
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -37,7 +38,8 @@ from sqlalchemy import update
 from app.db import database_enabled, session
 from app.db.models import Conversation
 from app.db.repository import list_conversations, load_transcript
-from app.identity import principal
+from app.auth import Principal, require_principal
+from app.sessions import owner_id_for
 
 logger = logging.getLogger(__name__)
 
@@ -92,16 +94,18 @@ class ClaimResult(BaseModel):
     claimed: int
 
 
-def _require(who: str | None) -> str:
-    """A principal, or 401.
+async def _owner(principal: Principal) -> uuid.UUID:
+    """The verified caller's user id, or 401.
 
-    Distinct from the chat endpoint, which accepts anonymous callers: asking a
-    question has never required identifying yourself. Reading a list of "your"
-    conversations is meaningless without a "you".
+    `require_principal` has already checked the signature and expiry; this also
+    confirms the session has not been retired — claiming an anonymous identity
+    and signing out both bump its epoch, and a token minted before that must
+    stop working immediately rather than at expiry.
     """
-    if not who:
-        raise HTTPException(status_code=401, detail="No device identity was supplied.")
-    return who
+    owner = await owner_id_for(principal)
+    if owner is None:
+        raise HTTPException(status_code=401, detail="This session is no longer valid.")
+    return owner
 
 
 def _unavailable() -> HTTPException:
@@ -109,8 +113,8 @@ def _unavailable() -> HTTPException:
 
 
 @router.get("", response_model=ConversationList)
-async def get_conversations(who: str | None = Depends(principal)) -> ConversationList:
-    owner = _require(who)
+async def get_conversations(principal: Principal = Depends(require_principal)) -> ConversationList:
+    owner = await _owner(principal)
     if not database_enabled():
         raise _unavailable()
 
@@ -134,9 +138,9 @@ async def get_conversations(who: str | None = Depends(principal)) -> Conversatio
 
 @router.get("/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
-    conversation_id: str, who: str | None = Depends(principal)
+    conversation_id: str, principal: Principal = Depends(require_principal)
 ) -> ConversationDetail:
-    owner = _require(who)
+    owner = await _owner(principal)
     if not database_enabled():
         raise _unavailable()
 
@@ -194,9 +198,9 @@ async def get_conversation(
 async def rename_conversation(
     conversation_id: str,
     body: RenameRequest,
-    who: str | None = Depends(principal),
+    principal: Principal = Depends(require_principal),
 ) -> None:
-    owner = _require(who)
+    owner = await _owner(principal)
     if not database_enabled():
         raise _unavailable()
 
@@ -207,7 +211,7 @@ async def rename_conversation(
         # else's conversation by guessing its id.
         result = await db.execute(
             update(Conversation)
-            .where(Conversation.id == conversation_id, Conversation.owner_key == owner)
+            .where(Conversation.id == conversation_id, Conversation.owner_id == owner)
             .values(title=body.title, title_source=body.title_source)
         )
         if result.rowcount == 0:
@@ -216,11 +220,11 @@ async def rename_conversation(
 
 @router.post("/claim", response_model=ClaimResult)
 async def claim_conversations(
-    body: ClaimRequest, who: str | None = Depends(principal)
+    body: ClaimRequest, principal: Principal = Depends(require_principal)
 ) -> ClaimResult:
     """Adopt conversations this browser wrote before ownership was recorded.
 
-    Every transcript written before 0005 has `owner_key = NULL` and is therefore
+    Every transcript written before ownership existed has `owner_id = NULL` and is
     readable by nobody. The browser that created them still has their ids in
     localStorage, and presenting an id it could only have if it made the
     conversation is the strongest claim available in a product with no accounts.
@@ -230,7 +234,7 @@ async def claim_conversations(
     else's ids takes nothing. It is also why this cannot be reused as a
     "transfer" route later -- that would need a real one.
     """
-    owner = _require(who)
+    owner = await _owner(principal)
     if not database_enabled():
         raise _unavailable()
     if not body.thread_ids:
@@ -243,9 +247,9 @@ async def claim_conversations(
             update(Conversation)
             .where(
                 Conversation.id.in_(body.thread_ids),
-                Conversation.owner_key.is_(None),
+                Conversation.owner_id.is_(None),
             )
-            .values(owner_key=owner)
+            .values(owner_id=owner)
         )
         claimed = result.rowcount or 0
 

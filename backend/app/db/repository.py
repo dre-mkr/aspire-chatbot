@@ -12,6 +12,7 @@ built from the second.
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
@@ -42,7 +43,7 @@ async def ensure_conversation(
     language: str = "en",
     persona: str | None = None,
     account_status: str | None = None,
-    owner_key: str | None = None,
+    owner_id: uuid.UUID | None = None,
     title: str | None = None,
 ) -> None:
     """Create the row on the first turn, leave it alone afterwards.
@@ -51,10 +52,10 @@ async def ensure_conversation(
     thread can race, and losing that race must not become an error the user
     sees.
 
-    `owner_key` is written once, on creation, and never updated here. That is
+    `owner_id` is written once, on creation, and never updated here. That is
     the point: a conversation's owner is settled by whoever started it, so a
-    later request carrying a different device id cannot quietly take one over
-    by asking a question in it.
+    later request from a different session cannot quietly take one over by
+    asking a question in it.
     """
     await db.execute(
         insert(Conversation)
@@ -63,7 +64,7 @@ async def ensure_conversation(
             language=language,
             persona=persona,
             account_status=account_status,
-            owner_key=owner_key,
+            owner_id=owner_id,
             title=title,
         )
         .on_conflict_do_nothing(index_elements=[Conversation.id])
@@ -71,7 +72,7 @@ async def ensure_conversation(
 
 
 async def list_conversations(
-    db: AsyncSession, owner_key: str, *, limit: int = 200
+    db: AsyncSession, owner_id: uuid.UUID, *, limit: int = 200
 ) -> list[Conversation]:
     """This principal's conversations, newest first.
 
@@ -82,7 +83,7 @@ async def list_conversations(
     """
     result = await db.execute(
         select(Conversation)
-        .where(Conversation.owner_key == owner_key)
+        .where(Conversation.owner_id == owner_id)
         .order_by(Conversation.updated_at.desc())
         .limit(limit)
     )
@@ -90,7 +91,7 @@ async def list_conversations(
 
 
 async def load_transcript(
-    db: AsyncSession, conversation_id: str, owner_key: str
+    db: AsyncSession, conversation_id: str, owner_id: uuid.UUID
 ) -> list[Message] | None:
     """Every turn of one conversation, oldest first, or None.
 
@@ -102,7 +103,7 @@ async def load_transcript(
     owns = await db.scalar(
         select(Conversation.id).where(
             Conversation.id == conversation_id,
-            Conversation.owner_key == owner_key,
+            Conversation.owner_id == owner_id,
         )
     )
     if owns is None:

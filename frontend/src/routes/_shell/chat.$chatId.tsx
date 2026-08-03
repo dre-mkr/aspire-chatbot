@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { deviceId } from "#/lib/aspire/device";
+import { currentSession } from "#/lib/aspire/session";
 import { conversationQuery } from "#/lib/aspire/queries";
 
 /**
@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_shell/chat/$chatId")({
 		// identity lives in its own storage, so a request made during SSR carries
 		// no principal and the service correctly refuses it. Warming the cache
 		// with that refusal would be worse than not warming it at all.
-		if (!deviceId()) return;
+		if (!currentSession()) return;
 		void context.queryClient
 			.ensureQueryData(conversationQuery(params.chatId))
 			// A conversation this identity cannot read is not an error here. The
