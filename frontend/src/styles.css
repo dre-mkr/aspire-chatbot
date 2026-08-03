@@ -1174,9 +1174,18 @@ body {
 	align-items: center;
 	flex-shrink: 0;
 	text-align: center;
+	/* Both of these were dropped by b75e7490 along with the transition below,
+	   leaving the blank line that used to separate them. Without `overflow`
+	   the copy spills out of a max-height that is collapsing to zero. */
 	overflow: hidden;
 	opacity: var(--hero-opacity);
 	max-height: var(--hero-max);
+	/* Rows 2 and 3 of ANIMATION-INVENTORY.md, and the reason the greeting fades
+	   rather than vanishing. The custom properties flip instantly on the phase
+	   change; these two make the used values travel. The stagger is the point —
+	   the hero is gone at 380ms while its height is still collapsing at 560ms,
+	   so the composer appears to settle last. `anim-check.mjs` asserts both
+	   durations against the inventory. */
 	transition:
 		opacity 380ms var(--ease),
 		max-height var(--morph);
@@ -1200,6 +1209,11 @@ body {
 	inset: -8% -6%;
 	z-index: 0;
 	pointer-events: none;
+	/* Removed by b75e7490 in the same hunk that took `.hero`'s transition and
+	   `overflow`. The comment above survived the deletion and went on describing
+	   a gradient that was no longer there, so the rule read as intentional while
+	   `.hero__sub` sat at 3.67:1 against real pixels — under AA, and the exact
+	   defect this was written to fix. `verify.mjs` measures it. */
 	background: radial-gradient(
 		ellipse 66% 62% at 50% 46%,
 		rgb(38 16 70 / 0.66) 0%,
@@ -2357,6 +2371,24 @@ body {
 	animation: none;
 }
 
+/* The evidence chip and the action row, held in reserve.
+
+   They used to mount when the answer settled, which grew the turn by 53px —
+   95px with sources — at that exact instant. With the thread pinned to the
+   bottom that is not a gap opening below the answer, it is the answer itself
+   sliding up out from under the reader on the last word.
+
+   So the space is committed from the first frame of the reveal and only the
+   visibility changes. Opacity alone, deliberately: anything that animates the
+   height would put the movement back, in slow motion. */
+.answer__tail {
+	transition: opacity 220ms var(--ease);
+}
+
+.answer__tail[data-pending] {
+	opacity: 0;
+}
+
 .answer-actions {
 	display: flex;
 	align-items: center;
@@ -2455,12 +2487,23 @@ body {
 
 /* ── Follow-ups ─────────────────────────────────────────────────────────── */
 
+/* Reserved on the same terms as the answer's tail, and for the same reason:
+   these chips are the last thing in the thread, so mounting them at completion
+   pushed the whole conversation up.
+
+   `rise` is gone from here. It was an entrance, and it fired at the moment the
+   answer FINISHED rather than the moment the chips arrived — which is precisely
+   backwards. They now arrive with the answer and simply become visible. */
 .follow-ups {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 9px;
 	margin: -12px 0 26px 44px;
-	animation: rise 400ms var(--ease) both;
+	transition: opacity 220ms var(--ease);
+}
+
+.follow-ups[data-pending] {
+	opacity: 0;
 }
 
 .follow-up {
@@ -2807,14 +2850,33 @@ body {
 
 /* On the landing screen it sits on the gradient, where a white-on-white pill
    would vanish. */
-.app[data-phase="landing"] .rail-open {
-	background: rgb(255 255 255 / 0.16);
+.app[data-phase="landing"] .rail-open,
+.app[data-phase="landing"] .account__signin {
+	/* A plum wash, not a white one. Both controls sit on the lightest, most
+	   magenta band of the page gradient, and a white veil there lifts the
+	   background towards the white text on top of it — "Sign in" measured
+	   3.76:1 at 1280 and 4.05:1 at 768, both under AA. Darkening the pill is
+	   the only move that helps, since the text is already pure white. The
+	   hamburger takes the same value: they are one pair and must not drift. */
+	background: rgb(38 16 70 / 0.42);
 	color: #fff;
-	border-color: rgb(255 255 255 / 0.28);
+	border-color: rgb(255 255 255 / 0.34);
+}
+
+/* Listed with the hamburger rather than given its own rule, because they are
+   one pair: the same frosted surface at either end of the same line, and the
+   two treatments must move together or they stop matching the first time one
+   is adjusted. */
+.app[data-phase="landing"] .account__signin:hover {
+	background: rgb(38 16 70 / 0.52);
+}
+
+.app[data-phase="landing"] .account__placeholder {
+	background: rgb(38 16 70 / 0.42);
 }
 
 .app[data-phase="landing"] .rail-open:hover {
-	background: rgb(255 255 255 / 0.26);
+	background: rgb(38 16 70 / 0.52);
 }
 
 .rail-scrim {
@@ -4389,9 +4451,11 @@ body {
 		animation: none !important;
 	}
 
-	/* Entrances collapse to their finished frame rather than travelling. */
+	/* Entrances collapse to their finished frame rather than travelling.
+	   `.follow-ups` is not in this list any more: it no longer has an entrance,
+	   it is reserved and revealed, and the global transition rule below covers
+	   it. */
 	.turn,
-	.follow-ups,
 	.voice-consent,
 	.voice-note,
 	.voice-menu,
@@ -4437,5 +4501,897 @@ body {
 
 	.voice-rec__dot {
 		animation: soft-pulse 1.6s ease-in-out infinite !important;
+	}
+}
+
+/* ─── Auth surface ──────────────────────────────────────────────────────────
+
+   `/signin` and `/signup`. A split surface: the brand panel carries the
+   gradient, the white column carries the form.
+
+   Everything here is built from the tokens already in `styles.css` — `--plum`,
+   `--magenta`, `--ink`, `--prose`, the `--wash-*` ramp, `--ease`. The auth
+   pages are the same product as the chat, and a second set of greys and radii
+   living beside the first is how two products end up in one codebase. */
+
+.auth {
+	display: flex;
+	width: 100%;
+	min-height: 100dvh;
+	background: #fff;
+	color: var(--ink);
+}
+
+.auth__panel {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	width: 50%;
+	overflow: hidden;
+	background: linear-gradient(135deg, var(--plum) 0%, var(--plum-light) 100%);
+}
+
+/* Ambient depth on a flat gradient, and the only motion on the page. */
+.auth__orb {
+	position: absolute;
+	border-radius: 50%;
+	filter: blur(64px);
+	animation: auth-glow 2.6s var(--ease) infinite;
+}
+
+.auth__orb--a {
+	top: 22%;
+	left: 20%;
+	width: 384px;
+	height: 384px;
+	background: rgb(255 255 255 / 0.1);
+}
+
+.auth__orb--b {
+	right: 16%;
+	bottom: 18%;
+	width: 320px;
+	height: 320px;
+	background: var(--wash-m-22);
+	animation-delay: 1s;
+}
+
+@keyframes auth-glow {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.6;
+	}
+}
+
+.auth__panel-inner {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	padding: 0 clamp(48px, 5vw, 80px);
+}
+
+/* The wordmark is a dark asset; this is what puts it on a dark panel without
+   shipping a second file for it. */
+.auth__logo {
+	height: 58px;
+	width: auto;
+	max-width: 100%;
+	margin-bottom: 34px;
+	object-fit: contain;
+	object-position: left;
+	filter: brightness(0) invert(1);
+}
+
+.auth__headline {
+	margin: 0 0 16px;
+	font-size: clamp(2rem, 3vw, 2.75rem);
+	font-weight: 700;
+	line-height: 1.1;
+	color: #fff;
+	text-wrap: pretty;
+}
+
+.auth__headline span {
+	color: rgb(255 255 255 / 0.8);
+}
+
+.auth__panel-sub {
+	margin: 0;
+	max-width: 460px;
+	font-size: 0.9375rem;
+	line-height: 1.6;
+	color: rgb(255 255 255 / 0.72);
+	text-wrap: pretty;
+}
+
+.auth__stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 40px;
+	margin-top: 36px;
+}
+
+.auth__stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.auth__stat-value {
+	font-family: "JetBrains Mono", ui-monospace, monospace;
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.1;
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+}
+
+.auth__stat-label,
+.auth__gov {
+	font-size: 0.75rem;
+	color: rgb(255 255 255 / 0.8);
+}
+
+.auth__gov {
+	margin-top: 28px;
+}
+
+.auth__column {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	align-items: center;
+	justify-content: center;
+	overflow-y: auto;
+	padding: 48px 40px;
+	background: #fff;
+}
+
+.auth__form {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 420px;
+}
+
+.auth__back {
+	display: flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 8px;
+	height: 40px;
+	padding: 0 12px 0 8px;
+	margin-bottom: 14px;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--prose);
+	font-family: inherit;
+	font-size: 0.84375rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background 150ms var(--ease),
+		color 150ms var(--ease);
+}
+
+.auth__back:hover {
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.auth__steps {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	margin-bottom: 22px;
+}
+
+.auth__segs {
+	display: flex;
+	gap: 6px;
+}
+
+.auth__seg {
+	flex: 1;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--wash-12);
+	transition: background 220ms var(--ease);
+}
+
+.auth__seg[data-done] {
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+}
+
+.auth__step-text {
+	font-size: 0.78125rem;
+	font-weight: 500;
+	color: var(--prose);
+}
+
+.auth__head {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 24px;
+}
+
+.auth__title {
+	margin: 0;
+	font-size: 1.4375rem;
+	font-weight: 700;
+	line-height: 1.25;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.auth__sub,
+.auth__note {
+	margin: 0;
+	font-size: 0.90625rem;
+	line-height: 1.6;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.auth__fields {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.auth__primary {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 52px;
+	margin-top: 6px;
+	border: none;
+	border-radius: 16px;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+	font-family: inherit;
+	font-size: 0.96875rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: filter 150ms var(--ease);
+}
+
+.auth__primary:hover:not(:disabled) {
+	filter: brightness(1.08);
+}
+
+.auth__primary:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.auth__secondary {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 52px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	color: var(--plum);
+	font-family: inherit;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		background 150ms var(--ease),
+		border-color 150ms var(--ease);
+}
+
+.auth__secondary:hover:not(:disabled) {
+	background: var(--wash-3);
+	border-color: var(--wash-18);
+}
+
+.auth__secondary:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.auth__secondary-note,
+.auth__foot-note {
+	font-size: 0.78125rem;
+	line-height: 1.5;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.auth__form-error {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 0;
+	padding: 12px 14px;
+	border: 1px solid var(--danger-line);
+	border-radius: 14px;
+	background: var(--danger-wash);
+	color: var(--danger);
+	font-size: 0.84375rem;
+	line-height: 1.5;
+}
+
+.auth__foot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 24px;
+	padding-top: 20px;
+	border-top: 1px solid var(--hairline);
+	font-size: 0.875rem;
+	color: var(--prose);
+}
+
+.auth__foot-link {
+	color: var(--plum);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.auth__foot-link:hover {
+	color: var(--magenta);
+}
+
+.auth__choices {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.auth__choice {
+	flex: 1;
+	min-width: 120px;
+	height: 56px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	color: var(--ink);
+	font-family: inherit;
+	font-size: 0.9375rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		border-color 150ms var(--ease),
+		background 150ms var(--ease);
+}
+
+.auth__choice[data-selected] {
+	border-color: var(--plum);
+	background: var(--wash-6);
+	color: var(--plum);
+	font-weight: 600;
+}
+
+.auth__reqs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 0.78125rem;
+	color: var(--quiet);
+}
+
+.auth__reqs li::before {
+	content: "○ ";
+}
+
+.auth__reqs li[data-ok] {
+	color: var(--success);
+}
+
+.auth__reqs li[data-ok]::before {
+	content: "● ";
+}
+
+/* ─── Fields ─── */
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.field__label {
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--ink);
+}
+
+.field__box {
+	position: relative;
+	display: flex;
+}
+
+.field__box[data-disabled] {
+	opacity: 0.55;
+}
+
+.field__icon {
+	position: absolute;
+	left: 15px;
+	top: 50%;
+	display: flex;
+	transform: translateY(-50%);
+	pointer-events: none;
+	color: var(--prose);
+}
+
+.field__icon[data-error] {
+	color: var(--danger);
+}
+
+.field__input {
+	width: 100%;
+	height: 52px;
+	padding: 0 16px 0 46px;
+	border: 1px solid var(--wash-14);
+	border-radius: 16px;
+	background: #fff;
+	font-family: inherit;
+	/* 16px exactly: anything smaller makes iOS zoom the page on focus, which
+	   throws the layout out from under whoever is typing. */
+	font-size: 1rem;
+	color: var(--ink);
+	outline: none;
+	transition:
+		border-color 150ms var(--ease),
+		box-shadow 150ms var(--ease);
+}
+
+.field__input[data-reveal] {
+	padding-right: 54px;
+}
+
+.field__input::placeholder {
+	color: var(--faint);
+	opacity: 1;
+}
+
+.field__input:focus {
+	border-color: var(--plum);
+	box-shadow: 0 0 0 4px var(--wash-18);
+}
+
+.field__input[data-error] {
+	border-color: var(--danger);
+}
+
+.field__select {
+	padding-left: 16px;
+	cursor: pointer;
+}
+
+.field__dob {
+	display: flex;
+	gap: 10px;
+}
+
+.field__input--day {
+	flex: 0 0 84px;
+	padding-left: 16px;
+	text-align: center;
+}
+
+.field__input--year {
+	flex: 0 0 104px;
+	padding-left: 16px;
+	text-align: center;
+}
+
+.field__dob .field__select {
+	flex: 1;
+	min-width: 0;
+}
+
+.field__reveal {
+	position: absolute;
+	right: 7px;
+	top: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	transform: translateY(-50%);
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--prose);
+	cursor: pointer;
+	transition:
+		background 150ms var(--ease),
+		color 150ms var(--ease);
+}
+
+.field__reveal:hover {
+	background: var(--wash-7);
+	color: var(--plum);
+}
+
+.field__hint {
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.field__error {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--danger);
+	text-wrap: pretty;
+}
+
+.field__error svg {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+
+/* Below this the panel stops being a column and becomes a header, with the
+   form rising over it as a sheet. */
+@media (max-width: 900px) {
+	.auth {
+		flex-direction: column;
+	}
+
+	.auth__panel {
+		width: 100%;
+		align-items: flex-start;
+	}
+
+	.auth__panel-inner {
+		padding: 26px 24px 44px;
+	}
+
+	.auth__logo {
+		height: 26px;
+		margin-bottom: 20px;
+	}
+
+	.auth__orb--a {
+		width: 220px;
+		height: 220px;
+	}
+
+	.auth__orb--b {
+		width: 190px;
+		height: 190px;
+	}
+
+	.auth__stats {
+		gap: 24px;
+		margin-top: 22px;
+	}
+
+	.auth__stat-value {
+		font-size: 1.1875rem;
+	}
+
+	.auth__column {
+		align-items: flex-start;
+		margin-top: -22px;
+		padding: 24px 22px 36px;
+		border-radius: 24px 24px 0 0;
+	}
+
+	.auth__form {
+		max-width: 100%;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.auth__orb {
+		animation: none;
+	}
+}
+
+/* `fieldset` is the right element for a group of inputs under one label, and
+   it arrives with a border and padding nobody asked for. */
+.auth__fieldset {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.auth__fieldset > legend {
+	padding: 0;
+	margin-bottom: 8px;
+}
+
+/* ─── The account control ───────────────────────────────────────────────────
+
+   One control, two placements: floating top-right opposite the hamburger, and
+   as the block at the foot of the sidebar.
+
+   Both are always mounted. Which one is visible is opacity, not presence — so
+   during the 560ms `/` → `/chat/:id` morph the handover is a cross-fade rather
+   than one popping out as the other pops in. Unmounting either would make the
+   transition stutter at exactly the moment it is meant to be seamless. */
+
+.account-slot {
+	position: absolute;
+	/* Above `.titlebar`, which is also 12 and spans the full width. At equal
+	   z-index the later node wins, and the bar is later — so on any width where
+	   the rail collapses and the corner control takes over, the bar was painted
+	   across the whole control and it could not be clicked at all. The
+	   `padding-right` rule further down stops the TITLE colliding with it; it
+	   does nothing about the bar's own box, which is what was in the way. */
+	z-index: 13;
+	top: 14px;
+	right: 14px;
+	opacity: 0;
+	pointer-events: none;
+	/* Matched to the morph, so the two controls trade places over the same
+	   period the composer takes to travel. */
+	transition: opacity var(--morph);
+}
+
+.account-slot[data-shown] {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.account {
+	display: flex;
+}
+
+/* Holds the slot open while the session is still unknown, so nothing jumps
+   when the answer arrives. Deliberately not a spinner: the wait is usually one
+   frame, and a spinner that flashes for 16ms is worse than a quiet gap. */
+.account__placeholder {
+	width: 40px;
+	height: 40px;
+	border-radius: 12px;
+	background: rgb(255 255 255 / 0.18);
+}
+
+.account--rail .account__placeholder {
+	width: 100%;
+	height: 36px;
+	border-radius: 999px;
+	background: var(--wash-6);
+}
+
+/* The signed-out corner control. Same frosted treatment as `.rail-open`
+   opposite it: same radius, same height, same blur, same shadow — it is the
+   other end of one pair, and a second surface treatment here would read as a
+   different product. */
+.account__signin {
+	/* So the 44px target below is positioned against this pill rather than
+	   whatever ancestor happens to be positioned. */
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 40px;
+	padding: 0 16px;
+	border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+	border-radius: 12px;
+	background: rgb(255 255 255 / 0.82);
+	backdrop-filter: blur(12px);
+	color: var(--chrome);
+	font-family: inherit;
+	font-size: 0.84375rem;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgb(53 29 90 / 0.14);
+	transition:
+		background var(--swift),
+		color var(--morph);
+}
+
+/* The same trick `.rail-open` uses, and for the same reason: the pill is 40px
+   because that is what pairs with the hamburger beside it, and 40px is under
+   the 44px a finger needs. The visual size is left alone and the target is
+   grown around it. `verify.mjs` measures the target, not the border. */
+.account__signin::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, 44px);
+	height: max(100%, 44px);
+	transform: translate(-50%, -50%);
+}
+
+.account__signin:hover {
+	background: rgb(255 255 255 / 0.95);
+}
+
+/* Signed in, the corner is the avatar and nothing else. A name beside it would
+   compete with the centred hero, which is the one thing on that screen meant to
+   hold attention. */
+.account__avatar-btn {
+	display: flex;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgb(53 29 90 / 0.18);
+	transition: transform var(--swift);
+}
+
+.account__avatar-btn:hover {
+	transform: scale(1.04);
+}
+
+.avatar {
+	display: block;
+	border-radius: 999px;
+	object-fit: cover;
+	flex-shrink: 0;
+}
+
+/* The sidebar block. Padding, gap and icon slot are the foot's own, so the
+   signed-in and signed-out states are the same shape. */
+.account--rail {
+	width: 100%;
+}
+
+.account__block {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 0;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: inherit;
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.account__block:hover .rail__name {
+	color: var(--plum);
+}
+
+/* An address is long and the rail is narrow; it may shorten but must not push
+   the row wider. */
+.account--rail .rail__note {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 15ch;
+}
+
+.account__menu {
+	position: absolute;
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 220px;
+	padding: 8px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	box-shadow: 0 18px 40px rgb(53 29 90 / 0.18);
+	animation: rise-up 220ms var(--ease) both;
+}
+
+.account__menu[data-variant="corner"] {
+	top: calc(100% + 8px);
+	right: 0;
+}
+
+/* Above the foot rather than below it: there is no room under the last row of
+   a full-height sidebar. */
+.account__menu[data-variant="rail"] {
+	bottom: calc(100% + 8px);
+	left: 8px;
+	right: 8px;
+}
+
+.account__who {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 10px 10px;
+	border-bottom: 1px solid var(--hairline);
+	margin-bottom: 4px;
+}
+
+.account__who-name {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.account__who-email {
+	font-size: 0.75rem;
+	color: var(--quiet);
+	overflow-wrap: anywhere;
+}
+
+.account__item {
+	display: flex;
+	align-items: center;
+	height: 38px;
+	padding: 0 10px;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--ink);
+	font-family: inherit;
+	font-size: 0.8125rem;
+	text-align: left;
+	cursor: pointer;
+	transition: background var(--swift);
+}
+
+.account__item:hover {
+	background: var(--wash-6);
+}
+
+.account__item--danger {
+	color: var(--danger);
+}
+
+.account__item--danger:hover {
+	background: var(--danger-wash);
+}
+
+/* One sentence, because from the menu it is not obvious what happens to the
+   conversations in the rail — and the honest answer is "nothing". */
+.account__confirm {
+	margin: 0;
+	padding: 2px 10px 8px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+/* The corner control sits over the gradient on the landing screen and over the
+   white workspace in a conversation; `--chrome` already flips between them for
+   the hamburger, and this rides the same variable. */
+
+/* The title bar and the account control share the top-right corner in a
+   conversation, and at narrow widths they collided — the chat's title ran
+   underneath the button rather than stopping before it.
+   
+   The bar reserves the room instead. This does shorten the title, which is a
+   visual change, but a title ending in an ellipsis is a great deal better than
+   one hidden behind a button. It applies only while the control is actually
+   shown, so a conversation with the sidebar expanded keeps the full width it
+   has always had.
+
+   Sized for the WIDER of the two states — the "Sign in" button, not the
+   avatar — so the title's right edge does not move when the session resolves
+   or when somebody signs in. A title that reflowed on sign-in would be the
+   auth flash wearing different clothes. */
+.app:has(.account-slot[data-shown]) .titlebar {
+	padding-right: 100px;
+}
+
+@media (max-width: 620px) {
+	.account__signin {
+		padding: 0 12px;
+	}
+
+	.app:has(.account-slot[data-shown]) .titlebar {
+		padding-right: 96px;
 	}
 }

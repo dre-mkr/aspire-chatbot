@@ -3,9 +3,11 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
+import { serveStream } from "./fake-stream.mjs";
+import { createConversationStore } from "./fake-conversations.mjs";
 
 const BASE = "http://localhost:4173/";
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Aspire-Device" };
 
 let fails = 0;
 const say = (l, ok, d = "") => { if (!ok) fails += 1; console.log(`  ${ok ? "PASS" : "FAIL"}  ${l}${d ? " — " + d : ""}`); };
@@ -20,9 +22,22 @@ async function open(w = 1280, h = 800, titleReply = "Completion certificate deta
 	// there is none. Returning a constant would collapse every "New chat" into
 	// the same stored record.
 	let minted = 0;
+	// History is server state now. The stub has to BE that service, or the
+	// rail is empty and every assertion about titles is an assertion about
+	// nothing. See fake-conversations.mjs.
+	const store = createConversationStore();
 	await page.setRequestInterception(true);
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+		if (await store.handle(r, (status, body) => r.respond({ status, contentType: "application/json", headers: CORS, body: body === null ? "" : JSON.stringify(body) }))) return;
+		// The real transport. Without this the client falls back to `/chat`,
+		// and this suite only passes while nothing is listening on :8000.
+		if (serveStream(r, CORS, (sent) => {
+			const id = sent.thread_id || "t-fixed";
+			store.openConversation(id, store.ownerOf(r), sent.message);
+			store.recordTurn(id, null, sent.message, { role: "assistant", text: "A certificate is issued on completion.", sources: [], follow_ups: [] });
+			return { reply: "A certificate is issued on completion." };
+		})) return;
 		if (r.url().endsWith("/chat")) {
 			const sent = JSON.parse(r.postData() || "{}");
 			return r.respond({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify({ reply: "A certificate is issued on completion.", thread_id: sent.thread_id || `t-${++minted}`, sources: [], follow_ups: [] }) });
@@ -38,7 +53,7 @@ async function open(w = 1280, h = 800, titleReply = "Completion certificate deta
 	await page.goto(BASE, { waitUntil: "networkidle2" });
 	await page.evaluate(() => localStorage.clear());
 	await page.reload({ waitUntil: "networkidle2" });
-	return { page, calls };
+	return { page, calls, store };
 }
 const ask = async (page, q) => {
 	await page.type("#aspire-composer", q);
@@ -46,11 +61,22 @@ const ask = async (page, q) => {
 	await page.waitForFunction(() => !document.querySelector(".composer__send--stop"), { timeout: 20000 });
 	await new Promise((r) => setTimeout(r, 400));
 };
-const stored = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("aspire.conversations.v1") || "[]"));
+/**
+ * What the service holds, which is where conversations live now.
+ *
+ * This read `localStorage.getItem("aspire.conversations.v1")` — a key that
+ * stopped existing when history moved off the device. It returned `[]` every
+ * time, so every assertion under it was comparing against nothing and the
+ * suite reported the product broken while the product was fine.
+ */
+const stored = (store) =>
+	[...store.rows.entries()]
+		.sort((a, b) => b[1].updatedAt - a[1].updatedAt)
+		.map(([threadId, row]) => ({ threadId, title: row.title, titleSource: row.titleSource ?? undefined }));
 
 console.log("\n=== no bar on the empty state ===");
 {
-	const { page } = await open();
+	const { page, store } = await open();
 	say("no bar before the first message", !(await page.$(".titlebar")));
 	await ask(page, "Do I get a certificate?");
 	say("bar appears in the chat phase", !!(await page.$(".titlebar")));
@@ -59,7 +85,7 @@ console.log("\n=== no bar on the empty state ===");
 
 console.log("\n=== crossfade, no layout shift ===");
 {
-	const { page } = await open(1280, 800, "Completion certificate details", 1200);
+	const { page, store } = await open(1280, 800, "Completion certificate details", 1200);
 	await ask(page, "Do I get a certificate when I finish?");
 	const before = await page.evaluate(() => {
 		const b = document.querySelector(".titlebar");
@@ -82,7 +108,7 @@ console.log("\n=== crossfade, no layout shift ===");
 
 console.log("\n=== bar and sidebar read the same title ===");
 {
-	const { page } = await open();
+	const { page, store } = await open();
 	await ask(page, "Do I get a certificate?");
 	await new Promise((r) => setTimeout(r, 900));
 	const both = await page.evaluate(() => ({
@@ -98,7 +124,7 @@ console.log("\n=== bar and sidebar read the same title ===");
 
 console.log("\n=== inline rename from the bar ===");
 {
-	const { page } = await open();
+	const { page, store } = await open();
 	await ask(page, "Do I get a certificate?");
 	await new Promise((r) => setTimeout(r, 900));
 	await page.click(".titlebar__title");
@@ -107,7 +133,7 @@ console.log("\n=== inline rename from the bar ===");
 	await page.type(".titlebar__input", "My certificate question");
 	await page.keyboard.press("Enter");
 	await new Promise((r) => setTimeout(r, 500));
-	const s = await stored(page);
+	const s = stored(store);
 	say("rename commits on Enter", s[0]?.title === "My certificate question", JSON.stringify(s[0]?.title));
 	say("marked manual", s[0]?.titleSource === "manual", String(s[0]?.titleSource));
 	const row = await page.evaluate(() => document.querySelector(".history-item")?.textContent.trim());
@@ -119,14 +145,14 @@ console.log("\n=== inline rename from the bar ===");
 	await page.evaluate(() => { const i = document.querySelector(".titlebar__input"); i.value = "throwaway"; });
 	await page.keyboard.press("Escape");
 	await new Promise((r) => setTimeout(r, 400));
-	const s2 = await stored(page);
+	const s2 = stored(store);
 	say("ESC cancels", s2[0]?.title === "My certificate question", JSON.stringify(s2[0]?.title));
 	await page.close();
 }
 
 console.log("\n=== a rename survives a regenerate on a DIFFERENT chat ===");
 {
-	const { page } = await open(1280, 800, "Second chat title");
+	const { page, store } = await open(1280, 800, "Second chat title");
 	await ask(page, "First question about certificates");
 	await new Promise((r) => setTimeout(r, 800));
 	// rename chat one
@@ -154,7 +180,7 @@ console.log("\n=== a rename survives a regenerate on a DIFFERENT chat ===");
 	await page.evaluate(() => [...document.querySelectorAll(".row-menu__item")].find((b) => b.textContent.includes("Regenerate"))?.click());
 	await new Promise((r) => setTimeout(r, 1200));
 
-	const s = await stored(page);
+	const s = stored(store);
 	const renamed = s.find((c) => c.title === "Hand typed name");
 	say("the renamed chat is untouched", !!renamed, JSON.stringify(s.map((c) => c.title)));
 	say("it is still marked manual", renamed?.titleSource === "manual", String(renamed?.titleSource));
@@ -163,7 +189,7 @@ console.log("\n=== a rename survives a regenerate on a DIFFERENT chat ===");
 
 console.log("\n=== mobile: hamburger in the bar, not duplicated ===");
 {
-	const { page } = await open(390, 844);
+	const { page, store } = await open(390, 844);
 	await ask(page, "Do I get a certificate?");
 	await new Promise((r) => setTimeout(r, 900));
 	const m = await page.evaluate(() => ({
@@ -180,7 +206,7 @@ console.log("\n=== mobile: hamburger in the bar, not duplicated ===");
 
 console.log("\n=== 320px ===");
 {
-	const { page } = await open(320, 568, "A reasonably long generated chat title");
+	const { page, store } = await open(320, 568, "A reasonably long generated chat title");
 	await ask(page, "A fairly long opening question about certificates and eligibility");
 	await new Promise((r) => setTimeout(r, 900));
 	const m = await page.evaluate(() => {
@@ -200,7 +226,7 @@ console.log("\n=== 320px ===");
 
 console.log("\n=== scroll reconciliation ===");
 {
-	const { page } = await open();
+	const { page, store } = await open();
 	await ask(page, "Do I get a certificate?");
 	const m = await page.evaluate(() => {
 		const b = document.querySelector(".titlebar");

@@ -33,6 +33,32 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Sessions ---------------------------------------------------------
+    # HMAC key for session tokens. No default on purpose: a signing key with a
+    # fallback value is a signing key an attacker also has, and the failure mode
+    # of forgetting to set it must be a refusal at boot rather than forged
+    # sessions in production.
+    session_secret: str = ""
+
+    # How many anonymous sessions one address may create per hour. Anonymous
+    # access removes the usual lever -- there is no address to ban -- so the
+    # limit is the lever. Generous enough for a shared school connection,
+    # tight enough that scripting a thousand identities is noticed.
+    anonymous_sessions_per_ip_per_hour: int = 30
+
+    # How long an anonymous conversation is kept before deletion. Documented in
+    # PRIVACY.md; enforced by the retention job.
+    anonymous_retention_days: int = 180
+
+    # Where the browser reaches this product. Used to build the links in reset
+    # and sign-in emails, so it must be the address a person can actually open.
+    public_web_url: str = "http://localhost:3000"
+
+    # Mail. Unset means the console provider: links are written to the log,
+    # which keeps development and the test suite off the network entirely.
+    resend_api_key: str = ""
+    mail_from: str = "ASPIRE <no-reply@aspire.kn>"
+
     # --- Chat model -------------------------------------------------------
     # Passed straight to init_chat_model, so the "provider:model" form selects
     # the provider. Swap to "anthropic:claude-sonnet-4-6" etc. without touching code.
@@ -83,6 +109,50 @@ class Settings(BaseSettings):
 
     # --- Retrieval --------------------------------------------------------
     retriever_k: int = Field(default=4, ge=1, le=20)
+
+    # --- Postgres (Neon) --------------------------------------------------
+    # MUST be the POOLED endpoint -- the host with `-pooler` in it. Neon's
+    # direct endpoint holds one Postgres backend per connection and a
+    # per-request async session pool will exhaust it; the pooled host
+    # multiplexes through pgbouncer. `db/engine.py` warns at startup if this
+    # does not look pooled.
+    #
+    # Unset means "no database", which is a fully supported state: at this step
+    # nothing in the request path reads Postgres at all, so leaving it unset
+    # changes nothing whatsoever.
+    database_url: str | None = None
+    # Neon scales to zero, so the first request after an idle period pays the
+    # wake-up. Warming one connection at startup costs nothing and keeps the
+    # overnight compute bill at zero, which disabling scale-to-zero would not.
+    database_warm_on_start: bool = True
+    db_pool_size: int = Field(default=5, ge=1, le=50)
+    db_max_overflow: int = Field(default=5, ge=0, le=50)
+
+    # --- Valkey -----------------------------------------------------------
+    # Wire-compatible with Redis 7.2, so redis-py and arq talk to it unchanged.
+    # Unset disables the response cache and the background queue; nothing else
+    # changes.
+    valkey_url: str | None = None
+    # How long a cached answer stays servable. Knowledge-base answers are stable
+    # for far longer than this, but a few hours is the point past which a
+    # corrected answer should have reached everyone.
+    response_cache_ttl_seconds: int = Field(default=6 * 3600, ge=60, le=86_400)
+    response_cache_enabled: bool = True
+
+    # --- Conversation memory ---------------------------------------------
+    # OFF by default. Enabling this changes what the model sees: the last N
+    # turns verbatim plus a running summary of everything older, instead of the
+    # whole thread. Flip it back and today's behaviour returns exactly, because
+    # the full transcript is persisted either way.
+    memory_window_enabled: bool = False
+    # How many recent messages the model sees verbatim. The single number that
+    # decides the per-turn prompt cost, which is why it is configurable.
+    memory_window_turns: int = Field(default=6, ge=1, le=50)
+    # Summarise once this many messages have fallen outside the window. Runs in
+    # arq, off the request path, always.
+    memory_summary_after_turns: int = Field(default=2, ge=1, le=50)
+    # Used only for accounting. o200k_base is the GPT-4o/5 family's encoding.
+    token_encoding: str = "o200k_base"
 
     # --- HTTP -------------------------------------------------------------
     # Permissive for local dev. Tighten to the real frontend origin before deploying.

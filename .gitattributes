@@ -1,0 +1,7 @@
+# The repository is edited on Windows and checked out on Linux. core.autocrlf
+# handles ordinary source, but a CRLF here is not a cosmetic difference: a
+# trailing \r in a shebang makes the kernel look for an interpreter named
+# "bash\r", and systemd and nginx both read their config files literally.
+*.sh            text eol=lf
+*.service       text eol=lf
+*.conf          text eol=lf

@@ -10,11 +10,35 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as ResetRouteImport } from './routes/reset'
+import { Route as SigninRouteImport } from './routes/signin'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as ShellChatChatIdRouteImport } from './routes/_shell/chat.$chatId'
 
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetRoute = ResetRouteImport.update({
+  id: '/reset',
+  path: '/reset',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyRoute = VerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShellIndexRoute = ShellIndexRouteImport.update({
@@ -30,28 +54,53 @@ const ShellChatChatIdRoute = ShellChatChatIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
+  '/reset': typeof ResetRoute
+  '/signin': typeof SigninRoute
+  '/signup': typeof SignupRoute
+  '/verify': typeof VerifyRoute
   '/chat/$chatId': typeof ShellChatChatIdRoute
 }
 export interface FileRoutesByTo {
+  '/reset': typeof ResetRoute
+  '/signin': typeof SigninRoute
+  '/signup': typeof SignupRoute
+  '/verify': typeof VerifyRoute
   '/': typeof ShellIndexRoute
   '/chat/$chatId': typeof ShellChatChatIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteWithChildren
+  '/reset': typeof ResetRoute
+  '/signin': typeof SigninRoute
+  '/signup': typeof SignupRoute
+  '/verify': typeof VerifyRoute
   '/_shell/': typeof ShellIndexRoute
   '/_shell/chat/$chatId': typeof ShellChatChatIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/chat/$chatId'
+  fullPaths:
+    '/' | '/reset' | '/signin' | '/signup' | '/verify' | '/chat/$chatId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat/$chatId'
-  id: '__root__' | '/_shell' | '/_shell/' | '/_shell/chat/$chatId'
+  to: '/reset' | '/signin' | '/signup' | '/verify' | '/' | '/chat/$chatId'
+  id:
+    | '__root__'
+    | '/_shell'
+    | '/reset'
+    | '/signin'
+    | '/signup'
+    | '/verify'
+    | '/_shell/'
+    | '/_shell/chat/$chatId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   ShellRoute: typeof ShellRouteWithChildren
+  ResetRoute: typeof ResetRoute
+  SigninRoute: typeof SigninRoute
+  SignupRoute: typeof SignupRoute
+  VerifyRoute: typeof VerifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -61,6 +110,34 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset': {
+      id: '/reset'
+      path: '/reset'
+      fullPath: '/reset'
+      preLoaderRoute: typeof ResetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify': {
+      id: '/verify'
+      path: '/verify'
+      fullPath: '/verify'
+      preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_shell/': {
@@ -94,6 +171,10 @@ const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   ShellRoute: ShellRouteWithChildren,
+  ResetRoute: ResetRoute,
+  SigninRoute: SigninRoute,
+  SignupRoute: SignupRoute,
+  VerifyRoute: VerifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

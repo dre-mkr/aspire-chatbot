@@ -101,6 +101,34 @@ export function Transcript({
 	eligibility,
 	animateAfterId,
 }: TranscriptProps) {
+	/**
+	 * The answer being revealed, rendered as the message it is about to become.
+	 *
+	 * It carries the id `finishStream` will settle it under, and it lives in this
+	 * array rather than in a slot after it, so React reconciles the reveal and the
+	 * finished answer as ONE element.
+	 *
+	 * They used to be two: a `StreamingAnswer` rendered after the list, swapped at
+	 * completion for an `Answer` inside it. Sibling slots and keyed arrays are
+	 * different reconciliation scopes, so React had no way to see them as the same
+	 * turn — it destroyed the node and built a fresh one. The answer blanked for a
+	 * frame and then played its 400ms entry animation again on the way back, every
+	 * single time a reply finished. Nothing about that was a CSS problem; the
+	 * element the CSS applied to was new.
+	 */
+	const turns: Array<ChatMessage> = streaming
+		? [
+				...messages,
+				{
+					id: streaming.id,
+					role: "assistant",
+					blocks: streaming.blocks,
+					followUps: streaming.followUps,
+					sources: streaming.sources,
+				},
+			]
+		: messages;
+
 	// There is only ever one live session, so only the NEWEST game turn can show
 	// it. Without this, leaving a game and starting another rendered the same
 	// card twice -- once at each game turn's position -- because both asked the
@@ -108,22 +136,32 @@ export function Transcript({
 	//
 	// Older game turns render nothing at all: the session they belonged to is
 	// finished, and there is no server state left to draw.
-	const liveGameIndex = messages.reduce(
+	const liveGameIndex = turns.reduce(
 		(latest, message, index) => (message.role === "game" ? index : latest),
 		-1,
 	);
 
 	// Same rule, same reason: one check per conversation, drawn at the newest
 	// turn that opened one.
-	const liveCheckIndex = messages.reduce(
-		(latest, message, index) =>
-			message.role === "eligibility" ? index : latest,
+	const liveCheckIndex = turns.reduce(
+		(latest, message, index) => (message.role === "eligibility" ? index : latest),
 		-1,
 	);
 
+	/**
+	 * The suggestions belonging to the answer at the tail, revealed or not.
+	 *
+	 * Taken from the reveal while one is running so the chips are laid out from
+	 * the start and merely become visible when the answer settles. Mounting them
+	 * at completion moved the whole transcript under the reader — the thread is
+	 * pinned to the bottom, so content appearing at the end pushes everything
+	 * above it up.
+	 */
+	const chips = streaming ? streaming.followUps : followUps;
+
 	return (
 		<div className="transcript">
-			{messages.map((message, index) => {
+			{turns.map((message, index) => {
 				const arriving = message.id >= animateAfterId;
 
 				if (message.role === "user") {
@@ -223,6 +261,10 @@ export function Transcript({
 						onRegenerate={onRegenerate}
 						playback={playback}
 						arriving={arriving}
+						// The same component draws the answer mid-reveal and the
+						// answer that has settled. Never two behind a conditional:
+						// that is the whole of the bug this replaced.
+						revealing={message.id === streaming?.id}
 						// How much of the conversation asking again would discard.
 						// The reveal always renders at the tail, so re-asking an
 						// older question necessarily drops what came after it —
@@ -231,8 +273,6 @@ export function Transcript({
 					/>
 				);
 			})}
-
-			{streaming ? <StreamingAnswer answer={streaming} /> : null}
 
 			{isThinking ? (
 				<div className="thinking">
@@ -245,9 +285,16 @@ export function Transcript({
 				</div>
 			) : null}
 
-			{followUps.length > 0 ? (
-				<div className="follow-ups">
-					{followUps.map((prompt) => (
+			{chips.length > 0 ? (
+				// Present and laid out for the whole of the reveal, inert and
+				// invisible until the answer settles. It is the same element
+				// throughout, so nothing mounts at completion and nothing animates.
+				<div
+					className="follow-ups"
+					data-pending={streaming ? "" : undefined}
+					inert={!!streaming || undefined}
+				>
+					{chips.map((prompt) => (
 						<button
 							key={prompt}
 							type="button"
@@ -265,42 +312,33 @@ export function Transcript({
 }
 
 /**
- * The answer mid-reveal. The only component that re-renders on a typewriter
- * tick — everything above it is settled and keeps its identity.
+ * One assistant turn, mid-reveal or settled.
+ *
+ * `revealing` is a prop rather than a second component on purpose. The reveal
+ * and the finished answer are one message at two ages, and the moment they were
+ * two components they became two DOM nodes — which is what made a finished
+ * answer blink out and re-enter.
  */
-function StreamingAnswer({ answer }: { answer: Streaming }) {
-	return (
-		<article className="turn turn--assistant" data-enter aria-busy="true">
-			<div className="orb" aria-hidden="true" />
-			<div className="answer">
-				<h2 className="sr-only">ASPIRE AI</h2>
-				{answer.blocks.map((block, index) => (
-					// Blocks are a fixed, ordered script; index is their identity.
-					// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
-					<Block key={index} block={block} />
-				))}
-			</div>
-		</article>
-	);
-}
-
 function Answer({
 	message,
 	onRegenerate,
 	playback,
 	discards,
 	arriving,
+	revealing,
 }: {
 	message: Extract<ChatMessage, { role: "assistant" }>;
 	onRegenerate: (messageId: number) => void;
 	playback: Playback;
 	discards: number;
 	arriving: boolean;
+	revealing: boolean;
 }) {
 	return (
 		<article
 			className="turn turn--assistant"
 			data-enter={arriving || undefined}
+			aria-busy={revealing || undefined}
 		>
 			<div className="orb" aria-hidden="true" />
 			<div className="answer">
@@ -309,14 +347,29 @@ function Answer({
 					// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
 					<Block key={index} block={block} />
 				))}
-				<Sources sources={message.sources} />
-				<AnswerActions
-					text={answerToText(message.blocks)}
-					onRegenerate={onRegenerate}
-					playback={playback}
-					messageId={message.id}
-					discards={discards}
-				/>
+				{/* Laid out from the first frame of the reveal and revealed when the
+				    answer settles, rather than mounting at completion. The evidence
+				    chip and the action row are 95px between them, and the thread is
+				    pinned to the bottom — so appending them shunted the answer being
+				    read upwards by that much, at the exact moment it finished. The
+				    space is theirs from the start; only their visibility changes.
+
+				    `inert` and not merely transparent: an invisible Copy button that
+				    still takes Tab is worse than one that moves. */}
+				<div
+					className="answer__tail"
+					data-pending={revealing ? "" : undefined}
+					inert={revealing || undefined}
+				>
+					<Sources sources={message.sources} />
+					<AnswerActions
+						text={answerToText(message.blocks)}
+						onRegenerate={onRegenerate}
+						playback={playback}
+						messageId={message.id}
+						discards={discards}
+					/>
+				</div>
 			</div>
 		</article>
 	);

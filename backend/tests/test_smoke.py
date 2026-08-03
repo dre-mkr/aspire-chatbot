@@ -20,7 +20,14 @@ def test_health_returns_ok():
     # touches neither the embedding model nor the chat model.
     response = TestClient(app).get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+
+    body = response.json()
+    assert body["status"] == "ok"
+    # The probe also reports whether the data layer connected, so a deployment
+    # that fell back to in-process memory is visible rather than merely slower.
+    # Asserted by key rather than whole-dict equality: this payload is expected
+    # to grow, and a probe should not break because it learned to say more.
+    assert set(body) >= {"status", "database", "cache", "cache_stats"}
 
 
 def test_row_to_document_formats_qa_columns():

@@ -4,6 +4,17 @@ version = "0.1.0"
 description = "ASPIRE Phase 1 backend: agentic RAG over a CSV knowledge base."
 requires-python = ">=3.12"
 dependencies = [
+    # Data layer. asyncpg is the driver, pgvector supplies the `vector` column
+    # type to SQLAlchemy, alembic owns every schema change.
+    "alembic==1.18.5",
+    "asyncpg==0.31.0",
+    "pgvector==0.5.0",
+    "sqlalchemy[asyncio]==2.0.51",
+    # Valkey implements the Redis 7.2 command set, so redis-py and arq talk to
+    # it unchanged -- there is no Valkey-specific client and none is wanted.
+    # redis-py is the response cache; arq is the background queue.
+    "arq==0.28.0",
+    "redis==5.3.1",
     "elevenlabs==2.60.0",
     "fastapi==0.141.1",
     "fastembed==0.8.0",

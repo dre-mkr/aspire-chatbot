@@ -128,12 +128,17 @@ def start_game(
     you are unsure what exists. If the user just says "a game" without choosing,
     ask which they would like rather than picking for them.
 
-    On success you get the first item: `next_kind` says whether it is scrambled
-    letters to arrange or a statement to judge, and `next_text` is the item
-    itself. Present it exactly as given — do not reorder a scramble's letters,
-    reword a statement, correct either, or answer it yourself.
+    ON SUCCESS, REPLY WITH NOTHING. The card that appears already shows the
+    item, its instructions and its controls, so any sentence you add puts the
+    same puzzle on screen a second time. Do not greet, do not introduce, and do
+    not repeat `text`. An empty reply is the correct reply.
 
-    If it declines, tell the user plainly why:
+    `kind` says whether the item is scrambled letters or a statement, and `text`
+    is the item itself -- both are for the card, not for you to read out. Never
+    reorder a scramble's letters, reword a statement, correct either, or answer
+    it yourself.
+
+    If it DECLINES there is no card, so tell the user plainly why:
       not_available_for_persona - the games are for ASPIRE account holders
       no_set_for_language       - that language has no set authored yet
       already_running           - a game is already in progress here

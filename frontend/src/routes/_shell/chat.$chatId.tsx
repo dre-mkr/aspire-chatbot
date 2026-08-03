@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { currentSession } from "#/lib/aspire/session";
+import { conversationQuery } from "#/lib/aspire/queries";
 
-/**
- * One conversation, at `/chat/:id`.
- *
- * Also renders nothing: its whole job is to put `chatId` in the match so the
- * shell can read it. That is what makes a conversation addressable, restorable
- * on refresh, and reachable by the back button.
- */
 export const Route = createFileRoute("/_shell/chat/$chatId")({
+	loader: ({ context, params }) => {
+		if (!currentSession()) return;
+		void context.queryClient
+			.ensureQueryData(conversationQuery(params.chatId))
+			.catch(() => undefined);
+	},
 	component: () => null,
 });

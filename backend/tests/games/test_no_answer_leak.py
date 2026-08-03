@@ -161,15 +161,37 @@ def test_two_conversations_do_not_share_a_game():
 
 
 def test_chat_response_schema_cannot_carry_an_answer():
-    """The browser is never sent one, because there is no field for it."""
-    from app.schemas import ChatResponse
+    """The browser is never sent one, because there is no field for it.
+
+    Asserted as an exact set on purpose: this test failing because someone added
+    a field is the point of it. Widen it only after checking the new field
+    cannot carry an answer -- which is why the nested models are checked too.
+    """
+    from app.schemas import ChatResponse, StartedEligibilityCheck, StartedGame
 
     assert set(ChatResponse.model_fields) == {
         "reply",
         "thread_id",
         "sources",
         "follow_ups",
+        "game_started",
+        "eligibility_started",
     }
+
+    # The nested objects, because a closed model is only a guarantee while its
+    # own fields are checked. Every one of these is already on the player's
+    # screen.
+    assert set(StartedGame.model_fields) == {
+        "game_type",
+        "display_name",
+        "kind",
+        "total",
+    }
+
+    # The eligibility card fetches its own question from its own endpoint, so
+    # nothing about the flow rides here -- and because nothing does, there is no
+    # field a game answer or a person's eligibility answers could travel in.
+    assert set(StartedEligibilityCheck.model_fields) == {"check", "language"}
 
 
 def test_game_tool_output_cannot_reach_the_sources_field():
