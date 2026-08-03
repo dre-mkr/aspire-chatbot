@@ -192,3 +192,38 @@ export function createConversationStore() {
 		},
 	};
 }
+
+/**
+ * A session, for suites that need one and are not testing auth.
+ *
+ * Every page asks for an anonymous session on first paint. A suite that lets
+ * that through spends one of the thirty an address is allowed per hour — and a
+ * full run is far more than thirty pages, so the product's own abuse control
+ * starts refusing, and whichever suite is unlucky fails with a 429 that looks
+ * like a regression and is not. Exactly the problem `backend/tests/conftest.py`
+ * solves on the other side of the wire.
+ *
+ * Fixed token on purpose: these suites do not care who they are, only that they
+ * are somebody.
+ *
+ *     if (serveAnonymousAuth(r, CORS)) return;
+ */
+export function serveAnonymousAuth(request, cors) {
+	const path = new URL(request.url()).pathname;
+	if (path !== "/api/auth/anonymous" && path !== "/api/auth/session") return false;
+	request.respond({
+		status: 200,
+		contentType: "application/json",
+		headers: cors,
+		body: JSON.stringify({
+			token: "harness-token",
+			user_id: "harness-user",
+			account_type: "anonymous",
+			email: null,
+			display_name: null,
+			avatar_url: null,
+			expires_in: 2592000,
+		}),
+	});
+	return true;
+}

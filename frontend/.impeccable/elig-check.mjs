@@ -14,6 +14,7 @@
  * Review-only. Never built or shipped.
  */
 import puppeteer from "puppeteer";
+import { serveAnonymousAuth } from "./fake-conversations.mjs";
 
 const LANG = process.argv[2] ?? "en";
 const API = "http://localhost:8000";
@@ -49,6 +50,7 @@ const installStub = async () => {
 	page.removeAllListeners("request");
 	page.on("request", async (r) => {
 		if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+		if (serveAnonymousAuth(r, CORS)) return;
 		if (r.url().endsWith("/chat")) {
 			// The client mints the conversation id before sending, and the real
 			// service echoes it back — that id is the URL, the storage key and

@@ -1,11 +1,13 @@
 import puppeteer from "puppeteer";
 import { serveStream } from "./fake-stream.mjs";
+import { serveAnonymousAuth } from "./fake-conversations.mjs";
 const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,PATCH,DELETE,OPTIONS","Access-Control-Allow-Headers":"Content-Type, Authorization, X-Aspire-Device"};
 const A={reply:"ok",thread_id:"t",sources:[],follow_ups:[]};
 const b=await puppeteer.launch({headless:"new"});
 const p=await b.newPage(); await p.setViewport({width:1280,height:800});
 await p.setRequestInterception(true);
 p.on("request",r=>{if(r.method()==="OPTIONS")return r.respond({status:204,headers:CORS});
+p.on("request",r=>{if (serveAnonymousAuth(r, CORS)) return;
  // The real transport. Without this the client falls back to `/chat`,
  // and this suite only passes while nothing is listening on :8000.
  if (serveStream(r, CORS, (sent) => { void sent; return { reply: A.reply }; })) return;

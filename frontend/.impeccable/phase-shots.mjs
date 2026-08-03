@@ -21,6 +21,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
+import { serveAnonymousAuth } from "./fake-conversations.mjs";
 import { handleChatStream } from "./fake-stream.mjs";
 
 
@@ -62,6 +63,7 @@ async function surfaces(label) {
 		await page.setRequestInterception(true);
 		page.on("request", async (r) => {
 			if (r.method() === "OPTIONS") return r.respond({ status: 204, headers: CORS });
+			if (serveAnonymousAuth(r, CORS)) return;
 			// `/chat/stream` is the transport now; `/chat` stays as the fallback.
 		// Both are served from the same fixture so they cannot drift apart.
 		if (

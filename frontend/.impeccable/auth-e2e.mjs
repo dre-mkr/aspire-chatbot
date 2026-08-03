@@ -48,6 +48,25 @@ try {
 	process.exit(0);
 }
 
+// This suite mints real sessions, and the service caps them per address per
+// hour. That cap is a real control and it works, which is exactly the problem:
+// once it has been spent — by a long harness run, or by running this a few
+// times — every assertion below fails with a 429 that reads as a broken sign-up
+// and is nothing of the sort. Said plainly instead of measured wrongly.
+const capProbe = await fetch(`${API}/api/auth/anonymous`, {
+	method: "POST",
+	headers: { "content-type": "application/json" },
+	body: JSON.stringify({ device_id: `cap-probe-${stamp}` }),
+});
+if (capProbe.status === 429) {
+	console.log(
+		`\n  SKIP  the anonymous session cap for this address is spent.` +
+			`\n        It refills within the hour, or raise` +
+			` ANONYMOUS_SESSIONS_PER_IP_PER_HOUR for local runs.`,
+	);
+	process.exit(0);
+}
+
 const browser = await puppeteer.launch({ headless: "new" });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 900 });
