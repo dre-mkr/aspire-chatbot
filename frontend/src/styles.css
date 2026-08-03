@@ -4460,3 +4460,617 @@ body {
 		animation: soft-pulse 1.6s ease-in-out infinite !important;
 	}
 }
+
+/* ─── Auth surface ──────────────────────────────────────────────────────────
+
+   `/signin` and `/signup`. A split surface: the brand panel carries the
+   gradient, the white column carries the form.
+
+   Everything here is built from the tokens already in `styles.css` — `--plum`,
+   `--magenta`, `--ink`, `--prose`, the `--wash-*` ramp, `--ease`. The auth
+   pages are the same product as the chat, and a second set of greys and radii
+   living beside the first is how two products end up in one codebase. */
+
+.auth {
+	display: flex;
+	width: 100%;
+	min-height: 100dvh;
+	background: #fff;
+	color: var(--ink);
+}
+
+.auth__panel {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	width: 50%;
+	overflow: hidden;
+	background: linear-gradient(135deg, var(--plum) 0%, var(--plum-light) 100%);
+}
+
+/* Ambient depth on a flat gradient, and the only motion on the page. */
+.auth__orb {
+	position: absolute;
+	border-radius: 50%;
+	filter: blur(64px);
+	animation: auth-glow 2.6s var(--ease) infinite;
+}
+
+.auth__orb--a {
+	top: 22%;
+	left: 20%;
+	width: 384px;
+	height: 384px;
+	background: rgb(255 255 255 / 0.1);
+}
+
+.auth__orb--b {
+	right: 16%;
+	bottom: 18%;
+	width: 320px;
+	height: 320px;
+	background: var(--wash-m-22);
+	animation-delay: 1s;
+}
+
+@keyframes auth-glow {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.6;
+	}
+}
+
+.auth__panel-inner {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	padding: 0 clamp(48px, 5vw, 80px);
+}
+
+/* The wordmark is a dark asset; this is what puts it on a dark panel without
+   shipping a second file for it. */
+.auth__logo {
+	height: 58px;
+	width: auto;
+	max-width: 100%;
+	margin-bottom: 34px;
+	object-fit: contain;
+	object-position: left;
+	filter: brightness(0) invert(1);
+}
+
+.auth__headline {
+	margin: 0 0 16px;
+	font-size: clamp(2rem, 3vw, 2.75rem);
+	font-weight: 700;
+	line-height: 1.1;
+	color: #fff;
+	text-wrap: pretty;
+}
+
+.auth__headline span {
+	color: rgb(255 255 255 / 0.8);
+}
+
+.auth__panel-sub {
+	margin: 0;
+	max-width: 460px;
+	font-size: 0.9375rem;
+	line-height: 1.6;
+	color: rgb(255 255 255 / 0.72);
+	text-wrap: pretty;
+}
+
+.auth__stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 40px;
+	margin-top: 36px;
+}
+
+.auth__stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.auth__stat-value {
+	font-family: "JetBrains Mono", ui-monospace, monospace;
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.1;
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+}
+
+.auth__stat-label,
+.auth__gov {
+	font-size: 0.75rem;
+	color: rgb(255 255 255 / 0.8);
+}
+
+.auth__gov {
+	margin-top: 28px;
+}
+
+.auth__column {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	align-items: center;
+	justify-content: center;
+	overflow-y: auto;
+	padding: 48px 40px;
+	background: #fff;
+}
+
+.auth__form {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 420px;
+}
+
+.auth__back {
+	display: flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 8px;
+	height: 40px;
+	padding: 0 12px 0 8px;
+	margin-bottom: 14px;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--prose);
+	font-family: inherit;
+	font-size: 0.84375rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background 150ms var(--ease),
+		color 150ms var(--ease);
+}
+
+.auth__back:hover {
+	background: var(--wash-6);
+	color: var(--plum);
+}
+
+.auth__steps {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	margin-bottom: 22px;
+}
+
+.auth__segs {
+	display: flex;
+	gap: 6px;
+}
+
+.auth__seg {
+	flex: 1;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--wash-12);
+	transition: background 220ms var(--ease);
+}
+
+.auth__seg[data-done] {
+	background: linear-gradient(90deg, var(--plum), var(--plum-light));
+}
+
+.auth__step-text {
+	font-size: 0.78125rem;
+	font-weight: 500;
+	color: var(--prose);
+}
+
+.auth__head {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 24px;
+}
+
+.auth__title {
+	margin: 0;
+	font-size: 1.4375rem;
+	font-weight: 700;
+	line-height: 1.25;
+	color: var(--ink);
+	text-wrap: pretty;
+}
+
+.auth__sub,
+.auth__note {
+	margin: 0;
+	font-size: 0.90625rem;
+	line-height: 1.6;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.auth__fields {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.auth__primary {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 52px;
+	margin-top: 6px;
+	border: none;
+	border-radius: 16px;
+	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	color: #fff;
+	font-family: inherit;
+	font-size: 0.96875rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: filter 150ms var(--ease);
+}
+
+.auth__primary:hover:not(:disabled) {
+	filter: brightness(1.08);
+}
+
+.auth__primary:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.auth__secondary {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 52px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	color: var(--plum);
+	font-family: inherit;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		background 150ms var(--ease),
+		border-color 150ms var(--ease);
+}
+
+.auth__secondary:hover:not(:disabled) {
+	background: var(--wash-3);
+	border-color: var(--wash-18);
+}
+
+.auth__secondary:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.auth__secondary-note,
+.auth__foot-note {
+	font-size: 0.78125rem;
+	line-height: 1.5;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.auth__form-error {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 0;
+	padding: 12px 14px;
+	border: 1px solid var(--danger-line);
+	border-radius: 14px;
+	background: var(--danger-wash);
+	color: var(--danger);
+	font-size: 0.84375rem;
+	line-height: 1.5;
+}
+
+.auth__foot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 24px;
+	padding-top: 20px;
+	border-top: 1px solid var(--hairline);
+	font-size: 0.875rem;
+	color: var(--prose);
+}
+
+.auth__foot-link {
+	color: var(--plum);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.auth__foot-link:hover {
+	color: var(--magenta);
+}
+
+.auth__choices {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.auth__choice {
+	flex: 1;
+	min-width: 120px;
+	height: 56px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	color: var(--ink);
+	font-family: inherit;
+	font-size: 0.9375rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		border-color 150ms var(--ease),
+		background 150ms var(--ease);
+}
+
+.auth__choice[data-selected] {
+	border-color: var(--plum);
+	background: var(--wash-6);
+	color: var(--plum);
+	font-weight: 600;
+}
+
+.auth__reqs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 0.78125rem;
+	color: var(--quiet);
+}
+
+.auth__reqs li::before {
+	content: "○ ";
+}
+
+.auth__reqs li[data-ok] {
+	color: var(--success);
+}
+
+.auth__reqs li[data-ok]::before {
+	content: "● ";
+}
+
+/* ─── Fields ─── */
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.field__label {
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--ink);
+}
+
+.field__box {
+	position: relative;
+	display: flex;
+}
+
+.field__box[data-disabled] {
+	opacity: 0.55;
+}
+
+.field__icon {
+	position: absolute;
+	left: 15px;
+	top: 50%;
+	display: flex;
+	transform: translateY(-50%);
+	pointer-events: none;
+	color: var(--prose);
+}
+
+.field__icon[data-error] {
+	color: var(--danger);
+}
+
+.field__input {
+	width: 100%;
+	height: 52px;
+	padding: 0 16px 0 46px;
+	border: 1px solid var(--wash-14);
+	border-radius: 16px;
+	background: #fff;
+	font-family: inherit;
+	/* 16px exactly: anything smaller makes iOS zoom the page on focus, which
+	   throws the layout out from under whoever is typing. */
+	font-size: 1rem;
+	color: var(--ink);
+	outline: none;
+	transition:
+		border-color 150ms var(--ease),
+		box-shadow 150ms var(--ease);
+}
+
+.field__input[data-reveal] {
+	padding-right: 54px;
+}
+
+.field__input::placeholder {
+	color: var(--faint);
+	opacity: 1;
+}
+
+.field__input:focus {
+	border-color: var(--plum);
+	box-shadow: 0 0 0 4px var(--wash-18);
+}
+
+.field__input[data-error] {
+	border-color: var(--danger);
+}
+
+.field__select {
+	padding-left: 16px;
+	cursor: pointer;
+}
+
+.field__dob {
+	display: flex;
+	gap: 10px;
+}
+
+.field__input--day {
+	flex: 0 0 84px;
+	padding-left: 16px;
+	text-align: center;
+}
+
+.field__input--year {
+	flex: 0 0 104px;
+	padding-left: 16px;
+	text-align: center;
+}
+
+.field__dob .field__select {
+	flex: 1;
+	min-width: 0;
+}
+
+.field__reveal {
+	position: absolute;
+	right: 7px;
+	top: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	transform: translateY(-50%);
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--prose);
+	cursor: pointer;
+	transition:
+		background 150ms var(--ease),
+		color 150ms var(--ease);
+}
+
+.field__reveal:hover {
+	background: var(--wash-7);
+	color: var(--plum);
+}
+
+.field__hint {
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+.field__error {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--danger);
+	text-wrap: pretty;
+}
+
+.field__error svg {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+
+/* Below this the panel stops being a column and becomes a header, with the
+   form rising over it as a sheet. */
+@media (max-width: 900px) {
+	.auth {
+		flex-direction: column;
+	}
+
+	.auth__panel {
+		width: 100%;
+		align-items: flex-start;
+	}
+
+	.auth__panel-inner {
+		padding: 26px 24px 44px;
+	}
+
+	.auth__logo {
+		height: 26px;
+		margin-bottom: 20px;
+	}
+
+	.auth__orb--a {
+		width: 220px;
+		height: 220px;
+	}
+
+	.auth__orb--b {
+		width: 190px;
+		height: 190px;
+	}
+
+	.auth__stats {
+		gap: 24px;
+		margin-top: 22px;
+	}
+
+	.auth__stat-value {
+		font-size: 1.1875rem;
+	}
+
+	.auth__column {
+		align-items: flex-start;
+		margin-top: -22px;
+		padding: 24px 22px 36px;
+		border-radius: 24px 24px 0 0;
+	}
+
+	.auth__form {
+		max-width: 100%;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.auth__orb {
+		animation: none;
+	}
+}
+
+/* `fieldset` is the right element for a group of inputs under one label, and
+   it arrives with a border and padding nobody asked for. */
+.auth__fieldset {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.auth__fieldset > legend {
+	padding: 0;
+	margin-bottom: 8px;
+}
