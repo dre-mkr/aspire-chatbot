@@ -255,3 +255,189 @@ Recorded here as measurements, not as decisions. Nothing below has been changed.
   is not characterised.
 - **`/chat` (non-streaming).** Instrumented and emits a line with no `t_ttft` —
   there is no first token when the whole reply arrives at once — but not probed.
+
+---
+
+# P13-002 — Chroma out, Neon pgvector in
+
+Not a latency optimisation. This moves the corpus off a local Chroma store onto
+Postgres so there is one source of truth, no local disk state, and a path that
+works across workers. **`t_retrieve` gets worse, on purpose** — retrieval becomes a
+network round trip — and that is what makes the in-memory matrix phase have
+something real to remove.
+
+- **Migration:** `alembic/versions/20260804_0009_documents_live.py`
+- **Retriever:** `app/rag.py::PgVectorRetriever`
+- **Equivalence gate:** `tests/test_retriever_equivalence.py`
+- **Date:** 2026-08-04
+
+## Deliverable: before/after `t_retrieve`
+
+| | before (Chroma, local) | after (pgvector, Neon) | delta |
+|---|---:|---:|---:|
+| cold p50 | 4.0 ms | 523.6 ms | **+519.6 ms** |
+| cold p95 | 6.7 ms | 1130.4 ms | **+1123.7 ms** |
+| warm p50 | 8.9 ms | 547.5 ms | **+538.6 ms** |
+| warm p95 | 11.7 ms | 565.9 ms | **+554.2 ms** |
+
+Retrieval went from 0.2% of warm p95 TTFT to 9.0%. The warm figure is tight
+(min 540.7, max 583.6) which makes it a reliable number: it is a round trip to
+Neon plus an exact 332-row cosine scan, and the scan is the small part.
+
+## What did NOT happen: a TTFT improvement
+
+Warm `t_ttft` reads 4825.2 → 4640.4 p50 and 7563.0 → 6290.5 p95, i.e. *better*
+after adding 540 ms of retrieval. That is noise, not a result, and it would be
+dishonest to bank it. Over the same two runs the model calls moved far more than
+retrieval did:
+
+| stage | P13-001 warm p95 | P13-002 warm p95 | swing |
+|---|---:|---:|---:|
+| `d_model_call_1` | 2505.6 ms | 1883.1 ms | −622.5 ms |
+| `d_model_call_2` | 3716.9 ms | 2680.1 ms | −1036.8 ms |
+
+A combined ~1.66 s of provider variance swamps a 0.54 s regression. **At n=24,
+cross-run TTFT comparisons are not a usable signal; per-stage durations are.**
+Anything claiming a TTFT win from here needs either many more samples or a stage
+figure to point at.
+
+## Behaviour: unchanged, and here is how that was established
+
+Rule 2 says no change to wording, persona voice, factual content or safety
+behaviour. Retrieval feeds all four, so this got the most attention in the phase.
+
+**Retrieval quality is identical.** `python -m evals.run --retrieval` over all 60
+golden cases, scored on both backends minutes apart:
+
+| | hit_rate | MRR | en | es | fr |
+|---|---:|---:|---:|---:|---:|
+| Chroma | 0.95 | 0.9056 | 1.00 | 0.90 | 0.95 |
+| pgvector | 0.95 | 0.9056 | 1.00 | 0.90 | 0.95 |
+
+Per-kind is identical too (grounded 1.00, exact 0.833), and the same three cases
+miss on both (`es-x2`, `es-x4`, `fr-x4`).
+
+**The relevance floor was carried across exactly, not re-tuned.** This needed
+care, because `config.py` described a transform that was not running.
+`RETRIEVER_SCORE_THRESHOLD=0.2` was written against Chroma's
+`similarity_score_threshold`, and the collection had been created with Chroma's
+*default* metric — `l2`, not cosine, because `build_vector_store` never passed a
+`collection_configuration`. Chroma's `l2` space returns **squared** L2, so the
+relevance function in play was `1 − L2²/√2`. Verified against the live store
+rather than assumed: for "What is ASPIRE Day?" Chroma reported 0.49243456 and
+`2 − 2·cos_sim` over the same vectors gives 0.49244264.
+
+The embeddings are unit vectors, so `L2² = 2·cos_dist` and the keep condition is:
+
+```
+1 − (2·cos_dist)/√2  ≥  threshold      →      cos_dist  ≤  (1 − threshold)/√2
+```
+
+At 0.2 that is **cos_dist ≤ 0.565685, i.e. cosine similarity ≥ 0.434315**, which
+is what `rag.chroma_floor_as_cosine_distance` computes and what the pgvector query
+applies. Confirmed live: out-of-scope questions ("What is the capital of France?",
+the chemistry one) return **zero** chunks with the floor and four without it.
+
+## Top-5 equivalence: what the investigation actually found
+
+The phase brief said a divergence "means an embedding or normalization bug, not an
+acceptable approximation difference". Two of the thirty probe questions diverged,
+and it was neither. The third possibility is worth recording because it changes
+what can be asserted at all.
+
+1. **Both searches are exact.** pgvector's `ORDER BY embedding <=> q` reproduces a
+   numpy cosine ranking element for element on all 30 questions. Chroma's HNSW
+   returned the exact ranking too — at 332 rows with `ef_search=100` it examines
+   the whole graph, so there was never an approximation to inherit. (This is also
+   why 0009 builds **no** vector index: at this size an ANN index buys nothing and
+   would cost exactness twice, once for HNSW and once for the `halfvec` float16
+   cast that 3072 dimensions forces.)
+2. **OpenAI's embedding API is not bit-deterministic.** Two identical
+   `embed_query` calls differ by up to **9.2e-05** per component. Document vectors
+   from the Chroma ingest and the Neon ingest differ by up to **1.45e-03** — a
+   cosine perturbation of ~1.5e-04.
+3. **The two divergent questions have candidates closer together than that.** For
+   "Combien y a-t-il sur le compte d'épargne ASPIRE ?", ASP-254 and ASP-172 sit
+   **1.5e-04** apart. Their order is a coin flip below the embedding model's own
+   reproducibility floor. Both are equally relevant context in a top-4 prompt.
+
+So exact top-k equality across a re-ingest is **not obtainable** while embeddings
+come from a hosted non-deterministic provider. The test therefore asserts what is
+true and would still catch a real bug: the ranking is exact given the vectors,
+rank 1 is stable on all 30, and any set difference is confined to chunks within
+2e-3 cosine distance of the top-k boundary — an order of magnitude above the
+measured noise and two orders below the span separating a relevant chunk from the
+floor. A chunk lost to a bad cast or a normalisation error would sit far outside
+that band.
+
+**This makes local embeddings more attractive than the latency case alone
+suggested.** A deterministic local model would make ingestion reproducible *and*
+remove `t_embed` (425 ms p50 / 629 ms p95) from the request path.
+
+## Cold and warm tables
+
+### cold (pgvector) run
+
+30 turns · cold-start turns: 1 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_open_conversation` | 812.2 | 848.3 | 1184.5 | 16.9% | 11.6% | Neon: upsert the conversation row before the model runs |
+| `t_history` | 659.9 | 891.6 | 931.0 | 13.7% | 12.1% | Neon: window read + running summary |
+| `t_prompt_build` | 0.1 | 0.6 | 273.3 | 0.0% | 0.0% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call_1` | 929.3 | 3476.6 | 6050.9 | 19.3% | 47.4% | derived: request -> tool call, less the measured work above |
+| `t_embed` | 503.2 | 858.7 | 1843.0 | 10.4% | 11.7% | OpenAI text-embedding-3-large: network round trip |
+| `t_retrieve` | 523.6 | 1130.4 | 1162.6 | 10.9% | 15.4% | Neon: exact cosine scan over 332 rows (network round trip) |
+| `d_model_call_2` | 1306.4 | 4095.7 | 11811.4 | 27.1% | 55.8% | derived: tool call -> model's first delta, less retrieval |
+| `d_buffer_hold` | 0.1 | 0.1 | 0.2 | 0.0% | 0.0% | derived: TurnBuffer holding text until a tool had run |
+| *unaccounted at p50* | 81.2 | | | 1.7% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 2434.4 | 4946.1 | 7522.4 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 4815.9 | 7341.0 | 15734.6 | — | — | cumulative from request received |
+| `t_ttft` | 4816.0 | 7341.1 | 15734.7 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 8431.0 | 20554.5 | 21154.4 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_retrieve_total` | 1026.8 | 1989.1 | 2362.7 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 4817.8 ms · p95 7344.5 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+### warm (pgvector) run
+
+30 turns · cold-start turns: 0 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_open_conversation` | 848.8 | 873.2 | 878.2 | 18.3% | 13.9% | Neon: upsert the conversation row before the model runs |
+| `t_history` | 694.8 | 711.0 | 711.6 | 15.0% | 11.3% | Neon: window read + running summary |
+| `t_prompt_build` | 0.1 | 0.4 | 0.6 | 0.0% | 0.0% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call_1` | 855.4 | 1883.1 | 2729.1 | 18.4% | 29.9% | derived: request -> tool call, less the measured work above |
+| `t_embed` | 425.1 | 628.9 | 677.7 | 9.2% | 10.0% | OpenAI text-embedding-3-large: network round trip |
+| `t_retrieve` | 547.5 | 565.9 | 583.6 | 11.8% | 9.0% | Neon: exact cosine scan over 332 rows (network round trip) |
+| `d_model_call_2` | 1028.2 | 2680.1 | 3099.4 | 22.2% | 42.6% | derived: tool call -> model's first delta, less retrieval |
+| `d_buffer_hold` | 0.1 | 0.9 | 2.5 | 0.0% | 0.0% | derived: TurnBuffer holding text until a tool had run |
+| *unaccounted at p50* | 240.5 | | | 5.2% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 2392.1 | 3418.7 | 4264.4 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 4639.6 | 6290.4 | 6387.3 | — | — | cumulative from request received |
+| `t_ttft` | 4640.4 | 6290.5 | 6387.4 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 7366.9 | 12017.1 | 14872.5 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_retrieve_total` | 974.1 | 1175.2 | 1225.0 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 4643.5 ms · p95 6292.3 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.

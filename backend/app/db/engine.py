@@ -116,8 +116,16 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession] | None:
 # through a run and probing for it every turn would be a query per message.
 _SCHEMA_MISSING = False
 
-# The tables the request path writes to. `documents` is not here: it is only
-# read, and a service with an empty corpus still answers questions.
+# The tables whose absence turns persistence off without stopping the service.
+#
+# `documents` is deliberately NOT here, and no longer for the reason this comment
+# used to give. It is not "only read, and an empty corpus still answers
+# questions" -- since P13-002 the corpus IS the knowledge base and an empty one
+# answers nothing. It is absent because this list drives a *degradation* latch:
+# losing these means conversations stop being saved and chat carries on from
+# in-process memory. Losing the corpus is fatal instead, and is enforced by
+# `main._require_corpus`, which refuses to start rather than serving ungrounded
+# answers. Two different failures, two different responses.
 REQUIRED_TABLES = ("conversations", "messages")
 
 

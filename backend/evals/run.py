@@ -52,13 +52,14 @@ def kb_rows() -> dict[str, dict]:
 
 def score_retrieval(cases: list[dict], k: int | None = None) -> dict:
     """Does the expected KB row appear in what the retriever actually returns?"""
-    from app.rag import build_retriever, get_vector_store
+    from app.rag import build_retriever
 
     settings = get_settings()
     k = k or settings.retriever_k
-    retriever = build_retriever(get_vector_store(), settings)
-    # `build_retriever` bakes k in; override for the sweep.
-    retriever.search_kwargs = {**retriever.search_kwargs, "k": k}
+    retriever = build_retriever(settings)
+    # `build_retriever` bakes k in; override for the sweep. `retriever` is the
+    # timing wrapper, so the k that matters is the inner one.
+    retriever.inner.k = k
 
     results = []
     for case in cases:
