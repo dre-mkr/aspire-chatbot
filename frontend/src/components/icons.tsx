@@ -107,6 +107,16 @@ export function DeviceIcon(props: IconProps) {
 	);
 }
 
+/** Who the answer is for. Head and shoulders, the plainest reading of it. */
+export function PersonIcon(props: IconProps) {
+	return (
+		<Icon size={16} {...props}>
+			<circle cx="12" cy="8" r="3.4" />
+			<path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+		</Icon>
+	);
+}
+
 export function ChevronDownIcon(props: IconProps) {
 	return (
 		<Icon size={14} {...props}>

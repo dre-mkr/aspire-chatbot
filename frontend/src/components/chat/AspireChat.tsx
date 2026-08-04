@@ -16,7 +16,8 @@ import {
 	loadEligibilityResult,
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
-import type { GamePersona, GameState } from "#/lib/aspire/games";
+import type { GameState } from "#/lib/aspire/games";
+import type { PersonaId } from "#/lib/aspire/personas";
 import {
 	displayTitle,
 	type StoredConversation,
@@ -55,19 +56,7 @@ const STICK_THRESHOLD_PX = 160;
  */
 const ELIGIBILITY_SPEECH_ID = -1;
 
-interface AspireChatProps {
-	/**
-	 * Which ASPIRE audience this is: "stella", "orion", "aurora" or "nova".
-	 *
-	 * Nothing selects one yet, so it defaults to unknown — which the service
-	 * treats as permissive rather than as any particular persona. Wire a picker
-	 * to this prop and the games gate, the voice, and the card's whole scale
-	 * follow with no further change.
-	 */
-	persona?: GamePersona | null;
-}
-
-export function AspireChat({ persona = null }: AspireChatProps = {}) {
+export function AspireChat() {
 	// Read-aloud has to start the moment an answer lands, but the voice layer
 	// needs the thread id the conversation owns. The ref breaks that cycle: the
 	// conversation calls through it, and the effect below keeps it current.
@@ -107,6 +96,25 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const awaitingUrl = useRef<string | null>(null);
 	/** One press of "New chat" is one navigation, however fast it is repeated. */
 	const startingNew = useRef(false);
+
+	/**
+	 * The two answer settings, read from the address rather than from state.
+	 *
+	 * Both change what the assistant is asked to produce, which makes them part
+	 * of the question and not part of the session — so they belong somewhere they
+	 * can be linked to and handed on. A teacher sending a class a link, or a
+	 * parent passing the tablet over, gets the right assistant without a second
+	 * instruction.
+	 *
+	 * `simple` is the plain-words toggle. `persona` is who the answer is for, and
+	 * `null` is a real value rather than a missing one: the service treats an
+	 * unknown persona as permissive rather than as any particular one.
+	 *
+	 * Read here, above `useConversation`, because the hook takes `persona` as an
+	 * input — this is not merely a display concern, it is on the request.
+	 */
+	const { simple, persona: personaParam } = useSearch({ from: "/_shell" });
+	const persona = personaParam ?? null;
 	/**
 	 * The language each eligibility check opened in, by thread.
 	 *
@@ -208,25 +216,37 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const [railCollapsed, setRailCollapsed] = useState(false);
 	const [drawerOpen, setDrawerOpen] = useState(false);
 
-	/**
-	 * The plain-words toggle, read from the address rather than from state.
-	 *
-	 * It changes what the assistant is asked to produce, which makes it part of
-	 * the question and not part of the session — so it belongs somewhere it can
-	 * be linked to and handed on. `replace` on the way in because toggling it is
-	 * an adjustment to the current view, not a place: it never added a history
-	 * entry when it lived in `useState`, and it must not start now.
-	 */
-	const { simple } = useSearch({ from: "/_shell" });
 	const simpleMode = simple === true;
 	const toggleSimpleMode = useCallback(() => {
 		void navigate({
 			to: ".",
+			// Spread, not replace. This used to return a fresh object, so toggling
+			// plain-words silently dropped every other search param -- which was
+			// invisible while `simple` was the only one.
 			search: (previous: ShellSearch): ShellSearch =>
-				previous.simple ? {} : { simple: true },
+				previous.simple
+					? { ...previous, simple: undefined }
+					: { ...previous, simple: true },
 			replace: true,
 		});
 	}, [navigate]);
+
+	// `replace`, like the toggle above and for the same reason: choosing who is
+	// at the screen adjusts the current view rather than going somewhere, and it
+	// must not put an entry in the back button for every change of mind.
+	const setPersona = useCallback(
+		(next: PersonaId | null) => {
+			void navigate({
+				to: ".",
+				search: (previous: ShellSearch): ShellSearch => ({
+					...previous,
+					persona: next ?? undefined,
+				}),
+				replace: true,
+			});
+		},
+		[navigate],
+	);
 	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
 
@@ -989,6 +1009,8 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 							onStop={handleStop}
 							simpleMode={simpleMode}
 							onToggleSimpleMode={toggleSimpleMode}
+							persona={persona}
+							onPersonaChange={setPersona}
 							draft={draft}
 							onDraftChange={setDraft}
 							focusSignal={focusSignal}

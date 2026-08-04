@@ -2751,6 +2751,163 @@ body {
 	}
 }
 
+/* ── Persona picker ──────────────────────────────────────────────────────── */
+
+/* Who the assistant is answering for, chosen from the composer's tool row.
+
+   Deliberately quieter than "Explain it simply" beside it. That control is a
+   toggle whose state has to be legible at a glance; this one names its current
+   value in its own label, so a filled treatment would make the composer read as
+   two competing switches. It carries the same 36px height and the same border
+   as its neighbour so the row is one family. */
+.persona {
+	position: relative;
+	display: flex;
+}
+
+.persona__trigger {
+	gap: 6px;
+	padding: 0 10px 0 12px;
+	color: var(--slate);
+}
+
+.persona__trigger[aria-expanded="true"] {
+	background: var(--wash-7);
+	color: var(--plum);
+}
+
+/* The name is the value, so it carries the weight the icons do not. */
+.persona__name {
+	font-weight: 600;
+}
+
+/* Under 620px the row is tight and "Explain it simply" already sheds its
+   label. The persona name stays -- it IS the control's value, and an unlabelled
+   person glyph would say nothing about who is currently being answered. What
+   goes is the chevron, which is decoration. */
+@media (max-width: 620px) {
+	.persona__trigger {
+		padding: 0 10px;
+	}
+	.persona__trigger > svg:last-of-type {
+		display: none;
+	}
+}
+
+/* Fixed, like `.row-menu`, and for the same reason: the composer sits inside a
+   clipping context and an absolutely positioned child is cut off by it.
+   Anchored from the bottom so it grows away from the composer rather than over
+   the box being typed in. */
+.persona__menu {
+	position: fixed;
+	z-index: 40;
+	/* 288px, not 260: at 260 every blurb wrapped to three lines and the rows
+	   stopped scanning as rows. These are one sentence each and should read as
+	   one or two lines. */
+	width: 288px;
+	max-width: calc(100vw - 24px);
+	padding: 6px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: rgb(255 255 255 / 0.97);
+	backdrop-filter: blur(20px);
+	box-shadow:
+		0 18px 40px -14px rgb(53 29 90 / 0.34),
+		0 2px 6px rgb(53 29 90 / 0.06);
+	animation: rise 180ms var(--ease) both;
+}
+
+.persona__option {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	width: 100%;
+	/* 44px would be the floor for a single-line row; these are two lines and
+	   comfortably past it. */
+	padding: 9px 10px;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--prose);
+	font: inherit;
+	text-align: left;
+	transition: background var(--swift);
+}
+
+.persona__option:hover {
+	background: var(--wash-6);
+}
+
+/* The focus ring is drawn INSIDE the row.
+
+   The global rule offsets it by 2px, which on a full-width row inside a 6px
+   padded menu put the ring outside the menu's own rounded edge -- it read as a
+   box hanging off the bottom rather than as the focused option. Inset, it
+   traces the row it belongs to. */
+.persona__option:focus-visible {
+	outline-offset: -2px;
+	border-radius: 10px;
+}
+
+/* A separator rather than a heading: "Everyone" is the absence of a choice,
+   not a fifth persona, and grouping it with the four would say otherwise. */
+.persona__option--none {
+	margin-top: 4px;
+	padding-top: 12px;
+	border-top: 1px solid var(--wash-12);
+}
+
+/* Reserved from the start, so checking a different option does not shunt every
+   label sideways by the width of a tick. */
+.persona__tick {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 16px;
+	height: 20px;
+	color: var(--plum);
+}
+
+.persona__text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.persona__label {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	font-size: 0.8125rem;
+	font-weight: 600;
+}
+
+/* Who it is for, beside the name. This is the line people choose by, so it is
+   not hidden in the description underneath. */
+.persona__audience {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: var(--quiet);
+}
+
+/* 12px is the documented body floor and this is a full sentence, so it sits at
+   it rather than under it. */
+.persona__blurb {
+	font-size: 0.75rem;
+	line-height: 1.45;
+	color: var(--quiet);
+	text-wrap: pretty;
+}
+
+@media (forced-colors: active) {
+	.persona__option[aria-checked="true"] {
+		outline: 2px solid Highlight;
+		outline-offset: -2px;
+	}
+}
+
 .composer__send {
 	display: flex;
 	align-items: center;

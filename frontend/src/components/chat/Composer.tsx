@@ -1,7 +1,9 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
+import type { PersonaId } from "#/lib/aspire/personas";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
+import { PersonaPicker } from "./PersonaPicker";
 import { VoiceListening, VoiceTranscribing } from "./Voice";
 import { VoiceSettings, type VoiceSettingsProps } from "./VoiceSettings";
 
@@ -16,6 +18,9 @@ interface ComposerProps {
 	/** "Explain it simply" — asks for the plain-words version of every answer. */
 	simpleMode: boolean;
 	onToggleSimpleMode: () => void;
+	/** Who the assistant is answering for. Null means nobody has said. */
+	persona: PersonaId | null;
+	onPersonaChange: (next: PersonaId | null) => void;
 	/** Draft is lifted so a transcript can land in it for review before sending. */
 	draft: string;
 	onDraftChange: (value: string) => void;
@@ -47,6 +52,8 @@ export function Composer({
 	onStop,
 	simpleMode,
 	onToggleSimpleMode,
+	persona,
+	onPersonaChange,
 	draft,
 	onDraftChange,
 	focusSignal,
@@ -201,6 +208,12 @@ export function Composer({
 					/>
 				) : (
 					<div className="composer__tools">
+						{/* First in the row, because it is the widest-reaching of these
+						    controls: it changes the reading level, the voice and which
+						    games are offered, where "Explain it simply" changes only how
+						    one answer is worded. */}
+						<PersonaPicker persona={persona} onChange={onPersonaChange} />
+
 						{/* Voice settings live here, not beside the mic. The mic is
 						    already a voice affordance; a second voice-looking control
 						    next to it would leave neither meaning anything. */}
