@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 150
 
     # --- Retrieval --------------------------------------------------------
-    retriever_k: int = Field(default=4, ge=1, le=20)
+    retriever_k: int = Field(default=3, ge=1, le=20)
     #: Minimum similarity for a chunk to reach the prompt. 0 disables the floor.
     #:
     #: Chroma's cosine relevance runs 0..1, higher being closer. 0.2 is
@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     #: ask, and by turn twelve they plainly do. The default is the opening turn
     #: only. This exists to restore the old behaviour for anyone who wants to
     #: measure the difference or disagrees with the trade.
-    follow_ups_always: bool = False
+    follow_ups_always: bool = True
 
     # --- Postgres (Neon) --------------------------------------------------
     # MUST be the POOLED endpoint -- the host with `-pooler` in it. Neon's
