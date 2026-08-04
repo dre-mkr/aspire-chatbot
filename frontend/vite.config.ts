@@ -5,23 +5,25 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { createRunnableDevEnvironment, defineConfig } from "vite";
 
-// A production build without VITE_ASPIRE_API_URL silently emits a bundle that
-// calls http://localhost:8000 -- it builds clean, deploys clean, and every
-// request fails in the browser. deploy/update.sh sets it, but nothing made
-// forgetting it loud. This is what makes it loud.
-//
-// It also cost real time during the audit: a harness was mocking localhost
-// while the bundle had been built against the live host, and both the
-// streaming and non-streaming paths failed identically as a result.
-if (process.env.NODE_ENV === "production" && !process.env.VITE_ASPIRE_API_URL) {
-	throw new Error(
-		"VITE_ASPIRE_API_URL is not set. A production build without it points the " +
-			"client at http://localhost:8000 and fails for every user. Build with " +
-			'VITE_ASPIRE_API_URL="https://your.host" (see deploy/update.sh).',
-	);
-}
+const config = defineConfig(({ command }) => {
+	// A production build without VITE_ASPIRE_API_URL silently emits a bundle that
+	// calls http://localhost:8000 -- it builds clean, deploys clean, and every
+	// request fails in the browser. deploy/update.sh sets it; nothing made
+	// forgetting it loud.
+	//
+	// Gated on `command === "build"` rather than on NODE_ENV. `vite preview` also
+	// runs with NODE_ENV=production and only serves an existing bundle, so a
+	// NODE_ENV check refused to start the preview server -- which is how this
+	// guard broke the very harness used to verify the rest of this work.
+	if (command === "build" && !process.env.VITE_ASPIRE_API_URL) {
+		throw new Error(
+			"VITE_ASPIRE_API_URL is not set. A production build without it points the " +
+				"client at http://localhost:8000 and fails for every user. Build with " +
+				'VITE_ASPIRE_API_URL="https://your.host" (see deploy/update.sh).',
+		);
+	}
 
-const config = defineConfig({
+	return {
 	resolve: { tsconfigPaths: true },
 	// Vite 8 no longer gives the `ssr` environment a runnable dev environment by
 	// default, and TanStack Start needs one: its dev middleware runs the server
@@ -74,6 +76,7 @@ const config = defineConfig({
 		viteReact(),
 		babel({ presets: [reactCompilerPreset()] }),
 	],
+	};
 });
 
 export default config;

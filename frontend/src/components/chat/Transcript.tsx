@@ -159,8 +159,39 @@ export function Transcript({
 	 */
 	const chips = streaming ? streaming.followUps : followUps;
 
+	/**
+	 * What a screen reader is told, and when.
+	 *
+	 * There was no live region anywhere in the product, so the answer a child
+	 * waits for was announced exactly never: the reveal painted four words at a
+	 * time and assistive technology heard silence throughout. WCAG 4.1.3, on the
+	 * primary interaction.
+	 *
+	 * Announced on settle rather than per tick, deliberately. `aria-live="polite"`
+	 * over the revealing text would re-announce on every one of the 25 updates a
+	 * second the typewriter makes — the "spamming a token at a time" failure — so
+	 * this reports the transition instead: thinking, then the finished answer
+	 * once, then nothing until the next turn.
+	 *
+	 * Visually hidden, and empty while a reveal is running, so nothing is
+	 * announced twice and nothing renders.
+	 */
+	const settled = streaming ? undefined : messages.at(-1);
+	const announcement = streaming
+		? ""
+		: isThinking
+			? "Finding an answer."
+			: settled?.role === "assistant"
+				? `Answer ready. ${answerToText(settled.blocks)}`
+				: settled?.role === "error"
+					? settled.text
+					: "";
+
 	return (
 		<div className="transcript">
+			<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+				{announcement}
+			</p>
 			{turns.map((message, index) => {
 				const arriving = message.id >= animateAfterId;
 
