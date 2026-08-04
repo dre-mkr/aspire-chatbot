@@ -192,7 +192,11 @@ export async function askAspire({
 	if (!response.ok) {
 		throw new AspireError(
 			await describeFailure(response),
-			response.status >= 500,
+			// 429 belongs with the 5xx here. Its message tells the reader to wait
+			// and ask again, and `>= 500` alone made that a lie by removing the
+			// control that would let them. Every other 4xx stays non-retryable:
+			// asking the same malformed thing again cannot help.
+			response.status === 429 || response.status >= 500,
 		);
 	}
 

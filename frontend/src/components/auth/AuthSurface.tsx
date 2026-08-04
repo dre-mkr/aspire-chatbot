@@ -62,6 +62,11 @@ export function AuthSurface({
 					<img
 						className="auth__logo"
 						src="/brand/aspire-wordmark.png"
+						// Reserves the box before the image decodes. Rail.tsx sets the
+						// same intrinsic size; without it this shifts the whole auth
+						// panel on first paint.
+						width={190}
+						height={48}
 						alt="ASPIRE — Achieving Success through Personal Investment, Resources and Education"
 					/>
 					<h1 className="auth__headline">
