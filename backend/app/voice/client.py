@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from elevenlabs.core import RequestOptions
 from elevenlabs.types import VoiceSettings as ElevenVoiceSettings
 
+from app.timing import T_TTS_FIRST_BYTE, record_stage
 from app.voice.config import ASPIRE_KEYTERMS, VoiceSettings, get_voice_settings
 
 logger = logging.getLogger(__name__)
@@ -157,6 +158,7 @@ class VoiceClient:
             raise VoiceUnavailable("Voice temporarily disabled by circuit breaker.")
 
         def call() -> bytes:
+            started = time.perf_counter()
             stream = self._client.text_to_speech.convert(
                 voice_id=voice_id,
                 text=text,
@@ -171,7 +173,23 @@ class VoiceClient:
                     timeout_in_seconds=int(self._settings.tts_timeout_seconds)
                 ),
             )
-            return b"".join(chunk for chunk in stream if chunk)
+            # `t_tts_first_byte` is measured where the first chunk arrives from
+            # the vendor -- which is NOT when the caller can play anything. The
+            # join below waits for the whole file, deliberately, because the audio
+            # is cached and replayed. Recording both is the point: the gap between
+            # first byte and last is exactly the latency a streaming voice
+            # response would remove, and it cannot be argued about without a
+            # number.
+            chunks: list[bytes] = []
+            for chunk in stream:
+                if not chunk:
+                    continue
+                if not chunks:
+                    record_stage(
+                        T_TTS_FIRST_BYTE, (time.perf_counter() - started) * 1000.0
+                    )
+                chunks.append(chunk)
+            return b"".join(chunks)
 
         try:
             audio = await asyncio.wait_for(

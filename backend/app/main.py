@@ -41,12 +41,29 @@ from app.db.repository import (
     load_context,
 )
 from app.jobs import enqueue_summary
-from app.memory import build_prompt, log_prompt_cost
+from app.memory import build_prompt, count_tokens, log_prompt_cost
 from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
 from app.ingest import ingest_if_empty
 from app.rag import count_documents, get_vector_store
 from app.streaming import agui_stream
+from app.timing import (
+    RING as TIMING_RING,
+    T_AGENT_FIRST_DELTA,
+    T_AGENT_FIRST_TOOL,
+    T_HISTORY,
+    T_IDENTITY,
+    T_OPEN_CONVERSATION,
+    T_PROMPT_BUILD,
+    annotate as annotate_timings,
+    begin as begin_timings,
+    bind as bind_timings,
+    mark_stage,
+    record_stage,
+    stage as timed_stage,
+    timings_endpoint_enabled,
+    turn as timed_turn,
+)
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -177,6 +194,24 @@ async def health() -> HealthResponse:
         cache=response_cache.cache_enabled(),
         cache_stats=await response_cache.stats(),
     )
+
+
+@app.get("/debug/timings")
+async def debug_timings(last: int | None = None) -> JSONResponse:
+    """p50/p95/p99 per stage over the last N turns this process served.
+
+    Gated on `TIMINGS_ENDPOINT_ENABLED`, and 404 rather than 403 when it is off:
+    a disabled debug route should not confirm that it exists.
+
+    The ring holds no message text -- durations, a persona, a language and token
+    counts -- but how a service is performing is still reconnaissance, so this is
+    something a measurement run switches on and switches off again. It is also
+    per-process and per-restart by design; see `TimingRing` for why that is a
+    feature of a debugging aid and a disqualifying property for a metric.
+    """
+    if not timings_endpoint_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return JSONResponse(TIMING_RING.summary(last=last))
 
 
 #: How long a provider reachability check is trusted.
@@ -439,16 +474,33 @@ async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMe
     """
     settings = get_settings()
     if not settings.memory_window_enabled:
+        # No history to fetch and nothing to assemble: the checkpointer supplies
+        # the rest inside the agent. Both stages are recorded as having happened
+        # and cost nothing, rather than left absent, because "this deployment
+        # does no history work" is a measurement, not a missing one.
+        annotate_timings(input_token_count=count_tokens(request.message))
+        record_stage(T_HISTORY, 0.0)
+        record_stage(T_PROMPT_BUILD, 0.0)
         return [HumanMessage(content=request.message)]
 
-    context = ConversationContext()
-    async with session() as db:
-        if db is not None:
-            context = await load_context(
-                db, thread_id, window_turns=settings.memory_window_turns
-            )
+    # The window read: one round trip to Neon for the recent turns and the
+    # running summary. Summarisation itself is never here -- it runs in the arq
+    # worker, off the request path, which is what makes the window affordable.
+    with timed_stage(T_HISTORY):
+        context = ConversationContext()
+        async with session() as db:
+            if db is not None:
+                context = await load_context(
+                    db, thread_id, window_turns=settings.memory_window_turns
+                )
 
-    prepared = build_prompt(request.message, context)
+    # Assembly plus the tiktoken pass `build_prompt` does to cost it. Local CPU,
+    # no network -- and the encoding is fetched and cached on first use, which is
+    # part of why the first turn in a process is slower than the rest.
+    with timed_stage(T_PROMPT_BUILD):
+        prepared = build_prompt(request.message, context)
+
+    annotate_timings(input_token_count=prepared.tokens)
     log_prompt_cost(thread_id, prepared)
     return prepared.messages
 
@@ -621,30 +673,34 @@ async def _open_conversation(
     is owed an answer, and losing the record of the question is our problem.
     """
     if not database_enabled():
+        record_stage(T_OPEN_CONVERSATION, 0.0)
         return
 
-    try:
-        async with session() as db:
-            if db is None:
-                return
-            await ensure_conversation(
-                db,
+    # On the critical path and ahead of the model, so it is timed: two writes to
+    # Neon that the reader waits through before the first token can even start.
+    with timed_stage(T_OPEN_CONVERSATION):
+        try:
+            async with session() as db:
+                if db is None:
+                    return
+                await ensure_conversation(
+                    db,
+                    thread_id,
+                    language=request.language,
+                    persona=request.persona,
+                    account_status=request.account_status,
+                    # Recorded on creation only, so the first turn settles whose
+                    # conversation this is and no later request can take it over.
+                    owner_id=owner_id,
+                    title=_provisional_title(request.message),
+                )
+                await append_turn(db, thread_id, role="user", content=request.message)
+        except Exception:
+            logger.warning(
+                "Could not open conversation %s; the turn was still served.",
                 thread_id,
-                language=request.language,
-                persona=request.persona,
-                account_status=request.account_status,
-                # Recorded on creation only, so the first turn settles whose
-                # conversation this is and no later request can take it over.
-                owner_id=owner_id,
-                title=_provisional_title(request.message),
+                exc_info=True,
             )
-            await append_turn(db, thread_id, role="user", content=request.message)
-    except Exception:
-        logger.warning(
-            "Could not open conversation %s; the turn was still served.",
-            thread_id,
-            exc_info=True,
-        )
 
 
 async def _persist_turn(
@@ -742,17 +798,42 @@ async def chat(
     # conversation is stored unowned and will not appear in anybody's list.
     # A new thread_id starts a fresh conversation; reuse it to keep context.
     thread_id = request.thread_id or str(uuid.uuid4())
-    who = await owner_id_for(principal)
 
-    cached = await _cached_reply(request)
-    if cached is not None:
-        return cached
+    # Measured on this path too, even though it has no TTFT to report -- there is
+    # no first token when the whole reply arrives at once, so `t_ttft` is simply
+    # absent here and `t_total` is the number that matters. What this path does
+    # have and the streaming one does not is the response cache, which is why
+    # `cache_hit` is recorded rather than hardcoded.
+    with timed_turn(
+        endpoint="/chat", persona=request.persona, lang=request.language
+    ):
+        with timed_stage(T_IDENTITY):
+            who = await owner_id_for(principal)
 
-    # Before the model, not after: see `_open_conversation`.
-    await _open_conversation(request, thread_id, who)
+        cached = await _cached_reply(request)
+        if cached is not None:
+            annotate_timings(cache_hit=True, output_token_count=count_tokens(cached.reply))
+            return cached
 
-    prepared = await _prepare_messages(request, thread_id)
+        # Before the model, not after: see `_open_conversation`.
+        await _open_conversation(request, thread_id, who)
 
+        prepared = await _prepare_messages(request, thread_id)
+
+        return await _serve_chat(request, thread_id, who, prepared)
+
+
+async def _serve_chat(
+    request: ChatRequest,
+    thread_id: str,
+    who: uuid_module.UUID | None,
+    prepared: list[BaseMessage],
+) -> ChatResponse:
+    """The rest of `/chat`, unchanged, split out only so the turn can wrap it.
+
+    Extracted rather than re-indented so the diff for this phase stays a diff
+    about measurement. Nothing below moved relative to anything else below.
+    """
     try:
         result = await get_agent(request.simple_mode).ainvoke(
             {"messages": prepared},
@@ -822,6 +903,7 @@ async def chat(
         raise HTTPException(status_code=502, detail="The assistant returned an empty response.")
 
     sources = _extract_sources(messages)
+    annotate_timings(output_token_count=count_tokens(reply) if reply else 0)
 
     # No chips on a game turn, and the reason is not tidiness.
     #
@@ -944,9 +1026,34 @@ async def chat_stream(
     """
     request = _chat_request_from(body)
     thread_id = request.thread_id or str(uuid.uuid4())
-    who = await owner_id_for(principal)
+
+    # The clock starts here, before the identity round trip, because "request
+    # received" is what TTFT is measured from and `owner_id_for` is already part
+    # of what the reader is waiting through.
+    timings = begin_timings(
+        endpoint="/chat/stream", persona=request.persona, lang=request.language
+    )
+    # Bound here as well as inside `run()`: this await happens before the
+    # generator is ever driven, so without it `t_identity` would have no turn to
+    # attach to and would land in the derived model-call figure instead.
+    with bind_timings(timings, finish_on_exit=False):
+        with timed_stage(T_IDENTITY):
+            who = await owner_id_for(principal)
 
     async def run() -> AsyncIterator[dict]:
+        """Publishes the turn's timings for everything below, including the agent.
+
+        The bind lives out here rather than inside `_run` so that it covers the
+        whole stream: the retriever and the embedding call happen several frames
+        down inside langgraph, and a ContextVar is the only way they can find the
+        turn they belong to. Closing it here is also what emits the line, which
+        is why it wraps the iteration rather than preceding it.
+        """
+        with bind_timings(timings):
+            async for event in _run():
+                yield event
+
+    async def _run() -> AsyncIterator[dict]:
         # Recorded before the model runs, exactly as `/chat` does, so a turn
         # that fails still leaves a conversation that can be reopened.
         await _open_conversation(request, thread_id, who)
@@ -986,8 +1093,14 @@ async def chat_stream(
                 # the buffer can silence a card turn before any of its prose is
                 # released.
                 for call in getattr(chunk, "tool_call_chunks", None) or []:
+                    # The first tool call is the end of model call #1, and that
+                    # call is the single largest thing standing between the
+                    # request and the first visible token -- nothing can be
+                    # released before a tool has run (see app/streaming.py).
+                    mark_stage(T_AGENT_FIRST_TOOL)
                     yield {"tool": call.get("name")}
                 for call in getattr(chunk, "tool_calls", None) or []:
+                    mark_stage(T_AGENT_FIRST_TOOL)
                     yield {"tool": call.get("name")}
 
                 # A tool's OUTPUT is never the assistant speaking. It is kept in
@@ -999,6 +1112,10 @@ async def chat_stream(
 
                 text = message_text(getattr(chunk, "content", ""))
                 if text:
+                    # The model has produced text. Whether the *reader* sees it
+                    # yet is `TurnBuffer`'s decision, and t_ttft is stamped there;
+                    # the gap between the two is what the suppression rule costs.
+                    mark_stage(T_AGENT_FIRST_DELTA)
                     streamed.append(text)
                     yield {"delta": text}
         except Exception:
@@ -1019,6 +1136,10 @@ async def chat_stream(
 
         sources = _extract_sources(collected)
         quiet_turn = game is not None or eligibility is not None
+
+        # Counted with the same encoder the memory window uses, so the number in
+        # a timing line and the number in a prompt-cost line mean the same thing.
+        annotate_timings(output_token_count=count_tokens(reply) if reply else 0)
 
         # The prose is complete here, and nothing below this line is prose.
         yield {"text_end": True}
@@ -1075,7 +1196,7 @@ async def chat_stream(
         yield {"follow_ups": follow_ups}
 
     return StreamingResponse(
-        agui_stream(thread_id=thread_id, run_events=run()),
+        agui_stream(thread_id=thread_id, run_events=run(), timings=timings),
         media_type="text/event-stream",
         headers={
             # Long-lived response through a proxy: without this nginx buffers the

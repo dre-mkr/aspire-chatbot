@@ -38,6 +38,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.timing import T_TTFT, TurnTimings
+
 logger = logging.getLogger(__name__)
 
 #: Tools whose presence means this turn is a card, and its prose must not ship.
@@ -122,6 +124,7 @@ async def agui_stream(
     *,
     thread_id: str,
     run_events: AsyncIterator[dict[str, Any]],
+    timings: TurnTimings | None = None,
 ) -> AsyncIterator[str]:
     """Wraps a turn's events in the AG-UI envelope.
 
@@ -129,6 +132,12 @@ async def agui_stream(
     `{"tool": name}`, `{"done": payload}`, `{"error": message}` -- so the
     envelope and the agent plumbing stay separable and each can be read on its
     own.
+
+    `timings` is optional and measurement-only. It exists here because this is
+    the only place that knows when a token actually crossed the wire: the buffer
+    above holds text back until a tool has run, so "the model produced a token"
+    and "the reader saw one" are different moments, and TTFT is the second.
+    Passing None -- as `/chat`'s tests do -- changes nothing.
     """
     run_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
@@ -146,6 +155,10 @@ async def agui_stream(
         )
 
     def content(text: str) -> str:
+        # The one funnel every visible token passes through, which is why the
+        # TTFT stamp belongs here and not at any of the four call sites.
+        if timings is not None:
+            timings.mark(T_TTFT)
         return sse(
             {"type": "TEXT_MESSAGE_CONTENT", "messageId": message_id, "delta": text}
         )

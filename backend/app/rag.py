@@ -8,13 +8,26 @@ hosted provider without touching ingestion, the agent, or the API.
 from __future__ import annotations
 
 import logging
+import time
 from functools import lru_cache
+from typing import Any
 
 from langchain_chroma import Chroma
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForRetrieverRun,
+    CallbackManagerForRetrieverRun,
+)
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 
 from app.config import Settings, get_settings
+from app.timing import (
+    T_EMBED,
+    T_RETRIEVE_TOTAL,
+    annotate,
+    record_stage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +63,76 @@ class FastEmbedEmbeddings(Embeddings):
         return next(iter(self.model.query_embed(text))).tolist()
 
 
+class TimedEmbeddings(Embeddings):
+    """Delegates to a real embeddings backend and times `embed_query`.
+
+    Only the query side is timed. `embed_documents` runs at ingest, which is not
+    a request and is not what this workstream is measuring.
+
+    Wrapping rather than editing each backend is what keeps the measurement
+    honest across a provider switch: `EMBEDDINGS_PROVIDER=openai` is a network
+    round trip and `fastembed` is local ONNX inference, and `t_embed` has to mean
+    the same thing -- "what embedding this query cost" -- in both cases.
+    """
+
+    def __init__(self, inner: Embeddings) -> None:
+        self.inner = inner
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.inner.embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        start = time.perf_counter()
+        try:
+            return self.inner.embed_query(text)
+        finally:
+            record_stage(T_EMBED, (time.perf_counter() - start) * 1000.0)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self.inner.aembed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        start = time.perf_counter()
+        try:
+            return await self.inner.aembed_query(text)
+        finally:
+            record_stage(T_EMBED, (time.perf_counter() - start) * 1000.0)
+
+
+class TimedRetriever(BaseRetriever):
+    """Times the whole retrieval call and counts what came back.
+
+    The span covers embedding *and* the vector query, because Chroma embeds the
+    question inside `similarity_search` and there is no seam between them from
+    out here. `TurnTimings.payload` subtracts `t_embed` to report the vector
+    query on its own -- see the note there.
+    """
+
+    inner: BaseRetriever
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun, **kwargs: Any
+    ) -> list[Document]:
+        start = time.perf_counter()
+        try:
+            documents = self.inner.invoke(query)
+        finally:
+            record_stage(T_RETRIEVE_TOTAL, (time.perf_counter() - start) * 1000.0)
+        annotate(retrieved_chunk_count=len(documents))
+        return documents
+
+    async def _aget_relevant_documents(
+        self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun, **kwargs: Any
+    ) -> list[Document]:
+        start = time.perf_counter()
+        try:
+            documents = await self.inner.ainvoke(query)
+        finally:
+            record_stage(T_RETRIEVE_TOTAL, (time.perf_counter() - start) * 1000.0)
+        annotate(retrieved_chunk_count=len(documents))
+        return documents
+
+
 def build_embeddings(settings: Settings | None = None) -> Embeddings:
     """Construct the configured embeddings backend. The one place to extend."""
     settings = settings or get_settings()
@@ -58,10 +141,10 @@ def build_embeddings(settings: Settings | None = None) -> Embeddings:
         # Reads OPENAI_API_KEY from the environment, same as the chat model.
         from langchain_openai import OpenAIEmbeddings
 
-        return OpenAIEmbeddings(model=settings.embeddings_model)
+        return TimedEmbeddings(OpenAIEmbeddings(model=settings.embeddings_model))
 
     if settings.embeddings_provider == "fastembed":
-        return FastEmbedEmbeddings(settings.embeddings_model)
+        return TimedEmbeddings(FastEmbedEmbeddings(settings.embeddings_model))
 
     raise ValueError(f"Unsupported embeddings_provider: {settings.embeddings_provider!r}")
 
@@ -111,12 +194,17 @@ def build_retriever(store: Chroma, settings: Settings | None = None) -> BaseRetr
     settings = settings or get_settings()
     threshold = settings.retriever_score_threshold
     if threshold <= 0:
-        return store.as_retriever(search_kwargs={"k": settings.retriever_k})
+        inner = store.as_retriever(search_kwargs={"k": settings.retriever_k})
+    else:
+        inner = store.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={
+                "k": settings.retriever_k,
+                "score_threshold": threshold,
+            },
+        )
 
-    return store.as_retriever(
-        search_type="similarity_score_threshold",
-        search_kwargs={
-            "k": settings.retriever_k,
-            "score_threshold": threshold,
-        },
-    )
+    # Timing only. `TimedRetriever` forwards the query unchanged and returns
+    # exactly what the inner retriever returned, so `k`, the threshold and the
+    # documents that reach the prompt are all untouched.
+    return TimedRetriever(inner=inner)

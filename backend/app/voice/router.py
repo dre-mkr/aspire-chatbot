@@ -12,6 +12,7 @@ import logging
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 
+from app.timing import annotate as annotate_timings, turn as timed_turn
 from app.voice.cache import cache_key, get_cache
 from app.voice.client import VoiceUnavailable, get_client
 from app.voice.config import ALLOWED_AUDIO_MIME, get_voice_settings
@@ -188,6 +189,24 @@ async def transcribe(
 
 @router.post("/speak")
 async def speak(request: Request, body: SpeakRequest) -> Response:
+    """Text to audio.
+
+    Wrapped in its own measured turn because it *is* its own request: the client
+    asks for audio after the answer text has arrived, so this never appears in a
+    `/chat/stream` timing line and `t_tts_first_byte` would otherwise have no
+    turn to attach to. `t_total` here is what the reader waits for before hearing
+    anything, and a cache hit skips the vendor entirely -- which is why the hit
+    is annotated rather than returned before the clock starts.
+    """
+    with timed_turn(
+        endpoint="/voice/speak",
+        persona=body.persona.value,
+        lang=body.language.value,
+    ):
+        return await _speak(request, body)
+
+
+async def _speak(request: Request, body: SpeakRequest) -> Response:
     settings = get_voice_settings()
 
     if body.format.lower() != "mp3":
@@ -213,6 +232,7 @@ async def speak(request: Request, body: SpeakRequest) -> Response:
     # writing a whole MP3 on the event loop stalls every other request behind
     # it. Under `--workers 1` that includes live chat turns.
     if (cached := await cache.aget(key)) is not None:
+        annotate_timings(cache_hit=True)
         return Response(
             content=cached,
             media_type="audio/mpeg",
