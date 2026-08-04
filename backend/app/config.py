@@ -140,11 +140,31 @@ class Settings(BaseSettings):
     response_cache_enabled: bool = True
 
     # --- Conversation memory ---------------------------------------------
-    # OFF by default. Enabling this changes what the model sees: the last N
-    # turns verbatim plus a running summary of everything older, instead of the
-    # whole thread. Flip it back and today's behaviour returns exactly, because
-    # the full transcript is persisted either way.
-    memory_window_enabled: bool = False
+    # ON by default, since the worker that backs it is now actually deployed.
+    #
+    # With this off, langgraph's InMemorySaver replays the ENTIRE thread into the
+    # model every turn -- including every prior turn's ToolMessage carrying its
+    # retrieved knowledge-base chunks. Measured: 1,800 tokens of fixed overhead
+    # plus 519 of context per turn, so turn n costs roughly
+    # 1800 + n x (519 + question + answer). Cost is quadratic in conversation
+    # length, and the saver grows without bound in a process that is pinned to a
+    # single worker.
+    #
+    # With it on, history comes from Postgres instead: a window of recent turns
+    # plus a running summary of everything older, compressed by the arq worker
+    # off the request path. Cost becomes linear and the process stops
+    # accumulating conversations it will never serve again.
+    #
+    # This was off for a good reason until now -- the summarisation job had no
+    # worker to run in, so turns falling out of the window were never folded into
+    # a summary and would simply have been forgotten. deploy/aspire-worker.service
+    # fixes that, which is what makes this flip safe.
+    #
+    # Gated on a database at the point of use (see `agent.build_agent`), so a
+    # deployment without Postgres keeps the old behaviour rather than losing its
+    # memory. Flip it back and today's behaviour returns exactly, because the
+    # full transcript is persisted either way.
+    memory_window_enabled: bool = True
     # How many recent messages the model sees verbatim. The single number that
     # decides the per-turn prompt cost, which is why it is configurable.
     memory_window_turns: int = Field(default=6, ge=1, le=50)
