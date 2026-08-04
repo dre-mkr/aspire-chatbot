@@ -10,7 +10,17 @@ import {
 } from "./voice";
 
 export type VoicePhase = "rest" | "consent" | "listening" | "transcribing";
-export type NoteKind = VoiceFailure | "review";
+/**
+ * "aborted" is excluded on purpose, and the type is what enforces it.
+ *
+ * Every other failure has a note because every other failure is something the
+ * reader needs told. An abort is something they asked for -- they pressed stop,
+ * played a different answer, or navigated away -- and a message about it would
+ * be the product apologising for doing as it was told. Leaving it out of this
+ * union means a future `showNote(failure)` that forgets to filter it will not
+ * compile.
+ */
+export type NoteKind = Exclude<VoiceFailure, "aborted"> | "review";
 export type NoteTone = "brand" | "bad" | "warn" | "quiet";
 
 export interface VoiceNote {
@@ -174,6 +184,8 @@ export function useVoice({
 	const cancelled = useRef(false);
 	const audio = useRef<HTMLAudioElement | null>(null);
 	const objectUrl = useRef<string | null>(null);
+	/** The in-flight synthesis, so it can be cancelled rather than paid for. */
+	const synthesis = useRef<AbortController | null>(null);
 
 	// localStorage is unavailable during SSR, so preferences load after mount.
 	useEffect(() => {
@@ -243,7 +255,15 @@ export function useVoice({
 				showNote("review");
 			} catch (error) {
 				if (cancelled.current) return;
-				showNote(error instanceof VoiceError ? error.failure : "offline");
+				// `transcribe` takes no external signal, so "aborted" cannot arrive
+				// here today. Handled anyway because the union allows it and a
+				// silent fallthrough to "offline" would be the wrong message on the
+				// day it can.
+				if (error instanceof VoiceError) {
+					if (error.failure !== "aborted") showNote(error.failure);
+				} else {
+					showNote("offline");
+				}
 			} finally {
 				if (!cancelled.current) setPhase("rest");
 			}
@@ -351,6 +371,11 @@ export function useVoice({
 	}, []);
 
 	const stopPlayback = useCallback(() => {
+		// Abort the synthesis too, not just the playback. Without this,
+		// interrupting a reply that was still being spoken left ElevenLabs
+		// generating -- and billing for -- audio that had already been cancelled.
+		synthesis.current?.abort();
+		synthesis.current = null;
 		audio.current?.pause();
 		audio.current = null;
 		if (objectUrl.current) {
@@ -360,6 +385,17 @@ export function useVoice({
 		setPlayingId(null);
 		setPausedId(null);
 	}, []);
+
+	/**
+	 * Stop on the way out, as well as on every deliberate interruption.
+	 *
+	 * `stopPlayback` was already called on send, regenerate, stop, chat switch
+	 * and audio-end, and no effect returned it as a cleanup. `AspireChat`
+	 * survives `/` to `/chat/:id`, so this was narrow -- but navigating to
+	 * `/signin`, `/signup`, `/verify` or `/reset` unmounts the shell, and audio
+	 * playing at that moment carried on with its blob never revoked.
+	 */
+	useEffect(() => stopPlayback, [stopPlayback]);
 
 	/**
 	 * Play an answer aloud, pause it if it is already playing, or resume it if
@@ -387,13 +423,30 @@ export function useVoice({
 			}
 
 			stopPlayback();
+			const controller = new AbortController();
+			synthesis.current = controller;
 			let url: string;
 			try {
-				url = await speak(text, language, threadId);
+				url = await speak(text, language, threadId, controller.signal);
 			} catch (error) {
-				showNote(error instanceof VoiceError ? error.failure : "offline");
+				// An abort is this component's own doing -- another answer was
+				// played, the reader stopped it, the shell unmounted. Saying "the
+				// connection dropped" for something they asked for would be a lie.
+				if (error instanceof VoiceError) {
+					if (error.failure !== "aborted") showNote(error.failure);
+				} else {
+					showNote("offline");
+				}
 				return;
 			}
+
+			// Cancelled while the bytes were arriving. Nothing to play, and the
+			// object URL must not leak.
+			if (controller.signal.aborted) {
+				URL.revokeObjectURL(url);
+				return;
+			}
+			synthesis.current = null;
 
 			objectUrl.current = url;
 			const element = new Audio(url);

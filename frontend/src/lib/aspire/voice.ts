@@ -41,7 +41,14 @@ export type VoiceFailure =
 	| "denied"
 	| "offline"
 	| "dropped"
-	| "limited";
+	| "limited"
+	/**
+	 * The caller cancelled it. Not a failure the reader should be told about —
+	 * they pressed stop, or sent a new message, or navigated away. It is in this
+	 * union so callers can recognise and swallow it rather than showing "the
+	 * connection dropped" for something they did on purpose.
+	 */
+	| "aborted";
 
 export class VoiceError extends Error {
 	readonly failure: VoiceFailure;
@@ -131,8 +138,22 @@ export async function speak(
 	text: string,
 	language: VoiceLanguage,
 	threadId: string | null,
+	/**
+	 * Cancels the synthesis, and with it the ElevenLabs call behind it.
+	 *
+	 * Optional because the 20s timeout still applies regardless -- this composes
+	 * with it rather than replacing it. Without one, interrupting playback,
+	 * sending a new message or navigating away left the synthesis running to
+	 * completion and billed in full for audio nobody would hear. Exactly the
+	 * defect class as P0-002 on the chat call, in a second subsystem.
+	 */
+	signal?: AbortSignal,
 ): Promise<string> {
 	let response: Response;
+	// The external signal and the timeout are combined rather than chosen
+	// between: whichever fires first should stop the request.
+	const timeout = AbortSignal.timeout(20_000);
+	const cancel = signal ? AbortSignal.any([signal, timeout]) : timeout;
 	try {
 		response = await fetch(`${API_URL}/api/voice/speak`, {
 			method: "POST",
@@ -143,9 +164,12 @@ export async function speak(
 				language,
 				thread_id: threadId,
 			}),
-			signal: AbortSignal.timeout(20_000),
+			signal: cancel,
 		});
 	} catch {
+		// A caller-driven abort is not a fault and must not be dressed as one:
+		// the caller already knows, because it is the one that asked.
+		if (signal?.aborted) throw new VoiceError("aborted");
 		throw new VoiceError("dropped");
 	}
 

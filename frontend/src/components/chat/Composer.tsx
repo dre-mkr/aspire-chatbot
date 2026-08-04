@@ -3,6 +3,7 @@ import {
 	lazy,
 	Suspense,
 	useEffect,
+	useId,
 	useRef,
 	useState,
 } from "react";
@@ -62,6 +63,29 @@ interface ComposerProps {
 	};
 }
 
+/**
+ * The backend's own cap on `message` (`backend/app/schemas.py`).
+ *
+ * The textarea had no limit at all, so a long paste was committed to the
+ * transcript as a user bubble, sent, and rejected with 422 — and `canRetry` is
+ * false for 4xx, so no retry was offered and the orphaned question sat there
+ * with no route forward. Exactly the state `openPast`'s recovery turn exists to
+ * prevent.
+ *
+ * Enforced in the box instead, where it is preventable rather than reportable.
+ */
+const MAX_CHARS = 8000;
+
+/**
+ * When the counter appears.
+ *
+ * A character count on an empty box is clutter and, worse, reads as a target.
+ * This is a chat with a five-year-old at one end; nobody should be told they
+ * have 8,000 characters to fill. It shows only once the limit is close enough
+ * to be worth knowing about.
+ */
+const COUNTER_FROM = MAX_CHARS - 500;
+
 const MIC_TITLE: Record<MicState, string> = {
 	ready: "Speak your question",
 	denied: "Microphone blocked",
@@ -85,6 +109,8 @@ export function Composer({
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const touch = useMediaQuery(TOUCH);
 	const fieldRef = useRef<HTMLTextAreaElement>(null);
+	const counterId = useId();
+	const nearLimit = draft.length >= COUNTER_FROM;
 
 	/**
 	 * Put the cursor in the box so a new chat can be typed into without a click.
@@ -207,12 +233,29 @@ export function Composer({
 						id="aspire-composer"
 						ref={fieldRef}
 						value={draft}
+						maxLength={MAX_CHARS}
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleKeyDown}
 						onKeyUp={handleKeyUp}
 						onBlur={handleBlur}
 						placeholder={placeholder}
+						aria-describedby={nearLimit ? counterId : undefined}
 					/>
+					{/* `role="status"` and polite: a screen reader is told how much room
+					    is left as it runs out, without interrupting typing. */}
+					{nearLimit ? (
+						<p
+							id={counterId}
+							className="composer__counter"
+							role="status"
+							aria-live="polite"
+							data-full={draft.length >= MAX_CHARS || undefined}
+						>
+							{draft.length >= MAX_CHARS
+								? "That is as long as a question can be."
+								: `${MAX_CHARS - draft.length} characters left`}
+						</p>
+					) : null}
 				</div>
 
 				{listening ? (

@@ -2836,6 +2836,26 @@ body {
 /* Out of the way until a keyboard asks for it, then a real control in a real
    place. Not `display: none` and not `width: 1px` — both would take it out of
    the tab order, which is the one thing it exists to be in. */
+/* Only present in the last 500 characters, and quiet even then. It sits inside
+   the field's own box so it cannot move the composer when it appears -- the
+   thread is pinned to the bottom, so anything that changes the composer's
+   height shifts the conversation above it. */
+.composer__counter {
+	margin: 0;
+	padding: 0 4px 2px;
+	font-size: 0.75rem;
+	color: var(--quiet);
+	text-align: right;
+}
+
+/* The limit reached is worth more than "getting close" -- this is the moment
+   the box stops accepting what is being typed, and silence there reads as a
+   broken keyboard. */
+.composer__counter[data-full] {
+	color: var(--danger);
+	font-weight: 500;
+}
+
 .skip-link {
 	position: absolute;
 	z-index: 60;
