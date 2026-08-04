@@ -987,16 +987,6 @@ export function AspireChat() {
 										Ask me about investing, your ASPIRE modules, or the
 										programme itself.
 									</p>
-									{/* Identity and regional grounding, worth most on first
-									    contact and worth nothing on the fortieth turn — so it
-									    lives in the empty state and goes away once you start.
-									    Deleted by a60512e, a commit about removing an unreachable
-									    voice scale; its stylesheet rule, that rule's measured
-									    contrast note, and `topbar-move.mjs` all survived and went
-									    on describing an element that was no longer rendered. */}
-									<p className="hero__identity">
-										Financial literacy assistant · St. Kitts and Nevis
-									</p>
 								</div>
 
 								<section aria-label="Conversation">

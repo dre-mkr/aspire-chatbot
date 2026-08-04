@@ -1401,22 +1401,6 @@ body {
 	text-wrap: pretty;
 }
 
-/* Was the top bar's caption. Quieter than the subtitle above it: this is who
-   is speaking and where from, which you read once, not the invitation to ask,
-   which is the thing to act on. */
-.hero__identity {
-	margin: 0 0 30px;
-	padding: 0 20px;
-	font-size: 0.78125rem;
-	font-weight: 400;
-	letter-spacing: 0.01em;
-	/* 0.92, not 0.86: measured against the painted gradient the dimmer value
-	   came in at 4.81:1, which clears AA by 0.31 and would not survive a small
-	   change to the gradient underneath it. */
-	color: rgb(255 255 255 / 0.92);
-	text-wrap: pretty;
-}
-
 /* ── Orb ────────────────────────────────────────────────────────────────── */
 
 .orb {
