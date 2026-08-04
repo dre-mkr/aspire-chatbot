@@ -116,8 +116,12 @@ mv -Tf "$WEB_ROOT/.client.swap" "$WEB_ROOT/client"
 # --- restart -----------------------------------------------------------------
 # The SSR process holds dist/server/server.js in memory from its last start, so
 # it keeps rendering the *old* HTML until this line.
+#
+# aspire-worker is in this list because the retention job lives in it. Note the
+# sudoers rule in /etc/sudoers.d/aspire-deploy matches the WHOLE command, so
+# adding a unit here without updating that file makes the deploy fail closed.
 log "Restarting services"
-sudo -n systemctl restart aspire-api aspire-web
+sudo -n systemctl restart aspire-api aspire-web aspire-worker
 
 # --- verify ------------------------------------------------------------------
 wait_for() {

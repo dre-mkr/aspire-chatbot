@@ -163,8 +163,8 @@ function SignUp() {
 
 			// The previous identity's data must not survive the change of owner.
 			queryClient.removeQueries({ queryKey: keys.allConversations() });
-			queryClient.removeQueries({ queryKey: ["games"] });
-			queryClient.removeQueries({ queryKey: ["eligibility"] });
+			queryClient.removeQueries({ queryKey: keys.allGames() });
+			queryClient.removeQueries({ queryKey: keys.allEligibility() });
 			await queryClient.invalidateQueries({ queryKey: keys.allConversations() });
 
 			// Re-validated at the point of use; see the note in signin.tsx.

@@ -10,6 +10,8 @@
  * the answer the reader is looking at.
  */
 
+import { authHeaders } from "./session";
+
 /** Where the FastAPI service lives. Override with VITE_ASPIRE_API_URL. */
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -36,7 +38,14 @@ export async function requestTitle(input: {
 	try {
 		const response = await fetch(`${API_URL}/api/title`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			// The session goes with it now: `/api/title` used to accept anyone,
+			// which made a model call the cheapest thing in the product to abuse.
+			// Anonymous identities are free and the client already holds one long
+			// before it has an answer worth naming, so this costs a real user
+			// nothing. A missing session gets a 401, which `!response.ok` already
+			// turns into "keep the fallback title" -- the same as every other
+			// unhappy path here.
+			headers: { "Content-Type": "application/json", ...authHeaders() },
 			body: JSON.stringify(input),
 			signal: AbortSignal.timeout(TIMEOUT_MS),
 		});

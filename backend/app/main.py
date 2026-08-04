@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.accounts import router as accounts_router
 from app.conversations import router as conversations_router
 from app.auth import Principal, chat_principal
+from app.limits import chat_rate_limit, title_rate_limit
 from app.sessions import owner_id_for, router as sessions_router
 from app.db import (
     check_schema,
@@ -459,6 +460,18 @@ async def _open_conversation(
         async with session() as db:
             if db is None:
                 return
+            await ensure_conversation(
+                db,
+                thread_id,
+                language=request.language,
+                persona=request.persona,
+                account_status=request.account_status,
+                # Recorded on creation only, so the first turn settles whose
+                # conversation this is and no later request can take it over.
+                owner_id=owner_id,
+                title=_provisional_title(request.message),
+            )
+            await append_turn(db, thread_id, role="user", content=request.message)
     except Exception:
         logger.warning(
             "Could not open conversation %s; the turn was still served.",
@@ -495,22 +508,20 @@ async def _persist_turn(
         async with session() as db:
             if db is None:
                 return
+            # `_open_conversation` already created the row and recorded the
+            # question before the model ran. This is an upsert and a no-op when
+            # that succeeded; it stays because that call swallows its own
+            # failures, and a turn whose opening write failed should still be
+            # persisted rather than silently losing its question.
             await ensure_conversation(
                 db,
                 thread_id,
                 language=request.language,
                 persona=request.persona,
                 account_status=request.account_status,
-                # Recorded on creation only, so the first turn settles whose
-                # conversation this is and no later request can take it over.
                 owner_id=owner_id,
-                # The provisional name, so a conversation is never nameless. It
-                # is the same string the client used to compute for itself while
-                # history lived in the browser, and the same one a generated
-                # title crossfades over a moment later.
                 title=_provisional_title(request.message),
             )
-            await append_turn(db, thread_id, role="user", content=request.message)
 
             # A game or eligibility turn has no prose by design, so it stores a
             # structured record instead: enough for the model to keep the
@@ -557,7 +568,7 @@ async def _persist_turn(
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(
-    request: ChatRequest, principal: Principal | None = Depends(chat_principal)
+    request: ChatRequest, principal: Principal | None = Depends(chat_rate_limit)
 ) -> ChatResponse:
     # Anonymous callers are welcome here and always have been: asking a question
     # has never required identifying yourself. `who` being None simply means the
@@ -733,7 +744,7 @@ def _chat_request_from(body: dict) -> ChatRequest:
 
 @app.post("/chat/stream")
 async def chat_stream(
-    body: dict, principal: Principal | None = Depends(chat_principal)
+    body: dict, principal: Principal | None = Depends(chat_rate_limit)
 ) -> StreamingResponse:
     """The same turn as `/chat`, delivered as AG-UI server-sent events.
 
@@ -868,7 +879,9 @@ async def chat_stream(
 
 
 @app.post("/api/title", response_model=TitleResponse)
-async def title(request: TitleRequest) -> TitleResponse:
+async def title(
+    request: TitleRequest, principal: Principal = Depends(title_rate_limit)
+) -> TitleResponse:
     """Name a conversation from its opening exchange.
 
     Separate from /chat on purpose. That call streams and is RAG-grounded, and

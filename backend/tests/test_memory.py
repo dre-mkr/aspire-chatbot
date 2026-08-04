@@ -105,8 +105,37 @@ def test_roles_round_trip_to_message_types(role, expected):
     assert build_prompt("q", context).messages[0].type == expected
 
 
-def test_the_window_is_off_by_default():
-    """Enabling it changes what the assistant recalls, so it is opt-in."""
+def test_the_window_is_on_by_default():
+    """It was opt-in while nothing ran the job that backs it.
+
+    With the window off, the InMemorySaver replays the whole thread -- including
+    every prior turn's retrieved chunks -- into every request, so cost grows
+    quadratically with conversation length and the process never releases a
+    conversation. That was still the safer default while no arq worker existed
+    to fold older turns into a summary: turns falling out of the window would
+    simply have been forgotten.
+
+    deploy/aspire-worker.service now runs that worker, so the window is the
+    better default and this asserts the flip deliberately rather than letting it
+    happen by accident.
+    """
     from app.config import Settings
 
-    assert Settings().memory_window_enabled is False
+    assert Settings().memory_window_enabled is True
+
+
+def test_the_window_requires_a_database():
+    """The flag alone must not switch it on.
+
+    `load_context` reads history from Postgres. With the flag on and no database
+    the agent would be handed a bare question every turn -- the conversation
+    would lose its memory entirely rather than merely windowing it. So the
+    decision is `flag AND database`, and a deployment without Postgres keeps the
+    checkpointer it has always had.
+    """
+    import inspect
+
+    from app import agent
+
+    source = inspect.getsource(agent.build_agent)
+    assert "memory_window_enabled and database_enabled()" in source

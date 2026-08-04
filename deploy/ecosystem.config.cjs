@@ -55,6 +55,38 @@ module.exports = {
     },
 
     {
+      // The background worker. This is what enforces the 180-day deletion
+      // commitment in backend/PRIVACY.md: app/jobs.py registers
+      // `cron(retention_job, hour=3, minute=15)` and nothing else runs it.
+      //
+      // It was missing from both this file and the systemd units, so the cron
+      // had never fired -- the audit found identities eight months past the
+      // retention window still holding conversations. It is not optional and it
+      // is not tied to MEMORY_WINDOW_ENABLED; that flag only affects the
+      // summarisation job that shares this worker.
+      name: "aspire-worker",
+      cwd: `${ROOT}/backend`,
+
+      // Same reasoning as uvicorn above: the venv's arq has its own shebang.
+      script: ".venv/bin/arq",
+      interpreter: "none",
+      args: "app.jobs.WorkerSettings",
+
+      // One is enough, and unlike the API this is a preference rather than a
+      // constraint: arq coordinates through Valkey, so a cron job is claimed by
+      // exactly one worker however many are running.
+      instances: 1,
+      exec_mode: "fork",
+
+      env: { PYTHONUNBUFFERED: "1" },
+
+      max_restarts: 10,
+      restart_delay: 10000,
+      min_uptime: "60s",
+      kill_timeout: 10000,
+    },
+
+    {
       name: "aspire-web",
       cwd: `${ROOT}/frontend`,
       script: "server.mjs",

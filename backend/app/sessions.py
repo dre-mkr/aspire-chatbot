@@ -30,6 +30,7 @@ lock everybody out of a product whose whole point is being open.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 
@@ -100,7 +101,14 @@ async def _within_limit(ip: str) -> bool:
         return True
 
     settings = get_settings()
-    key = f"aspire:anon-sessions:{hash_ip(ip)}"
+    # The namespace is overridable so concurrent test runs cannot count against
+    # each other. Two pytest runs overlapping on the shared Valkey made this
+    # cap's own test fail while passing in isolation (P11-001), and CI now runs
+    # pytest on every push -- so two PRs would flake each other on an abuse
+    # control, which reads as a real regression and is not. Unset in production,
+    # where the plain namespace is what is wanted.
+    prefix = os.environ.get("ASPIRE_CACHE_NAMESPACE", "")
+    key = f"aspire:{prefix}anon-sessions:{hash_ip(ip)}"
     try:
         count = await client.incr(key)
         if count == 1:

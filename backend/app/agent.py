@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
 from app.config import Settings, get_settings
+from app.db import database_enabled
 from app.eligibility import ELIGIBILITY_TOOLS, eligibility_enabled
 from app.games import GAME_TOOLS, games_enabled
 from app.prompts import (
@@ -111,7 +112,12 @@ def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
     # thread_id and the service behaves exactly as it always has. With it on,
     # the agent is stateless and history arrives with each invocation -- see the
     # note on _CHECKPOINTER for why it cannot be both.
-    windowed = settings.memory_window_enabled
+    # AND a database, not just the flag. With the window on and no Postgres to
+    # read history from, `load_context` returns nothing and the agent is handed a
+    # bare question -- the conversation would lose its memory entirely rather
+    # than merely windowing it. Gating on both means a database-less deployment
+    # keeps working exactly as it does today.
+    windowed = settings.memory_window_enabled and database_enabled()
     agent = create_agent(
         model=model,
         tools=tools,

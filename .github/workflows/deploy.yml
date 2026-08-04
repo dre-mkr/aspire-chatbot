@@ -15,7 +15,77 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Nothing used to gate this workflow. 487 backend tests and a clean typecheck
+  # existed and every push to main reached production without running any of
+  # them -- on a government service used by children. The deploy job now depends
+  # on this one, so a red build never ships.
+  #
+  # Deliberately fast and hermetic: no database, no Valkey, no model calls. The
+  # eval harness needs an API key and lives in evals.yml, which gates on
+  # retrieval quality separately.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- frontend ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Typecheck
+        working-directory: frontend
+        run: npx tsc --noEmit
+      # Report-only, deliberately, and this is the one step here that is not yet
+      # a gate. `biome lint` currently reports 3 pre-existing errors (P0-009):
+      #
+      #   Composer.tsx:71   useExhaustiveDependencies
+      #   Rail.tsx:346      useSemanticElements
+      #   VoiceSettings.tsx:132  useSemanticElements
+      #
+      # None is safe to silence here. The Composer dependency is deliberate and
+      # documented in a comment above the effect -- dropping it to satisfy the
+      # rule would change when the composer takes focus. The other two suggest
+      # replacing a positioned popover's `role="group"` with `<fieldset>`, which
+      # is both wrong for the context (fieldset groups form controls) and a
+      # visual change that needs sign-off under the UI policy.
+      #
+      # Turning this into a gate is a one-word change once P0-009 is resolved.
+      # Making it a gate now would mean either shipping red or weakening the
+      # code to pass a check, and neither is worth it.
+      - name: Lint (report only — see P0-009)
+        working-directory: frontend
+        continue-on-error: true
+        run: npx biome lint
+      - name: Frontend regression tests
+        working-directory: frontend
+        run: node --test src/lib/aspire/*.test.ts
+      - name: Production build
+        working-directory: frontend
+        # The real deploy builds with the site URL. Without it the bundle is
+        # emitted pointing at http://localhost:8000 (P6-006) -- harmless here
+        # because this artefact is discarded, but it must not look like a pass
+        # for a build that would ship broken.
+        env:
+          VITE_ASPIRE_API_URL: https://aspire.eccugenai.app
+        run: npx vite build
+
+      # --- backend ---
+      - uses: astral-sh/setup-uv@v5
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+      - name: Backend test suite
+        working-directory: backend
+        env:
+          SESSION_SECRET: ci-only-secret-not-used-for-anything
+        run: uv run pytest -q
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

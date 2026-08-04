@@ -96,8 +96,8 @@ export function AccountControl({ variant }: AccountControlProps) {
 		// showing them for even one frame is the thing to avoid.
 		await signOut(() => {
 			queryClient.removeQueries({ queryKey: keys.allConversations() });
-			queryClient.removeQueries({ queryKey: ["games"] });
-			queryClient.removeQueries({ queryKey: ["eligibility"] });
+			queryClient.removeQueries({ queryKey: keys.allGames() });
+			queryClient.removeQueries({ queryKey: keys.allEligibility() });
 		});
 		void navigate({ to: "/" });
 	}

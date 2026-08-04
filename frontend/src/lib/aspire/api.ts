@@ -67,6 +67,16 @@ export interface AskResult {
 
 export interface AskInput {
 	message: string;
+	/**
+	 * Cancels the turn, and with it the model call behind it.
+	 *
+	 * Optional because `askAspire` still applies its own timeout regardless --
+	 * this composes with that rather than replacing it. Passing one is what lets
+	 * Stop, navigation and unmount actually stop the work: without it the request
+	 * ran to completion and was billed in full no matter what the reader did,
+	 * because nothing outside this function could reach the controller.
+	 */
+	signal?: AbortSignal;
 	/** Null starts a new conversation; pass the returned id to continue one. */
 	threadId: string | null;
 	simpleMode: boolean;
@@ -124,10 +134,20 @@ export async function askAspire({
 	simpleMode,
 	persona = null,
 	language = "en",
+	signal,
 }: AskInput): Promise<AskResult> {
 	// AbortSignal.timeout is unavailable in older Safari; a controller is not.
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+	// The caller's signal and the timeout both feed the one controller, so the
+	// fetch has a single thing to listen to. `AbortSignal.any` would be tidier
+	// and is not available everywhere this has to run.
+	const onExternalAbort = () => controller.abort();
+	if (signal) {
+		if (signal.aborted) controller.abort();
+		else signal.addEventListener("abort", onExternalAbort, { once: true });
+	}
 
 	let response: Response;
 	try {
@@ -151,6 +171,12 @@ export async function askAspire({
 		// Fetch rejects for aborts and for the network being unreachable alike,
 		// and the two need different advice.
 		if (error instanceof DOMException && error.name === "AbortError") {
+			// Two very different things arrive here. The reader pressing Stop is
+			// not a fault and must not be dressed as one -- `stop()` already puts
+			// its own note in the transcript, so this one is never shown.
+			if (signal?.aborted) {
+				throw new AspireError("You stopped this answer.", true);
+			}
 			throw new AspireError(
 				"That took longer than expected. Ask again, and try a shorter question if it keeps happening.",
 			);
@@ -160,12 +186,17 @@ export async function askAspire({
 		);
 	} finally {
 		clearTimeout(timer);
+		signal?.removeEventListener("abort", onExternalAbort);
 	}
 
 	if (!response.ok) {
 		throw new AspireError(
 			await describeFailure(response),
-			response.status >= 500,
+			// 429 belongs with the 5xx here. Its message tells the reader to wait
+			// and ask again, and `>= 500` alone made that a lie by removing the
+			// control that would let them. Every other 4xx stays non-retryable:
+			// asking the same malformed thing again cannot help.
+			response.status === 429 || response.status >= 500,
 		);
 	}
 

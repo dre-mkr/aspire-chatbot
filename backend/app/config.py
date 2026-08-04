@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     # which keeps development and the test suite off the network entirely.
     resend_api_key: str = ""
     mail_from: str = "ASPIRE <no-reply@aspire.kn>"
+    # Whether the console provider may write message bodies to the log.
+    #
+    # Those bodies contain working sign-in and password-reset links. Logging them
+    # is genuinely useful in development and is how a local password reset is
+    # completed at all -- and it is a credential leak anywhere else. OFF by
+    # default so the unsafe behaviour has to be asked for rather than inherited
+    # by a deploy that forgot RESEND_API_KEY.
+    mail_console_logs_links: bool = False
 
     # --- Chat model -------------------------------------------------------
     # Passed straight to init_chat_model, so the "provider:model" form selects
@@ -140,11 +148,31 @@ class Settings(BaseSettings):
     response_cache_enabled: bool = True
 
     # --- Conversation memory ---------------------------------------------
-    # OFF by default. Enabling this changes what the model sees: the last N
-    # turns verbatim plus a running summary of everything older, instead of the
-    # whole thread. Flip it back and today's behaviour returns exactly, because
-    # the full transcript is persisted either way.
-    memory_window_enabled: bool = False
+    # ON by default, since the worker that backs it is now actually deployed.
+    #
+    # With this off, langgraph's InMemorySaver replays the ENTIRE thread into the
+    # model every turn -- including every prior turn's ToolMessage carrying its
+    # retrieved knowledge-base chunks. Measured: 1,800 tokens of fixed overhead
+    # plus 519 of context per turn, so turn n costs roughly
+    # 1800 + n x (519 + question + answer). Cost is quadratic in conversation
+    # length, and the saver grows without bound in a process that is pinned to a
+    # single worker.
+    #
+    # With it on, history comes from Postgres instead: a window of recent turns
+    # plus a running summary of everything older, compressed by the arq worker
+    # off the request path. Cost becomes linear and the process stops
+    # accumulating conversations it will never serve again.
+    #
+    # This was off for a good reason until now -- the summarisation job had no
+    # worker to run in, so turns falling out of the window were never folded into
+    # a summary and would simply have been forgotten. deploy/aspire-worker.service
+    # fixes that, which is what makes this flip safe.
+    #
+    # Gated on a database at the point of use (see `agent.build_agent`), so a
+    # deployment without Postgres keeps the old behaviour rather than losing its
+    # memory. Flip it back and today's behaviour returns exactly, because the
+    # full transcript is persisted either way.
+    memory_window_enabled: bool = True
     # How many recent messages the model sees verbatim. The single number that
     # decides the per-turn prompt cost, which is why it is configurable.
     memory_window_turns: int = Field(default=6, ge=1, le=50)
@@ -153,6 +181,21 @@ class Settings(BaseSettings):
     memory_summary_after_turns: int = Field(default=2, ge=1, le=50)
     # Used only for accounting. o200k_base is the GPT-4o/5 family's encoding.
     token_encoding: str = "o200k_base"
+
+    # --- Rate limits on the endpoints that spend model calls ---------------
+    # Counted per proven identity where there is one, otherwise per hashed
+    # address -- see app/limits.py for why in-process rather than Valkey.
+    #
+    # Sized for a classroom on one school connection rather than for one child:
+    # unauthenticated callers share an address, so the anonymous case is the one
+    # these numbers have to survive. Thirty questions in ten minutes is far more
+    # than a lesson generates and far less than a script does.
+    chat_rate_window_seconds: int = Field(default=600, ge=10, le=3600)
+    chat_messages_per_window: int = Field(default=30, ge=1, le=1000)
+    # Titles are one per conversation, so this only has to allow starting a lot
+    # of chats. It is lower than the message limit on purpose: a title request is
+    # a model call with a 28,000-character payload and no conversation behind it.
+    title_requests_per_window: int = Field(default=20, ge=1, le=1000)
 
     # --- HTTP -------------------------------------------------------------
     # Permissive for local dev. Tighten to the real frontend origin before deploying.

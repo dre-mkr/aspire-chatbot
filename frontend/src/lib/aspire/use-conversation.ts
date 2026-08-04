@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AskResult, AspireError, type Source } from "./api";
-import { blockIsClosed, settledBlocks } from "./settled";
+import { settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
 import { ensureSession } from "./session";
@@ -103,15 +103,25 @@ const WORDS_PER_TICK = 4;
 const TICKS_PER_ITEM = 3;
 
 interface StreamCursor {
-	/** Everything received so far, unparsed. Grows as the service sends. */
-	buffer: string;
-	/** The blocks of `buffer` that can no longer be re-read. See `settled.ts`. */
-	settled: Array<AnswerBlock>;
-	/** The service has said the turn is over; the tail is safe to settle. */
-	ended: boolean;
+	/**
+	 * The whole answer, parsed, before a word of it has been revealed.
+	 *
+	 * The reveal is a presentation effect over text that has already arrived —
+	 * not a window onto text still being written. That is the difference between
+	 * a steady four-words-a-tick cadence and one that stalls wherever the model
+	 * paused, which is what the live drain actually looked like on screen.
+	 */
+	answer: Answer;
 	sources: Array<Source>;
-	followUps: Array<string>;
 	id: number;
+	/**
+	 * Whether the service has said the turn is over.
+	 *
+	 * The reveal runs alongside the wire now, so reaching the end of `answer` no
+	 * longer means the answer is finished -- it usually means the typewriter has
+	 * caught up and should wait. Only `ended` settles the turn.
+	 */
+	ended: boolean;
 	blockIndex: number;
 	wordIndex: number;
 	holdTicks: number;
@@ -335,6 +345,21 @@ export function useConversation({
 	 */
 	const turnToken = useRef(0);
 	/**
+	 * Cancels the request behind the turn in flight.
+	 *
+	 * `turnToken` already stopped an abandoned reply from being *rendered*, but
+	 * the work carried on regardless: the model finished generating, the service
+	 * persisted the turn, and the programme was billed for an answer nobody would
+	 * ever see. Bumping a number cannot stop a fetch; only aborting it can.
+	 */
+	const inFlight = useRef<AbortController | null>(null);
+
+	/** Ends the request in flight, if there is one. Safe to call twice. */
+	const abortInFlight = useCallback(() => {
+		inFlight.current?.abort();
+		inFlight.current = null;
+	}, []);
+	/**
 	 * Threads this session has already tried to name.
 	 *
 	 * A ref, not state, so a re-render cannot fire a second call. Keyed by
@@ -473,6 +498,11 @@ export function useConversation({
 
 	useEffect(() => clearTimers, [clearTimers]);
 
+	// Leaving the page is the clearest possible signal that nobody is waiting for
+	// this answer. Before this, closing the tab mid-reply left the model
+	// generating to the end and the turn billed in full.
+	useEffect(() => abortInFlight, [abortInFlight]);
+
 	/** The reveal reached the end: the answer joins the settled transcript. */
 	const finishStream = useCallback(() => {
 		clearTimers();
@@ -482,11 +512,7 @@ export function useConversation({
 		if (!state) return;
 		setMessages((current) => [
 			...current,
-			completed(
-				{ blocks: parseAnswer(state.buffer), followUps: state.followUps },
-				state.sources,
-				state.id,
-			),
+			completed(state.answer, state.sources, state.id),
 		]);
 	}, [clearTimers]);
 
@@ -494,11 +520,11 @@ export function useConversation({
 		const state = cursor.current;
 		if (!state) return;
 
-		const block = state.settled[state.blockIndex];
+		const block = state.answer.blocks[state.blockIndex];
 		if (!block) {
-			// Caught up. Whether that means "finished" or "waiting for the next
-			// token" is the difference between ending the turn and stalling it,
-			// and only the service can say which.
+			// Out of blocks. If the service has finished, so have we; if it has
+			// not, the typewriter has simply outrun the wire and waits for the
+			// next chunk. Finishing here would truncate the answer mid-sentence.
 			if (state.ended) finishStream();
 			return;
 		}
@@ -513,12 +539,7 @@ export function useConversation({
 				kind: "paragraph",
 				text: words.slice(0, state.wordIndex).join(" "),
 			};
-			// Stepping past a paragraph that can still grow would strand the words
-			// that arrive after it — the typewriter would never come back.
-			if (
-				state.wordIndex >= words.length &&
-				blockIsClosed(state.blockIndex, state.settled, state.ended)
-			) {
+			if (state.wordIndex >= words.length) {
 				state.blockIndex += 1;
 				state.wordIndex = 0;
 			}
@@ -532,10 +553,7 @@ export function useConversation({
 					kind: "list",
 					items: block.items.slice(0, state.wordIndex),
 				};
-				if (
-					state.wordIndex >= block.items.length &&
-					blockIsClosed(state.blockIndex, state.settled, state.ended)
-				) {
+				if (state.wordIndex >= block.items.length) {
 					state.blockIndex += 1;
 					state.wordIndex = 0;
 				}
@@ -546,137 +564,130 @@ export function useConversation({
 			id: state.id,
 			blocks: [...state.built],
 			sources: state.sources,
-			followUps: state.followUps,
+			followUps: state.answer.followUps,
 		});
 	}, [finishStream]);
 
 	/**
-	 * Opens a reveal for a reply that has not arrived yet.
+	 * Starts revealing an answer that has already arrived whole. Returns its id.
 	 *
-	 * The typewriter used to be handed a finished answer. It is now handed an
-	 * empty buffer that fills as the service sends, which is the whole point of
-	 * the change: a long reply starts being read while its ending is still being
-	 * written, instead of after.
+	 * The reveal is paced by the typewriter alone — four words every 40ms, from
+	 * the first word to the last. It was briefly driven by the tokens as they
+	 * came off the wire instead, and the cadence that produced is what this
+	 * exists to undo: the reveal could only ever advance as far as the last
+	 * *terminated line* the service had sent, so it emptied its buffer, stalled
+	 * wherever the model paused, then emptied it again. Read as a reply arriving
+	 * in two or three lurches rather than being typed.
 	 *
-	 * The pacing is deliberately unchanged. Tokens land at whatever rate the
-	 * model produces them; the reveal still runs at four words every 40ms. The
-	 * buffer absorbs the difference in both directions -- it waits when the
-	 * service is behind, and it never races ahead when the service is early.
+	 * Whatever the wire does is therefore hidden here on purpose. Waiting for
+	 * the whole reply costs time-to-first-word and buys back the one property
+	 * this animation has to have, which is an even one.
 	 */
-	const openStream = useCallback(
-		(id: number, sources: Array<Source>) => {
+	const beginStream = useCallback(
+		(answer: Answer, sources: Array<Source>, ended = true) => {
+			setIsThinking(false);
+			const id = nextId.current++;
+
+			// Reduced motion still skips the reveal, but only once the answer is
+			// whole -- settling a half-delivered stream would drop the rest of it.
+			if (ended && prefersReducedMotion()) {
+				setMessages((current) => [...current, completed(answer, sources, id)]);
+				return id;
+			}
+
 			cursor.current = {
-				buffer: "",
-				settled: [],
-				ended: false,
+				answer,
 				sources,
-				followUps: [],
 				id,
+				ended,
 				blockIndex: 0,
 				wordIndex: 0,
 				holdTicks: 0,
 				built: [],
 			};
+			setStreaming({
+				id,
+				blocks: [],
+				sources,
+				followUps: answer.followUps,
+			});
 			streamTimer.current = setInterval(tick, TICK_MS);
+			return id;
 		},
 		[tick],
 	);
 
-	/** More of the reply arrived. */
-	const pushDelta = useCallback((delta: string) => {
-		const state = cursor.current;
-		if (!state || state.ended) return;
-
-		// The thinking indicator gives way to the answer on the first token, not
-		// on the first byte of the response -- the same moment it used to give
-		// way to a finished reply.
-		if (!state.buffer) {
-			setIsThinking(false);
-			setStreaming({ id: state.id, blocks: [], sources: state.sources, followUps: [] });
-		}
-
-		state.buffer += delta;
-		state.settled = settledBlocks(state.buffer, false);
-	}, []);
-
 	/**
-	 * The service has finished. The reveal has not.
-	 *
-	 * `reply` is authoritative rather than the accumulated deltas: a card turn
-	 * ends with an empty reply on purpose, and the service is the only thing
-	 * that knows a turn was a card. Where the two disagree about text already on
-	 * screen the accumulated version wins, because rewriting revealed words is
-	 * the one outcome worth more than being right about them.
-	 */
-	const closeStream = useCallback(
-		(reply: string, sources: Array<Source>, followUps: Array<string>) => {
-			const state = cursor.current;
-			if (!state) return;
-
-			// Also here, not only on the first token. A turn can finish without
-			// ever producing one — the `/chat` fallback resolves with the whole
-			// reply and no deltas at all — and leaving this to `pushDelta` left the
-			// thinking indicator up and the composer busy for good.
-			setIsThinking(false);
-
-			state.buffer = reply.startsWith(state.buffer) ? reply : state.buffer || reply;
-			state.sources = sources;
-			state.followUps = followUps;
-			state.ended = true;
-			state.settled = settledBlocks(state.buffer, true);
-		},
-		[],
-	);
-
-	/** Reveals an answer that is already whole. The reduced-motion path. */
-	const revealAtOnce = useCallback(
-		(answer: Answer, sources: Array<Source>, id: number) => {
-			setIsThinking(false);
-			setMessages((current) => [...current, completed(answer, sources, id)]);
-		},
-		[],
-	);
-
-	/**
-	 * Asks the service and streams the reply in.
+	 * Asks the service and reveals the reply.
 	 *
 	 * There is no artificial thinking delay any more: the request itself takes
 	 * real time, and the thinking orb covers exactly that.
 	 */
 	const ask = useCallback(
 		async (question: string, simpleMode: boolean, token: number) => {
-			try {
-				// The reveal is opened before the request is awaited, so the first
-				// token has somewhere to land. Reduced motion skips it entirely and
-				// takes the finished answer below, exactly as it always has.
-				const live = !prefersReducedMotion();
-				const id = nextId.current++;
-				if (live) openStream(id, []);
+			const controller = new AbortController();
+			inFlight.current?.abort(); // a previous turn should never outlive this one
+			inFlight.current = controller;
+			/**
+			 * Feeds the reveal from the wire, without letting the wire pace it.
+			 *
+			 * This used to wait for the whole reply and then run the typewriter
+			 * over it. That bought a perfectly even cadence and paid for it with
+			 * time-to-first-word: nothing appeared at all until the model had
+			 * finished writing, which on a long answer is many seconds of an orb.
+			 *
+			 * The even cadence is kept and that price is not paid. `settledBlocks`
+			 * decides what is safe to show -- text whose terminating newline has
+			 * arrived can no longer change what it *is*, so revealing it cannot
+			 * cause a line already on screen to re-render as something else. The
+			 * typewriter reveals out of that settled region at its own steady four
+			 * words a tick, and when it catches up to the wire it waits rather
+			 * than finishing.
+			 *
+			 * So the reveal simply starts sooner. Nothing about its pacing changed.
+			 */
+			let buffer = "";
+			let streamingId = -1;
+			const onDelta = (delta: string) => {
+				if (turnToken.current !== token) return;
+				buffer += delta;
 
+				const blocks = settledBlocks(buffer, false);
+				if (streamingId === -1) {
+					// Nothing settles until the first newline lands, which on a real
+					// reply is one line. The thinking orb covers exactly that gap;
+					// starting the reveal on an empty block list would replace it
+					// with an empty bubble.
+					if (blocks.length === 0) return;
+					streamingId = beginStream({ blocks, followUps: [] }, [], false);
+					return;
+				}
+
+				const state = cursor.current;
+				if (!state) return;
+				// Only ever grows, and only over settled text, so `built` indices
+				// stay valid and the reveal is never rewound.
+				state.answer = { ...state.answer, blocks };
+			};
+
+			try {
 				const result: AskResult = await streamAspire({
 					message: question,
+					onDelta,
+					signal: controller.signal,
 					// Read now, not closed over: see `threadRef`. This is also why
 					// `ask` no longer depends on `threadId` — the send pipeline used
 					// to be rebuilt on every turn for a value it can read directly.
 					threadId: threadRef.current,
 					simpleMode,
 					persona,
-					// Every token, as it arrives. This is the live drain.
-					onDelta: live ? pushDelta : undefined,
 					// Read at call time for the same reason the title call does: the
 					// voice layer that owns this setting is built after this hook.
 					// It decides which language the eligibility card opens in.
 					language: getLanguageRef.current(),
 				});
 
-				if (turnToken.current !== token) {
-					// The reveal was opened before the request was awaited, so every
-					// path out of here has to close it. A cursor left running is not
-					// just a stray timer: `send` treats one as "a reply is already
-					// arriving" and refuses the next question.
-					if (live) dropStream();
-					return;
-				}
+				if (turnToken.current !== token) return; // the turn was abandoned
 
 				// Adopt the server's id only when we had none to begin with.
 				//
@@ -739,7 +750,6 @@ export function useConversation({
 						nameConversation(result.threadId, named, "generated");
 					}
 
-					if (live) dropStream();
 					onGameStartRef.current?.(result.threadId);
 					return;
 				}
@@ -775,7 +785,6 @@ export function useConversation({
 						nameConversation(result.threadId, named, "generated");
 					}
 
-					if (live) dropStream();
 					onEligibilityStartRef.current?.(
 						result.threadId,
 						result.startedEligibility.language,
@@ -783,18 +792,29 @@ export function useConversation({
 					return;
 				}
 
-				if (live) {
-					closeStream(result.reply, result.sources, result.followUps);
+				// The payload is authoritative, not the accumulated deltas: on a
+				// card turn the service deliberately sends an empty reply, and the
+				// final blocks must come from it rather than from whatever text
+				// escaped down the wire.
+				const finalAnswer: Answer = {
+					blocks: parseAnswer(result.reply),
+					followUps: result.followUps,
+				};
+
+				const live = cursor.current;
+				if (live && live.id === streamingId) {
+					// A reveal is already running. Hand it the finished answer and
+					// let it play out to the end at its own pace.
+					live.answer = finalAnswer;
+					live.sources = result.sources;
+					live.ended = true;
 				} else {
-					revealAtOnce(
-						{ blocks: parseAnswer(result.reply), followUps: result.followUps },
-						result.sources,
-						id,
-					);
+					// Nothing was ever revealed -- a reply with no newline in it, or
+					// the non-streaming fallback inside `streamAspire`. Start whole.
+					streamingId = beginStream(finalAnswer, result.sources, true);
 				}
-				onAnswerRef.current?.(id, result.reply);
+				onAnswerRef.current?.(streamingId, result.reply);
 			} catch (error) {
-				dropStream();
 				if (turnToken.current !== token) return;
 
 				setIsThinking(false);
@@ -815,15 +835,7 @@ export function useConversation({
 		// `nameConversation` and `queryClient` are both stable references, so
 		// naming them here does not rebuild the send pipeline every turn — which
 		// is the property these dependency lists have always been protecting.
-		[
-			openStream,
-			pushDelta,
-			closeStream,
-			revealAtOnce,
-			dropStream,
-			persona,
-			nameConversation,
-		],
+		[beginStream, persona, nameConversation],
 	);
 
 	const send = useCallback(
@@ -974,6 +986,8 @@ export function useConversation({
 
 	const stop = useCallback(() => {
 		turnToken.current += 1;
+		// The half that was missing. Without this, Stop only hid the answer.
+		abortInFlight();
 
 		// Keep whatever is already on screen — the words are there to be read,
 		// and deleting them as you read is its own small betrayal — but keep only
@@ -997,7 +1011,7 @@ export function useConversation({
 				},
 			];
 		});
-	}, [settleRevealed]);
+	}, [settleRevealed, abortInFlight]);
 
 	/**
 	 * Keep the rail's row in step with the exchange that just settled.
@@ -1135,6 +1149,7 @@ export function useConversation({
 	/** Reopens a stored conversation; everything lands already finished. */
 	const openPast = useCallback(
 		(conversation: StoredConversation) => {
+			abortInFlight();
 			dropStream();
 			turnToken.current += 1;
 
@@ -1190,10 +1205,11 @@ export function useConversation({
 			// The next message sent will be.
 			setAnimateAfterId(nextId.current);
 		},
-		[dropStream],
+		[dropStream, abortInFlight],
 	);
 
 	const reset = useCallback(() => {
+		abortInFlight();
 		dropStream();
 		lastQuestion.current = "";
 		turnToken.current += 1;
@@ -1202,7 +1218,7 @@ export function useConversation({
 		setPhase("landing");
 		setMessages([]);
 		setIsThinking(false);
-	}, [dropStream]);
+	}, [dropStream, abortInFlight]);
 
 	// Follow-ups belong to the answer that has settled — never to one still
 	// being revealed, where they would appear before the text they follow.

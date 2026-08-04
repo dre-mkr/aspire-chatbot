@@ -100,10 +100,19 @@ export async function streamAspire(
 		persona,
 		language = "en",
 		onDelta,
+		signal,
 	} = input;
 
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+	// The caller's signal feeds the same controller, so Stop, navigation and
+	// unmount end the stream and the model call behind it (P0-002).
+	const onExternalAbort = () => controller.abort();
+	if (signal) {
+		if (signal.aborted) controller.abort();
+		else signal.addEventListener("abort", onExternalAbort, { once: true });
+	}
 
 	/** Whether anything at all came back, which decides if falling back is safe. */
 	let opened = false;
@@ -154,6 +163,7 @@ export async function streamAspire(
 		);
 	} finally {
 		clearTimeout(timer);
+		signal?.removeEventListener("abort", onExternalAbort);
 	}
 
 	if (failure) throw new AspireError(failure, true);
