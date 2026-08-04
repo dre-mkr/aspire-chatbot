@@ -123,7 +123,20 @@ def cache_key(
         ensure_ascii=False,
     )
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
-    return f"aspire:answer:v1:{digest}"
+    # Namespaced, which it was not until P13-006 -- `namespace()` existed, said
+    # "any key this module invents needs the same treatment", and was used by the
+    # metrics counters and by nothing else. Answer keys and the lease keys derived
+    # from them sat in the shared production namespace, so a pytest run read and
+    # wrote the live cache.
+    #
+    # That was invisible while `/chat/stream` never consulted the cache: tests
+    # wrote entries nothing read back. Putting the cache on the transport the
+    # client uses made it visible immediately -- `test_streaming.py` started
+    # getting real production answers in place of its fake agent's.
+    #
+    # Changing the key retires every existing entry, which costs one cold turn per
+    # distinct question and is the cheapest possible consequence.
+    return f"{namespace()}answer:v1:{digest}"
 
 
 def valkey_url() -> str | None:

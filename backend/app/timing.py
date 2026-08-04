@@ -6,14 +6,20 @@ that was already happening.
 
 ## Why a ContextVar rather than a parameter
 
-Most of the interesting stages are not reachable from the endpoint. This service
-is agentic RAG: the agent owns the retriever as a *tool* and decides for itself
-when to call it, so the embedding call and the vector query happen somewhere
-inside `langgraph`'s executor, several frames below anything `/chat/stream` can
-see. Threading a timer down through LangChain's internals is not an option, so
-the active turn is held in a `ContextVar` and the deep code records into it.
+Several of the interesting stages are not reachable from the endpoint. The
+embedding call and the vector query are recorded by wrappers inside `app.rag`,
+which the endpoint reaches through `BaseRetriever.ainvoke` -- and since P13-005
+through an `asyncio.Task` as well, so the retrieval happens concurrently with the
+database work rather than in the endpoint's own frame. Threading a timer down
+through LangChain's internals to get there is not an option, so the active turn is
+held in a `ContextVar` and the deep code records into it.
 
-`ContextVar` is also the reason this works when the retriever runs in a worker
+(Until P13-005 the reason was stronger still: retrieval was a *tool* the agent
+chose to call, so it happened several frames inside `langgraph`'s executor. That
+is gone, but the plumbing is still the right shape -- `create_task` copies the
+context, so a turn stays visible to the task it spawns.)
+
+`ContextVar` is also the reason this works when a retriever runs in a worker
 thread. LangChain wraps a sync retriever with `run_in_executor`, which copies the
 context into the thread -- so the value is visible there. It is a *copy of the
 mapping*, though, not of the object, which is why `TurnTimings` is mutated in
@@ -71,6 +77,38 @@ T_TTS_FIRST_BYTE = "t_tts_first_byte"
 T_IDENTITY = "t_identity"
 T_OPEN_CONVERSATION = "t_open_conversation"
 
+#: What the reader waits for the response-cache lookup (P13-006).
+#:
+#: On a HIT this is essentially the whole turn: no model call, no retrieval, no
+#: history. On a MISS it is pure added cost, which is the trade this phase makes --
+#: so it is measured rather than assumed cheap. It overlaps the corpus search, so
+#: on a miss most of it should be absorbed.
+T_CACHE_LOOKUP = "t_cache_lookup"
+
+#: Cost of *starting* the concurrent corpus search, not of running it (P13-005).
+#: Should be microseconds -- it is `asyncio.create_task`. Recorded so that if it
+#: ever stops being free, the reason is visible rather than hidden inside the
+#: unaccounted residual.
+T_RETRIEVE_KICKOFF = "t_retrieve_kickoff"
+
+#: Wall time waiting for everything that runs concurrently before the model: the
+#: corpus search and the conversation write. ONE stage for the pair on purpose --
+#: they overlap, so counting each separately double-counts the overlap and can
+#: make the pre-model total exceed the elapsed time it is a part of. (Measured
+#: exactly that on the first cut: `t_open_conversation` 855 ms plus
+#: `t_retrieve_wait` 1030 ms against 1534 ms actually elapsed, which clamped the
+#: derived model figure to zero.)
+#:
+#: This is the number the phase is about. Compare it against `t_retrieve_total`
+#: and `t_open_conversation` in the auxiliary block to see how much of their cost
+#: the overlap actually absorbed.
+T_CONCURRENT_WAIT = "t_concurrent_wait"
+
+#: Of that concurrent block, how long the corpus search specifically took to
+#: arrive. Diagnostic only -- it overlaps `t_open_conversation`, so it is not a
+#: budget line.
+T_RETRIEVE_WAIT = "t_retrieve_wait"
+
 #: Two stages the brief does not name, added because without them the table
 #: measures everything except the thing that dominates it.
 #:
@@ -91,12 +129,16 @@ T_AGENT_FIRST_DELTA = "t_agent_first_delta"
 #: directly from out here -- the agent does not announce "I am now waiting on the
 #: model", it just goes quiet between a request and a tool call. Each is the gap
 #: between two things that ARE measured, and each is named for what happens in it.
-D_MODEL_CALL_1 = "d_model_call_1"
+#: The one answering model call (P13-005). There used to be two -- one to decide
+#: to retrieve, one to write the answer -- and `d_model_call_1` / `d_model_call_2`
+#: measured them separately. With the corpus already in the prompt there is a
+#: single call, so there is a single figure.
+#:
 #: Ends at the model's first DELTA, not at the first token the client sees. The
 #: gap between those two is `d_buffer_hold`, and ending this span at `t_ttft`
 #: instead would swallow it -- the budget would then double-count the hold and
 #: quietly overshoot `t_ttft`.
-D_MODEL_CALL_2 = "d_model_call_2"
+D_MODEL_CALL = "d_model_call"
 D_BUFFER_HOLD = "d_buffer_hold"
 
 #: Measured elapsed time for one piece of work. These are the only stages a
@@ -106,15 +148,28 @@ DURATION_STAGES: tuple[str, ...] = (
     T_LANG,
     T_PERSONA,
     T_ACCOUNT,
+    T_RETRIEVE_KICKOFF,
     T_IDENTITY,
-    T_OPEN_CONVERSATION,
+    T_CACHE_LOOKUP,
     T_HISTORY,
+    T_CONCURRENT_WAIT,
     T_PROMPT_BUILD,
-    D_MODEL_CALL_1,
-    T_EMBED,
-    T_RETRIEVE,
-    D_MODEL_CALL_2,
+    D_MODEL_CALL,
     D_BUFFER_HOLD,
+)
+
+#: The stages that make up the pre-model critical path, in order. `_derive` sums
+#: these to work out what the model call itself cost, so anything added to the
+#: path ahead of the model belongs here or it will be attributed to the model --
+#: and anything that runs CONCURRENTLY must stay out, or the model figure is
+#: understated by the overlap.
+PRE_MODEL_STAGES: tuple[str, ...] = (
+    T_RETRIEVE_KICKOFF,
+    T_IDENTITY,
+    T_CACHE_LOOKUP,
+    T_HISTORY,
+    T_CONCURRENT_WAIT,
+    T_PROMPT_BUILD,
 )
 
 #: Cumulative stamps, measured from "request received". A share of TTFT is
@@ -128,9 +183,25 @@ MILESTONE_STAGES: tuple[str, ...] = (
     T_TOTAL,
 )
 
-#: Reported, but part of neither budget: `t_retrieve_total` is `t_embed`
-#: plus `t_retrieve` and would double-count, and TTS is a different request.
-AUXILIARY_STAGES: tuple[str, ...] = (T_RETRIEVE_TOTAL, T_TTS_FIRST_BYTE)
+#: Reported, but part of no budget.
+#:
+#: `t_embed` and `t_retrieve` moved here in P13-005 and the reason is the whole
+#: point of that phase: retrieval now runs CONCURRENTLY with the database work, so
+#: its duration is no longer time the reader waits. What the reader waits for is
+#: `t_retrieve_wait`, which is in the budget. Leaving embed and retrieve in the
+#: budget would double-count them against the stages they overlap and make the
+#: shares sum to well over TTFT.
+#:
+#: `t_retrieve_total` is `t_embed` plus `t_retrieve` and would double-count those
+#: in turn. TTS is a different request entirely.
+AUXILIARY_STAGES: tuple[str, ...] = (
+    T_OPEN_CONVERSATION,
+    T_RETRIEVE_WAIT,
+    T_EMBED,
+    T_RETRIEVE,
+    T_RETRIEVE_TOTAL,
+    T_TTS_FIRST_BYTE,
+)
 
 #: Every stage this module can report, in the order a table should show them.
 STAGES: tuple[str, ...] = DURATION_STAGES + MILESTONE_STAGES + AUXILIARY_STAGES
@@ -147,14 +218,17 @@ ABSENT_REASONS: dict[str, str] = {
 #: Printed under a stage name so a table explains its own arithmetic.
 STAGE_NOTES: dict[str, str] = {
     T_IDENTITY: "Neon: resolve the caller's owner id",
-    T_OPEN_CONVERSATION: "Neon: upsert the conversation row before the model runs",
+    T_OPEN_CONVERSATION: "concurrent: Neon upsert + question write (off the critical path)",
     T_HISTORY: "Neon: window read + running summary",
+    T_CACHE_LOOKUP: "Valkey: response-cache read (the whole turn on a hit)",
+    T_RETRIEVE_KICKOFF: "local: asyncio.create_task for the concurrent search",
+    T_CONCURRENT_WAIT: "what the reader waits for the search AND the write, overlapped",
+    T_RETRIEVE_WAIT: "of that block, the search alone (overlaps the write)",
     T_PROMPT_BUILD: "local: assemble messages, count tokens (tiktoken)",
-    D_MODEL_CALL_1: "derived: request -> tool call, less the measured work above",
-    T_EMBED: "OpenAI text-embedding-3-large: network round trip",
-    T_RETRIEVE: "Neon: exact cosine scan over 332 rows (network round trip)",
-    D_MODEL_CALL_2: "derived: tool call -> model's first delta, less retrieval",
-    D_BUFFER_HOLD: "derived: TurnBuffer holding text until a tool had run",
+    D_MODEL_CALL: "derived: the one answering call, less every pre-model stage",
+    T_EMBED: "concurrent: OpenAI embedding round trip (off the critical path)",
+    T_RETRIEVE: "concurrent: Neon cosine scan over 332 rows (off the critical path)",
+    D_BUFFER_HOLD: "derived: TurnBuffer holding text before releasing it",
     T_AGENT_FIRST_TOOL: "cumulative from request received",
     T_AGENT_FIRST_DELTA: "cumulative from request received",
     T_TTFT: "cumulative: request received -> first token to client",
@@ -232,33 +306,18 @@ class TurnTimings:
         if T_RETRIEVE_TOTAL in got and T_EMBED in got:
             got.setdefault(T_RETRIEVE, max(0.0, round(got[T_RETRIEVE_TOTAL] - got[T_EMBED], 3)))
 
-        # Model call #1: everything between the request arriving and the tool
-        # call appearing, less the work we measured in that window ourselves.
-        if T_AGENT_FIRST_TOOL in got:
-            before_agent = sum(
-                got.get(stage, 0.0)
-                for stage in (T_IDENTITY, T_OPEN_CONVERSATION, T_HISTORY, T_PROMPT_BUILD)
-            )
+        # The answering model call: from the request arriving to text existing,
+        # less every pre-model stage we measured ourselves along the way.
+        #
+        # Retrieval is deliberately NOT subtracted here even though it happened in
+        # that window. It ran concurrently, so the only part of it the model call
+        # waited behind is `t_retrieve_wait` -- which is in `PRE_MODEL_STAGES` and
+        # is therefore already out. Subtracting `t_retrieve_total` as well would
+        # remove time nothing spent.
+        if T_AGENT_FIRST_DELTA in got:
+            before_model = sum(got.get(stage, 0.0) for stage in PRE_MODEL_STAGES)
             got.setdefault(
-                D_MODEL_CALL_1, max(0.0, round(got[T_AGENT_FIRST_TOOL] - before_agent, 3))
-            )
-
-        # Model call #2, up to the model's first delta: from the tool call being
-        # issued to text existing, less the retrieval it waited on. Stopping at
-        # the delta rather than at `t_ttft` is what keeps `d_buffer_hold` a
-        # separate, additive term instead of a double-counted one.
-        if T_AGENT_FIRST_DELTA in got and T_AGENT_FIRST_TOOL in got:
-            got.setdefault(
-                D_MODEL_CALL_2,
-                max(
-                    0.0,
-                    round(
-                        got[T_AGENT_FIRST_DELTA]
-                        - got[T_AGENT_FIRST_TOOL]
-                        - got.get(T_RETRIEVE_TOTAL, 0.0),
-                        3,
-                    ),
-                ),
+                D_MODEL_CALL, max(0.0, round(got[T_AGENT_FIRST_DELTA] - before_model, 3))
             )
 
         # What `TurnBuffer` cost by holding text back until a tool had run.

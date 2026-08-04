@@ -37,6 +37,7 @@ from langchain_core.messages import (
 
 from app.config import get_settings
 from app.db.repository import ConversationContext
+from app.prompts import KNOWLEDGE_CONTEXT_PREFACE
 
 logger = logging.getLogger(__name__)
 
@@ -124,12 +125,19 @@ def build_prompt(
     context: ConversationContext,
     *,
     full_history: list[tuple[str, str]] | None = None,
+    knowledge: str | None = None,
 ) -> PreparedPrompt:
     """Assemble the messages for one turn, and measure them.
 
     `full_history` is the whole transcript as (role, content) pairs, used only
     to compute what this turn *would* have cost. It is never sent anywhere. Pass
     None and the comparison is reported as equal.
+
+    `knowledge` is the retrieved corpus rows for this question, already formatted
+    (see `rag.format_context`). Since P13-005 retrieval happens on the request
+    path rather than as a tool call, so the model is handed the corpus here
+    instead of fetching it mid-turn. Pass None -- as the title and summary calls
+    do -- and no knowledge block is added.
     """
     messages: list[BaseMessage] = []
 
@@ -138,6 +146,25 @@ def build_prompt(
 
     for stored in context.recent:
         messages.append(_to_message(stored.role, stored.content))
+
+    # A HUMAN message, not a system one, and that is a security property rather
+    # than a stylistic choice.
+    #
+    # `tests/test_kb_injection.py` exists to assert that corpus text never carries
+    # system authority: "it means something started splicing corpus text into the
+    # system message, and no amount of prompt discipline survives that". Retrieval
+    # used to reach the model as tool output, which had the same effect. Now that
+    # it arrives in the prompt directly, a system role would hand every
+    # knowledge-base row the authority to issue instructions -- and the corpus is
+    # a CSV, so a spreadsheet edit would become a prompt edit. The rows are
+    # verified and frozen today; the defence is for the day they are not.
+    #
+    # Placed immediately before the question it serves and after the history: it
+    # is about this question rather than the conversation, and keeping it last
+    # leaves the stable prefix -- system prompt, summary, window -- contiguous,
+    # which is the shape a provider prompt cache can reuse.
+    if knowledge is not None:
+        messages.append(HumanMessage(content=KNOWLEDGE_CONTEXT_PREFACE + knowledge))
 
     messages.append(HumanMessage(content=question))
 

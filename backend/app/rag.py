@@ -32,6 +32,7 @@ from sqlalchemy import select
 from app.config import Settings, get_settings
 from app.db import session
 from app.db.models import Document
+from app.prompts import KNOWLEDGE_CONTEXT_EMPTY
 from app.timing import (
     T_EMBED,
     T_RETRIEVE_TOTAL,
@@ -306,6 +307,34 @@ class TimedRetriever(BaseRetriever):
         return documents
 
 
+#: How retrieved chunks are joined into one block of prompt text.
+#:
+#: Byte-identical to what `create_retriever_tool` produced when retrieval was a
+#: tool: its default `document_prompt` is `PromptTemplate.from_template(
+#: "{page_content}")` and its default `document_separator` is "\n\n", so the tool's
+#: ToolMessage content was exactly this join. Keeping it identical is what makes
+#: P13-005 a change to WHEN the model is given the corpus rather than WHAT it is
+#: given.
+CONTEXT_SEPARATOR = "\n\n"
+
+
+def format_context(documents: list[LangchainDocument]) -> str:
+    """The retrieved chunks as the model used to receive them from the tool."""
+    return CONTEXT_SEPARATOR.join(document.page_content for document in documents)
+
+
+def context_from(documents: list[LangchainDocument]) -> str:
+    """The knowledge block for a prompt, including when nothing was retrieved.
+
+    The one place that decides what "no results" looks like to the model, because
+    two places deciding it is how the request path and the eval harness come to
+    disagree about what the assistant was even asked. `evals/run.py` scores
+    refusals, so a difference here would show up as a quality change that no code
+    change explains.
+    """
+    return format_context(documents) if documents else KNOWLEDGE_CONTEXT_EMPTY
+
+
 def build_retriever(settings: Settings | None = None) -> BaseRetriever:
     """The retriever, with a floor on how irrelevant a chunk may be.
 
@@ -337,3 +366,14 @@ def build_retriever(settings: Settings | None = None) -> BaseRetriever:
     # exactly what the inner retriever returned, so `k`, the threshold and the
     # documents that reach the prompt are all untouched.
     return TimedRetriever(inner=inner)
+
+
+@lru_cache(maxsize=1)
+def get_retriever() -> BaseRetriever:
+    """Process-wide retriever.
+
+    Cached for the same reason the agent is: it holds the embeddings backend, and
+    a local model must not be loaded per request. Since P13-005 the request path
+    calls this directly rather than reaching it through the agent's tool list.
+    """
+    return build_retriever()

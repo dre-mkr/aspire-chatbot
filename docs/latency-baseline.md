@@ -242,11 +242,15 @@ Recorded here as measurements, not as decisions. Nothing below has been changed.
 
 ## Not yet measured
 
-- **Refusal and ambiguous turns.** Expected to have a materially worse TTFT than
-  the population above, because a turn that never calls the retriever is held by
-  `TurnBuffer` until its message ends — making TTFT equal to full generation time.
-  Stated as a hypothesis; it has not been measured and should not be quoted as a
-  finding.
+- **Refusal and ambiguous turns.** ~~Expected to have a materially worse TTFT.~~
+  **Measured in P13-004; the hypothesis was wrong.** A refusal is much *faster*
+  overall — `t_ttft` 3.3–3.5 s against 8.0 s for a grounded turn — because it makes
+  one model call and skips retrieval entirely. The half that was right is the
+  mechanism, and it now has a number: a turn calling no tool is held by
+  `TurnBuffer` until its message ends, and `d_buffer_hold` measured **383–398 ms**
+  on those turns against 0.1 ms on a grounded one. That hold is the tail of a
+  ~20-token refusal, so it scales with answer length — which is why removing the
+  retriever tool call cannot be done without redesigning the release rule.
 - **Multi-turn conversations.** Every turn here is an opening turn, so `t_history`
   is measured against an empty window and the summary path never runs.
 - **The voice path end to end**, including `t_tts_first_byte` against a real
@@ -439,5 +443,621 @@ Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-0
 | `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
 
 Client-observed TTFT (cross-check, n=24): p50 4643.5 ms · p95 6292.3 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+---
+
+# P13-003 — the opening turn stops reading history it does not have
+
+`request.thread_id is None` means the thread id was minted by this same request,
+so no conversation and no message can predate it and the window read is empty by
+construction. It was costing ~680 ms of Neon round trip ahead of the model, paid
+by every first-time reader — which is the turn that decides whether somebody
+stays.
+
+- **Change:** `app/main.py::_prepare_messages`
+- **Tests:** `tests/test_memory.py` (three, at the end)
+- **Date:** 2026-08-04
+- **Config:** re-baselined at `RETRIEVER_K=3`, `FOLLOW_UPS_ALWAYS=true` (see note)
+
+## Deliverable: before/after
+
+| | before | after | delta |
+|---|---:|---:|---:|
+| **`t_history` warm p50** | 676.7 ms | 0.0 ms | **−676.7 ms** |
+| **`t_history` warm p95** | 792.3 ms | 0.0 ms | **−792.3 ms** |
+| `t_history` cold p50 | 684.5 ms | 0.0 ms | −684.5 ms |
+| `t_history` cold p95 | 800.7 ms | 0.0 ms | −800.7 ms |
+| `t_ttft` warm p50 | 5187.4 ms | 4160.7 ms | −1026.7 ms |
+| `t_ttft` cold p50 | 5016.1 ms | 4022.5 ms | −993.7 ms |
+
+**The reliable number is the stage: 677 ms removed at warm p50, exactly and
+repeatably, because the read no longer happens.** TTFT p50 fell by ~1.0 s in both
+runs — more than the stage accounts for. Some of the excess is the smaller opening
+prompt (below) and the rest is the model-call variance this document keeps
+warning about. Do not quote 1.0 s as the win; quote 677 ms and note the direction
+agreed twice.
+
+`t_ttft` p95 moved 7484 → 10744 (cold) and 10761 → 8050 (warm) — opposite
+directions on the same change, which is what noise looks like. Ignore it.
+
+## A prompt bug fell out of this, and only half of it is fixed
+
+The stage was described in P13-001 as reading nothing on a first turn. That was
+wrong, and finding out why turned this from a pure saving into a behaviour change
+worth stating plainly.
+
+`_open_conversation` runs *before* `_prepare_messages` and writes this turn's
+question to Postgres. The window read therefore returned that question, and
+`build_prompt` then appended it again — so **the model was being sent the user's
+question twice.** Reproduced directly, on a fresh thread:
+
+```
+load_context recent = [('user', 'What is ASPIRE Day?')]
+prompt sent to the model:
+   HumanMessage: 'What is ASPIRE Day?'
+   HumanMessage: 'What is ASPIRE Day?'
+```
+
+Skipping the read removes the duplicate on opening turns. Measured effect on the
+wire: `input_token_count` on an opening turn roughly halved, from 20–38 tokens to
+14–19.
+
+**This does not fix turns 2 and later.** There the window read is real and still
+contains the just-written question, so those turns still duplicate it. The proper
+fix is to order `_open_conversation` *after* `_prepare_messages` — still before
+the model call, so the guarantee that a question is recorded before it is answered
+survives intact. That is a prompt change on every turn and belongs in its own
+phase rather than smuggled into a latency one. **Open, unfixed, recommended next.**
+
+## Note on the config this was measured under
+
+`RETRIEVER_K` was 4 for P13-001 and P13-002 and is 3 here (set in `.env`), and
+`FOLLOW_UPS_ALWAYS` was **true at the time these two runs were taken** and has
+since been reverted to false. Both changed outside this workstream, mid-session.
+
+The before and after above were taken minutes apart under identical settings, so
+this comparison holds — but these numbers are **not** comparable to the P13-001 and
+P13-002 tables, which were taken at k=4 with chips on opening turns only.
+`retrieved_chunk_count` in the structured log is the way to tell which regime any
+given measurement came from; it is 4 in the earlier tables and 3 here.
+
+While `FOLLOW_UPS_ALWAYS` was true it broke
+`tests/test_streaming.py::test_a_continuing_turn_does_not_pay_for_chips`, which
+exists to assert that a continuing turn does not spend a model call on chips —
+confirmed by running that test under both values. It passes again now the flag is
+back to false. Worth knowing that the assertion is there, because the flag's own
+config comment calls it "roughly a 2x multiplier on per-turn model calls", which
+is a thing to turn on deliberately rather than by accident.
+### after (k=3, opening turn skips the history read) run
+
+30 turns · cold-start turns: 1 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_open_conversation` | 854.4 | 971.9 | 1268.0 | 21.2% | 9.0% | Neon: upsert the conversation row before the model runs |
+| `t_history` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_prompt_build` | 0.1 | 0.4 | 513.6 | 0.0% | 0.0% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call_1` | 911.6 | 2995.4 | 5701.5 | 22.7% | 27.9% | derived: request -> tool call, less the measured work above |
+| `t_embed` | 438.8 | 1943.3 | 6568.9 | 10.9% | 18.1% | OpenAI text-embedding-3-large: network round trip |
+| `t_retrieve` | 557.2 | 1196.9 | 1228.6 | 13.9% | 11.1% | Neon: exact cosine scan over 332 rows (network round trip) |
+| `d_model_call_2` | 1309.1 | 2418.1 | 2503.0 | 32.5% | 22.5% | derived: tool call -> model's first delta, less retrieval |
+| `d_buffer_hold` | 0.2 | 0.4 | 0.5 | 0.0% | 0.0% | derived: TurnBuffer holding text until a tool had run |
+| *unaccounted at p50* | -48.9 | | | -1.2% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 1763.8 | 4777.0 | 6546.2 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 4022.3 | 10743.4 | 10885.2 | — | — | cumulative from request received |
+| `t_ttft` | 4022.5 | 10743.5 | 10885.3 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 7371.2 | 13500.2 | 14330.9 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_retrieve_total` | 999.8 | 3172.0 | 7263.1 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 4024.1 ms · p95 10744.8 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+### after (k=3, opening turn skips the history read) run
+
+30 turns · cold-start turns: 0 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_open_conversation` | 852.3 | 949.1 | 998.2 | 20.5% | 11.8% | Neon: upsert the conversation row before the model runs |
+| `t_history` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_prompt_build` | 0.1 | 0.2 | 1.1 | 0.0% | 0.0% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call_1` | 876.6 | 2623.6 | 4108.8 | 21.1% | 32.6% | derived: request -> tool call, less the measured work above |
+| `t_embed` | 495.5 | 838.2 | 3203.6 | 11.9% | 10.4% | OpenAI text-embedding-3-large: network round trip |
+| `t_retrieve` | 550.6 | 646.1 | 1178.2 | 13.2% | 8.0% | Neon: exact cosine scan over 332 rows (network round trip) |
+| `d_model_call_2` | 1149.2 | 5035.8 | 7119.6 | 27.6% | 62.6% | derived: tool call -> model's first delta, less retrieval |
+| `d_buffer_hold` | 0.1 | 0.3 | 0.4 | 0.0% | 0.0% | derived: TurnBuffer holding text until a tool had run |
+| *unaccounted at p50* | 236.2 | | | 5.7% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 1733.7 | 3467.8 | 4959.3 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 4160.5 | 8049.5 | 12571.9 | — | — | cumulative from request received |
+| `t_ttft` | 4160.7 | 8049.6 | 12572.1 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 7001.9 | 12242.6 | 16879.2 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_retrieve_total` | 1048.2 | 1984.5 | 3745.8 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 4164.4 ms · p95 8051.3 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+---
+
+# P13-004 — the question was being sent to the model twice
+
+Not a latency phase. A correctness fix, recorded here because P13-003 found it and
+only half-fixed it, and because it changes the prompt on every continuing turn.
+
+- **Change:** `app/main.py` — `_prepare_messages` now runs before `_open_conversation`, on both endpoints
+- **Tests:** `tests/test_streaming.py` (two, at the end)
+- **Date:** 2026-08-04
+
+## The bug
+
+`_open_conversation` wrote this turn's question to Postgres, and *then*
+`_prepare_messages` read the window back — which now contained that question — and
+`build_prompt` appended it again. Demonstrated on a real continuing turn, by
+capturing the messages the agent was actually handed:
+
+```
+AssertionError: the question was sent 2 times:
+  ['What is ASPIRE?', 'A savings programme.',
+   'And what about withdrawals?', 'And what about withdrawals?']
+```
+
+P13-003 removed it for opening turns as a side effect of skipping the empty
+window read. This removes it everywhere, by swapping the two calls. Both remain
+ahead of the model call, so `_open_conversation`'s actual guarantee — a question
+is recorded before it is answered, so a failed turn still leaves a conversation
+that can be reopened — is untouched.
+
+## Before/after
+
+The unit here is tokens, not milliseconds. A continuing turn with three prior
+exchanges in the window:
+
+| | input tokens | messages |
+|---|---:|---:|
+| before (question duplicated) | 162 | 8 |
+| after (question once) | 147 | 7 |
+| **saved** | **15 (9.3%)** | 1 |
+
+Opening turns were already covered by P13-003, where `input_token_count` fell from
+20–38 to 14–19.
+
+**No TTFT measurement for this phase, deliberately.** `latency_probe.py` fires
+opening turns only — every probe request omits `thread_id`, because that is the
+turn a first-time reader waits through — so it cannot exercise the path this
+changes. Running it would produce 60 turns of model-call noise around a null
+result on a code path the probe does not reach. The honest claim is the token
+figure above plus the demonstrated removal of the duplicate; there is no
+millisecond claim to make.
+
+## Why this was worth its own phase
+
+It changes what the model is shown on every turn past the first, which is exactly
+the kind of change a latency workstream is not allowed to make quietly. Bundling
+it into P13-003 would have buried a prompt change inside a commit whose headline
+was a 677 ms saving.
+
+Two tests pin it: one behavioural, asserting the question appears exactly once in
+what the agent receives on a continuing turn with real history; one structural,
+asserting the call order in `chat_stream`, so the ordering stays pinned even where
+the integration test skips for want of a database. Both were verified to FAIL on
+the old ordering — a test that passes either way would have been worthless here.
+
+---
+
+# P13-005 — one model call instead of two
+
+The agent used to spend a model round trip deciding to search, wait for the
+search, then spend a second call writing the answer — and `app/streaming.py`
+releases no text until a tool has run, so the reader waited out both. The corpus
+is now searched on the request path, concurrently with the database work, and
+arrives in the prompt before the model is called at all.
+
+- **Agent:** `app/agent.py` (retriever removed from the tool list)
+- **Retrieval:** `app/main.py::start_retrieval`, `_await_retrieval`
+- **Release rule:** `app/streaming.py::TurnBuffer`
+- **Date:** 2026-08-04
+
+## Deliverable: before/after TTFT
+
+Both runs at `RETRIEVER_K=3`, `FOLLOW_UPS_ALWAYS=false`.
+
+| | before (two calls) | after (one call) | delta |
+|---|---:|---:|---:|
+| **`t_ttft` warm p50** | 4160.7 ms | **1819.3 ms** | **−2341.4 ms (−56.3%)** |
+| **`t_ttft` warm p95** | 8049.6 ms | **2941.3 ms** | **−5108.3 ms (−63.5%)** |
+| `t_ttft` cold p50 | 4022.5 ms | 1841.2 ms | −2181.2 ms (−54.2%) |
+| `t_ttft` cold p95 | 10743.5 ms | 4267.1 ms | −6476.5 ms (−60.3%) |
+
+`t_total` also fell (7001.9 → 4594.7 ms warm p50) but **that comparison is not
+trustworthy and should not be quoted.** `FOLLOW_UPS_ALWAYS` was changed outside this
+workstream between the two runs, and follow-up chips are generated after
+`text_end` — so they sit inside `t_total` and not inside `t_ttft`. The TTFT figures
+above are unaffected by the flag; the total is confounded by it.
+
+**This one is signal, not noise, and that is worth stating because the previous
+phases' p95 figures were not.** Three reasons: the p50 improvement (~2.3 s)
+exceeds the ~1.66 s of model-call variance measured across the P13-001/002 runs;
+cold and warm agree to within 160 ms on p50 and both show a ~60% p95 drop; and the
+spread narrowed rather than moved, with warm p95/p50 falling from 1.93 to 1.62.
+Removing an entire round trip removes its variance too.
+
+Warm p95 after this change (2941 ms) is lower than warm **p50** before it.
+
+## Where it went
+
+| warm stage | before p50/p95 | after p50/p95 | |
+|---|---:|---:|---|
+| `d_model_call_1` (decide to search) | 876.6 / 2623.6 | **gone** | one call now |
+| `t_open_conversation` | 852.3 / 949.1 | 826.5 / 980.2 | **concurrent, off the path** |
+| `t_embed` | 495.5 / 838.2 | 401.9 / 583.7 | **concurrent, off the path** |
+| `t_retrieve` | 550.6 / 646.1 | 531.9 / 1118.4 | **concurrent, off the path** |
+| `t_concurrent_wait` (what the reader waits) | — | 935.9 / 1653.8 | replaces the three above |
+| `d_model_call` (the answer) | — | 827.9 / 1341.4 | |
+
+Two model calls became one, and the conversation write disappeared into the search
+it now runs alongside. `t_concurrent_wait` at 936 ms p50 contains an 827 ms write
+and a ~934 ms search: the write is absorbed essentially completely.
+
+The budget closes to **3.0% unaccounted at warm p50** (54.6 ms), the tightest of
+any phase — which is what you would expect once the two largest items are a single
+measured wait and a single measured model call.
+
+### Two accounting corrections this phase forced
+
+`t_embed` and `t_retrieve` moved out of the TTFT budget into the auxiliary block.
+They still record what retrieval cost; they are no longer time the reader waits, so
+leaving them in would double-count them against the stages they overlap.
+
+`t_open_conversation` and `t_retrieve_wait` moved out for the same reason and one
+sharper one. Measured on the first cut: `t_open_conversation` 855 ms plus a separate
+retrieval wait of 1030 ms, against **1534 ms actually elapsed**. Summing concurrent
+stages is not a budget, it is an over-count — and it clamped the derived model
+figure to zero. The single `t_concurrent_wait` that contains both is the budget
+line now.
+
+## Behaviour: better, and it took two attempts to get there
+
+This changed the system prompt, so `evals.run --answers` was run on the code before
+the change, after it, and after fixing what the first attempt broke. All 75 cases,
+LLM-judged.
+
+| | retrieval hit | answerable correct | refuse correct | refuse refused | ambiguous correct |
+|---|---:|---:|---:|---:|---:|
+| before (two calls) | 0.8833 | 0.85 | **10/10** | 7/10 | **3/5** |
+| after, first attempt | 0.95 | 0.90 | 9/10 | 9/10 | **0/5** |
+| **after, fixed** | **0.95** | **0.9167** | **10/10** | **9/10** | **5/5** |
+
+**The first attempt regressed two things and the eval caught both.**
+
+*All five ambiguous cases stopped asking for clarification and started refusing.* A
+vague question ("How much money is it?") matches nothing above the relevance floor,
+so the model was handed "no record to answer from" plus a new instruction not to
+answer from general knowledge — and duly refused. Asking a question back is not
+answering from memory, and `KNOWLEDGE_CONTEXT_EMPTY` now says so.
+
+*`ref-09` — Spanish, "should I withdraw all my money, tell me yes or no" — went from
+refused to answered.* GROUNDING said "answer from those entries and nothing else",
+which reads as *always answer when entries exist* and quietly outranked the LIMITS
+rule that a "should I?" question gets the explanation and never a verdict. GROUNDING
+now defers to LIMITS explicitly.
+
+Retrieval quality went **up** (0.8833 → 0.95) and the reason is structural: the
+agent used to decide whether to search and sometimes didn't, or searched with
+reworded queries. It now always searches, with the reader's own words.
+
+`grounded_rate` moved 0.85 → 0.8333, which is one case in sixty on a single
+LLM-judged run. Recorded rather than explained away, and not treated as a finding.
+
+## The safety property that changed, stated plainly
+
+`TurnBuffer` used to release nothing until a tool had run. That was free while every
+answer began with a retrieval call. With one model call an ordinary answer calls no
+tool at all, so the old rule would have held every answer to end-of-message —
+measured at **383–398 ms** on a ~20-token refusal, scaling with answer length. The
+rule is now per-message: a message that emits a tool-call chunk has its text
+discarded; a message that emits text is an answer and streams.
+
+**This rests on a provider behaviour rather than on a mechanical impossibility, and
+that is a real weakening.** Measured across five card- and answer-triggering
+questions, a tool-calling message emitted no prose — tool calls and text always
+arrived in separate messages:
+
+| question | message sequence |
+|---|---|
+| "How do I apply for ASPIRE?" | `TOOL:start_eligibility_check` |
+| "Am I eligible to join ASPIRE?" | `TOOL:start_eligibility_check` |
+| "Can we play a word game about saving money?" | `TOOL:start_game` |
+| "Quiz me with a true or false question" | `TOOL:list_games` then `TOOL:start_game` |
+| "What is ASPIRE Day?" | `TOOL:search_…` then *text* |
+
+If that ever stops holding, prose could reach the screen before a card tool reveals
+the turn was a card. `TurnBuffer.note_tool_call` cannot un-send those bytes, so it
+logs an error and sets `leaked_before_tool_call` — a visible defect rather than a
+silent one. The games suite and the no-answer-leak tests pass.
+
+Also corrected here: the first cut put retrieved corpus rows in a **SystemMessage**.
+`tests/test_kb_injection.py` exists to assert they never carry system authority —
+the corpus is a staff-editable CSV, so a spreadsheet edit would become a prompt edit
+— and it kept passing only because it never exercised the new path. The block is a
+`HumanMessage`, and there is now a test covering the route every turn uses.
+
+## What was given up
+
+The agent can no longer search twice when the first results are thin, which the old
+retriever tool description explicitly invited it to do. The corpus is 332 fixed rows
+and retrieval hits on the first attempt 95% of the time — but "rarely load-bearing"
+is not "never", and this is the trade.
+
+Retrieval also now runs on every turn, including refusals and card turns that
+previously skipped it. It is concurrent, so it costs no latency; it does cost an
+embedding call.
+
+## Cold and warm tables
+
+### cold (P13-005, one model call) run
+
+30 turns · cold-start turns: 1 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 0.0 | 0.4 | 719.3 | 0.0% | 0.0% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_history` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_concurrent_wait` | 896.5 | 2417.0 | 2868.6 | 48.7% | 56.6% | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 1.1 | 12.6 | 606.1 | 0.1% | 0.3% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 826.3 | 1662.3 | 2771.7 | 44.9% | 39.0% | derived: the one answering call, less every pre-model stage |
+| `d_buffer_hold` | 0.1 | 0.3 | 0.5 | 0.0% | 0.0% | derived: TurnBuffer holding text before releasing it |
+| *unaccounted at p50* | 117.1 | | | 6.4% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 1853.3 | 3153.7 | 3153.7 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 1841.0 | 4266.9 | 4723.6 | — | — | cumulative from request received |
+| `t_ttft` | 1841.2 | 4267.1 | 4723.8 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 4818.5 | 7696.2 | 7959.1 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_open_conversation` | 829.7 | 1175.2 | 1567.1 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 895.1 | 2416.9 | 2868.6 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 366.5 | 1760.5 | 2339.4 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 531.8 | 1122.3 | 1368.2 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 904.9 | 2417.9 | 2873.4 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 1845.5 ms · p95 4269.6 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+### warm (P13-005, one model call) run
+
+30 turns · cold-start turns: 0 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 0.0 | 0.0 | 0.2 | 0.0% | 0.0% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_history` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_concurrent_wait` | 935.9 | 1653.8 | 1655.7 | 51.4% | 56.2% | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 0.6 | 23.9 | 44.0 | 0.0% | 0.8% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 827.9 | 1341.4 | 2714.6 | 45.5% | 45.6% | derived: the one answering call, less every pre-model stage |
+| `d_buffer_hold` | 0.1 | 1.0 | 2.2 | 0.0% | 0.0% | derived: TurnBuffer holding text before releasing it |
+| *unaccounted at p50* | 54.6 | | | 3.0% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 1797.7 | 2077.1 | 2077.1 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 1819.1 | 2941.1 | 3597.2 | — | — | cumulative from request received |
+| `t_ttft` | 1819.3 | 2941.3 | 3597.4 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 4594.7 | 6935.4 | 9065.5 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_open_conversation` | 826.5 | 980.2 | 1655.5 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 921.5 | 1598.0 | 1653.7 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 401.9 | 583.7 | 689.2 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 531.9 | 1118.4 | 1136.5 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 933.9 | 1598.7 | 1655.2 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 1821.5 ms · p95 2943.7 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+---
+
+# P13-006 — the response cache, on the transport the client uses
+
+P12-001, closed. The cache was written for `POST /chat`; the client speaks
+`POST /chat/stream`. So the only reader was a transport nobody used, and — found
+while wiring this — the only *writer* was too, which is why `cache_hit` was false
+for all 60 turns in P13-001.
+
+- **Lookup and replay:** `app/main.py::_replay_cached`, `_cache_the_answer`
+- **Key fix:** `app/cache.py::cache_key`
+- **Tests:** `tests/test_streaming.py` (five), `tests/test_cache_keys.py`
+- **Date:** 2026-08-04
+
+## Deliverable: before/after
+
+Measured as a clean pair on one process: clear the 30 probe questions, run once
+(every turn a miss), run again (every cacheable turn a hit).
+
+| | `t_ttft` p50 | `t_ttft` p95 |
+|---|---:|---:|
+| before this phase (P13-005, no cache on the stream) | 1819.3 ms | 2941.3 ms |
+| after — **first** ask (cache miss) | 1658.0 ms | 2401.4 ms |
+| after — **repeat** ask (cache hit) | **6.2 ms** | **9.1 ms** |
+
+A repeat question went from **1819 ms to 6.2 ms — 293× faster**, and the four
+landing starter chips are the highest-collision strings in the product.
+
+**The miss pays almost nothing**, which is the other half of the claim and the
+part that needed checking: `t_cache_lookup` is **3.3 ms p50 / 9.0 ms p95**, 0.2%
+of TTFT. The lookup is started as a task alongside the corpus search rather than
+awaited before it, so a miss absorbs it into work it was going to do anyway. The
+first-ask figures above are indistinguishable from P13-005's at this sample size —
+the difference is smaller than the model-call variance either side of it.
+
+On a hit, `t_cache_lookup` is 77.5% of the turn. That is the shape of a cache
+working: the lookup *is* the turn.
+
+**24 of 30 turns hit.** The other six open the eligibility card and are never
+cached, by design — a card creates server-side session state, so replaying one
+would render a card for a flow nobody started. That property held without being
+touched: `_cache_the_answer` refuses card turns exactly as `/chat` always did.
+
+## A correctness bug this had to fix, not inherit
+
+`/chat` returns its cached reply and stops — no `_open_conversation`, no
+`_persist_turn`. A cached first turn therefore leaves **nothing in Postgres** and
+never appears in anybody's history.
+
+That is survivable on `/chat`, the fallback transport. It is not survivable here:
+the client commits the chat to the rail and the address bar the moment it is sent,
+so a conversation that does not exist server-side is a chat on screen with a dead
+end behind it — precisely what `_open_conversation` exists to prevent.
+
+So `_replay_cached` records the turn, *after* the reply has gone out. Verified
+against the real database rather than against a mock: over the miss-then-hit pair,
+**60 of 60 conversations exist with both a question and an answer**.
+
+`/chat`'s own gap is left as it is. Fixing it means changing what that endpoint
+returns and persists, which is a behaviour change on a path this phase does not
+otherwise touch. Recorded here as open.
+
+## Two bugs found while wiring it
+
+**`cache_key` never used `namespace()`.** The function existed, its docstring said
+"any key this module invents needs the same treatment, or the same flake comes
+back", and it was used by the metrics counters and by nothing else. Answer keys —
+and the lease keys derived from them — sat in the shared production namespace, so
+a pytest run read and wrote the live cache.
+
+Invisible for as long as `/chat/stream` never consulted the cache: tests wrote
+entries nothing read back. Putting the cache on the transport every test drives
+made it visible in one run, with `test_streaming.py` receiving real production
+answers in place of its fake agent's. Fixed by namespacing the key, which retires
+existing entries — one cold turn per distinct question, the cheapest possible
+consequence.
+
+`test_key_is_namespaced_and_bounded` asserted `startswith("aspire:answer:v1:")` —
+the *un*-namespaced form. The test encoded the bug rather than catching it, because
+the literal it pinned was exactly what the bug produced. It now asserts against
+`namespace()`, and a second test checks two namespaces cannot collide on the same
+question.
+
+**The probe could not render a mixed population.** With 24 hits and 6 uncached card
+turns in one run, the share column divided one population's p50 by another's and
+produced **15880.6%**, with an unaccounted residual of **−874.1 ms**. The table now
+carries an `n` column and shows a share only where a stage covers TTFT's turns; a
+stage recorded on *fewer* turns is marked `n/a` rather than divided. Shares from a
+stage measured over *more* turns are approximations and can exceed 100%, which the
+table now says on its own face.
+
+## What a cached answer looks like
+
+The whole reply in one delta. Splitting it would not improve TTFT — the first chunk
+is the first chunk either way — and pacing the pieces to imitate a model typing
+would mean adding delay on purpose, in a workstream about removing it. The client
+buffers deltas and reveals settled blocks, so it renders correctly either way.
+
+A cached answer therefore appears at once rather than typing out. That is what a
+cached answer is; if it should instead be paced to match a computed turn, that is a
+deliberate decision to add latency and belongs to whoever owns the reading
+experience.
+
+## Cold and warm tables
+
+### cache MISS (first ask) run
+
+30 turns · cold-start turns: 0 · cache hits: 0 · turns with a visible token: 24
+
+| stage | n | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---:|---|
+| *`n` is how many turns recorded the stage. A share is shown only when `n` covers TTFT's turns, and is an approximation when `n` is larger — which is why one can exceed 100%.* | | | | | | | |
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | | |
+| `t_lang` | 0 | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | 0 | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | 0 | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_cache_lookup` | 30 | 3.3 | 9.0 | 26.4 | 0.2% | 0.4% | Valkey: response-cache read (the whole turn on a hit) |
+| `t_history` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_concurrent_wait` | 30 | 838.4 | 1464.8 | 1536.3 | 50.6% | 61.0% | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 30 | 0.4 | 0.5 | 0.5 | 0.0% | 0.0% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 24 | 769.3 | 1243.3 | 1263.8 | 46.4% | 51.8% | derived: the one answering call, less every pre-model stage |
+| `d_buffer_hold` | 24 | 0.1 | 0.3 | 0.3 | 0.0% | 0.0% | derived: TurnBuffer holding text before releasing it |
+| *unaccounted at p50* | 24 | 46.5 | | | 2.8% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | | |
+| `t_agent_first_tool` | 6 | 1624.8 | 2919.0 | 2919.0 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 24 | 1657.9 | 2401.3 | 2732.8 | — | — | cumulative from request received |
+| `t_ttft` | 24 | 1658.0 | 2401.4 | 2732.9 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 30 | 4163.2 | 5924.4 | 5985.7 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | | |
+| `t_open_conversation` | 30 | 817.9 | 943.6 | 1461.9 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 30 | 838.4 | 1464.8 | 1536.3 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 30 | 316.2 | 596.4 | 674.6 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 30 | 528.5 | 1104.4 | 1135.3 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 30 | 843.0 | 1469.0 | 1541.5 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | 0 | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 1659.2 ms · p95 2403.1 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+### cache HIT (repeat ask) run
+
+30 turns · cold-start turns: 0 · cache hits: 24 · turns with a visible token: 24
+
+| stage | n | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---:|---|
+| *`n` is how many turns recorded the stage. A share is shown only when `n` covers TTFT's turns, and is an approximation when `n` is larger — which is why one can exceed 100%.* | | | | | | | |
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | | |
+| `t_lang` | 0 | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | 0 | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | 0 | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 30 | 0.0 | 0.0 | 0.0 | 0.2% | 0.2% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_cache_lookup` | 30 | 4.8 | 7.1 | 7.9 | 77.5% | 77.7% | Valkey: response-cache read (the whole turn on a hit) |
+| `t_history` | 6 | 0.0 | 0.0 | 0.0 | n/a | n/a | Neon: window read + running summary |
+| `t_concurrent_wait` | 6 | 864.6 | 932.0 | 932.0 | n/a | n/a | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 6 | 0.3 | 0.6 | 0.6 | n/a | n/a | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `d_buffer_hold` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| *unaccounted at p50* | 24 | 1.4 | | | 22.3% | | framework overhead not inside any measured span — excludes `t_history`, `t_concurrent_wait`, `t_prompt_build`, recorded on FEWER turns than t_ttft and so on a different population |
+| **Milestones** (cumulative from request received) | | | | | | | |
+| `t_agent_first_tool` | 6 | 1853.6 | 4398.5 | 4398.5 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_ttft` | 24 | 6.2 | 9.1 | 11.1 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 30 | 1634.9 | 6146.4 | 6185.9 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | | |
+| `t_open_conversation` | 30 | 804.2 | 826.3 | 897.2 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 6 | 864.6 | 932.0 | 932.0 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 30 | 7.4 | 394.2 | 410.2 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 30 | 0.1 | 531.4 | 535.8 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 30 | 7.4 | 925.6 | 937.1 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | 0 | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 8.2 ms · p95 29.1 ms
 
 Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.

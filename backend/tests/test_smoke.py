@@ -9,10 +9,20 @@ an API key.
 
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage
 
 from app.ingest import row_to_document
 from app.main import _extract_reply, _extract_sources, app
+
+
+class _FakeVar:
+    """Stands in for the retrieval ContextVar without touching real context."""
+
+    def __init__(self, documents):
+        self._documents = documents
+
+    def get(self):
+        return self._documents
 
 
 def test_health_returns_ok():
@@ -55,31 +65,47 @@ def test_row_to_document_skips_empty_rows():
     assert row_to_document({"question": "", "answer": "   "}, 9, "kb.csv") is None
 
 
-def test_extract_sources_reads_tool_artifacts_from_latest_turn():
-    messages = [
-        HumanMessage(content="older question"),
-        ToolMessage(
-            content="stale",
-            tool_call_id="old",
-            artifact=[Document(page_content="from a previous turn")],
-        ),
-        HumanMessage(content="current question"),
-        ToolMessage(
-            content="fresh",
-            tool_call_id="new",
-            artifact=[
+def test_extract_sources_reads_this_turns_retrieval(monkeypatch):
+    """Sources come from what the request retrieved, not from the agent's messages.
+
+    Rewritten in P13-005. It used to walk the turn for a ToolMessage and pull
+    `artifact` off it, because while retrieval was a tool that was the only route
+    available -- and there is no such message any more. The intent it was written
+    to protect is unchanged and still asserted: duplicates collapse, and a prior
+    turn's documents never leak into this turn's sources.
+
+    The second half is now true by construction rather than by filtering: the
+    ContextVar holds exactly the documents this request retrieved, so there is no
+    "previous turn" in scope to exclude.
+    """
+    from app import main
+
+    monkeypatch.setattr(
+        main,
+        "_RETRIEVED",
+        _FakeVar(
+            [
                 Document(page_content="tuition is free", metadata={"category": "Fees"}),
                 Document(page_content="tuition is free", metadata={"category": "Fees"}),
-            ],
+            ]
         ),
-        AIMessage(content="Tuition is free."),
-    ]
+    )
 
-    sources = _extract_sources(messages)
+    # `messages` is still accepted and still ignored, so both endpoints can keep
+    # calling this the same way.
+    sources = _extract_sources([AIMessage(content="Tuition is free.")])
 
-    assert len(sources) == 1, "duplicates collapse and prior turns are excluded"
+    assert len(sources) == 1, "duplicates must still collapse"
     assert sources[0].content == "tuition is free"
     assert sources[0].metadata["category"] == "Fees"
+
+
+def test_extract_sources_is_empty_when_nothing_was_retrieved(monkeypatch):
+    """A refused turn retrieved nothing, so it cites nothing."""
+    from app import main
+
+    monkeypatch.setattr(main, "_RETRIEVED", _FakeVar([]))
+    assert _extract_sources([AIMessage(content="I don't have that one.")]) == []
 
 
 def test_extract_reply_handles_block_content():

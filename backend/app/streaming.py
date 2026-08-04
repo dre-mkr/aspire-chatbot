@@ -65,6 +65,29 @@ class TurnBuffer:
     Deliberately not clever. A heuristic that usually keeps a puzzle's answer
     off the screen is not a guarantee, and this is the half of the design that
     must not depend on the model complying with a prompt.
+
+    ## What P13-005 changed, and what it rests on
+
+    The old rule was "release nothing until a tool has run". That was free when
+    every answer began with a retrieval call -- by the time prose existed, a tool
+    had run. Removing the retriever tool broke it: an ordinary answer now calls no
+    tool at all, so the gate never opened and every answer was held to
+    end-of-message. Measured before the change, on turns that call no tool:
+    `d_buffer_hold` was 383-398 ms on a ~20-token refusal, and it scales with
+    answer length.
+
+    The rule is now per-message rather than per-turn: a message that has emitted a
+    tool-call chunk is a request to call a tool and its text is discarded; a
+    message that emits text is an answer and streams immediately.
+
+    That rests on a property of the provider rather than a mechanical
+    impossibility, which is a real weakening and is why it is written down.
+    Measured across five card-triggering and answer-triggering questions, a
+    tool-calling message emitted NO prose -- tool calls and text always arrived in
+    separate messages. If that ever stops being true, prose could reach the screen
+    before a card tool reveals the turn was a card. `note_tool_call` raises the
+    alarm in that case rather than failing silently: it cannot un-send the words,
+    but it must not let the breach go unnoticed.
     """
 
     def __init__(self) -> None:
@@ -76,11 +99,29 @@ class TurnBuffer:
         #: A card tool fired this turn. Nothing more may be sent, ever.
         self.silenced = False
         self.started = False
-        #: At least one tool has been called, so what kind of turn this is has
-        #: already been decided. Until that is true, nothing is released.
+        #: At least one tool has been called this turn. No longer gates release --
+        #: see the class docstring -- but still reported for diagnostics.
         self.tools_ran = False
+        #: Text was released from the CURRENT message. If a tool call then arrives
+        #: in that same message, the provider has behaved in a way this design
+        #: assumed it would not, and prose has already gone out.
+        self.released_this_message = False
+        #: Set when that happens. Surfaced so it is a visible defect and not a
+        #: silent one.
+        self.leaked_before_tool_call = False
 
     def note_tool_call(self, name: str | None) -> None:
+        if self.released_this_message:
+            # Cannot be undone: those bytes are on the client. Say so loudly.
+            self.leaked_before_tool_call = True
+            logger.error(
+                "Tool %r was called in a message that had already streamed text. "
+                "The per-message release rule assumes a tool-calling message emits "
+                "no prose; this provider just broke that assumption. If %r is a "
+                "card tool, its turn's narration has reached the reader.",
+                name,
+                name,
+            )
         self.is_tool_message = True
         self.tools_ran = True
         self.pending.clear()
@@ -91,24 +132,21 @@ class TurnBuffer:
     def add(self, delta: str) -> str:
         """Accepts a delta and returns whatever may now be sent.
 
-        Nothing is released before a tool has run, and that is the guarantee the
-        whole file turns on. A card turn announces itself by calling its tool in
-        the agent's first assistant message, so any preamble the model produced
-        alongside it is still in hand and can be dropped. Releasing eagerly and
-        retracting later is not an option: the retraction is a visible flash, and
-        by then the words have been read.
-
-        It costs nothing in the ordinary case. Answering anything here means
-        retrieving first, so by the time real prose exists the tools have run.
+        A message that has already revealed itself as a tool call holds its text
+        forever -- that is the part which must not weaken, because a card turn's
+        narration is exactly what it discards. A message that has only ever
+        emitted text is an answer, and waiting on it buys nothing: there is no
+        later tool call to learn from within the same message.
         """
         if self.silenced or not delta:
             return ""
         self.pending.append(delta)
-        if self.is_tool_message or not self.tools_ran:
+        if self.is_tool_message:
             return ""
         out = "".join(self.pending)
         self.pending.clear()
         self.released += out
+        self.released_this_message = True
         return out
 
     def end_message(self) -> str:
@@ -116,6 +154,9 @@ class TurnBuffer:
         held = "" if (self.is_tool_message or self.silenced) else "".join(self.pending)
         self.pending.clear()
         self.is_tool_message = False
+        # Per-message state resets with the message. The turn-level flags --
+        # `silenced`, `tools_ran`, `leaked_before_tool_call` -- deliberately do not.
+        self.released_this_message = False
         self.released += held
         return held
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import logging
 import time
@@ -9,7 +11,7 @@ import uuid
 import uuid as uuid_module
 from contextlib import asynccontextmanager
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -45,15 +47,20 @@ from app.memory import build_prompt, count_tokens, log_prompt_cost
 from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
 from app.ingest import count_corpus, ingest_if_empty
+from app.rag import context_from, get_retriever
 from app.streaming import agui_stream
 from app.timing import (
     RING as TIMING_RING,
     T_AGENT_FIRST_DELTA,
     T_AGENT_FIRST_TOOL,
+    T_CACHE_LOOKUP,
     T_HISTORY,
     T_IDENTITY,
     T_OPEN_CONVERSATION,
     T_PROMPT_BUILD,
+    T_CONCURRENT_WAIT,
+    T_RETRIEVE_KICKOFF,
+    T_RETRIEVE_WAIT,
     annotate as annotate_timings,
     begin as begin_timings,
     bind as bind_timings,
@@ -373,30 +380,32 @@ def _messages_from_this_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
 
 
 def _extract_sources(messages: list[BaseMessage]) -> list[Source]:
-    """Collect the documents the retriever tool actually returned this turn."""
+    """The corpus rows this turn retrieved, in the shape the client expects.
+
+    Reads the request's own retrieval rather than the agent's messages. It used to
+    walk the turn for a ToolMessage and pull `artifact` off it, which was the only
+    route available while retrieval was a tool -- and there is no such message any
+    more (P13-005).
+
+    Strictly more reliable, as well as necessary: the documents are now the exact
+    list that went into the prompt, rather than a list recovered from whatever the
+    agent left behind. `messages` is still accepted so both endpoints keep calling
+    this the same way, and is deliberately unused.
+    """
     sources: list[Source] = []
     seen: set[str] = set()
 
-    for message in _messages_from_this_turn(messages):
-        if not isinstance(message, ToolMessage):
+    for document in _RETRIEVED.get():
+        content = document.page_content.strip()
+        key = content[:200]
+        if key in seen:
             continue
+        seen.add(key)
 
-        # Set by response_format="content_and_artifact" on the retriever tool.
-        documents = message.artifact if isinstance(message.artifact, list) else []
-        for document in documents:
-            if not isinstance(document, Document):
-                continue
-
-            content = document.page_content.strip()
-            key = content[:200]
-            if key in seen:  # the agent may retrieve twice and overlap
-                continue
-            seen.add(key)
-
-            truncated = content[:MAX_SOURCE_CHARS]
-            if len(content) > MAX_SOURCE_CHARS:
-                truncated += "..."
-            sources.append(Source(content=truncated, metadata=dict(document.metadata)))
+        truncated = content[:MAX_SOURCE_CHARS]
+        if len(content) > MAX_SOURCE_CHARS:
+            truncated += "..."
+        sources.append(Source(content=truncated, metadata=dict(document.metadata)))
 
     return sources[:MAX_SOURCES]
 
@@ -499,27 +508,78 @@ def _extract_reply(messages: list[BaseMessage]) -> str:
     return message_text(messages[-1].content).strip()
 
 
-async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMessage]:
-    """The messages for this turn.
+def start_retrieval(question: str) -> asyncio.Task[list[Document]]:
+    """Begin searching the corpus now, without waiting for it.
 
-    With MEMORY_WINDOW_ENABLED off -- the default -- this is exactly what it has
-    always been: the new question alone, with the checkpointer supplying the
-    rest. Turning the flag off restores that behaviour completely, which is why
-    it is a flag rather than a rewrite.
+    Kicked off before the database work rather than after, because it does not
+    depend on any of it: the query is the question, which we already have. It then
+    runs concurrently with the identity lookup, the history read and the
+    conversation upsert -- roughly 850 ms of Neon round trips -- so most of
+    retrieval's own ~1 s costs nothing on the critical path.
 
-    With it on, history comes from Postgres instead: a window of recent messages
-    plus a running summary of everything older.
+    Failures are deliberately NOT swallowed here. They surface where the task is
+    awaited, in `_prepare_messages`, because a turn with no corpus is a turn that
+    cannot be grounded and must not be answered from the model's own knowledge.
+    """
+    with timed_stage(T_RETRIEVE_KICKOFF):
+        return asyncio.create_task(get_retriever().ainvoke(question))
+
+
+#: The documents this turn retrieved, so `_extract_sources` can report them.
+#:
+#: A ContextVar for the same reason `app.timing` uses one: the sources are needed
+#: after the agent has finished, in a helper shared by both endpoints, and
+#: threading them through every signature to get there would be worse.
+_RETRIEVED: contextvars.ContextVar[list[Document]] = contextvars.ContextVar(
+    "aspire_retrieved_documents", default=[]
+)
+
+
+async def _await_retrieval(retrieval: asyncio.Task[list[Document]] | None) -> str | None:
+    """Collect the pre-started search, and say plainly when it found nothing.
+
+    Returns None only when there was no search to await -- the title and summary
+    calls, and the tests that build a prompt without one. An empty corpus result
+    is NOT None: it is `KNOWLEDGE_CONTEXT_EMPTY`, which tells the model in words
+    that it has no record to answer from. Passing an empty string instead would
+    read as "the knowledge base is silent", which is an invitation to answer from
+    general knowledge -- the one thing GROUNDING exists to stop.
+
+    A failed search is allowed to raise. The caller turns it into the same 502 as
+    any other failure, and that is correct: on a government product serving
+    minors, an ungrounded answer is worse than no answer.
+    """
+    if retrieval is None:
+        return None
+
+    with timed_stage(T_RETRIEVE_WAIT):
+        documents = await retrieval
+    _RETRIEVED.set(documents)
+    annotate_timings(retrieved_chunk_count=len(documents))
+    if not documents:
+        logger.info("Retrieval returned nothing above the relevance floor.")
+    return context_from(documents)
+
+
+async def _load_history(request: ChatRequest, thread_id: str) -> ConversationContext:
+    """The window of recent turns, or an empty one.
+
+    An opening turn has no history, so it does not read any.
+    `request.thread_id is None` is exactly that case and nothing else: the id in
+    `thread_id` was minted by this request microseconds ago, so no conversation
+    and no message can predate it. Measured at ~700 ms of Neon round trip -- paid
+    by every first-time reader, ahead of the model, for a window that is empty by
+    construction.
+
+    Callers run this BEFORE recording the question, and that ordering is
+    load-bearing: with it reversed, the window read returns the question this very
+    turn just wrote and `build_prompt` appends it again, sending the model the same
+    sentence twice. `tests/test_streaming.py` asserts it appears exactly once.
     """
     settings = get_settings()
-    if not settings.memory_window_enabled:
-        # No history to fetch and nothing to assemble: the checkpointer supplies
-        # the rest inside the agent. Both stages are recorded as having happened
-        # and cost nothing, rather than left absent, because "this deployment
-        # does no history work" is a measurement, not a missing one.
-        annotate_timings(input_token_count=count_tokens(request.message))
+    if not settings.memory_window_enabled or request.thread_id is None:
         record_stage(T_HISTORY, 0.0)
-        record_stage(T_PROMPT_BUILD, 0.0)
-        return [HumanMessage(content=request.message)]
+        return ConversationContext()
 
     # The window read: one round trip to Neon for the recent turns and the
     # running summary. Summarisation itself is never here -- it runs in the arq
@@ -531,16 +591,71 @@ async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMe
                 context = await load_context(
                     db, thread_id, window_turns=settings.memory_window_turns
                 )
+    return context
 
-    # Assembly plus the tiktoken pass `build_prompt` does to cost it. Local CPU,
-    # no network -- and the encoding is fetched and cached on first use, which is
-    # part of why the first turn in a process is slower than the rest.
+
+def _assemble_prompt(
+    request: ChatRequest,
+    thread_id: str,
+    context: ConversationContext,
+    knowledge: str | None,
+) -> list[BaseMessage]:
+    """Turn the history and the retrieved corpus into the messages to send.
+
+    Assembly plus the tiktoken pass `build_prompt` does to cost it. Local CPU, no
+    network -- and the encoding is fetched and cached on first use, which is part
+    of why the first turn in a process is slower than the rest.
+    """
     with timed_stage(T_PROMPT_BUILD):
-        prepared = build_prompt(request.message, context)
+        prepared = build_prompt(request.message, context, knowledge=knowledge)
 
     annotate_timings(input_token_count=prepared.tokens)
     log_prompt_cost(thread_id, prepared)
     return prepared.messages
+
+
+async def _prepare_messages(
+    request: ChatRequest,
+    thread_id: str,
+    retrieval: asyncio.Task[list[Document]] | None = None,
+    *,
+    after_history: Callable[[], Awaitable[None] | None] | None = None,
+) -> list[BaseMessage]:
+    """The messages for this turn: history, the retrieved corpus, the question.
+
+    `after_history` is called the moment the window read is done and may return an
+    awaitable to be waited on alongside retrieval. It exists so the caller can put
+    the conversation write in flight at the one point where doing so is both safe
+    and useful: safe because the read has already happened (see `_load_history`),
+    and useful because retrieval is still outstanding and now has something to
+    overlap with.
+
+    Both are awaited inside ONE timed block, and that is deliberate. They run
+    concurrently, so timing them separately double-counts the overlap: measured
+    `t_open_conversation` 855 ms plus a separate retrieval wait of 1030 ms against
+    1534 ms actually elapsed, which is not a budget, it is an over-count that
+    clamped the derived model figure to zero.
+    """
+    context = await _load_history(request, thread_id)
+    pending = after_history() if after_history is not None else None
+
+    try:
+        with timed_stage(T_CONCURRENT_WAIT):
+            knowledge = await _await_retrieval(retrieval)
+            if pending is not None:
+                await pending
+    except BaseException:
+        # Retrieval is allowed to fail the turn, and when it does the write is
+        # still in flight. Awaiting it here rather than abandoning it is what
+        # keeps the question recorded -- the whole point of `_open_conversation`
+        # is that a turn which could not be answered still leaves a conversation
+        # to reopen, and a failed retrieval is exactly such a turn. It swallows
+        # its own errors, so this cannot mask the retrieval failure being raised.
+        if pending is not None:
+            await asyncio.shield(pending)
+        raise
+
+    return _assemble_prompt(request, thread_id, context, knowledge)
 
 
 async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
@@ -597,6 +712,137 @@ async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
         sources=[Source(**source) for source in hit.get("sources", [])],
         follow_ups=hit.get("follow_ups", []),
     )
+
+
+async def _cache_the_answer(
+    request: ChatRequest,
+    *,
+    reply: str,
+    sources: list[Source],
+    follow_ups: list[str],
+    quiet_turn: bool,
+) -> None:
+    """Store the answer and release the single-flight lease.
+
+    Shared by both transports since P13-006, and shared rather than copied for
+    the reason `chat_stream`'s docstring gives: two paths that answer the same
+    question differently is how the streaming version becomes a second product.
+    Before this, `/chat` populated the cache and `/chat/stream` never did -- so
+    the only writer was the transport nobody used, and the cache stayed empty.
+
+    Only the opening turn is cacheable -- see `_cached_reply` -- and never a game
+    or eligibility turn: both create server-side session state, so replaying a
+    cached "answer" would render a card for a flow nobody started.
+
+    This matters more for eligibility than for games, because "Who is eligible for
+    ASPIRE?" is a landing-page starter chip and therefore the most cacheable
+    string in the product. Caching that turn would serve every later asker an
+    empty reply with no card at all.
+    """
+    if request.thread_id:
+        return
+
+    key = response_cache.cache_key(
+        request.message,
+        language=request.language,
+        persona=request.persona,
+        account_status=request.account_status,
+    )
+    if quiet_turn is False:
+        await response_cache.put_answer(
+            request.message,
+            {
+                "reply": reply,
+                "sources": [source.model_dump() for source in sources],
+                "follow_ups": follow_ups,
+            },
+            language=request.language,
+            persona=request.persona,
+            account_status=request.account_status,
+        )
+    # Released whether or not anything was cached. A card turn is not cacheable,
+    # but callers waiting on the lease must still be let go rather than sitting
+    # out the full wait for an answer that is never coming. The lease also expires
+    # on its own, so a crash costs the next caller a lease's worth of waiting and
+    # nothing more.
+    await response_cache.release_lease(key)
+
+
+async def _replay_cached(
+    request: ChatRequest,
+    thread_id: str,
+    owner_id: uuid_module.UUID | None,
+    cached: ChatResponse,
+) -> AsyncIterator[dict]:
+    """Serve a cache hit as a streamed turn, then record it.
+
+    The whole reply in ONE delta, deliberately. Splitting it into several would
+    not improve time-to-first-token -- the first chunk is the first chunk either
+    way -- and pacing them out to imitate a model typing would mean adding delay
+    on purpose, in a workstream about removing it. A cached answer arriving at
+    once is what a cached answer is.
+
+    ## Persistence happens here, and `/chat`'s cached path is why
+
+    `/chat` returns its cached reply and stops: no `_open_conversation`, no
+    `_persist_turn`. A cached first turn therefore leaves nothing in Postgres and
+    never appears in anybody's history. That is survivable on `/chat`, which is
+    the fallback transport. It is not survivable here: the client commits the chat
+    to the rail and the address bar the moment it is sent, so a conversation that
+    does not exist server-side is a chat on screen with a dead end behind it --
+    exactly what `_open_conversation` exists to prevent.
+
+    So it is recorded, and recorded AFTER the reply has gone out. On the miss path
+    persistence already sits behind `done` for the same reason: the reader has
+    their answer, and nothing that happens afterwards may delay it.
+
+    `thread_id` is the one this request minted, not the fresh id `_cached_reply`
+    puts in its `ChatResponse`. The client is told this id and the conversation is
+    stored under it, so the two agree -- on `/chat` they cannot, because nothing
+    is stored at all.
+    """
+    annotate_timings(
+        cache_hit=True,
+        output_token_count=count_tokens(cached.reply),
+        retrieved_chunk_count=len(cached.sources),
+    )
+
+    if cached.reply:
+        yield {"delta": cached.reply}
+    yield {"text_end": True}
+    yield {
+        "done": {
+            "reply": cached.reply,
+            "thread_id": thread_id,
+            "sources": [source.model_dump() for source in cached.sources],
+            "follow_ups": [],
+            # A card turn is never cached -- see the note in `_serve_chat` -- so
+            # there is nothing here to replay, and replaying one would render a
+            # card for a flow no server-side session was ever opened for.
+            "game_started": None,
+            "eligibility_started": None,
+        }
+    }
+    yield {"follow_ups": cached.follow_ups}
+
+    # Counted so the card-rate denominator stays honest: a cache hit is a real
+    # non-card turn, and leaving it out would inflate the rate.
+    await response_cache.record_turn(False)
+
+    try:
+        await _open_conversation(request, thread_id, owner_id)
+        await _persist_turn(
+            request,
+            thread_id,
+            reply=cached.reply,
+            sources=list(cached.sources),
+            follow_ups=cached.follow_ups,
+            owner_id=owner_id,
+        )
+    except Exception:
+        # Same rule as the miss path: the reader already has the answer, so
+        # losing the record of it is our problem and not theirs.
+        logger.exception("Persisting a cached turn failed for thread %s", thread_id)
 
 
 async def _follow_ups_for(
@@ -845,18 +1091,28 @@ async def chat(
     with timed_turn(
         endpoint="/chat", persona=request.persona, lang=request.language
     ):
+        retrieval = start_retrieval(request.message)
         with timed_stage(T_IDENTITY):
             who = await owner_id_for(principal)
 
         cached = await _cached_reply(request)
         if cached is not None:
+            # The search is already running and its answer is not needed. Cancel
+            # it rather than leaving an orphan task to finish into nothing.
+            retrieval.cancel()
             annotate_timings(cache_hit=True, output_token_count=count_tokens(cached.reply))
             return cached
 
-        # Before the model, not after: see `_open_conversation`.
-        await _open_conversation(request, thread_id, who)
-
-        prepared = await _prepare_messages(request, thread_id)
+        # History first, then record the question concurrently with the rest of
+        # retrieval -- same ordering and the same reasons as `/chat/stream`.
+        prepared = await _prepare_messages(
+            request,
+            thread_id,
+            retrieval,
+            after_history=lambda: asyncio.create_task(
+                _open_conversation(request, thread_id, who)
+            ),
+        )
 
         return await _serve_chat(request, thread_id, who, prepared)
 
@@ -984,39 +1240,9 @@ async def _serve_chat(
     if settings.memory_window_enabled and database_enabled():
         await enqueue_summary(thread_id)
 
-    # Only the opening turn is cacheable -- see `_cached_reply` -- and never a
-    # game or eligibility turn: both create server-side session state, so
-    # replaying a cached "answer" would render a card for a flow nobody started.
-    #
-    # This matters more for eligibility than for games, because "Who is eligible
-    # for ASPIRE?" is a landing-page starter chip and therefore the most
-    # cacheable string in the product. Caching that turn would serve every later
-    # asker an empty reply with no card at all.
-    if not request.thread_id:
-        key = response_cache.cache_key(
-            request.message,
-            language=request.language,
-            persona=request.persona,
-            account_status=request.account_status,
-        )
-        if quiet_turn is False:
-            await response_cache.put_answer(
-                request.message,
-                {
-                    "reply": reply,
-                    "sources": [source.model_dump() for source in sources],
-                    "follow_ups": follow_ups,
-                },
-                language=request.language,
-                persona=request.persona,
-                account_status=request.account_status,
-            )
-        # Released whether or not anything was cached. A card turn is not
-        # cacheable, but callers waiting on the lease must still be let go
-        # rather than sitting out the full wait for an answer that is never
-        # coming. The lease also expires on its own, so a crash costs the next
-        # caller a lease's worth of waiting and nothing more.
-        await response_cache.release_lease(key)
+    await _cache_the_answer(
+        request, reply=reply, sources=sources, follow_ups=follow_ups, quiet_turn=quiet_turn
+    )
 
     return ChatResponse(
         reply=reply,
@@ -1075,6 +1301,19 @@ async def chat_stream(
     # generator is ever driven, so without it `t_identity` would have no turn to
     # attach to and would land in the derived model-call figure instead.
     with bind_timings(timings, finish_on_exit=False):
+        # First thing, before any awaiting: neither of these needs anything but
+        # the question, so everything below overlaps them instead of queueing
+        # behind them.
+        #
+        # Both, concurrently, and that ordering is the point. Checking the cache
+        # first and only then starting the search would make every MISS pay the
+        # two serially -- and misses are the common case for a corpus of 332 rows
+        # asked about in three languages. Started together, a miss absorbs the
+        # lookup into the search it was going to run anyway, and a hit throws away
+        # one embedding call. That is the right way round: the hit is the path
+        # worth being fast.
+        retrieval = start_retrieval(request.message)
+        lookup = asyncio.create_task(_cached_reply(request))
         with timed_stage(T_IDENTITY):
             who = await owner_id_for(principal)
 
@@ -1092,10 +1331,35 @@ async def chat_stream(
                 yield event
 
     async def _run() -> AsyncIterator[dict]:
-        # Recorded before the model runs, exactly as `/chat` does, so a turn
-        # that fails still leaves a conversation that can be reopened.
-        await _open_conversation(request, thread_id, who)
-        prepared = await _prepare_messages(request, thread_id)
+        # The cache, on the transport the client actually uses (P12-001). It has
+        # sat on `/chat` only since it was written, so every repeat of the four
+        # landing starter chips -- the highest-collision strings in the product --
+        # has been paying for a full agent turn.
+        with timed_stage(T_CACHE_LOOKUP):
+            cached = await lookup
+        if cached is not None:
+            retrieval.cancel()
+            async for event in _replay_cached(request, thread_id, who, cached):
+                yield event
+            return
+
+        # Read the history BEFORE recording this turn's question, or the read
+        # returns the question and `build_prompt` appends it again -- see
+        # `_prepare_messages`. Still recorded before the model runs, which is the
+        # guarantee `_open_conversation` actually makes.
+        # The conversation write goes in flight as soon as the history read is
+        # done, so it runs alongside whatever is left of retrieval instead of
+        # after it. Awaited before the model call, which is the guarantee
+        # `_open_conversation` actually makes -- the question is recorded before
+        # it is answered.
+        prepared = await _prepare_messages(
+            request,
+            thread_id,
+            retrieval,
+            after_history=lambda: asyncio.create_task(
+                _open_conversation(request, thread_id, who)
+            ),
+        )
 
         collected: list[BaseMessage] = []
         #: The answer as it was actually sent, for persistence and the done
@@ -1230,6 +1494,18 @@ async def chat_stream(
                 await enqueue_summary(thread_id)
         except Exception:
             logger.exception("Persisting the turn failed for thread %s", thread_id)
+
+        # Populated here as well as on `/chat`, and this is the other half of
+        # P12-001: a cache only the unused transport wrote to was a cache that
+        # stayed empty. After the answer has gone out, like everything else on
+        # this side of `done`.
+        await _cache_the_answer(
+            request,
+            reply=reply,
+            sources=sources,
+            follow_ups=follow_ups,
+            quiet_turn=quiet_turn,
+        )
 
         yield {"follow_ups": follow_ups}
 

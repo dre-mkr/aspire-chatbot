@@ -210,7 +210,7 @@ def _row(name: str, entry: dict[str, Any], ttft: dict[str, Any], budget: bool) -
     note = STAGE_NOTES.get(name, "")
     if not entry.get("count"):
         reason = entry.get("reason", ABSENT_REASONS.get(name, "not recorded"))
-        return [f"| `{name}` | n/a | n/a | n/a | — | — | {reason} |"]
+        return [f"| `{name}` | 0 | n/a | n/a | n/a | — | — | {reason} |"]
 
     def share(key: str) -> str:
         # Only the duration stages get a share, and only against TTFT. The
@@ -218,6 +218,23 @@ def _row(name: str, entry: dict[str, Any], ttft: dict[str, Any], budget: bool) -
         # column spanning both is a column somebody will try to add up.
         if not budget:
             return "—"
+        # And only when the stage covers at least the turns TTFT was measured on.
+        #
+        # `>=` rather than `==`, and the difference matters in both directions.
+        # Most pre-model stages run on all 30 turns while only 24 produce a
+        # visible token, so requiring equality would suppress every share in the
+        # table -- including on the ordinary runs where the figures are sound. A
+        # stage measured over a superset is an approximation, noted in the header.
+        #
+        # What this DOES reject is a stage recorded on fewer turns than TTFT,
+        # which on a mixed run means a different population entirely. Measured on
+        # the cache-hit run: 24 turns hit the cache and have a ~5 ms TTFT with no
+        # model call, while 6 open the eligibility card, are never cached, and have
+        # a ~909 ms concurrent wait and no TTFT at all. Dividing one population's
+        # p50 by the other's produced a share of 15880.6% and a residual of
+        # -874.1 ms.
+        if entry.get("count", 0) < ttft.get("count", 0):
+            return "n/a"
         total = ttft.get(key)
         value = entry.get(key)
         if not total or value is None:
@@ -225,8 +242,8 @@ def _row(name: str, entry: dict[str, Any], ttft: dict[str, Any], budget: bool) -
         return f"{100.0 * value / total:.1f}%"
 
     return [
-        f"| `{name}` | {entry['p50']:.1f} | {entry['p95']:.1f} | {entry['p99']:.1f} "
-        f"| {share('p50')} | {share('p95')} | {note} |"
+        f"| `{name}` | {entry['count']} | {entry['p50']:.1f} | {entry['p95']:.1f} "
+        f"| {entry['p99']:.1f} | {share('p50')} | {share('p95')} | {note} |"
     ]
 
 
@@ -245,34 +262,67 @@ def render(summary: dict[str, Any], observed: list[dict[str, Any]], label: str) 
     )
     lines.append("")
     header = (
-        "| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT "
+        "| stage | n | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT "
         "| share of p95 TTFT | what it is |"
     )
     lines.append(header)
-    lines.append("|---|---:|---:|---:|---:|---:|---|")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---|")
+    lines.append(
+        "| *`n` is how many turns recorded the stage. A share is shown only when "
+        "`n` covers TTFT's turns, and is an approximation when `n` is larger — "
+        "which is why one can exceed 100%.* | | | | | | | |"
+    )
 
-    lines.append("| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |")
+    lines.append(
+        "| **TTFT budget** (durations; these sum to t_ttft) | | | | | | | |"
+    )
     for name in DURATION_STAGES:
         lines.extend(_row(name, stages.get(name, {}), ttft, budget=True))
 
     # Whether the budget actually adds up. A decomposition that silently loses a
     # second is worth catching here rather than in a review of the conclusions.
-    accounted = sum(
-        stages[name]["p50"] for name in DURATION_STAGES if stages.get(name, {}).get("count")
-    )
-    if ttft.get("p50"):
+    #
+    # Summed over the stages recorded on the SAME turns as TTFT, for the reason
+    # `_row` explains: on a mixed run, adding a stage measured on 6 turns to one
+    # measured on 24 produced a residual of -874.1 ms.
+    comparable = [
+        name
+        for name in DURATION_STAGES
+        if stages.get(name, {}).get("count", 0) >= ttft.get("count", 0) > 0
+    ]
+    if ttft.get("p50") and comparable:
+        accounted = sum(stages[name]["p50"] for name in comparable)
         residual = ttft["p50"] - accounted
+        skipped = [
+            name
+            for name in DURATION_STAGES
+            if stages.get(name, {}).get("count") and name not in comparable
+        ]
+        note = "framework overhead not inside any measured span"
+        if skipped:
+            note += (
+                f" — excludes {', '.join(f'`{s}`' for s in skipped)}, recorded on "
+                "FEWER turns than t_ttft and so on a different population"
+            )
         lines.append(
-            f"| *unaccounted at p50* | {residual:.1f} | | | "
-            f"{100.0 * residual / ttft['p50']:.1f}% | | "
-            "framework overhead not inside any measured span |"
+            f"| *unaccounted at p50* | {ttft.get('count', 0)} | {residual:.1f} | | | "
+            f"{100.0 * residual / ttft['p50']:.1f}% | | {note} |"
+        )
+    elif ttft.get("p50"):
+        # Nothing shares TTFT's population, so there is no budget to reconcile.
+        # Saying so beats printing a residual of 100% and letting a reader
+        # conclude the instrumentation lost the whole turn.
+        lines.append(
+            "| *no budget for this run* | | | | | — | — | every duration stage was "
+            "recorded on a different set of turns than `t_ttft`, so the shares are "
+            "not computable — see the `n` column |"
         )
 
-    lines.append("| **Milestones** (cumulative from request received) | | | | | | |")
+    lines.append("| **Milestones** (cumulative from request received) | | | | | | | |")
     for name in MILESTONE_STAGES:
         lines.extend(_row(name, stages.get(name, {}), ttft, budget=False))
 
-    lines.append("| **Auxiliary** | | | | | | |")
+    lines.append("| **Auxiliary** | | | | | | | |")
     for name in AUXILIARY_STAGES:
         lines.extend(_row(name, stages.get(name, {}), ttft, budget=False))
 

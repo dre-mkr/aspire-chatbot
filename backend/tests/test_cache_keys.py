@@ -52,12 +52,45 @@ class TestKeyDimensions:
         assert key("q", account_status="active") != key("q", account_status="lapsed")
 
     def test_key_is_namespaced_and_bounded(self):
-        # Hashed, so a very long question cannot produce an unbounded key and no
-        # user text leaks into logs or `KEYS` output.
+        """What the name always claimed, and what it now actually checks.
+
+        This asserted `startswith("aspire:answer:v1:")` -- the UN-namespaced form.
+        `cache_key` ignored `namespace()` until P13-006, so answer keys and their
+        leases sat in the shared production namespace and a pytest run read and
+        wrote the live cache. The test encoded the bug rather than catching it,
+        because the literal it pinned was exactly what the bug produced.
+        """
+        from app.cache import namespace
+
         produced = key("x" * 10_000)
-        assert produced.startswith("aspire:answer:v1:")
-        assert len(produced) < 64
+        assert produced.startswith(namespace()), (
+            f"{produced!r} is outside {namespace()!r}; a test run would share "
+            "answer keys with production"
+        )
+        assert produced.startswith(f"{namespace()}answer:v1:")
+        # Hashed, so a very long question cannot produce an unbounded key and no
+        # user text leaks into logs or `KEYS` output. Bound allows for the test
+        # namespace, which production does not carry.
+        assert len(produced) < 64 + len(namespace())
         assert "x" * 20 not in produced
+
+    def test_the_namespace_actually_isolates(self, monkeypatch):
+        """Two namespaces must not collide on the same question.
+
+        The property the P11-001 note asks for, asserted on answer keys rather
+        than only on the metrics counters that were honouring it.
+        """
+        from app import cache
+
+        monkeypatch.setenv("ASPIRE_CACHE_NAMESPACE", "run-a:")
+        first = cache.cache_key("same question", language="en", persona=None, account_status=None)
+        monkeypatch.setenv("ASPIRE_CACHE_NAMESPACE", "run-b:")
+        second = cache.cache_key("same question", language="en", persona=None, account_status=None)
+
+        assert first != second
+        assert first.endswith(second.split(":")[-1]), (
+            "only the namespace should differ; the digest is the same question"
+        )
 
 
 class TestValkeyUrl:
