@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import logging
 import time
@@ -9,7 +11,7 @@ import uuid
 import uuid as uuid_module
 from contextlib import asynccontextmanager
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -45,6 +47,7 @@ from app.memory import build_prompt, count_tokens, log_prompt_cost
 from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
 from app.ingest import count_corpus, ingest_if_empty
+from app.rag import context_from, get_retriever
 from app.streaming import agui_stream
 from app.timing import (
     RING as TIMING_RING,
@@ -54,6 +57,9 @@ from app.timing import (
     T_IDENTITY,
     T_OPEN_CONVERSATION,
     T_PROMPT_BUILD,
+    T_CONCURRENT_WAIT,
+    T_RETRIEVE_KICKOFF,
+    T_RETRIEVE_WAIT,
     annotate as annotate_timings,
     begin as begin_timings,
     bind as bind_timings,
@@ -373,30 +379,32 @@ def _messages_from_this_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
 
 
 def _extract_sources(messages: list[BaseMessage]) -> list[Source]:
-    """Collect the documents the retriever tool actually returned this turn."""
+    """The corpus rows this turn retrieved, in the shape the client expects.
+
+    Reads the request's own retrieval rather than the agent's messages. It used to
+    walk the turn for a ToolMessage and pull `artifact` off it, which was the only
+    route available while retrieval was a tool -- and there is no such message any
+    more (P13-005).
+
+    Strictly more reliable, as well as necessary: the documents are now the exact
+    list that went into the prompt, rather than a list recovered from whatever the
+    agent left behind. `messages` is still accepted so both endpoints keep calling
+    this the same way, and is deliberately unused.
+    """
     sources: list[Source] = []
     seen: set[str] = set()
 
-    for message in _messages_from_this_turn(messages):
-        if not isinstance(message, ToolMessage):
+    for document in _RETRIEVED.get():
+        content = document.page_content.strip()
+        key = content[:200]
+        if key in seen:
             continue
+        seen.add(key)
 
-        # Set by response_format="content_and_artifact" on the retriever tool.
-        documents = message.artifact if isinstance(message.artifact, list) else []
-        for document in documents:
-            if not isinstance(document, Document):
-                continue
-
-            content = document.page_content.strip()
-            key = content[:200]
-            if key in seen:  # the agent may retrieve twice and overlap
-                continue
-            seen.add(key)
-
-            truncated = content[:MAX_SOURCE_CHARS]
-            if len(content) > MAX_SOURCE_CHARS:
-                truncated += "..."
-            sources.append(Source(content=truncated, metadata=dict(document.metadata)))
+        truncated = content[:MAX_SOURCE_CHARS]
+        if len(content) > MAX_SOURCE_CHARS:
+            truncated += "..."
+        sources.append(Source(content=truncated, metadata=dict(document.metadata)))
 
     return sources[:MAX_SOURCES]
 
@@ -499,67 +507,154 @@ def _extract_reply(messages: list[BaseMessage]) -> str:
     return message_text(messages[-1].content).strip()
 
 
-async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMessage]:
-    """The messages for this turn.
+def start_retrieval(question: str) -> asyncio.Task[list[Document]]:
+    """Begin searching the corpus now, without waiting for it.
 
-    With MEMORY_WINDOW_ENABLED off -- the default -- this is exactly what it has
-    always been: the new question alone, with the checkpointer supplying the
-    rest. Turning the flag off restores that behaviour completely, which is why
-    it is a flag rather than a rewrite.
+    Kicked off before the database work rather than after, because it does not
+    depend on any of it: the query is the question, which we already have. It then
+    runs concurrently with the identity lookup, the history read and the
+    conversation upsert -- roughly 850 ms of Neon round trips -- so most of
+    retrieval's own ~1 s costs nothing on the critical path.
 
-    With it on, history comes from Postgres instead: a window of recent messages
-    plus a running summary of everything older.
+    Failures are deliberately NOT swallowed here. They surface where the task is
+    awaited, in `_prepare_messages`, because a turn with no corpus is a turn that
+    cannot be grounded and must not be answered from the model's own knowledge.
+    """
+    with timed_stage(T_RETRIEVE_KICKOFF):
+        return asyncio.create_task(get_retriever().ainvoke(question))
+
+
+#: The documents this turn retrieved, so `_extract_sources` can report them.
+#:
+#: A ContextVar for the same reason `app.timing` uses one: the sources are needed
+#: after the agent has finished, in a helper shared by both endpoints, and
+#: threading them through every signature to get there would be worse.
+_RETRIEVED: contextvars.ContextVar[list[Document]] = contextvars.ContextVar(
+    "aspire_retrieved_documents", default=[]
+)
+
+
+async def _await_retrieval(retrieval: asyncio.Task[list[Document]] | None) -> str | None:
+    """Collect the pre-started search, and say plainly when it found nothing.
+
+    Returns None only when there was no search to await -- the title and summary
+    calls, and the tests that build a prompt without one. An empty corpus result
+    is NOT None: it is `KNOWLEDGE_CONTEXT_EMPTY`, which tells the model in words
+    that it has no record to answer from. Passing an empty string instead would
+    read as "the knowledge base is silent", which is an invitation to answer from
+    general knowledge -- the one thing GROUNDING exists to stop.
+
+    A failed search is allowed to raise. The caller turns it into the same 502 as
+    any other failure, and that is correct: on a government product serving
+    minors, an ungrounded answer is worse than no answer.
+    """
+    if retrieval is None:
+        return None
+
+    with timed_stage(T_RETRIEVE_WAIT):
+        documents = await retrieval
+    _RETRIEVED.set(documents)
+    annotate_timings(retrieved_chunk_count=len(documents))
+    if not documents:
+        logger.info("Retrieval returned nothing above the relevance floor.")
+    return context_from(documents)
+
+
+async def _load_history(request: ChatRequest, thread_id: str) -> ConversationContext:
+    """The window of recent turns, or an empty one.
+
+    An opening turn has no history, so it does not read any.
+    `request.thread_id is None` is exactly that case and nothing else: the id in
+    `thread_id` was minted by this request microseconds ago, so no conversation
+    and no message can predate it. Measured at ~700 ms of Neon round trip -- paid
+    by every first-time reader, ahead of the model, for a window that is empty by
+    construction.
+
+    Callers run this BEFORE recording the question, and that ordering is
+    load-bearing: with it reversed, the window read returns the question this very
+    turn just wrote and `build_prompt` appends it again, sending the model the same
+    sentence twice. `tests/test_streaming.py` asserts it appears exactly once.
     """
     settings = get_settings()
-    if not settings.memory_window_enabled:
-        # No history to fetch and nothing to assemble: the checkpointer supplies
-        # the rest inside the agent. Both stages are recorded as having happened
-        # and cost nothing, rather than left absent, because "this deployment
-        # does no history work" is a measurement, not a missing one.
-        annotate_timings(input_token_count=count_tokens(request.message))
+    if not settings.memory_window_enabled or request.thread_id is None:
         record_stage(T_HISTORY, 0.0)
-        record_stage(T_PROMPT_BUILD, 0.0)
-        return [HumanMessage(content=request.message)]
+        return ConversationContext()
 
-    # An opening turn has no history, so it does not read any.
-    #
-    # `request.thread_id is None` is exactly that case and nothing else: the id
-    # in `thread_id` was minted by this request microseconds ago, so no
-    # conversation and no message can predate it. Measured at ~700 ms of Neon
-    # round trip -- paid by every first-time reader, ahead of the model, for a
-    # window that is empty by construction.
-    #
-    # Both callers now run this BEFORE `_open_conversation`, and that ordering is
-    # load-bearing rather than incidental. It used to be the other way round, so
-    # the window read returned the question this very turn had just written and
-    # the `build_prompt` call below appended it again -- the model was sent the
-    # user's question twice, on every turn past the first. Anything that moves
-    # `_open_conversation` back in front of this reintroduces that;
-    # `tests/test_streaming.py` asserts the question appears exactly once.
-    if request.thread_id is None:
+    # The window read: one round trip to Neon for the recent turns and the
+    # running summary. Summarisation itself is never here -- it runs in the arq
+    # worker, off the request path, which is what makes the window affordable.
+    with timed_stage(T_HISTORY):
         context = ConversationContext()
-        record_stage(T_HISTORY, 0.0)
-    else:
-        # The window read: one round trip to Neon for the recent turns and the
-        # running summary. Summarisation itself is never here -- it runs in the arq
-        # worker, off the request path, which is what makes the window affordable.
-        with timed_stage(T_HISTORY):
-            context = ConversationContext()
-            async with session() as db:
-                if db is not None:
-                    context = await load_context(
-                        db, thread_id, window_turns=settings.memory_window_turns
-                    )
+        async with session() as db:
+            if db is not None:
+                context = await load_context(
+                    db, thread_id, window_turns=settings.memory_window_turns
+                )
+    return context
 
-    # Assembly plus the tiktoken pass `build_prompt` does to cost it. Local CPU,
-    # no network -- and the encoding is fetched and cached on first use, which is
-    # part of why the first turn in a process is slower than the rest.
+
+def _assemble_prompt(
+    request: ChatRequest,
+    thread_id: str,
+    context: ConversationContext,
+    knowledge: str | None,
+) -> list[BaseMessage]:
+    """Turn the history and the retrieved corpus into the messages to send.
+
+    Assembly plus the tiktoken pass `build_prompt` does to cost it. Local CPU, no
+    network -- and the encoding is fetched and cached on first use, which is part
+    of why the first turn in a process is slower than the rest.
+    """
     with timed_stage(T_PROMPT_BUILD):
-        prepared = build_prompt(request.message, context)
+        prepared = build_prompt(request.message, context, knowledge=knowledge)
 
     annotate_timings(input_token_count=prepared.tokens)
     log_prompt_cost(thread_id, prepared)
     return prepared.messages
+
+
+async def _prepare_messages(
+    request: ChatRequest,
+    thread_id: str,
+    retrieval: asyncio.Task[list[Document]] | None = None,
+    *,
+    after_history: Callable[[], Awaitable[None] | None] | None = None,
+) -> list[BaseMessage]:
+    """The messages for this turn: history, the retrieved corpus, the question.
+
+    `after_history` is called the moment the window read is done and may return an
+    awaitable to be waited on alongside retrieval. It exists so the caller can put
+    the conversation write in flight at the one point where doing so is both safe
+    and useful: safe because the read has already happened (see `_load_history`),
+    and useful because retrieval is still outstanding and now has something to
+    overlap with.
+
+    Both are awaited inside ONE timed block, and that is deliberate. They run
+    concurrently, so timing them separately double-counts the overlap: measured
+    `t_open_conversation` 855 ms plus a separate retrieval wait of 1030 ms against
+    1534 ms actually elapsed, which is not a budget, it is an over-count that
+    clamped the derived model figure to zero.
+    """
+    context = await _load_history(request, thread_id)
+    pending = after_history() if after_history is not None else None
+
+    try:
+        with timed_stage(T_CONCURRENT_WAIT):
+            knowledge = await _await_retrieval(retrieval)
+            if pending is not None:
+                await pending
+    except BaseException:
+        # Retrieval is allowed to fail the turn, and when it does the write is
+        # still in flight. Awaiting it here rather than abandoning it is what
+        # keeps the question recorded -- the whole point of `_open_conversation`
+        # is that a turn which could not be answered still leaves a conversation
+        # to reopen, and a failed retrieval is exactly such a turn. It swallows
+        # its own errors, so this cannot mask the retrieval failure being raised.
+        if pending is not None:
+            await asyncio.shield(pending)
+        raise
+
+    return _assemble_prompt(request, thread_id, context, knowledge)
 
 
 async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
@@ -864,19 +959,28 @@ async def chat(
     with timed_turn(
         endpoint="/chat", persona=request.persona, lang=request.language
     ):
+        retrieval = start_retrieval(request.message)
         with timed_stage(T_IDENTITY):
             who = await owner_id_for(principal)
 
         cached = await _cached_reply(request)
         if cached is not None:
+            # The search is already running and its answer is not needed. Cancel
+            # it rather than leaving an orphan task to finish into nothing.
+            retrieval.cancel()
             annotate_timings(cache_hit=True, output_token_count=count_tokens(cached.reply))
             return cached
 
-        # History first, then record the question -- same ordering and the same
-        # reason as `/chat/stream`. Both are still ahead of the model, which is
-        # what `_open_conversation` actually promises.
-        prepared = await _prepare_messages(request, thread_id)
-        await _open_conversation(request, thread_id, who)
+        # History first, then record the question concurrently with the rest of
+        # retrieval -- same ordering and the same reasons as `/chat/stream`.
+        prepared = await _prepare_messages(
+            request,
+            thread_id,
+            retrieval,
+            after_history=lambda: asyncio.create_task(
+                _open_conversation(request, thread_id, who)
+            ),
+        )
 
         return await _serve_chat(request, thread_id, who, prepared)
 
@@ -1095,6 +1199,9 @@ async def chat_stream(
     # generator is ever driven, so without it `t_identity` would have no turn to
     # attach to and would land in the derived model-call figure instead.
     with bind_timings(timings, finish_on_exit=False):
+        # First thing, before any awaiting: the search only needs the question,
+        # so everything below overlaps it instead of queueing behind it.
+        retrieval = start_retrieval(request.message)
         with timed_stage(T_IDENTITY):
             who = await owner_id_for(principal)
 
@@ -1116,8 +1223,19 @@ async def chat_stream(
         # returns the question and `build_prompt` appends it again -- see
         # `_prepare_messages`. Still recorded before the model runs, which is the
         # guarantee `_open_conversation` actually makes.
-        prepared = await _prepare_messages(request, thread_id)
-        await _open_conversation(request, thread_id, who)
+        # The conversation write goes in flight as soon as the history read is
+        # done, so it runs alongside whatever is left of retrieval instead of
+        # after it. Awaited before the model call, which is the guarantee
+        # `_open_conversation` actually makes -- the question is recorded before
+        # it is answered.
+        prepared = await _prepare_messages(
+            request,
+            thread_id,
+            retrieval,
+            after_history=lambda: asyncio.create_task(
+                _open_conversation(request, thread_id, who)
+            ),
+        )
 
         collected: list[BaseMessage] = []
         #: The answer as it was actually sent, for persistence and the done

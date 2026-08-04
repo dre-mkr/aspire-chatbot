@@ -1,8 +1,16 @@
-"""The ASPIRE agent: chat model + retriever tool + short-term memory.
+"""The ASPIRE agent: chat model + card tools + short-term memory.
 
-This is agentic RAG, not a fixed retrieve-then-answer chain. The agent owns the
-retriever as a tool and decides for itself whether to call it, and may call it
-more than once per turn if the first results are weak.
+This WAS agentic RAG -- the agent owned the retriever as a tool, decided for
+itself whether to call it, and could call it more than once when the first
+results were weak. As of P13-005 it is a fixed retrieve-then-answer chain, and
+that was a deliberate trade for latency: the deciding call cost 876 ms at p50 and
+2.6 s at p95 of time-to-first-token, and the corpus is 332 fixed rows that
+retrieval finds on the first attempt 95% of the time.
+
+What the agent still decides for itself is which turns are cards rather than
+answers -- games and eligibility remain tools, because those genuinely are
+choices. Retrieval was not: every factual question needed it, and the system
+prompt said so in as many words.
 """
 
 from __future__ import annotations
@@ -12,7 +20,6 @@ from functools import lru_cache
 
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
-from langchain_core.tools.retriever import create_retriever_tool
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
@@ -26,13 +33,10 @@ from app.prompts import (
     ELIGIBILITY_INSTRUCTIONS,
     FOLLOW_UP_PROMPT,
     GAMES_INSTRUCTIONS,
-    RETRIEVER_TOOL_DESCRIPTION,
-    RETRIEVER_TOOL_NAME,
     SIMPLE_MODE_INSTRUCTIONS,
     SUMMARY_PROMPT,
     TITLE_PROMPT,
 )
-from app.rag import build_retriever
 
 logger = logging.getLogger(__name__)
 
@@ -74,29 +78,35 @@ _CHECKPOINTER = InMemorySaver()
 
 
 def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
-    """Wire up the model, the retrieval tool, and the shared checkpointer."""
+    """Wire up the model, the card tools, and the shared checkpointer."""
     settings = settings or get_settings()
     model = build_chat_model(settings)
-
-    retriever = build_retriever(settings)
-    retriever_tool = create_retriever_tool(
-        retriever,
-        name=RETRIEVER_TOOL_NAME,
-        description=RETRIEVER_TOOL_DESCRIPTION,
-        # Returns (text_for_the_model, list[Document]). The Document list rides
-        # along on ToolMessage.artifact, which is how /chat reports the exact
-        # snippets the agent saw without re-running retrieval.
-        response_format="content_and_artifact",
-    )
 
     system_prompt = ASPIRE_SYSTEM_PROMPT
     if simple_mode:
         system_prompt += SIMPLE_MODE_INSTRUCTIONS
 
+    # Retrieval is NOT a tool any more (P13-005). It runs on the request path,
+    # concurrently with the database work, and its results are in the prompt
+    # before the model is called at all.
+    #
+    # That is what removes a whole model round trip from time-to-first-token. The
+    # agent used to spend one call deciding to search, wait for the search, then
+    # spend a second call writing the answer -- and `app/streaming.py` releases no
+    # text until a tool has run, so the reader waited out both. With the corpus
+    # already in the prompt an ordinary answer is one call.
+    #
+    # What is given up, and it is a real loss worth naming: the agent can no
+    # longer search twice when the first results are thin, which the old
+    # retriever tool description explicitly invited it to do. The corpus is 332
+    # fixed rows and `evals/run.py` measures retrieval at 0.95 hit rate on the
+    # first attempt, so the second search was rarely load-bearing -- but "rarely"
+    # is not "never", and this is the trade.
+    #
     # Games are additive: the tools and their prompt section appear together or
     # not at all, so a disabled module leaves no instructions describing tools
     # the agent does not have.
-    tools = [retriever_tool]
+    tools = []
     if games_enabled():
         tools.extend(GAME_TOOLS)
         system_prompt += GAMES_INSTRUCTIONS

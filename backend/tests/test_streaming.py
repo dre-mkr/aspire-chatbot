@@ -505,10 +505,19 @@ def test_history_is_read_before_the_question_is_recorded(client, monkeypatch):
     """
     import inspect
 
-    source = inspect.getsource(main.chat_stream)
-    prepare = source.index("_prepare_messages(request, thread_id)")
-    record = source.index("_open_conversation(request, thread_id, who)")
-    assert prepare < record, (
-        "_open_conversation runs before _prepare_messages again; the window read "
-        "will return this turn's question and it will be sent to the model twice"
+    # Asserted where the guarantee now lives. P13-004 enforced it by call order
+    # inside `chat_stream`; P13-005 moved it into `_prepare_messages`, which reads
+    # the window and only then invokes `after_history` -- the hook both endpoints
+    # use to put the question-write in flight.
+    #
+    # Two earlier drafts of this test broke on unrelated edits: the first pinned
+    # exact argument lists, the second assumed the write was `await`ed at the call
+    # site rather than launched as a task. So this matches the two call NAMES and
+    # only their relative order, which is the property and nothing else.
+    source = inspect.getsource(main._prepare_messages)
+    read = source.index("_load_history(")
+    record = source.index("after_history(")
+    assert read < record, (
+        "the question is recorded before the window is read again; the read will "
+        "return this turn's question and it will be sent to the model twice"
     )

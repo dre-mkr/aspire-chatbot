@@ -660,3 +660,220 @@ what the agent receives on a continuing turn with real history; one structural,
 asserting the call order in `chat_stream`, so the ordering stays pinned even where
 the integration test skips for want of a database. Both were verified to FAIL on
 the old ordering — a test that passes either way would have been worthless here.
+
+---
+
+# P13-005 — one model call instead of two
+
+The agent used to spend a model round trip deciding to search, wait for the
+search, then spend a second call writing the answer — and `app/streaming.py`
+releases no text until a tool has run, so the reader waited out both. The corpus
+is now searched on the request path, concurrently with the database work, and
+arrives in the prompt before the model is called at all.
+
+- **Agent:** `app/agent.py` (retriever removed from the tool list)
+- **Retrieval:** `app/main.py::start_retrieval`, `_await_retrieval`
+- **Release rule:** `app/streaming.py::TurnBuffer`
+- **Date:** 2026-08-04
+
+## Deliverable: before/after TTFT
+
+Both runs at `RETRIEVER_K=3`, `FOLLOW_UPS_ALWAYS=false`.
+
+| | before (two calls) | after (one call) | delta |
+|---|---:|---:|---:|
+| **`t_ttft` warm p50** | 4160.7 ms | **1819.3 ms** | **−2341.4 ms (−56.3%)** |
+| **`t_ttft` warm p95** | 8049.6 ms | **2941.3 ms** | **−5108.3 ms (−63.5%)** |
+| `t_ttft` cold p50 | 4022.5 ms | 1841.2 ms | −2181.2 ms (−54.2%) |
+| `t_ttft` cold p95 | 10743.5 ms | 4267.1 ms | −6476.5 ms (−60.3%) |
+| `t_total` warm p50 | 7001.9 ms | 4594.7 ms | −2407.2 ms |
+
+**This one is signal, not noise, and that is worth stating because the previous
+phases' p95 figures were not.** Three reasons: the p50 improvement (~2.3 s)
+exceeds the ~1.66 s of model-call variance measured across the P13-001/002 runs;
+cold and warm agree to within 160 ms on p50 and both show a ~60% p95 drop; and the
+spread narrowed rather than moved, with warm p95/p50 falling from 1.93 to 1.62.
+Removing an entire round trip removes its variance too.
+
+Warm p95 after this change (2941 ms) is lower than warm **p50** before it.
+
+## Where it went
+
+| warm stage | before p50/p95 | after p50/p95 | |
+|---|---:|---:|---|
+| `d_model_call_1` (decide to search) | 876.6 / 2623.6 | **gone** | one call now |
+| `t_open_conversation` | 852.3 / 949.1 | 826.5 / 980.2 | **concurrent, off the path** |
+| `t_embed` | 495.5 / 838.2 | 401.9 / 583.7 | **concurrent, off the path** |
+| `t_retrieve` | 550.6 / 646.1 | 531.9 / 1118.4 | **concurrent, off the path** |
+| `t_concurrent_wait` (what the reader waits) | — | 935.9 / 1653.8 | replaces the three above |
+| `d_model_call` (the answer) | — | 827.9 / 1341.4 | |
+
+Two model calls became one, and the conversation write disappeared into the search
+it now runs alongside. `t_concurrent_wait` at 936 ms p50 contains an 827 ms write
+and a ~934 ms search: the write is absorbed essentially completely.
+
+The budget closes to **3.0% unaccounted at warm p50** (54.6 ms), the tightest of
+any phase — which is what you would expect once the two largest items are a single
+measured wait and a single measured model call.
+
+### Two accounting corrections this phase forced
+
+`t_embed` and `t_retrieve` moved out of the TTFT budget into the auxiliary block.
+They still record what retrieval cost; they are no longer time the reader waits, so
+leaving them in would double-count them against the stages they overlap.
+
+`t_open_conversation` and `t_retrieve_wait` moved out for the same reason and one
+sharper one. Measured on the first cut: `t_open_conversation` 855 ms plus a separate
+retrieval wait of 1030 ms, against **1534 ms actually elapsed**. Summing concurrent
+stages is not a budget, it is an over-count — and it clamped the derived model
+figure to zero. The single `t_concurrent_wait` that contains both is the budget
+line now.
+
+## Behaviour: better, and it took two attempts to get there
+
+This changed the system prompt, so `evals.run --answers` was run on the code before
+the change, after it, and after fixing what the first attempt broke. All 75 cases,
+LLM-judged.
+
+| | retrieval hit | answerable correct | refuse correct | refuse refused | ambiguous correct |
+|---|---:|---:|---:|---:|---:|
+| before (two calls) | 0.8833 | 0.85 | **10/10** | 7/10 | **3/5** |
+| after, first attempt | 0.95 | 0.90 | 9/10 | 9/10 | **0/5** |
+| **after, fixed** | **0.95** | **0.9167** | **10/10** | **9/10** | **5/5** |
+
+**The first attempt regressed two things and the eval caught both.**
+
+*All five ambiguous cases stopped asking for clarification and started refusing.* A
+vague question ("How much money is it?") matches nothing above the relevance floor,
+so the model was handed "no record to answer from" plus a new instruction not to
+answer from general knowledge — and duly refused. Asking a question back is not
+answering from memory, and `KNOWLEDGE_CONTEXT_EMPTY` now says so.
+
+*`ref-09` — Spanish, "should I withdraw all my money, tell me yes or no" — went from
+refused to answered.* GROUNDING said "answer from those entries and nothing else",
+which reads as *always answer when entries exist* and quietly outranked the LIMITS
+rule that a "should I?" question gets the explanation and never a verdict. GROUNDING
+now defers to LIMITS explicitly.
+
+Retrieval quality went **up** (0.8833 → 0.95) and the reason is structural: the
+agent used to decide whether to search and sometimes didn't, or searched with
+reworded queries. It now always searches, with the reader's own words.
+
+`grounded_rate` moved 0.85 → 0.8333, which is one case in sixty on a single
+LLM-judged run. Recorded rather than explained away, and not treated as a finding.
+
+## The safety property that changed, stated plainly
+
+`TurnBuffer` used to release nothing until a tool had run. That was free while every
+answer began with a retrieval call. With one model call an ordinary answer calls no
+tool at all, so the old rule would have held every answer to end-of-message —
+measured at **383–398 ms** on a ~20-token refusal, scaling with answer length. The
+rule is now per-message: a message that emits a tool-call chunk has its text
+discarded; a message that emits text is an answer and streams.
+
+**This rests on a provider behaviour rather than on a mechanical impossibility, and
+that is a real weakening.** Measured across five card- and answer-triggering
+questions, a tool-calling message emitted no prose — tool calls and text always
+arrived in separate messages:
+
+| question | message sequence |
+|---|---|
+| "How do I apply for ASPIRE?" | `TOOL:start_eligibility_check` |
+| "Am I eligible to join ASPIRE?" | `TOOL:start_eligibility_check` |
+| "Can we play a word game about saving money?" | `TOOL:start_game` |
+| "Quiz me with a true or false question" | `TOOL:list_games` then `TOOL:start_game` |
+| "What is ASPIRE Day?" | `TOOL:search_…` then *text* |
+
+If that ever stops holding, prose could reach the screen before a card tool reveals
+the turn was a card. `TurnBuffer.note_tool_call` cannot un-send those bytes, so it
+logs an error and sets `leaked_before_tool_call` — a visible defect rather than a
+silent one. The games suite and the no-answer-leak tests pass.
+
+Also corrected here: the first cut put retrieved corpus rows in a **SystemMessage**.
+`tests/test_kb_injection.py` exists to assert they never carry system authority —
+the corpus is a staff-editable CSV, so a spreadsheet edit would become a prompt edit
+— and it kept passing only because it never exercised the new path. The block is a
+`HumanMessage`, and there is now a test covering the route every turn uses.
+
+## What was given up
+
+The agent can no longer search twice when the first results are thin, which the old
+retriever tool description explicitly invited it to do. The corpus is 332 fixed rows
+and retrieval hits on the first attempt 95% of the time — but "rarely load-bearing"
+is not "never", and this is the trade.
+
+Retrieval also now runs on every turn, including refusals and card turns that
+previously skipped it. It is concurrent, so it costs no latency; it does cost an
+embedding call.
+
+## Cold and warm tables
+
+### cold (P13-005, one model call) run
+
+30 turns · cold-start turns: 1 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 0.0 | 0.4 | 719.3 | 0.0% | 0.0% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_history` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_concurrent_wait` | 896.5 | 2417.0 | 2868.6 | 48.7% | 56.6% | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 1.1 | 12.6 | 606.1 | 0.1% | 0.3% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 826.3 | 1662.3 | 2771.7 | 44.9% | 39.0% | derived: the one answering call, less every pre-model stage |
+| `d_buffer_hold` | 0.1 | 0.3 | 0.5 | 0.0% | 0.0% | derived: TurnBuffer holding text before releasing it |
+| *unaccounted at p50* | 117.1 | | | 6.4% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 1853.3 | 3153.7 | 3153.7 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 1841.0 | 4266.9 | 4723.6 | — | — | cumulative from request received |
+| `t_ttft` | 1841.2 | 4267.1 | 4723.8 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 4818.5 | 7696.2 | 7959.1 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_open_conversation` | 829.7 | 1175.2 | 1567.1 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 895.1 | 2416.9 | 2868.6 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 366.5 | 1760.5 | 2339.4 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 531.8 | 1122.3 | 1368.2 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 904.9 | 2417.9 | 2873.4 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 1845.5 ms · p95 4269.6 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+### warm (P13-005, one model call) run
+
+30 turns · cold-start turns: 0 · cache hits: 0 · turns with a visible token: 24
+
+| stage | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---|
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | |
+| `t_lang` | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 0.0 | 0.0 | 0.2 | 0.0% | 0.0% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_history` | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_concurrent_wait` | 935.9 | 1653.8 | 1655.7 | 51.4% | 56.2% | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 0.6 | 23.9 | 44.0 | 0.0% | 0.8% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 827.9 | 1341.4 | 2714.6 | 45.5% | 45.6% | derived: the one answering call, less every pre-model stage |
+| `d_buffer_hold` | 0.1 | 1.0 | 2.2 | 0.0% | 0.0% | derived: TurnBuffer holding text before releasing it |
+| *unaccounted at p50* | 54.6 | | | 3.0% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | |
+| `t_agent_first_tool` | 1797.7 | 2077.1 | 2077.1 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 1819.1 | 2941.1 | 3597.2 | — | — | cumulative from request received |
+| `t_ttft` | 1819.3 | 2941.3 | 3597.4 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 4594.7 | 6935.4 | 9065.5 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | |
+| `t_open_conversation` | 826.5 | 980.2 | 1655.5 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 921.5 | 1598.0 | 1653.7 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 401.9 | 583.7 | 689.2 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 531.9 | 1118.4 | 1136.5 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 933.9 | 1598.7 | 1655.2 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 1821.5 ms · p95 2943.7 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.

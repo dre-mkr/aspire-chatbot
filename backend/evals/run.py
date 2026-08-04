@@ -266,7 +266,9 @@ async def judge_refusals(rows: list[dict]) -> list[dict]:
 async def score_answers(cases: list[dict]) -> list[dict]:
     """Run the real agent and score grounding / refusal / latency."""
     from app.agent import get_agent
-    from langchain_core.messages import HumanMessage, ToolMessage
+    from app.db.repository import ConversationContext
+    from app.memory import build_prompt
+    from app.rag import context_from, get_retriever
 
     rows = kb_rows()
     out = []
@@ -276,8 +278,21 @@ async def score_answers(cases: list[dict]) -> list[dict]:
         reply = ""
         error = None
         try:
+            # Retrieval is not a tool any more (P13-005), so the harness has to do
+            # what the request path does: search first, put the corpus in the
+            # prompt, then call the agent once. Invoking with the bare question
+            # would hand the model no context at all and score every case as a
+            # refusal -- measuring the harness rather than the assistant.
+            documents = await get_retriever().ainvoke(case["q"])
+            retrieved += [
+                d.metadata.get("id") for d in documents if hasattr(d, "metadata")
+            ]
+            prepared = build_prompt(
+                case["q"], ConversationContext(), knowledge=context_from(documents)
+            )
+
             result = await get_agent().ainvoke(
-                {"messages": [HumanMessage(content=case["q"])]},
+                {"messages": prepared.messages},
                 config={
                     "configurable": {
                         "thread_id": f"eval-{case['id']}-{int(time.time())}",
@@ -287,11 +302,6 @@ async def score_answers(cases: list[dict]) -> list[dict]:
                 },
             )
             msgs = result.get("messages", [])
-            for m in msgs:
-                if isinstance(m, ToolMessage) and isinstance(m.artifact, list):
-                    retrieved += [
-                        d.metadata.get("id") for d in m.artifact if hasattr(d, "metadata")
-                    ]
             content = msgs[-1].content if msgs else ""
             reply = (
                 content

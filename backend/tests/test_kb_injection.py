@@ -99,12 +99,14 @@ def test_a_poisoned_row_is_read_as_data(poisoned_csv):
 
 
 def test_retrieved_text_never_becomes_a_system_instruction(poisoned_csv):
-    """The structural defence: retrieved rows are tool output, not system text.
+    """The structural defence: corpus rows are never system text.
 
-    A row reaches the model as a ToolMessage in response to the retriever tool
-    call. That is what makes an instruction inside it a quoted string rather
-    than a directive -- and it is a property of how the prompt is assembled, so
-    it can be asserted without spending a model call.
+    A row used to reach the model as a ToolMessage in response to the retriever
+    tool call. Since P13-005 retrieval happens on the request path and the rows
+    arrive in the prompt directly -- as a HUMAN message, for exactly this reason.
+    Either way an instruction inside a row is a quoted string rather than a
+    directive, and it is a property of how the prompt is assembled, so it can be
+    asserted without spending a model call.
 
     If this ever fails, the fix is not a better system prompt. It means
     something started splicing corpus text into the system message, and no
@@ -150,6 +152,52 @@ def test_retrieved_text_never_becomes_a_system_instruction(poisoned_csv):
     # bug: the model needs to see what was retrieved in order to answer from it.
     everything = "\n".join(str(message.content) for message in prepared.messages)
     assert "ASPIRE is a national savings programme" in everything
+
+
+def test_the_retrieved_knowledge_block_is_not_a_system_message(poisoned_csv):
+    """The same defence, on the path P13-005 actually introduced.
+
+    The test above predates that phase and exercises poisoned rows arriving via
+    replayed *history*. It kept passing after retrieval moved into the prompt
+    only because it never passes `knowledge=` -- so the new route was untested,
+    and the first cut of P13-005 did put corpus text in a SystemMessage. This
+    covers the route that now carries every retrieved row on every turn.
+    """
+    import csv as _csv
+    from types import SimpleNamespace
+
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from app.db.repository import ConversationContext
+    from app.memory import build_prompt
+    from app.rag import context_from
+
+    with poisoned_csv.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(_csv.DictReader(handle))
+
+    poisoned = [
+        SimpleNamespace(page_content=row["answer"], metadata=dict(row)) for row in rows
+    ]
+    prepared = build_prompt(
+        "How do I contact them?",
+        ConversationContext(),
+        knowledge=context_from(poisoned),
+    )
+
+    system_text = "\n".join(
+        str(m.content) for m in prepared.messages if isinstance(m, SystemMessage)
+    )
+    assert "IGNORE ALL PREVIOUS INSTRUCTIONS" not in system_text
+    assert "SYSTEM OVERRIDE" not in system_text
+
+    # Present, and carried by a human-role message so it has no more authority
+    # than the question it accompanies.
+    human_text = "\n".join(
+        str(m.content) for m in prepared.messages if isinstance(m, HumanMessage)
+    )
+    assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in human_text, (
+        "the poisoned row must still reach the model as data"
+    )
 
 
 def test_the_system_prompt_states_the_rule_retrieval_relies_on():

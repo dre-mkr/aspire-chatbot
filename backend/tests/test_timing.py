@@ -18,8 +18,8 @@ from app import timing
 from app.timing import (
     ABSENT_REASONS,
     D_BUFFER_HOLD,
-    D_MODEL_CALL_1,
-    D_MODEL_CALL_2,
+    D_MODEL_CALL,
+    AUXILIARY_STAGES,
     DURATION_STAGES,
     MILESTONE_STAGES,
     STAGES,
@@ -32,7 +32,10 @@ from app.timing import (
     T_OPEN_CONVERSATION,
     T_PROMPT_BUILD,
     T_RETRIEVE,
+    T_RETRIEVE_KICKOFF,
     T_RETRIEVE_TOTAL,
+    T_RETRIEVE_WAIT,
+    T_CONCURRENT_WAIT,
     T_TOTAL,
     T_TTFT,
     TimingRing,
@@ -98,49 +101,57 @@ def test_a_stage_explicitly_recorded_as_zero_is_reported():
 # --- derived durations ---------------------------------------------------
 
 
-def test_model_call_1_excludes_the_work_measured_before_it():
+def test_the_model_call_excludes_every_pre_model_stage():
     payload = _turn(
         **{
+            T_RETRIEVE_KICKOFF: 0.2,
             T_IDENTITY: 10.0,
-            T_OPEN_CONVERSATION: 800.0,
             T_HISTORY: 700.0,
+            T_CONCURRENT_WAIT: 850.0,
             T_PROMPT_BUILD: 1.0,
-            T_AGENT_FIRST_TOOL: 2500.0,
+            T_AGENT_FIRST_DELTA: 2500.0,
         }
     ).payload()
-    # 2500 cumulative, less the 1511 we accounted for inside that window.
-    assert payload[D_MODEL_CALL_1] == pytest.approx(989.0)
+    # 2500 cumulative, less the 1561.2 accounted for ahead of the model.
+    assert payload[D_MODEL_CALL] == pytest.approx(938.8)
 
 
-def test_model_call_2_excludes_the_retrieval_it_waited_on():
+def test_the_model_call_does_not_subtract_concurrent_retrieval():
+    """Retrieval overlaps the database work, so only the WAIT is off the path.
+
+    Subtracting `t_retrieve_total` as well would remove a second of time that
+    nothing actually spent, and flatter the model figure by exactly that much.
+    """
     payload = _turn(
         **{
-            T_AGENT_FIRST_TOOL: 2500.0,
+            T_CONCURRENT_WAIT: 820.0,
+            T_OPEN_CONVERSATION: 800.0,
+            T_RETRIEVE_WAIT: 810.0,
             T_EMBED: 500.0,
-            T_RETRIEVE_TOTAL: 505.0,
-            T_AGENT_FIRST_DELTA: 4300.0,
-            T_TTFT: 4300.5,
+            T_RETRIEVE: 450.0,
+            T_RETRIEVE_TOTAL: 950.0,
+            T_AGENT_FIRST_DELTA: 2000.0,
         }
     ).payload()
-    assert payload[D_MODEL_CALL_2] == pytest.approx(1295.0)
+    # 2000 - 820 = 1180. Neither the 800 write nor the 950 search is deducted
+    # again: both are inside the 820 of concurrent wait.
+    assert payload[D_MODEL_CALL] == pytest.approx(1180.0)
 
 
-def test_model_call_2_stops_at_the_delta_so_the_buffer_hold_is_not_double_counted():
-    """Ending model call #2 at `t_ttft` would swallow `d_buffer_hold`."""
+def test_the_model_call_stops_at_the_delta_so_the_buffer_hold_is_not_double_counted():
+    """Ending the model call at `t_ttft` would swallow `d_buffer_hold`."""
     payload = _turn(
         **{
-            T_AGENT_FIRST_TOOL: 1000.0,
-            T_RETRIEVE_TOTAL: 100.0,
+            T_CONCURRENT_WAIT: 800.0,
             T_AGENT_FIRST_DELTA: 2000.0,
             T_TTFT: 2500.0,
         }
     ).payload()
-    assert payload[D_MODEL_CALL_2] == pytest.approx(900.0)
+    assert payload[D_MODEL_CALL] == pytest.approx(1200.0)
     assert payload[D_BUFFER_HOLD] == pytest.approx(500.0)
-    # The two, plus the retrieval, must bridge the tool call to the first
-    # visible token -- with nothing counted twice.
-    assert payload[D_MODEL_CALL_2] + payload[D_BUFFER_HOLD] + 100.0 == pytest.approx(
-        payload[T_TTFT] - payload[T_AGENT_FIRST_TOOL]
+    # Together with the pre-model work they must bridge request to first token.
+    assert 800.0 + payload[D_MODEL_CALL] + payload[D_BUFFER_HOLD] == pytest.approx(
+        payload[T_TTFT]
     )
 
 
@@ -155,37 +166,67 @@ def test_buffer_hold_is_the_gap_between_a_token_existing_and_being_sent():
 
 
 def test_derived_durations_are_never_negative():
-    """A turn that answered without a tool call must not publish -900 ms."""
-    payload = _turn(**{T_AGENT_FIRST_TOOL: 100.0, T_HISTORY: 1000.0}).payload()
-    assert payload[D_MODEL_CALL_1] == 0.0
+    """Measured stages exceeding the milestone must not publish -900 ms."""
+    payload = _turn(**{T_AGENT_FIRST_DELTA: 100.0, T_HISTORY: 1000.0}).payload()
+    assert payload[D_MODEL_CALL] == 0.0
 
 
 def test_derivation_is_skipped_when_its_inputs_are_missing():
     payload = _turn(**{T_TTFT: 1000.0}).payload()
-    assert D_MODEL_CALL_1 not in payload
-    assert D_MODEL_CALL_2 not in payload
+    assert D_MODEL_CALL not in payload
+
+
+def test_a_card_turn_derives_no_model_call():
+    """A card turn produces no text, so there is no first delta to measure to.
+
+    Reporting a model-call figure for it would mean inventing one, and card turns
+    are exactly the population whose `t_ttft` is legitimately absent.
+    """
+    payload = _turn(
+        **{T_OPEN_CONVERSATION: 800.0, T_AGENT_FIRST_TOOL: 1500.0, T_TOTAL: 3000.0}
+    ).payload()
+    assert D_MODEL_CALL not in payload
+    assert D_BUFFER_HOLD not in payload
 
 
 def test_the_ttft_budget_reconstructs_ttft():
-    """The durations must account for TTFT, or the table misleads."""
+    """The durations must account for TTFT, or the table misleads.
+
+    Retrieval is present but concurrent, so it is deliberately NOT part of the sum:
+    only `t_retrieve_wait` is. If a future change puts embed or retrieve back into
+    DURATION_STAGES this test fails, which is the point.
+    """
     turn = _turn(
         **{
+            T_RETRIEVE_KICKOFF: 0.2,
             T_IDENTITY: 0.0,
-            T_OPEN_CONVERSATION: 830.0,
             T_HISTORY: 680.0,
+            T_CONCURRENT_WAIT: 845.0,
             T_PROMPT_BUILD: 0.2,
-            T_AGENT_FIRST_TOOL: 2450.0,
-            T_EMBED: 508.0,
-            T_RETRIEVE_TOTAL: 516.0,
-            T_AGENT_FIRST_DELTA: 4405.0,
-            T_TTFT: 4405.2,
+            T_OPEN_CONVERSATION: 830.0,
+            T_RETRIEVE_WAIT: 840.0,
+            T_EMBED: 480.0,
+            T_RETRIEVE_TOTAL: 930.0,
+            T_AGENT_FIRST_DELTA: 3000.0,
+            T_TTFT: 3000.4,
         }
     )
     payload = turn.payload()
     accounted = sum(payload[name] for name in DURATION_STAGES if name in payload)
-    # Exactly, in fact: every span in this turn is either measured or derived
-    # from measured ones, so the only slack is float rounding.
     assert accounted == pytest.approx(payload[T_TTFT], abs=0.01)
+
+
+def test_concurrent_retrieval_is_not_in_the_ttft_budget():
+    """Embed and retrieve must be auxiliary, or the shares over-sum."""
+    assert T_EMBED not in DURATION_STAGES
+    assert T_RETRIEVE not in DURATION_STAGES
+    assert T_EMBED in AUXILIARY_STAGES
+    assert T_RETRIEVE in AUXILIARY_STAGES
+    assert T_CONCURRENT_WAIT in DURATION_STAGES
+    # The write and the search overlap each other, so neither is a budget line;
+    # the single `t_concurrent_wait` that contains both is.
+    assert T_OPEN_CONVERSATION in AUXILIARY_STAGES
+    assert T_RETRIEVE_WAIT in AUXILIARY_STAGES
 
 
 # --- first write wins, and repeats ---------------------------------------
