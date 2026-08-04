@@ -376,7 +376,7 @@ function Answer({
 				<h2 className="sr-only">ASPIRE AI</h2>
 				{message.blocks.map((block, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
-					<Block key={index} block={block} />
+					<Block key={index} block={block} revealing={revealing} />
 				))}
 				{/* Laid out from the first frame of the reveal and revealed when the
 				    answer settles, rather than mounting at completion. The evidence
@@ -407,16 +407,22 @@ function Answer({
 }
 
 /** Renders one block, promoting `**...**` runs to real emphasis. */
-function Block({ block }: { block: AnswerBlock }) {
+function Block({ block, revealing }: { block: AnswerBlock; revealing: boolean }) {
 	if (block.kind === "paragraph") {
 		return (
 			<p>
-				<Rich text={block.text} />
+				<Rich text={block.text} revealing={revealing} />
 			</p>
 		);
 	}
+
+	// `<ol>` when the model numbered it. Application steps are the case that
+	// matters — "How do I apply for ASPIRE?" is a landing starter and its answer
+	// is a procedure, which a child follows in order and a screen reader
+	// announces as "list item 2 of 5" only if the element says so.
+	const List = block.ordered ? "ol" : "ul";
 	return (
-		<ul>
+		<List>
 			{block.items.map((item, index) => (
 				// Positional, not keyed by text: the last item grows word by word
 				// while it is being revealed, and keying by content would make
@@ -424,15 +430,15 @@ function Block({ block }: { block: AnswerBlock }) {
 				// entrance, and throwing away the selection inside it.
 				// biome-ignore lint/suspicious/noArrayIndexKey: append-only by construction
 				<li key={index}>
-					<Rich text={item} />
+					<Rich text={item} revealing={revealing} />
 				</li>
 			))}
-		</ul>
+		</List>
 	);
 }
 
-function Rich({ text }: { text: string }) {
-	return <Inline nodes={parseInline(text)} />;
+function Rich({ text, revealing }: { text: string; revealing: boolean }) {
+	return <Inline nodes={parseInline(text, revealing)} />;
 }
 
 function Inline({ nodes }: { nodes: Array<InlineNode> }) {

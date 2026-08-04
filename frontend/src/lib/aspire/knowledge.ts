@@ -8,7 +8,7 @@
 
 export type AnswerBlock =
 	| { kind: "paragraph"; text: string }
-	| { kind: "list"; items: Array<string> };
+	| { kind: "list"; items: Array<string>; ordered: boolean };
 
 export interface Answer {
 	blocks: Array<AnswerBlock>;
@@ -17,6 +17,15 @@ export interface Answer {
 
 /** `- item`, `* item`, or `1. item`. */
 const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+/;
+/**
+ * The numbered subset of `BULLET`.
+ *
+ * The marker is stripped from the item text either way, so this is the only
+ * thing that remembers a list was a numbered procedure. "How do I apply for
+ * ASPIRE?" is one of the four landing starters and its answer is steps — losing
+ * the numbering there is the finding this exists to prevent.
+ */
+const ORDERED_BULLET = /^\s*\d+[.)]\s+/;
 /** Leading `#`s and trailing `#`s from a markdown heading. */
 const HEADING = /^\s*#{1,6}\s+|\s+#+\s*$/g;
 
@@ -30,6 +39,10 @@ export function parseAnswer(markdown: string): Array<AnswerBlock> {
 	const blocks: Array<AnswerBlock> = [];
 	let paragraph: Array<string> = [];
 	let items: Array<string> = [];
+	// Decided by the marker that opens the run. A list that starts numbered stays
+	// numbered even if the model switches to dashes partway down: renumbering
+	// mid-list would be a worse lie than a stray dash.
+	let ordered = false;
 
 	const flushParagraph = () => {
 		if (paragraph.length === 0) return;
@@ -39,8 +52,9 @@ export function parseAnswer(markdown: string): Array<AnswerBlock> {
 
 	const flushList = () => {
 		if (items.length === 0) return;
-		blocks.push({ kind: "list", items });
+		blocks.push({ kind: "list", items, ordered });
 		items = [];
+		ordered = false;
 	};
 
 	for (const rawLine of markdown.replace(/\r\n/g, "\n").split("\n")) {
@@ -56,6 +70,7 @@ export function parseAnswer(markdown: string): Array<AnswerBlock> {
 		if (BULLET.test(line)) {
 			// A bullet interrupts prose without needing a blank line first.
 			flushParagraph();
+			if (items.length === 0) ordered = ORDERED_BULLET.test(line);
 			items.push(line.replace(BULLET, "").trim());
 			continue;
 		}
@@ -98,7 +113,12 @@ export function answerToText(blocks: Array<AnswerBlock>) {
 		.map((block) =>
 			block.kind === "paragraph"
 				? plain(block.text)
-				: block.items.map((item) => `• ${plain(item)}`).join("\n"),
+				: block.items
+						.map(
+							(item, index) =>
+								`${block.ordered ? `${index + 1}.` : "•"} ${plain(item)}`,
+						)
+						.join("\n"),
 		)
 		.join("\n\n");
 }
@@ -127,9 +147,36 @@ const PARTIAL_LINK = /\[([^\]]*)(?:\](?:\([^)]*)?)?$/;
 /**
  * A URL, a bare domain, or an email address sitting loose in prose.
  * Bare domains need an explicit TLD so "St. Kitts" and "1.5" are left alone.
+ *
+ * The TLD list is split because a dotted token is not evidence of a link. The
+ * old single list turned `document.cookie` into a link to `https://document.co`
+ * — it matched `.co` and simply abandoned `okie`. Two rules fix that class:
+ *
+ *   1. `(?![\w-])` after the TLD, so a TLD must end the token rather than sit
+ *      inside a longer word. Kills `document.cookie` and `example.command`.
+ *   2. Generic TLDs must carry a path. `config.io` and `index.co` read as code
+ *      far more often than as destinations, whereas nobody writes `aspire.gov.kn`
+ *      meaning anything but the site.
+ *
+ * Checked against the live corpus: it links every real destination there —
+ * `*.gov.kn` bare, and `facebook.com/…`, `instagram.com/…`, `tiktok.com/…`
+ * with paths — while leaving prose alone.
  */
-const AUTOLINK =
-	/https?:\/\/[^\s<>()]+|[\w.+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+|(?:[a-z0-9-]+\.)+(?:kn|com|org|net|gov|edu|io|co|uk)(?:\/[^\s<>()]*)?/gi;
+const NATIONAL_TLD = "kn|gov|org|edu";
+const GENERIC_TLD = "com|net|io|co|uk";
+const AUTOLINK = new RegExp(
+	[
+		// Explicit scheme: always a link, path or not.
+		"https?://[^\\s<>()]+",
+		// Email address.
+		"[\\w.+-]+@[a-z0-9-]+(?:\\.[a-z0-9-]+)+",
+		// Bare national/institutional domain, path optional.
+		`(?:[a-z0-9-]+\\.)+(?:${NATIONAL_TLD})(?![\\w-])(?:/[^\\s<>()]*)?`,
+		// Bare generic domain, path required.
+		`(?:[a-z0-9-]+\\.)+(?:${GENERIC_TLD})(?![\\w-])/[^\\s<>()]*`,
+	].join("|"),
+	"gi",
+);
 
 /**
  * Turn a target into something safe to put in `href`.
@@ -178,7 +225,7 @@ function autolink(segment: string): Array<InlineNode> {
 }
 
 /** Resolves markdown links, then autolinks whatever prose is left. */
-function parseLinks(segment: string): Array<InlineNode> {
+function parseLinks(segment: string, revealing: boolean): Array<InlineNode> {
 	const nodes: Array<InlineNode> = [];
 	let rest = segment;
 
@@ -198,12 +245,20 @@ function parseLinks(segment: string): Array<InlineNode> {
 	// Mid-stream the closing `)` may not have arrived yet. Show the label rather
 	// than raw brackets: it is about to become a link, and flashing `[` reads
 	// as a glitch.
-	const partial = rest.match(PARTIAL_LINK);
-	if (partial) {
-		const head = rest.slice(0, partial.index);
-		if (head) nodes.push(...autolink(head));
-		if (partial[1]) nodes.push({ kind: "text", text: partial[1] });
-		return nodes;
+	//
+	// Only while revealing. On settled text there is no closing `)` still in
+	// flight, so a bracket is the author's own — a citation marker or a
+	// placeholder — and eating it is wrong. Because the pattern is anchored to
+	// `$` it only ever ate the LAST bracketed run, so "Choose [A] or [B]" drew
+	// the same construct two different ways in one sentence.
+	if (revealing) {
+		const partial = rest.match(PARTIAL_LINK);
+		if (partial) {
+			const head = rest.slice(0, partial.index);
+			if (head) nodes.push(...autolink(head));
+			if (partial[1]) nodes.push({ kind: "text", text: partial[1] });
+			return nodes;
+		}
 	}
 
 	if (rest) nodes.push(...autolink(rest));
@@ -218,30 +273,47 @@ function parseLinks(segment: string): Array<InlineNode> {
  * within bold rather than beside it.
  *
  * The typewriter reveals a few words per tick, so half-written markup arrives
- * constantly. An unterminated `**` is treated as bold and an unterminated link
- * renders as its label; both settle correctly once the rest lands.
+ * constantly. While `revealing`, an unterminated `**` is treated as bold and an
+ * unterminated link renders as its label; both settle correctly once the rest
+ * lands.
+ *
+ * `revealing` defaults to false because settled text is the steady state — a
+ * reply is mid-reveal for a few seconds and rendered for the rest of the
+ * session. Optimistic markup on settled text is not tolerance, it is a wrong
+ * render that never corrects itself: an odd number of asterisks left the tail
+ * bold permanently, and a bracket lost its brackets.
  */
-export function parseInline(text: string): Array<InlineNode> {
+export function parseInline(text: string, revealing = false): Array<InlineNode> {
 	const nodes: Array<InlineNode> = [];
 	let rest = text;
 
 	while (rest.length > 0) {
 		const open = rest.indexOf("**");
 		if (open === -1) {
-			nodes.push(...parseLinks(rest));
+			nodes.push(...parseLinks(rest, revealing));
 			break;
 		}
 
-		if (open > 0) nodes.push(...parseLinks(rest.slice(0, open)));
+		if (open > 0) nodes.push(...parseLinks(rest.slice(0, open), revealing));
 
 		const after = rest.slice(open + 2);
 		const close = after.indexOf("**");
 		if (close === -1) {
-			if (after) nodes.push({ kind: "bold", children: parseLinks(after) });
+			// No closer. Mid-reveal it has not arrived yet; settled it is never
+			// coming, so the asterisks are literal text the author typed.
+			if (revealing) {
+				if (after) nodes.push({ kind: "bold", children: parseLinks(after, true) });
+			} else {
+				nodes.push({ kind: "text", text: "**" });
+				if (after) nodes.push(...parseLinks(after, false));
+			}
 			break;
 		}
 
-		nodes.push({ kind: "bold", children: parseLinks(after.slice(0, close)) });
+		nodes.push({
+			kind: "bold",
+			children: parseLinks(after.slice(0, close), revealing),
+		});
 		rest = after.slice(close + 2);
 	}
 

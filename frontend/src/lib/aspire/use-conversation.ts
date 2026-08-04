@@ -170,7 +170,7 @@ function sliceBlock(block: AnswerBlock, words: number): AnswerBlock {
 		items.push(left >= parts.length ? item : parts.slice(0, left).join(" "));
 		left -= parts.length;
 	}
-	return { kind: "list", items };
+	return { kind: "list", items, ordered: block.ordered };
 }
 
 interface StreamCursor {
