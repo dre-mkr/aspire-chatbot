@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type AskResult, AspireError, askAspire, type Source } from "./api";
+import { type AskResult, AspireError, type Source } from "./api";
+import { settledBlocks } from "./settled";
+import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
 import { ensureSession } from "./session";
 import { useSession } from "./use-session";
@@ -112,6 +114,14 @@ interface StreamCursor {
 	answer: Answer;
 	sources: Array<Source>;
 	id: number;
+	/**
+	 * Whether the service has said the turn is over.
+	 *
+	 * The reveal runs alongside the wire now, so reaching the end of `answer` no
+	 * longer means the answer is finished -- it usually means the typewriter has
+	 * caught up and should wait. Only `ended` settles the turn.
+	 */
+	ended: boolean;
 	blockIndex: number;
 	wordIndex: number;
 	holdTicks: number;
@@ -512,7 +522,10 @@ export function useConversation({
 
 		const block = state.answer.blocks[state.blockIndex];
 		if (!block) {
-			finishStream();
+			// Out of blocks. If the service has finished, so have we; if it has
+			// not, the typewriter has simply outrun the wire and waits for the
+			// next chunk. Finishing here would truncate the answer mid-sentence.
+			if (state.ended) finishStream();
 			return;
 		}
 
@@ -571,11 +584,13 @@ export function useConversation({
 	 * this animation has to have, which is an even one.
 	 */
 	const beginStream = useCallback(
-		(answer: Answer, sources: Array<Source>) => {
+		(answer: Answer, sources: Array<Source>, ended = true) => {
 			setIsThinking(false);
 			const id = nextId.current++;
 
-			if (prefersReducedMotion()) {
+			// Reduced motion still skips the reveal, but only once the answer is
+			// whole -- settling a half-delivered stream would drop the rest of it.
+			if (ended && prefersReducedMotion()) {
 				setMessages((current) => [...current, completed(answer, sources, id)]);
 				return id;
 			}
@@ -584,6 +599,7 @@ export function useConversation({
 				answer,
 				sources,
 				id,
+				ended,
 				blockIndex: 0,
 				wordIndex: 0,
 				holdTicks: 0,
@@ -612,13 +628,53 @@ export function useConversation({
 			const controller = new AbortController();
 			inFlight.current?.abort(); // a previous turn should never outlive this one
 			inFlight.current = controller;
+			/**
+			 * Feeds the reveal from the wire, without letting the wire pace it.
+			 *
+			 * This used to wait for the whole reply and then run the typewriter
+			 * over it. That bought a perfectly even cadence and paid for it with
+			 * time-to-first-word: nothing appeared at all until the model had
+			 * finished writing, which on a long answer is many seconds of an orb.
+			 *
+			 * The even cadence is kept and that price is not paid. `settledBlocks`
+			 * decides what is safe to show -- text whose terminating newline has
+			 * arrived can no longer change what it *is*, so revealing it cannot
+			 * cause a line already on screen to re-render as something else. The
+			 * typewriter reveals out of that settled region at its own steady four
+			 * words a tick, and when it catches up to the wire it waits rather
+			 * than finishing.
+			 *
+			 * So the reveal simply starts sooner. Nothing about its pacing changed.
+			 */
+			let buffer = "";
+			let streamingId = -1;
+			const onDelta = (delta: string) => {
+				if (turnToken.current !== token) return;
+				buffer += delta;
+
+				const blocks = settledBlocks(buffer, false);
+				if (streamingId === -1) {
+					// Nothing settles until the first newline lands, which on a real
+					// reply is one line. The thinking orb covers exactly that gap;
+					// starting the reveal on an empty block list would replace it
+					// with an empty bubble.
+					if (blocks.length === 0) return;
+					streamingId = beginStream({ blocks, followUps: [] }, [], false);
+					return;
+				}
+
+				const state = cursor.current;
+				if (!state) return;
+				// Only ever grows, and only over settled text, so `built` indices
+				// stay valid and the reveal is never rewound.
+				state.answer = { ...state.answer, blocks };
+			};
+
 			try {
-				// The whole reply, in one response, over `/chat`. `/chat/stream`
-				// still exists and still works; it is not used, because a reveal fed
-				// by the wire cannot be paced evenly and an evenly paced one is the
-				// point. See `beginStream`.
-				const result: AskResult = await askAspire({
+				const result: AskResult = await streamAspire({
 					message: question,
+					onDelta,
+					signal: controller.signal,
 					// Read now, not closed over: see `threadRef`. This is also why
 					// `ask` no longer depends on `threadId` — the send pipeline used
 					// to be rebuilt on every turn for a value it can read directly.
@@ -629,7 +685,6 @@ export function useConversation({
 					// voice layer that owns this setting is built after this hook.
 					// It decides which language the eligibility card opens in.
 					language: getLanguageRef.current(),
-					signal: controller.signal,
 				});
 
 				if (turnToken.current !== token) return; // the turn was abandoned
@@ -737,11 +792,28 @@ export function useConversation({
 					return;
 				}
 
-				const id = beginStream(
-					{ blocks: parseAnswer(result.reply), followUps: result.followUps },
-					result.sources,
-				);
-				onAnswerRef.current?.(id, result.reply);
+				// The payload is authoritative, not the accumulated deltas: on a
+				// card turn the service deliberately sends an empty reply, and the
+				// final blocks must come from it rather than from whatever text
+				// escaped down the wire.
+				const finalAnswer: Answer = {
+					blocks: parseAnswer(result.reply),
+					followUps: result.followUps,
+				};
+
+				const live = cursor.current;
+				if (live && live.id === streamingId) {
+					// A reveal is already running. Hand it the finished answer and
+					// let it play out to the end at its own pace.
+					live.answer = finalAnswer;
+					live.sources = result.sources;
+					live.ended = true;
+				} else {
+					// Nothing was ever revealed -- a reply with no newline in it, or
+					// the non-streaming fallback inside `streamAspire`. Start whole.
+					streamingId = beginStream(finalAnswer, result.sources, true);
+				}
+				onAnswerRef.current?.(streamingId, result.reply);
 			} catch (error) {
 				if (turnToken.current !== token) return;
 
