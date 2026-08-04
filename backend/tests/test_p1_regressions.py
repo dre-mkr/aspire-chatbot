@@ -30,7 +30,6 @@ from app.main import app
 # ── P0-004 — _open_conversation is a no-op ──────────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="open finding; remove this marker with the fix")
 def test_open_conversation_records_the_question(monkeypatch):
     """A first turn whose answer fails must still leave a conversation behind.
 

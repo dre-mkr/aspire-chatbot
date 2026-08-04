@@ -460,6 +460,18 @@ async def _open_conversation(
         async with session() as db:
             if db is None:
                 return
+            await ensure_conversation(
+                db,
+                thread_id,
+                language=request.language,
+                persona=request.persona,
+                account_status=request.account_status,
+                # Recorded on creation only, so the first turn settles whose
+                # conversation this is and no later request can take it over.
+                owner_id=owner_id,
+                title=_provisional_title(request.message),
+            )
+            await append_turn(db, thread_id, role="user", content=request.message)
     except Exception:
         logger.warning(
             "Could not open conversation %s; the turn was still served.",
@@ -496,22 +508,20 @@ async def _persist_turn(
         async with session() as db:
             if db is None:
                 return
+            # `_open_conversation` already created the row and recorded the
+            # question before the model ran. This is an upsert and a no-op when
+            # that succeeded; it stays because that call swallows its own
+            # failures, and a turn whose opening write failed should still be
+            # persisted rather than silently losing its question.
             await ensure_conversation(
                 db,
                 thread_id,
                 language=request.language,
                 persona=request.persona,
                 account_status=request.account_status,
-                # Recorded on creation only, so the first turn settles whose
-                # conversation this is and no later request can take it over.
                 owner_id=owner_id,
-                # The provisional name, so a conversation is never nameless. It
-                # is the same string the client used to compute for itself while
-                # history lived in the browser, and the same one a generated
-                # title crossfades over a moment later.
                 title=_provisional_title(request.message),
             )
-            await append_turn(db, thread_id, role="user", content=request.message)
 
             # A game or eligibility turn has no prose by design, so it stores a
             # structured record instead: enough for the model to keep the
