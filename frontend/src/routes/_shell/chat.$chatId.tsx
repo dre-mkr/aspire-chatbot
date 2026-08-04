@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { currentSession } from "#/lib/aspire/session";
 import { conversationQuery } from "#/lib/aspire/queries";
+import { currentSession } from "#/lib/aspire/session";
 
 export const Route = createFileRoute("/_shell/chat/$chatId")({
 	// Full-document SSR. The transcript is fetched in the loader, so the

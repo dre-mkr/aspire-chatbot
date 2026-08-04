@@ -225,7 +225,8 @@ export function Transcript({
 	// Same rule, same reason: one check per conversation, drawn at the newest
 	// turn that opened one.
 	const liveCheckIndex = turns.reduce(
-		(latest, message, index) => (message.role === "eligibility" ? index : latest),
+		(latest, message, index) =>
+			message.role === "eligibility" ? index : latest,
 		-1,
 	);
 
@@ -312,7 +313,10 @@ export function Transcript({
 		// Keyed by message id, not by index. The reveal and the answer it settles
 		// into are one element (see `turns` above); an index key would let a row
 		// be reused for a different turn and undo that.
-		getItemKey: useCallback((index: number) => turns[index]?.id ?? index, [turns]),
+		getItemKey: useCallback(
+			(index: number) => turns[index]?.id ?? index,
+			[turns],
+		),
 		scrollMargin,
 		// Turns are tall — roughly 1.5 fit a 662px viewport — so 3 either side is
 		// already a screen and a half of runway. More is just DOM back again.
@@ -446,9 +450,13 @@ export function Transcript({
 
 	return (
 		<div className="transcript" ref={listRef}>
-			<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+			{/* `<output>` is a status region by definition, so the role is
+			    implicit. Kept `aria-live` and `aria-atomic` explicit: the
+			    announcement is replaced wholesale each turn and must be read as
+			    one thing, which is not the default for every screen reader. */}
+			<output className="sr-only" aria-live="polite" aria-atomic="true">
 				{announcement}
-			</p>
+			</output>
 
 			{windowed ? (
 				<div
@@ -573,7 +581,13 @@ function Answer({
 }
 
 /** Renders one block, promoting `**...**` runs to real emphasis. */
-function Block({ block, revealing }: { block: AnswerBlock; revealing: boolean }) {
+function Block({
+	block,
+	revealing,
+}: {
+	block: AnswerBlock;
+	revealing: boolean;
+}) {
 	if (block.kind === "paragraph") {
 		return (
 			<p>

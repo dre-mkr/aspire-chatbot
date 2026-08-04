@@ -19,6 +19,9 @@ from app.config import get_settings
 from app.limits import get_limiter
 from app.main import app
 
+#: P0-010 -- see the `slow` marker note in pyproject.toml.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(autouse=True)
 def _clean_limiter():

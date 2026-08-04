@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 import uuid as uuid_module
 from contextlib import asynccontextmanager
@@ -11,8 +12,9 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
@@ -116,14 +118,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Permissive CORS for local development: the Vite dev server on :3000 is a
-# different origin from this API on :8000, so the browser preflights every /chat.
-# TODO: before deploying, restrict allow_origins to the real frontend origin(s).
+# CORS for local development: the Vite dev server on :3000 is a different origin
+# from this API on :8000, so the browser preflights every /chat.
 #
-# allow_credentials stays False because the default origin list is "*", and a
-# wildcard is not a legal Access-Control-Allow-Origin for a credentialed request.
-# Phase 1 has no cookies or auth, so nothing needs it. Turn it on only alongside
-# an explicit origin list.
+# The default origin list is those two and nothing else -- it used to be `["*"]`,
+# which let any website drive `POST /chat` from a visitor's browser at the
+# programme's model cost. Production overrides it with its own origin; see
+# `cors_allow_origins` in config.py for why the wildcard is now something a
+# deployment has to ask for by name.
+#
+# allow_credentials stays False. Auth here is a bearer token in a header, not a
+# cookie, so nothing needs credentialed cross-origin requests -- and turning it
+# on would make the origin list load-bearing in a way it is not today.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allow_origins,
@@ -170,6 +176,114 @@ async def health() -> HealthResponse:
         database=database_enabled(),
         cache=response_cache.cache_enabled(),
         cache_stats=await response_cache.stats(),
+    )
+
+
+#: How long a provider reachability check is trusted.
+#:
+#: The check costs a network round trip, and `/ready` may be polled every few
+#: seconds by a load balancer. Sixty seconds is short enough to notice an outage
+#: within a minute and long enough that probing cannot itself become traffic.
+_PROVIDER_TTL_SECONDS = 60.0
+_provider_checked_at = 0.0
+_provider_reachable: bool | None = None
+
+
+def _provider_probe() -> tuple[str, dict[str, str]] | None:
+    """Where to knock, for whichever provider `CHAT_MODEL` selects.
+
+    `chat_model` is a `provider:model` string passed to `init_chat_model`, so
+    the provider is a configuration choice and this must not assume one. A
+    provider it does not recognise, or one with no key, returns None and is
+    reported as unknown rather than as broken.
+    """
+    settings = get_settings()
+    provider = settings.chat_model.split(":", 1)[0].lower()
+
+    if provider == "anthropic" and settings.anthropic_api_key:
+        return (
+            "https://api.anthropic.com/v1/models",
+            {
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+    if provider == "openai" and settings.openai_api_key:
+        return (
+            "https://api.openai.com/v1/models",
+            {"Authorization": f"Bearer {settings.openai_api_key}"},
+        )
+    return None
+
+
+async def _provider_ready() -> bool | None:
+    """Whether the model provider answers. `None` when it cannot be checked.
+
+    Cached, and deliberately not a model call: this asks whether the API is
+    reachable and the key is accepted, not whether it will answer a question.
+    Spending a completion on every readiness probe would make the probe the
+    largest line on the bill.
+    """
+    global _provider_checked_at, _provider_reachable
+
+    probe = _provider_probe()
+    if probe is None:
+        return None
+    url, headers = probe
+
+    now = time.monotonic()
+    if _provider_reachable is not None and now - _provider_checked_at < _PROVIDER_TTL_SECONDS:
+        return _provider_reachable
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url, headers=headers)
+        # 401 and 403 are answers: the provider is up and the key is wrong,
+        # which is a configuration failure and still "not ready".
+        _provider_reachable = response.status_code < 400
+    except Exception:
+        logger.warning("Model provider did not answer a readiness check.", exc_info=True)
+        _provider_reachable = False
+
+    _provider_checked_at = now
+    return _provider_reachable
+
+
+@app.get("/ready")
+async def ready() -> Response:
+    """Whether this process can actually answer a question.
+
+    Split from `/health` because they are different questions and were one.
+    `/health` says the process is up; nothing external could distinguish that
+    from "able to answer", so a provider outage looked healthy right up until
+    every turn 502'd.
+
+    The model provider is the dependency whose failure makes the product
+    useless, and it was the one thing nothing checked. It is checked here, on a
+    cached reachability probe rather than a completion.
+
+    503 rather than a 200 with a false flag in it: a readiness probe is read by
+    a load balancer, and load balancers read status codes.
+    """
+    database = database_enabled()
+    cache = response_cache.cache_enabled()
+    provider = await _provider_ready()
+
+    # The cache is deliberately NOT required. It is an optimisation, and a
+    # service that refuses traffic because its cache is down is worse than one
+    # that answers a little slower.
+    ok = database and provider is not False
+
+    return JSONResponse(
+        status_code=200 if ok else 503,
+        content={
+            "ready": ok,
+            "database": database,
+            "cache": cache,
+            # `null` means no key is configured, which is a legitimate local
+            # setup and not a readiness failure.
+            "provider": provider,
+        },
     )
 
 
@@ -356,6 +470,30 @@ async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
         persona=request.persona,
         account_status=request.account_status,
     )
+
+    if hit is None:
+        # A miss used to let every concurrent caller run the full agent --
+        # retrieval plus two model calls, each, all computing the same answer.
+        # The four landing starter chips are the highest-collision strings in
+        # the product, so a classroom tapping one against a cold cache is N
+        # simultaneous billed runs.
+        #
+        # Single-flight: the first caller here takes the lease and returns None
+        # to go and compute. The rest wait briefly for its answer.
+        key = response_cache.cache_key(
+            request.message,
+            language=request.language,
+            persona=request.persona,
+            account_status=request.account_status,
+        )
+        if not await response_cache.acquire_lease(key):
+            hit = await response_cache.await_leader(key)
+            if hit is None:
+                # The leader was slow, or died. Computing it ourselves is right:
+                # this is a cost optimisation, never a correctness gate, and a
+                # slower answer beats no answer.
+                logger.info("single-flight wait expired; computing anyway")
+
     await response_cache.record(hit is not None)
     if hit is None:
         return None
@@ -369,6 +507,35 @@ async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
         sources=[Source(**source) for source in hit.get("sources", [])],
         follow_ups=hit.get("follow_ups", []),
     )
+
+
+async def _follow_ups_for(
+    request: ChatRequest, reply: str, *, quiet_turn: bool
+) -> list[str]:
+    """The chips under an answer, when they are worth a model call.
+
+    They used to be generated on EVERY non-card turn: a third model call per
+    turn, on top of the answer and (once per conversation) the title. Roughly a
+    2x multiplier on per-turn model calls for a UI affordance -- and one whose
+    value is entirely front-loaded. A reader on turn one does not yet know what
+    to ask; by turn twelve they plainly do, because they have been asking.
+
+    So: the opening turn of a conversation only. `request.thread_id is None` is
+    exactly that turn and costs nothing to check -- no count, no extra query, on
+    a path where the point is to remove work rather than move it.
+
+    `FOLLOW_UPS_ALWAYS=true` restores the old behaviour for anyone who wants to
+    measure the difference or disagrees with the trade.
+
+    `quiet_turn` still wins outright. A game or eligibility card is asking a
+    question and waiting for a tap; chips underneath it would invite someone out
+    of the flow they just started, on the turn they started it.
+    """
+    if quiet_turn:
+        return []
+    if request.thread_id is not None and not get_settings().follow_ups_always:
+        return []
+    return await suggest_follow_ups(request.message, reply)
 
 
 def _game_history_line(game: dict) -> str:
@@ -673,7 +840,11 @@ async def chat(
     # "Am I eligible?" would be inviting someone out of the flow they just
     # started, on the very turn they started it.
     quiet_turn = game is not None or eligibility is not None
-    follow_ups = [] if quiet_turn else await suggest_follow_ups(request.message, reply)
+    # See `record_turn` in app/cache.py: how often a card actually starts is the
+    # number P8-003 needs before the 979 tokens of card instructions can be
+    # shortened or moved behind a router turn. Recorded on both transports.
+    await response_cache.record_turn(quiet_turn)
+    follow_ups = await _follow_ups_for(request, reply, quiet_turn=quiet_turn)
 
     await _persist_turn(
         request,
@@ -701,18 +872,31 @@ async def chat(
     # for ASPIRE?" is a landing-page starter chip and therefore the most
     # cacheable string in the product. Caching that turn would serve every later
     # asker an empty reply with no card at all.
-    if not request.thread_id and quiet_turn is False:
-        await response_cache.put_answer(
+    if not request.thread_id:
+        key = response_cache.cache_key(
             request.message,
-            {
-                "reply": reply,
-                "sources": [source.model_dump() for source in sources],
-                "follow_ups": follow_ups,
-            },
             language=request.language,
             persona=request.persona,
             account_status=request.account_status,
         )
+        if quiet_turn is False:
+            await response_cache.put_answer(
+                request.message,
+                {
+                    "reply": reply,
+                    "sources": [source.model_dump() for source in sources],
+                    "follow_ups": follow_ups,
+                },
+                language=request.language,
+                persona=request.persona,
+                account_status=request.account_status,
+            )
+        # Released whether or not anything was cached. A card turn is not
+        # cacheable, but callers waiting on the lease must still be let go
+        # rather than sitting out the full wait for an answer that is never
+        # coming. The lease also expires on its own, so a crash costs the next
+        # caller a lease's worth of waiting and nothing more.
+        await response_cache.release_lease(key)
 
     return ChatResponse(
         reply=reply,
@@ -863,7 +1047,8 @@ async def chat_stream(
             }
         }
 
-        follow_ups = [] if quiet_turn else await suggest_follow_ups(request.message, reply)
+        await response_cache.record_turn(quiet_turn)
+        follow_ups = await _follow_ups_for(request, reply, quiet_turn=quiet_turn)
 
         # Past this point the reader already has the answer, so nothing here may
         # take it away. Persistence failing is a real fault and is logged as one,

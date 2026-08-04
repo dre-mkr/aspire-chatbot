@@ -105,12 +105,20 @@ function Reset() {
 					onChange={setRepeat}
 					placeholder="Repeat it"
 					disabled={busy}
-					error={repeat && repeat !== password ? "These two do not match yet." : ""}
+					error={
+						repeat && repeat !== password ? "These two do not match yet." : ""
+					}
 				/>
 				<ul className="auth__reqs">
-					<li data-ok={password.length >= 10 || undefined}>10 characters or more</li>
-					<li data-ok={/[0-9]/.test(password) || undefined}>one number helps</li>
-					<li data-ok={(password.length > 0 && password === repeat) || undefined}>
+					<li data-ok={password.length >= 10 || undefined}>
+						10 characters or more
+					</li>
+					<li data-ok={/[0-9]/.test(password) || undefined}>
+						one number helps
+					</li>
+					<li
+						data-ok={(password.length > 0 && password === repeat) || undefined}
+					>
 						both boxes match
 					</li>
 				</ul>

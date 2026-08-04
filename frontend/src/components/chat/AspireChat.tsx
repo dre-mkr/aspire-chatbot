@@ -17,13 +17,13 @@ import {
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
 import type { GameState } from "#/lib/aspire/games";
-import type { PersonaId } from "#/lib/aspire/personas";
 import {
 	displayTitle,
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
 import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
+import type { PersonaId } from "#/lib/aspire/personas";
 import {
 	conversationQuery,
 	eligibilityStateQuery,
@@ -113,7 +113,11 @@ export function AspireChat() {
 	 * Read here, above `useConversation`, because the hook takes `persona` as an
 	 * input — this is not merely a display concern, it is on the request.
 	 */
-	const { simple, persona: personaParam, lang } = useSearch({ from: "/_shell" });
+	const {
+		simple,
+		persona: personaParam,
+		lang,
+	} = useSearch({ from: "/_shell" });
 	const persona = personaParam ?? null;
 	/**
 	 * The language each eligibility check opened in, by thread.
@@ -831,7 +835,7 @@ export function AspireChat() {
 				conversation.language ?? voice.language,
 			);
 		},
-		[messages, threadId],
+		[messages, threadId, voice.language],
 	);
 
 	return (
@@ -932,7 +936,7 @@ export function AspireChat() {
 					    stops a pointer and does nothing about a keyboard: the sign-in
 					    button stayed in the tab order while invisible, so tabbing across
 					    the chat screen landed focus on a control nobody could see. */}
-				<div
+					<div
 						className="account-slot"
 						data-shown={railClosed || undefined}
 						inert={!railClosed || undefined}

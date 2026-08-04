@@ -33,6 +33,9 @@ from langchain_core.messages import AIMessageChunk, ToolMessage  # noqa: E402
 from app import main  # noqa: E402
 from app.main import app, message_text  # noqa: E402
 
+#: P0-010 -- see the `slow` marker note in pyproject.toml.
+pytestmark = pytest.mark.slow
+
 #: What a retrieved row looks like once the retriever has serialised it. These
 #: exact strings are what a user saw in the assistant bubble.
 CONTEXT_DUMP = (
@@ -240,8 +243,84 @@ def test_the_message_closes_before_the_follow_ups_are_generated(client, monkeypa
     frames = _frames(response)
     streamed = "".join(f["delta"] for f in frames if f["type"] == "TEXT_MESSAGE_CONTENT")
     assert streamed == "ASPIRE helps young people build savings."
-    done = next(f for f in frames if f["type"] == "CUSTOM")
-    assert done["value"]["follow_ups"] == ["Who is eligible?"]
+
+
+def test_the_turn_is_announced_before_the_chips_are_written(client, monkeypatch):
+    """Sources and the action row must not wait on a second model call.
+
+    `aspire.turn` carries everything derivable the moment the model stops
+    writing -- the reply, the sources, which card opened. Follow-up chips are the
+    one thing that is not: they cost another model call, which measured two to
+    five seconds against the real service.
+
+    They used to travel together, so the client could not settle the turn until
+    the chips existed. The answer sat finished on screen with no sources, no copy
+    or Ask-again row and no chips, waiting on work that none of them needed.
+
+    The order of the frames is the contract, and it is what this asserts.
+    """
+    answer = [
+        AIMessageChunk(content=[{"type": "text", "text": part}], id="msg-1")
+        for part in ("ASPIRE helps young people ", "build savings.")
+    ]
+
+    async def _chips(_message, _reply):
+        return ["Who is eligible?", "How do I apply?"]
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent(answer))
+    monkeypatch.setattr(main, "suggest_follow_ups", _chips)
+
+    # No `thread_id`: an OPENING turn. Follow-up chips are generated for the
+    # first turn of a conversation only (P8-002) -- they cost a full model call
+    # and their value is front-loaded -- so this is the turn on which the
+    # two-frame contract is observable at all. The contract itself is unchanged:
+    # whenever chips exist, they arrive in their own frame, after the turn.
+    response = client.post("/chat/stream", json={"message": "What is ASPIRE?"})
+    frames = _frames(response)
+    customs = [f for f in frames if f["type"] == "CUSTOM"]
+
+    assert [f["name"] for f in customs] == ["aspire.turn", "aspire.follow_ups"]
+
+    turn = customs[0]["value"]
+    assert turn["reply"] == "ASPIRE helps young people build savings."
+    # Empty here on purpose. The chips are not late, they are separate.
+    assert turn["follow_ups"] == []
+
+    assert customs[1]["value"]["follow_ups"] == ["Who is eligible?", "How do I apply?"]
+
+    # The run closes once, after everything.
+    kinds = [f["type"] for f in frames]
+    assert kinds.count("RUN_FINISHED") == 1
+    assert kinds[-1] == "RUN_FINISHED"
+
+
+def test_a_failure_after_the_answer_does_not_retract_it(client, monkeypatch):
+    """Persistence is bookkeeping, and the reader already has the answer.
+
+    Once `aspire.turn` has gone out the answer is on screen and settled. A
+    database write failing after that is a real fault and is logged as one, but
+    letting it raise would turn a correct answer into an error message -- the
+    reader would watch a complete reply be replaced by "something went wrong".
+    """
+    answer = [AIMessageChunk(content=[{"type": "text", "text": "EC$500."}], id="msg-1")]
+
+    async def _explode(*_args, **_kwargs):
+        raise RuntimeError("the database is down")
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent(answer))
+    monkeypatch.setattr(main, "suggest_follow_ups", _no_follow_ups)
+    monkeypatch.setattr(main, "_persist_turn", _explode)
+
+    response = client.post(
+        "/chat/stream", json={"message": "How much?", "thread_id": "t-stream-7"}
+    )
+    frames = _frames(response)
+    kinds = [f["type"] for f in frames]
+
+    assert "RUN_ERROR" not in kinds
+    turn = next(f for f in frames if f.get("name") == "aspire.turn")
+    assert turn["value"]["reply"] == "EC$500."
+    assert kinds[-1] == "RUN_FINISHED"
 
 
 def test_a_card_turn_closes_no_message_at_all(client, monkeypatch):
@@ -276,3 +355,42 @@ def test_a_card_turn_closes_no_message_at_all(client, monkeypatch):
 async def _no_follow_ups(_message, _reply):
     """Follow-ups are a second model call and are not what these tests measure."""
     return []
+
+
+def test_a_continuing_turn_does_not_pay_for_chips(client, monkeypatch):
+    """P8-002: follow-ups are an opening-turn affordance, not a per-turn cost.
+
+    They were generated on every non-card turn -- a third model call each time,
+    roughly a 2x multiplier on per-turn model calls for a UI affordance whose
+    value is entirely front-loaded. A reader on turn one does not know what to
+    ask; by turn twelve they have been asking.
+
+    Asserted by counting calls rather than by looking at the frames, because the
+    saving IS the call not happening. A version that generated the chips and
+    then dropped them would pass a frame assertion and cost exactly as much.
+    """
+    answer = [
+        AIMessageChunk(content=[{"type": "text", "text": "Yes."}], id="msg-1")
+    ]
+    calls = []
+
+    async def _chips(message, reply):
+        calls.append(message)
+        return ["Who is eligible?"]
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent(answer))
+    monkeypatch.setattr(main, "suggest_follow_ups", _chips)
+
+    response = client.post(
+        "/chat/stream",
+        json={"message": "And what about savings?", "thread_id": "t-stream-continuing"},
+    )
+    customs = [f for f in _frames(response) if f["type"] == "CUSTOM"]
+
+    assert calls == [], "a continuing turn spent a model call on follow-up chips"
+
+    # The frame still arrives, carrying nothing. Deliberate: the wire shape is
+    # the same on every turn, so the client has one code path rather than two
+    # and "no chips" is a value rather than an absence to time out on.
+    assert [f["name"] for f in customs] == ["aspire.turn", "aspire.follow_ups"]
+    assert customs[1]["value"]["follow_ups"] == []

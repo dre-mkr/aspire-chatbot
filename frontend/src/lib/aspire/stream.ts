@@ -138,9 +138,19 @@ export async function streamAspire(
 			signal: controller.signal,
 		});
 
-		for await (const chunk of connection.connect([], undefined, controller.signal)) {
+		for await (const chunk of connection.connect(
+			[],
+			undefined,
+			controller.signal,
+		)) {
 			opened = true;
-			const event = chunk as { type?: string; delta?: string; name?: string; value?: unknown; message?: string };
+			const event = chunk as {
+				type?: string;
+				delta?: string;
+				name?: string;
+				value?: unknown;
+				message?: string;
+			};
 
 			if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) {
 				onDelta?.(event.delta);

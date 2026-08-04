@@ -43,7 +43,8 @@ import { useMediaQuery } from "#/lib/use-media-query";
    `persona` prop that nothing ever passed. Every player read this one. Removed
    rather than left as copy no reader could reach. */
 const COPY = {
-	sub: (total: number) => `${total} ${total === 1 ? "statement" : "statements"}`,
+	sub: (total: number) =>
+		`${total} ${total === 1 ? "statement" : "statements"}`,
 	leave: "Leave game",
 	close: "Close",
 	skip: "Not sure — show me the answer",
@@ -240,12 +241,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 		// tabIndex -1 so a click anywhere on the card puts focus inside it, which
 		// is what arms the T/F shortcut scoped above. Not reachable by Tab —
 		// the answer buttons already are.
-		<section
-			className="game tf"
-			aria-label={label}
-			ref={cardRef}
-			tabIndex={-1}
-		>
+		<section className="game tf" aria-label={label} ref={cardRef} tabIndex={-1}>
 			<header className="game__head">
 				<span className="game__badge" aria-hidden="true">
 					<SparkIcon />
@@ -344,9 +340,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 							    it and "t" just types a letter — advertising the key in
 							    that state is a promise the code does not keep. */}
 							{keyboardArmed && !touch ? (
-								<span className="game__count tf__hint">
-									{copy.inputHint}
-								</span>
+								<span className="game__count tf__hint">{copy.inputHint}</span>
 							) : null}
 						</div>
 					</>

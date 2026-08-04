@@ -124,7 +124,10 @@ export function ChatTitleBar({
 					    shift the bar or the thread beneath it. */}
 					<span className="titlebar__text">{title}</span>
 					{outgoing ? (
-						<span className="titlebar__text titlebar__text--out" aria-hidden="true">
+						<span
+							className="titlebar__text titlebar__text--out"
+							aria-hidden="true"
+						>
 							{outgoing}
 						</span>
 					) : null}

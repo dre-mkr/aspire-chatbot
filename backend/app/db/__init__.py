@@ -13,7 +13,6 @@ from app.db.models import (
     EMBEDDING_DIMENSIONS,
     Base,
     Conversation,
-    Document,
     EligibilityOutcome,
     Message,
 )
@@ -21,7 +20,6 @@ from app.db.models import (
 __all__ = [
     "Base",
     "Conversation",
-    "Document",
     "EMBEDDING_DIMENSIONS",
     "EligibilityOutcome",
     "Message",

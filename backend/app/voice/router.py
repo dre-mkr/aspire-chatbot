@@ -209,7 +209,10 @@ async def speak(request: Request, body: SpeakRequest) -> Response:
 
     key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
     cache = get_cache()
-    if (cached := cache.get(key)) is not None:
+    # `aget`/`aput`, not `get`/`put`: this is an async handler, and reading or
+    # writing a whole MP3 on the event loop stalls every other request behind
+    # it. Under `--workers 1` that includes live chat turns.
+    if (cached := await cache.aget(key)) is not None:
         return Response(
             content=cached,
             media_type="audio/mpeg",
@@ -231,7 +234,7 @@ async def speak(request: Request, body: SpeakRequest) -> Response:
     except VoiceUnavailable:
         raise HTTPException(status_code=503, detail=_FALLBACK) from None
 
-    cache.put(key, audio)
+    await cache.aput(key, audio)
     logger.info(
         "speak ok persona=%s language=%s chars=%d model=%s bytes=%d",
         body.persona.value,

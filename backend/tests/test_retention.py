@@ -49,9 +49,11 @@ def teardown_module(_module):
     _loop.close()
 
 
-pytestmark = pytest.mark.skipif(
+#: P0-010 -- see the `slow` marker note in pyproject.toml. Both markers apply:
+#: this needs a live dependency AND is dominated by wall-clock cost.
+pytestmark = [pytest.mark.slow, pytest.mark.skipif(
     not database_enabled(), reason="These are database-backed retention tests."
-)
+)]
 
 
 async def make(

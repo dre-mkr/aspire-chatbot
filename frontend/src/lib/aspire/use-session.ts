@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { renewSessionIfStale } from "./auth";
-import { type Session, currentSession, ensureSession, subscribeToSession } from "./session";
+import {
+	currentSession,
+	ensureSession,
+	type Session,
+	subscribeToSession,
+} from "./session";
 
 /**
  * Who is signed in, and whether that is known yet.

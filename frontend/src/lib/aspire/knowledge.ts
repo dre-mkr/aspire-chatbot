@@ -283,7 +283,10 @@ function parseLinks(segment: string, revealing: boolean): Array<InlineNode> {
  * render that never corrects itself: an odd number of asterisks left the tail
  * bold permanently, and a bracket lost its brackets.
  */
-export function parseInline(text: string, revealing = false): Array<InlineNode> {
+export function parseInline(
+	text: string,
+	revealing = false,
+): Array<InlineNode> {
 	const nodes: Array<InlineNode> = [];
 	let rest = text;
 
@@ -302,7 +305,8 @@ export function parseInline(text: string, revealing = false): Array<InlineNode> 
 			// No closer. Mid-reveal it has not arrived yet; settled it is never
 			// coming, so the asterisks are literal text the author typed.
 			if (revealing) {
-				if (after) nodes.push({ kind: "bold", children: parseLinks(after, true) });
+				if (after)
+					nodes.push({ kind: "bold", children: parseLinks(after, true) });
 			} else {
 				nodes.push({ kind: "text", text: "**" });
 				if (after) nodes.push(...parseLinks(after, false));

@@ -91,5 +91,32 @@ def count_documents(store: Chroma) -> int:
 
 
 def build_retriever(store: Chroma, settings: Settings | None = None) -> BaseRetriever:
+    """The retriever, with a floor on how irrelevant a chunk may be.
+
+    `k` alone returns the top four chunks regardless of distance, so an
+    out-of-scope question -- "what is the capital of France" -- still put four
+    irrelevant knowledge-base rows into the prompt. Refusal correctness measures
+    10/10 today, which means the system prompt is carrying it entirely: grounding
+    depends on prompt discipline with no retrieval-side backstop, and a future
+    prompt edit could remove it without anything failing.
+
+    So this is defence in depth, not a fix for a live defect. The threshold is
+    deliberately permissive -- it is calibrated to drop chunks that are plainly
+    unrelated, not to second-guess borderline ones, because a retrieval floor
+    that starves a real question is a much worse failure than one that lets a
+    weak chunk through to a prompt that will refuse anyway.
+
+    Set `RETRIEVER_SCORE_THRESHOLD=0` to switch it off entirely.
+    """
     settings = settings or get_settings()
-    return store.as_retriever(search_kwargs={"k": settings.retriever_k})
+    threshold = settings.retriever_score_threshold
+    if threshold <= 0:
+        return store.as_retriever(search_kwargs={"k": settings.retriever_k})
+
+    return store.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={
+            "k": settings.retriever_k,
+            "score_threshold": threshold,
+        },
+    )

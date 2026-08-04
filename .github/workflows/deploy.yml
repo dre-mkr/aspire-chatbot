@@ -33,33 +33,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # bun, not npm, and that is the point (P0-007). `deploy/update.sh` runs
+      # `bun install --frozen-lockfile` on the box; CI running `npm ci` against
+      # a package-lock.json meant local, CI and production could each resolve a
+      # different dependency tree from the same commit. There is one lockfile
+      # now and both places install from it.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: bun install --frozen-lockfile
       - name: Typecheck
         working-directory: frontend
-        run: npx tsc --noEmit
-      # Report-only, deliberately, and this is the one step here that is not yet
-      # a gate. `biome lint` currently reports 3 pre-existing errors (P0-009):
-      #
-      #   Composer.tsx:71   useExhaustiveDependencies
-      #   Rail.tsx:346      useSemanticElements
-      #   VoiceSettings.tsx:132  useSemanticElements
-      #
-      # None is safe to silence here. The Composer dependency is deliberate and
-      # documented in a comment above the effect -- dropping it to satisfy the
-      # rule would change when the composer takes focus. The other two suggest
-      # replacing a positioned popover's `role="group"` with `<fieldset>`, which
-      # is both wrong for the context (fieldset groups form controls) and a
-      # visual change that needs sign-off under the UI policy.
-      #
-      # Turning this into a gate is a one-word change once P0-009 is resolved.
-      # Making it a gate now would mean either shipping red or weakening the
-      # code to pass a check, and neither is worth it.
-      - name: Lint (report only — see P0-009)
+        run: bunx tsc --noEmit
+      # A gate, not a report (P0-009 is closed). `biome check` covers lint,
+      # formatting and import order in one pass, and all three are clean --
+      # the two `useSemanticElements` diagnostics that used to block this are
+      # suppressed at the two call sites with the reason written down, and the
+      # 38 formatting diffs were fixed in their own no-behaviour commit.
+      - name: Lint, format and import order
         working-directory: frontend
-        continue-on-error: true
-        run: npx biome lint
+        run: bunx biome check
       - name: Frontend regression tests
         working-directory: frontend
         run: node --test src/lib/aspire/*.test.ts
@@ -71,18 +66,35 @@ jobs:
         # for a build that would ship broken.
         env:
           VITE_ASPIRE_API_URL: https://aspire.eccugenai.app
-        run: npx vite build
+        run: bunx vite build
 
       # --- backend ---
       - uses: astral-sh/setup-uv@v5
       - name: Install backend dependencies
         working-directory: backend
         run: uv sync --frozen
-      - name: Backend test suite
+      # Split fast from slow (P0-010). The whole suite is ~20 minutes, almost
+      # all of it in bcrypt rounds and model/embedding fixtures, and a gate
+      # nobody wants to wait for is a gate people learn to skip.
+      #
+      # `-m "not slow"` runs first and fails fast, so the common case -- a typo,
+      # a broken import, a logic error -- is reported in well under a minute.
+      # The slow half still runs, and still gates the deploy; it just does not
+      # stand between the author and the news that something is obviously wrong.
+      - name: Backend tests (fast)
         working-directory: backend
         env:
           SESSION_SECRET: ci-only-secret-not-used-for-anything
-        run: uv run pytest -q
+          # Namespaced per run so two concurrent CI jobs cannot count against
+          # each other's rate limits (P11-001).
+          ASPIRE_CACHE_NAMESPACE: ci-${{ github.run_id }}-
+        run: uv run pytest -q -m "not slow"
+      - name: Backend tests (slow)
+        working-directory: backend
+        env:
+          SESSION_SECRET: ci-only-secret-not-used-for-anything
+          ASPIRE_CACHE_NAMESPACE: ci-${{ github.run_id }}-
+        run: uv run pytest -q -m slow
 
   deploy:
     needs: verify

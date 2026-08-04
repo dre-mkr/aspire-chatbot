@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.config import Settings, get_settings
-from app.db.models import EMBEDDING_DIMENSIONS, dimensions_for
 
 logger = logging.getLogger(__name__)
 
@@ -175,51 +174,6 @@ async def check_schema() -> bool:
 
     _SCHEMA_MISSING = False
     logger.info("Database schema present; conversations will be persisted.")
-    await check_embedding_dimensions()
-    return True
-
-
-async def check_embedding_dimensions() -> bool:
-    """Warn if the embedding model and the `documents` column disagree.
-
-    The column width is fixed when the migration runs; the model is fixed by a
-    setting someone can change afterwards. Nothing else connects the two, so
-    without this the mismatch is invisible until the first INSERT into
-    `documents` -- and then it fails for every row, with an error about vector
-    dimensions rather than about configuration.
-
-    A warning rather than a hard failure: conversations do not touch this column
-    and must keep working. Only ingest and retrieval care.
-    """
-    settings = get_settings()
-    configured = dimensions_for(settings.embeddings_model)
-
-    if configured is None:
-        logger.warning(
-            "Embedding model %r has no known dimension; cannot verify it matches "
-            "the documents.embedding column (%d). Add it to "
-            "EMBEDDING_MODEL_DIMENSIONS.",
-            settings.embeddings_model,
-            EMBEDDING_DIMENSIONS,
-        )
-        return False
-
-    if configured != EMBEDDING_DIMENSIONS:
-        logger.error(
-            "EMBEDDING DIMENSION MISMATCH: %s produces %d-dimension vectors but "
-            "documents.embedding is vector(%d). Every insert into `documents` "
-            "will fail. Either set EMBEDDINGS_MODEL to a %d-dimension model, or "
-            "add a migration that recreates the column at %d and re-embed the "
-            "corpus -- the vectors themselves differ, so there is no in-place "
-            "conversion.",
-            settings.embeddings_model,
-            configured,
-            EMBEDDING_DIMENSIONS,
-            EMBEDDING_DIMENSIONS,
-            configured,
-        )
-        return False
-
     return True
 
 

@@ -14,10 +14,10 @@
  * migration nobody finishes.
  */
 
-import { authHeaders } from "./session";
+import type { Source } from "./api";
 import type { StoredConversation, StoredMessage } from "./history";
 import { parseAnswer } from "./knowledge";
-import type { Source } from "./api";
+import { authHeaders } from "./session";
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -111,7 +111,10 @@ function isConversationList(
 	if (typeof value !== "object" || value === null) return false;
 	const body = (value as Record<string, unknown>).conversations;
 	// Absent is legitimate and means "none"; present and wrong is not.
-	return body === undefined || (Array.isArray(body) && body.every(isWireConversation));
+	return (
+		body === undefined ||
+		(Array.isArray(body) && body.every(isWireConversation))
+	);
 }
 
 /**
@@ -123,7 +126,8 @@ function isConversationList(
  * the whole turn — so it is reconstructed as the marker it is.
  */
 function toStoredMessage(message: WireMessage): StoredMessage | null {
-	if (message.role === "user") return { role: "user", text: message.text ?? "" };
+	if (message.role === "user")
+		return { role: "user", text: message.text ?? "" };
 	if (message.role === "game")
 		return { role: "game", gameType: message.game_type ?? "" };
 	if (message.role === "eligibility") return { role: "eligibility" };

@@ -152,10 +152,12 @@ function isChatResponseBody(value: unknown): value is ChatResponseBody {
 	if (typeof body.reply !== "string") return false;
 	if (typeof body.thread_id !== "string") return false;
 	if (body.sources !== undefined && !Array.isArray(body.sources)) return false;
-	if (body.follow_ups !== undefined && !Array.isArray(body.follow_ups)) return false;
+	if (body.follow_ups !== undefined && !Array.isArray(body.follow_ups))
+		return false;
 	for (const marker of ["game_started", "eligibility_started"]) {
 		const held = body[marker];
-		if (held !== undefined && held !== null && typeof held !== "object") return false;
+		if (held !== undefined && held !== null && typeof held !== "object")
+			return false;
 	}
 	return true;
 }

@@ -74,7 +74,13 @@ export function AccountControl({ variant }: AccountControlProps) {
 	 */
 	if (!resolved) {
 		return (
-			<div className={variant === "corner" ? "account account--corner" : "account account--rail"}>
+			<div
+				className={
+					variant === "corner"
+						? "account account--corner"
+						: "account account--rail"
+				}
+			>
 				<div className="account__placeholder" aria-hidden="true" />
 			</div>
 		);
@@ -106,7 +112,11 @@ export function AccountControl({ variant }: AccountControlProps) {
 		if (variant === "corner") {
 			return (
 				<div className="account account--corner">
-					<button type="button" className="account__signin" onClick={goToSignIn}>
+					<button
+						type="button"
+						className="account__signin"
+						onClick={goToSignIn}
+					>
 						Sign in
 					</button>
 				</div>
@@ -137,19 +147,29 @@ export function AccountControl({ variant }: AccountControlProps) {
 
 	return (
 		<div
-			className={variant === "corner" ? "account account--corner" : "account account--rail"}
+			className={
+				variant === "corner"
+					? "account account--corner"
+					: "account account--rail"
+			}
 			ref={wrapper}
 		>
 			<button
 				type="button"
 				ref={trigger}
-				className={variant === "corner" ? "account__avatar-btn" : "account__block"}
+				className={
+					variant === "corner" ? "account__avatar-btn" : "account__block"
+				}
 				aria-haspopup="menu"
 				aria-expanded={open}
 				aria-controls={open ? menuId : undefined}
 				onClick={() => setOpen((was) => !was)}
 			>
-				<Avatar name={name} url={session?.avatarUrl} size={variant === "corner" ? 36 : 36} />
+				<Avatar
+					name={name}
+					url={session?.avatarUrl}
+					size={variant === "corner" ? 36 : 36}
+				/>
 				{/* The corner is the avatar and nothing else: a name beside it
 				    would compete with the centred hero for attention. */}
 				{variant === "rail" ? (
@@ -161,7 +181,12 @@ export function AccountControl({ variant }: AccountControlProps) {
 			</button>
 
 			{open ? (
-				<div className="account__menu" id={menuId} role="menu" data-variant={variant}>
+				<div
+					className="account__menu"
+					id={menuId}
+					role="menu"
+					data-variant={variant}
+				>
 					<div className="account__who">
 						<span className="account__who-name">{name}</span>
 						{email ? <span className="account__who-email">{email}</span> : null}
@@ -169,8 +194,8 @@ export function AccountControl({ variant }: AccountControlProps) {
 					{confirming ? (
 						<>
 							<p className="account__confirm">
-								Your chats stay on this account. Sign back in any time to pick them
-								up.
+								Your chats stay on this account. Sign back in any time to pick
+								them up.
 							</p>
 							<button
 								type="button"

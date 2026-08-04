@@ -125,6 +125,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 	 * the mobile sheet can never drift apart.
 	 */
 	const panel = (
+		// biome-ignore lint/a11y/useSemanticElements: a positioned panel, not a form control group (see Rail.tsx)
 		<div
 			className="voice-menu voice-menu--up"
 			id={panelId}
@@ -138,7 +139,9 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 			<div className="voice-menu__row">
 				<span className="voice-menu__copy">
 					<span className="voice-menu__title">Read answers aloud</span>
-					<span className="voice-menu__sub">Starts as each answer arrives.</span>
+					<span className="voice-menu__sub">
+						Starts as each answer arrives.
+					</span>
 				</span>
 				<button
 					type="button"

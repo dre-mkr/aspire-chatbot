@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Conversation, Message
@@ -90,10 +91,29 @@ async def list_conversations(
     return list(result.scalars().all())
 
 
+#: How much of a conversation is sent when it is reopened.
+#:
+#: 400 messages is 200 turns, which is far past any real conversation in the
+#: measured data and still a bounded query. It exists so the endpoint has a
+#: ceiling at all, not to trim anything anybody has.
+TRANSCRIPT_LIMIT = 400
+
+#: How many times `append_turn` will re-read MAX(seq) after losing a race.
+#:
+#: Two contenders need one retry. Three is room for a pathological burst and
+#: still a hard stop, because a loop that retries forever under contention is a
+#: worse failure than the one it replaced.
+_APPEND_ATTEMPTS = 3
+
+
 async def load_transcript(
-    db: AsyncSession, conversation_id: str, owner_id: uuid.UUID
+    db: AsyncSession,
+    conversation_id: str,
+    owner_id: uuid.UUID,
+    *,
+    limit: int = TRANSCRIPT_LIMIT,
 ) -> list[Message] | None:
-    """Every turn of one conversation, oldest first, or None.
+    """The last `limit` turns of one conversation, oldest first, or None.
 
     Ownership is part of the WHERE clause rather than a check afterwards, so
     "not yours" and "does not exist" are the same answer and the caller cannot
@@ -109,12 +129,24 @@ async def load_transcript(
     if owns is None:
         return None
 
+    # Bounded, newest-first, then reversed for display.
+    #
+    # This had no LIMIT at all: an unbounded query feeding a render that was
+    # also unbounded (P5-001/P5-003). It is only fast today because
+    # conversations are short, and it backs `GET /api/conversations/{id}`, which
+    # the client calls on every restore.
+    #
+    # The newest end is the right end to keep. A reader reopening a
+    # conversation is continuing it, not reading it from the beginning, and the
+    # client's transcript now windows anyway, so the oldest turns of a very long
+    # thread were never going to be on screen.
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.seq)
+        .order_by(Message.seq.desc())
+        .limit(limit)
     )
-    return list(result.scalars().all())
+    return list(reversed(result.scalars().all()))
 
 
 async def append_turn(
@@ -131,25 +163,58 @@ async def append_turn(
     the application, so two workers appending to one thread cannot both believe
     they are turn 7. The unique index on (conversation_id, seq) is the backstop
     if they somehow do.
-    """
-    next_seq = (
-        await db.scalar(
-            select(func.coalesce(func.max(Message.seq), 0) + 1).where(
-                Message.conversation_id == conversation_id
-            )
-        )
-    ) or 1
 
-    db.add(
-        Message(
-            conversation_id=conversation_id,
-            seq=next_seq,
-            role=role,
-            content=content,
-            extra=extra or {},
-        )
-    )
-    return next_seq
+    That backstop used to be the end of the story, and it was not enough. The
+    IntegrityError it raises was swallowed by `_persist_turn`'s try/except, so a
+    collision did not retry -- it dropped the turn, silently. Low probability,
+    because the client blocks sending during a turn, but silent data loss is the
+    wrong failure mode at any probability.
+
+    So: retry on collision, with a savepoint so the failed INSERT does not take
+    the surrounding transaction down with it. Re-reading MAX() is the whole
+    point of the retry -- by the time we are here, the winner's row exists, so
+    the second attempt reads past it.
+    """
+    for attempt in range(_APPEND_ATTEMPTS):
+        next_seq = (
+            await db.scalar(
+                select(func.coalesce(func.max(Message.seq), 0) + 1).where(
+                    Message.conversation_id == conversation_id
+                )
+            )
+        ) or 1
+
+        try:
+            # A nested transaction is a SAVEPOINT. Without it a unique violation
+            # poisons the outer transaction and everything after it fails too.
+            async with db.begin_nested():
+                db.add(
+                    Message(
+                        conversation_id=conversation_id,
+                        seq=next_seq,
+                        role=role,
+                        content=content,
+                        extra=extra or {},
+                    )
+                )
+                await db.flush()
+            return next_seq
+        except IntegrityError:
+            if attempt == _APPEND_ATTEMPTS - 1:
+                logger.warning(
+                    "append_turn lost the seq race %d times on %s; giving up",
+                    _APPEND_ATTEMPTS,
+                    conversation_id,
+                )
+                raise
+            logger.info(
+                "append_turn hit a seq collision at %d on %s; retrying",
+                next_seq,
+                conversation_id,
+            )
+
+    # Unreachable: the loop either returns or raises.
+    raise RuntimeError("append_turn exhausted its attempts without a verdict")
 
 
 async def load_context(

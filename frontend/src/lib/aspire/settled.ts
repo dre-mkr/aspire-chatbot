@@ -104,7 +104,10 @@ export function settledText(buffer: string, ended: boolean): string {
  * gaining items — which is why `blockIsClosed` exists and why the typewriter
  * must consult it before stepping past anything.
  */
-export function settledBlocks(buffer: string, ended: boolean): Array<AnswerBlock> {
+export function settledBlocks(
+	buffer: string,
+	ended: boolean,
+): Array<AnswerBlock> {
 	return parseAnswer(settledText(buffer, ended));
 }
 

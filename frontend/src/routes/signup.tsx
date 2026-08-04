@@ -80,7 +80,10 @@ function ageFrom(day: string, month: string, year: string): number | null {
 	if (!d || !m || !y || String(y).length !== 4) return null;
 	const today = new Date();
 	let age = today.getFullYear() - y;
-	if (today.getMonth() + 1 < m || (today.getMonth() + 1 === m && today.getDate() < d)) {
+	if (
+		today.getMonth() + 1 < m ||
+		(today.getMonth() + 1 === m && today.getDate() < d)
+	) {
 		age -= 1;
 	}
 	return age;
@@ -129,18 +132,25 @@ function SignUp() {
 			if (!first.trim()) return fail("first", "We need a first name.");
 			if (!last.trim()) return fail("last", "We need a last name.");
 			if (age === null) return fail("dob", "Fill in the whole date of birth.");
-			if (age < 0 || age > 120) return fail("dob", "Check that date — it looks wrong.");
+			if (age < 0 || age > 120)
+				return fail("dob", "Check that date — it looks wrong.");
 			return true;
 		}
 		if (step === 3 && isMinor) {
 			// Refused here as well as by the service. An under-13 account without
 			// a named adult is the one shape this form must not be able to send.
-			if (!gName.trim()) return fail("gName", "Name the adult who will hold this account.");
-			if (!gEmail.trim()) return fail("gEmail", "We need their email — it signs in to this account.");
+			if (!gName.trim())
+				return fail("gName", "Name the adult who will hold this account.");
+			if (!gEmail.trim())
+				return fail(
+					"gEmail",
+					"We need their email — it signs in to this account.",
+				);
 			return true;
 		}
 		if (step === 4) {
-			if (!email.trim()) return fail("email", "We need an email to sign in with.");
+			if (!email.trim())
+				return fail("email", "We need an email to sign in with.");
 			if (password.length < 10) {
 				return fail("password", "Use at least 10 characters.");
 			}
@@ -172,7 +182,9 @@ function SignUp() {
 			queryClient.removeQueries({ queryKey: keys.allConversations() });
 			queryClient.removeQueries({ queryKey: keys.allGames() });
 			queryClient.removeQueries({ queryKey: keys.allEligibility() });
-			await queryClient.invalidateQueries({ queryKey: keys.allConversations() });
+			await queryClient.invalidateQueries({
+				queryKey: keys.allConversations(),
+			});
 
 			// Re-validated at the point of use; see the note in signin.tsx.
 			void navigate({
@@ -226,10 +238,12 @@ function SignUp() {
 							? isMinor
 								? "An adult holds this account. They sign in, and you use it with them."
 								: "Someone we can reach about your progress. Optional."
-								: "Last step. This is what you will sign in with."
+							: "Last step. This is what you will sign in with."
 			}
 			step={{ current: step, total: 4, label: stepLabels[step - 1] }}
-			onBack={() => (step === 1 ? navigate({ to: "/signin" }) : setStep(step - 1))}
+			onBack={() =>
+				step === 1 ? navigate({ to: "/signin" }) : setStep(step - 1)
+			}
 			backLabel={step === 1 ? "Back to sign in" : "Back"}
 			footText={step === 1 ? "Already have an account?" : undefined}
 			footLinkLabel={step === 1 ? "Sign in" : undefined}
@@ -267,7 +281,9 @@ function SignUp() {
 									placeholder="DD"
 									aria-label="Day"
 									value={day}
-									onChange={(e) => setDay(e.currentTarget.value.replace(/\D/g, ""))}
+									onChange={(e) =>
+										setDay(e.currentTarget.value.replace(/\D/g, ""))
+									}
 								/>
 								<select
 									className="field__input field__select"
@@ -289,7 +305,9 @@ function SignUp() {
 									placeholder="YYYY"
 									aria-label="Year"
 									value={year}
-									onChange={(e) => setYear(e.currentTarget.value.replace(/\D/g, ""))}
+									onChange={(e) =>
+										setYear(e.currentTarget.value.replace(/\D/g, ""))
+									}
 								/>
 							</div>
 							{errors.dob ? (
@@ -400,7 +418,11 @@ function SignUp() {
 							value={email}
 							onChange={setEmail}
 							placeholder="you@example.com"
-							hint={isMinor ? "The adult named in the last step signs in with this." : undefined}
+							hint={
+								isMinor
+									? "The adult named in the last step signs in with this."
+									: undefined
+							}
 							error={errors.email}
 							disabled={busy}
 						/>
@@ -417,8 +439,12 @@ function SignUp() {
 							disabled={busy}
 						/>
 						<ul className="auth__reqs">
-							<li data-ok={password.length >= 10 || undefined}>10 characters or more</li>
-							<li data-ok={/[0-9]/.test(password) || undefined}>one number helps</li>
+							<li data-ok={password.length >= 10 || undefined}>
+								10 characters or more
+							</li>
+							<li data-ok={/[0-9]/.test(password) || undefined}>
+								one number helps
+							</li>
 						</ul>
 					</>
 				) : null}
@@ -429,14 +455,23 @@ function SignUp() {
 					</p>
 				) : null}
 
-				<button type="button" className="auth__primary" onClick={advance} disabled={busy}>
-					{step === 4 ? (busy ? "Creating your account" : "Create account") : "Continue"}
+				<button
+					type="button"
+					className="auth__primary"
+					onClick={advance}
+					disabled={busy}
+				>
+					{step === 4
+						? busy
+							? "Creating your account"
+							: "Create account"
+						: "Continue"}
 				</button>
 
 				{step === 1 ? (
 					<span className="auth__secondary-note">
-						Signing up keeps your chats when you switch device, and gets them back
-						if this browser is cleared.
+						Signing up keeps your chats when you switch device, and gets them
+						back if this browser is cleared.
 					</span>
 				) : null}
 			</div>

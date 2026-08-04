@@ -95,10 +95,14 @@ export function RouteError({ error }: { error: Error }) {
 export function RoutePending() {
 	return (
 		<div className="route-state route-state--pending">
-			<div className="route-state__orb route-state__orb--pulse" aria-hidden="true" />
-			<p className="sr-only" role="status">
-				Loading.
-			</p>
+			<div
+				className="route-state__orb route-state__orb--pulse"
+				aria-hidden="true"
+			/>
+			{/* `<output>` rather than `<p role="status">`: it carries the role
+			    implicitly, so the semantics are identical and there is one fewer
+			    thing to keep in sync. Visually hidden either way. */}
+			<output className="sr-only">Loading.</output>
 		</div>
 	);
 }

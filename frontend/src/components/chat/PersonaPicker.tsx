@@ -1,11 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronDownIcon, PersonIcon } from "#/components/icons";
-import {
-	PERSONAS,
-	type PersonaId,
-	personaById,
-} from "#/lib/aspire/personas";
+import { PERSONAS, type PersonaId, personaById } from "#/lib/aspire/personas";
 
 /**
  * Who the assistant is talking to, chosen from the composer.
@@ -76,6 +72,7 @@ export function PersonaPicker({
 
 	// Correct against the menu's real height once it exists, so a short viewport
 	// cannot push the first option off the top of the screen.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `measure` reads live geometry and is recreated every render; declaring it would re-run this on every render and fight the guard below
 	useLayoutEffect(() => {
 		const menu = menuRef.current;
 		if (!open || !menu || !at) return;
@@ -121,7 +118,9 @@ export function PersonaPicker({
 		if (!open) return;
 		const menu = menuRef.current;
 		if (!menu) return;
-		const checked = menu.querySelector<HTMLButtonElement>('[aria-checked="true"]');
+		const checked = menu.querySelector<HTMLButtonElement>(
+			'[aria-checked="true"]',
+		);
 		(checked ?? menu.querySelector<HTMLButtonElement>("button"))?.focus();
 	}, [open]);
 
@@ -169,7 +168,9 @@ export function PersonaPicker({
 				}
 			>
 				<PersonIcon />
-				<span className="persona__name">{current ? current.name : "Everyone"}</span>
+				<span className="persona__name">
+					{current ? current.name : "Everyone"}
+				</span>
 				<ChevronDownIcon size={14} />
 				<span className="sr-only">
 					{current
@@ -200,50 +201,52 @@ export function PersonaPicker({
 							style={{ top: at.top, left: at.left }}
 							onKeyDown={onMenuKeyDown}
 						>
-					{PERSONAS.map((option) => (
-						<button
-							key={option.id}
-							type="button"
-							role="menuitemradio"
-							aria-checked={persona === option.id}
-							className="persona__option"
-							onClick={() => choose(option.id)}
-						>
-							<span className="persona__tick" aria-hidden="true">
-								{persona === option.id ? <CheckIcon /> : null}
-							</span>
-							<span className="persona__text">
-								<span className="persona__label">
-									{option.name}
-									<span className="persona__audience">{option.audience}</span>
-								</span>
-								<span className="persona__blurb">{option.blurb}</span>
-							</span>
-						</button>
-					))}
+							{PERSONAS.map((option) => (
+								<button
+									key={option.id}
+									type="button"
+									role="menuitemradio"
+									aria-checked={persona === option.id}
+									className="persona__option"
+									onClick={() => choose(option.id)}
+								>
+									<span className="persona__tick" aria-hidden="true">
+										{persona === option.id ? <CheckIcon /> : null}
+									</span>
+									<span className="persona__text">
+										<span className="persona__label">
+											{option.name}
+											<span className="persona__audience">
+												{option.audience}
+											</span>
+										</span>
+										<span className="persona__blurb">{option.blurb}</span>
+									</span>
+								</button>
+							))}
 
-					{/* "Not chosen" is a real state and stays reachable. The service
+							{/* "Not chosen" is a real state and stays reachable. The service
 					    treats an unknown persona as permissive rather than as any
 					    particular one, so this is not a fifth persona -- it is the
 					    absence of the question, which is what a first-time visitor who
 					    has not said who they are should get. */}
-					<button
-						type="button"
-						role="menuitemradio"
-						aria-checked={persona === null}
-						className="persona__option persona__option--none"
-						onClick={() => choose(null)}
-					>
-						<span className="persona__tick" aria-hidden="true">
-							{persona === null ? <CheckIcon /> : null}
-						</span>
-						<span className="persona__text">
-							<span className="persona__label">Everyone</span>
-							<span className="persona__blurb">
-								No particular audience. The default.
-							</span>
-						</span>
-					</button>
+							<button
+								type="button"
+								role="menuitemradio"
+								aria-checked={persona === null}
+								className="persona__option persona__option--none"
+								onClick={() => choose(null)}
+							>
+								<span className="persona__tick" aria-hidden="true">
+									{persona === null ? <CheckIcon /> : null}
+								</span>
+								<span className="persona__text">
+									<span className="persona__label">Everyone</span>
+									<span className="persona__blurb">
+										No particular audience. The default.
+									</span>
+								</span>
+							</button>
 						</div>,
 						document.body,
 					)

@@ -1,11 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type AskResult, AspireError, type Source } from "./api";
-import { blockIsClosed, settledBlocks } from "./settled";
-import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
-import { ensureSession } from "./session";
-import { useSession } from "./use-session";
 import {
 	loadConversations,
 	type StoredConversation,
@@ -13,22 +9,26 @@ import {
 	titleFor,
 } from "./history";
 import {
-	clearTitleLockInCache,
-	conversationQuery,
-	keys,
-	conversationsQuery,
-	readConversation,
-	retitleInCache,
-	titleSnapshot,
-	upsertConversation,
-} from "./queries";
-import {
 	type Answer,
 	type AnswerBlock,
 	answerToText,
 	parseAnswer,
 } from "./knowledge";
+import {
+	clearTitleLockInCache,
+	conversationQuery,
+	conversationsQuery,
+	keys,
+	readConversation,
+	retitleInCache,
+	titleSnapshot,
+	upsertConversation,
+} from "./queries";
+import { ensureSession } from "./session";
+import { blockIsClosed, settledBlocks } from "./settled";
+import { streamAspire } from "./stream";
 import { requestTitle } from "./title";
+import { useSession } from "./use-session";
 
 export type ChatMessage =
 	| { id: number; role: "user"; text: string }
@@ -142,7 +142,8 @@ const MAX_RATE_ENDED = 8;
 
 /** Words in a block. Lists count every word of every item, not the items. */
 function blockWords(block: AnswerBlock): number {
-	if (block.kind === "paragraph") return block.text ? block.text.split(" ").length : 0;
+	if (block.kind === "paragraph")
+		return block.text ? block.text.split(" ").length : 0;
 	return block.items.reduce(
 		(total, item) => total + (item ? item.split(" ").length : 0),
 		0,
@@ -159,7 +160,10 @@ function blockWords(block: AnswerBlock): number {
  */
 function sliceBlock(block: AnswerBlock, words: number): AnswerBlock {
 	if (block.kind === "paragraph") {
-		return { kind: "paragraph", text: block.text.split(" ").slice(0, words).join(" ") };
+		return {
+			kind: "paragraph",
+			text: block.text.split(" ").slice(0, words).join(" "),
+		};
 	}
 
 	const items: Array<string> = [];
@@ -763,7 +767,9 @@ export function useConversation({
 			// no longer grow -- otherwise the words that arrive next are written
 			// into a block the typewriter has already left behind, and never
 			// appear until the finished answer replaces the revealed one.
-			if (!blockIsClosed(state.blockIndex, state.answer.blocks, state.textEnded))
+			if (
+				!blockIsClosed(state.blockIndex, state.answer.blocks, state.textEnded)
+			)
 				break;
 			state.blockIndex += 1;
 			state.wordIndex = 0;

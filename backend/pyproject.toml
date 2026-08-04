@@ -42,3 +42,17 @@ dev = [
 # Put the project root on sys.path so `from app...` resolves without installing.
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    # P0-010: the whole suite is ~14-20 minutes, and almost all of it is in a
+    # handful of modules -- bcrypt rounds on the auth paths, real sleeps in the
+    # rate-limit windows, and model/embedding fixtures. A gate nobody wants to
+    # wait for is a gate people learn to skip.
+    #
+    # CI runs `-m "not slow"` first and fails fast, then `-m slow`. Both gate
+    # the deploy; the split is about WHEN you hear that something is obviously
+    # broken, not about what is checked.
+    #
+    # Mark a module `pytestmark = pytest.mark.slow` when it is dominated by
+    # wall-clock cost rather than by logic.
+    "slow: dominated by wall-clock cost (bcrypt, real sleeps, model fixtures)",
+]

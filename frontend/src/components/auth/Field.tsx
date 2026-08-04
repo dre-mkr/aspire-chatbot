@@ -9,7 +9,13 @@ import { useId, useState } from "react";
  * a phone it is usually off screen by the time they are typing.
  */
 
-export type FieldIcon = "mail" | "lock" | "user" | "calendar" | "school" | "phone";
+export type FieldIcon =
+	| "mail"
+	| "lock"
+	| "user"
+	| "calendar"
+	| "school"
+	| "phone";
 
 const PATHS: Record<FieldIcon, ReactPath> = {
 	mail: [

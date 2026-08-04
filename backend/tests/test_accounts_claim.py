@@ -20,9 +20,11 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import database_enabled  # noqa: E402
 from app.main import app  # noqa: E402
 
-pytestmark = pytest.mark.skipif(
+#: P0-010 -- see the `slow` marker note in pyproject.toml. Both markers apply:
+#: this needs a live dependency AND is dominated by wall-clock cost.
+pytestmark = [pytest.mark.slow, pytest.mark.skipif(
     not database_enabled(), reason="These are database-backed account tests."
-)
+)]
 
 STRONG = "seaview7392pass"
 

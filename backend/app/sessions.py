@@ -32,6 +32,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -53,6 +54,28 @@ from app.db import database_enabled, session
 from app.db.models import User
 
 logger = logging.getLogger(__name__)
+
+
+async def _record_cap_bypass() -> None:
+    """Count a session admitted without its cap being checked.
+
+    Written to the same instance whose failure caused the bypass, which sounds
+    circular and is not: the common case is Valkey answering slowly or one
+    command erroring, not the whole instance being gone. When it genuinely is
+    gone this write fails too and the counter simply does not move -- which is
+    why the counter's absence must never be read as "no bypasses", and why
+    `/health` reports it alongside the cache's own reachability.
+    """
+    client = cache.get_client()
+    if client is None:
+        return
+    try:
+        key = f"{cache.namespace()}session-cap-bypass:{int(time.time()) // 3600}"
+        await client.incr(key)
+        await client.expire(key, 7 * 3600)
+    except Exception:
+        # Accounting must never be the reason a session is refused.
+        pass
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -115,7 +138,28 @@ async def _within_limit(ip: str) -> bool:
             await client.expire(key, 3600)
         return count <= settings.anonymous_sessions_per_ip_per_hour
     except Exception:
+        # DECISION (P1-010, 2026-08-04): fail OPEN, and make it visible.
+        #
+        # This is the only control on anonymous identity creation, and it
+        # disappears exactly when Valkey is unreachable -- which is plausibly
+        # during the load an attacker is causing. That is a real tradeoff and it
+        # is taken deliberately rather than by accident:
+        #
+        #   Failing closed means a Valkey outage stops every new visitor from
+        #   using the service at all. This is a government service for children;
+        #   an outage that turns into a total lockout is a worse failure than a
+        #   window in which anonymous sessions are uncapped. The blast radius of
+        #   failing open is bounded -- sessions are cheap rows, and the
+        #   expensive endpoints have their own limiter (P1-001) which fails
+        #   CLOSED precisely because model calls are what cost money.
+        #
+        #   So: the cheap control fails open, the expensive one fails closed.
+        #
+        # What was missing was not the decision, it was the visibility. It is
+        # counted now, so "the cap is not being enforced" is a number somebody
+        # can alert on rather than a log line nobody reads.
         logger.warning("Rate-limit check failed; allowing the session.", exc_info=True)
+        await _record_cap_bypass()
         return True
 
 
@@ -156,11 +200,19 @@ async def create_anonymous_session(
         token = mint_token(user.id, user.account_type, user.session_epoch)
         # Enough to investigate a burst, and no more: which identity, from which
         # (hashed) source, seeded by which browser. No address, no user agent.
+        #
+        # The device id is hashed with the same treatment as the IP beside it.
+        # It is not a secret and is never accepted as auth, but it IS a stable
+        # per-browser identifier for a child, and it was sitting in plaintext
+        # next to an address that had been carefully pseudonymised -- one line,
+        # two identifiers, two different standards of care. Hashed, it still
+        # correlates two log lines from the same browser, which is the entire
+        # reason it is logged.
         logger.info(
-            "anonymous session created user=%s ip_hash=%s device=%s",
+            "anonymous session created user=%s ip_hash=%s device_hash=%s",
             user.id,
             hash_ip(ip)[:12],
-            (device_id or "none")[:8],
+            hash_ip(device_id)[:12] if device_id else "none",
         )
         return to_session(user, token)
 

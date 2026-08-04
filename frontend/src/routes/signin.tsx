@@ -58,9 +58,11 @@ function SignIn() {
 	const [password, setPassword] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [linkSent, setLinkSent] = useState(false);
-	const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>(
-		{},
-	);
+	const [errors, setErrors] = useState<{
+		email?: string;
+		password?: string;
+		form?: string;
+	}>({});
 
 	/**
 	 * Everything user-scoped belongs to whoever is signed in.
@@ -87,7 +89,9 @@ function SignIn() {
 			resetScopedCaches();
 			// The claimed conversations have to appear without a manual reload,
 			// so the list is asked for again the moment the identity changes.
-			await queryClient.invalidateQueries({ queryKey: keys.allConversations() });
+			await queryClient.invalidateQueries({
+				queryKey: keys.allConversations(),
+			});
 			// Checked again here, deliberately. The validator on the route is the
 			// first line, but the value that matters is the one handed to
 			// `navigate`, and an unchecked redirect target is how a sign-in page
@@ -124,7 +128,10 @@ function SignIn() {
 			setLinkSent(true);
 		} catch (error) {
 			setErrors({
-				form: error instanceof AuthError ? error.message : "Could not send that link.",
+				form:
+					error instanceof AuthError
+						? error.message
+						: "Could not send that link.",
 			});
 		} finally {
 			setBusy(false);
@@ -141,8 +148,8 @@ function SignIn() {
 				footLinkTo="/signin"
 			>
 				<p className="auth__note">
-					Nothing arrived? Look in spam, then ask for another link. Nobody can get
-					in without it.
+					Nothing arrived? Look in spam, then ask for another link. Nobody can
+					get in without it.
 				</p>
 			</AuthSurface>
 		);

@@ -50,7 +50,26 @@ logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
 #: How long a session lasts before the client must refresh it.
-TOKEN_TTL = timedelta(days=30)
+#:
+#: DECISION (P9-005, 2026-08-04): shortened from 30 days to 7, and `jti` stays
+#: unrecorded.
+#:
+#: A `jti` is minted on every token and never written down or checked, so there
+#: is no replay protection: a stolen token is usable for its whole life unless
+#: somebody bumps that user's `session_epoch`. Standard for stateless JWT, and
+#: the two ways out are a denylist or a shorter window.
+#:
+#: A denylist is rejected on purpose. It would put a Valkey read on the auth
+#: path of every request, which means the service stops authenticating when the
+#: cache is down -- trading a small, bounded risk for an availability dependency
+#: on a component this codebase deliberately treats as optional everywhere else
+#: (see `_within_limit`, and every "never raises" comment in `cache.py`).
+#:
+#: So the window shrinks instead. 30 days on a children's product is a long time
+#: to be wrong about; 7 keeps the refresh path (which already exists and is
+#: exercised on every load) doing the work, and revocation via `session_epoch`
+#: remains immediate for the cases that matter -- sign-out and account claim.
+TOKEN_TTL = timedelta(days=7)
 #: How long past expiry a token still satisfies the chat endpoints.
 #:
 #: A reply can take a minute; a token expiring during one must not turn into an
@@ -112,6 +131,10 @@ def mint_token(user_id: uuid.UUID, account_type: str, session_epoch: int) -> str
             "epo": session_epoch,
             "iat": int(now.timestamp()),
             "exp": int((now + TOKEN_TTL).timestamp()),
+            # Kept, and deliberately not recorded -- see TOKEN_TTL. It makes
+            # every token unique, which is what stops two tokens minted in the
+            # same second for the same user being byte-identical, and it is the
+            # handle a denylist would use if the decision above is ever revisited.
             "jti": uuid.uuid4().hex,
         },
         _secret(),

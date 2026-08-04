@@ -18,8 +18,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-	type InlineNode,
 	answerToText,
+	type InlineNode,
 	parseAnswer,
 	parseInline,
 } from "./knowledge.ts";
@@ -70,7 +70,9 @@ test("P1-004: bracketed text mid-sentence is untouched", () => {
 // ── P1-005 — ordered lists lose their numbering ─────────────────────────────
 
 test("P1-005: an ordered list is distinguishable from an unordered one", () => {
-	const ordered = parseAnswer("Steps:\n1. Get a form\n2. Sign it\n3. Return it");
+	const ordered = parseAnswer(
+		"Steps:\n1. Get a form\n2. Sign it\n3. Return it",
+	);
 	const list = ordered.find((block) => block.kind === "list");
 	assert.ok(list && list.kind === "list");
 
@@ -145,7 +147,10 @@ test("P1-007: a stray ** does not bold the remainder of a settled answer", () =>
 // trade one visible defect for another.
 
 test("revealing: a half-typed link still renders as its label", () => {
-	assert.equal(rendered(parseInline("Visit [the site](htt", true)), "Visit the site");
+	assert.equal(
+		rendered(parseInline("Visit [the site](htt", true)),
+		"Visit the site",
+	);
 	assert.equal(rendered(parseInline("Visit [the sit", true)), "Visit the sit");
 });
 
@@ -156,9 +161,15 @@ test("revealing: an unterminated ** is still bold mid-reveal", () => {
 
 test("settled: a complete markdown link is still a link either way", () => {
 	for (const revealing of [false, true]) {
-		const nodes = parseInline("See [ASPIRE](https://aspire.gov.kn/)", revealing);
+		const nodes = parseInline(
+			"See [ASPIRE](https://aspire.gov.kn/)",
+			revealing,
+		);
 		const link = nodes.find((node) => node.kind === "link");
-		assert.ok(link?.kind === "link", `lost the link with revealing=${revealing}`);
+		assert.ok(
+			link?.kind === "link",
+			`lost the link with revealing=${revealing}`,
+		);
 		assert.equal(link.href, "https://aspire.gov.kn/");
 	}
 });

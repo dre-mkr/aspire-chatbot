@@ -123,6 +123,7 @@ export function Composer({
 	 * reports `false` for the first client paint to keep hydration quiet, which
 	 * is precisely the paint this effect runs on.
 	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: focusSignal is the trigger, not an input
 	useEffect(() => {
 		if (window.matchMedia(TOUCH).matches) return;
 		fieldRef.current?.focus();
@@ -247,7 +248,6 @@ export function Composer({
 						<p
 							id={counterId}
 							className="composer__counter"
-							role="status"
 							aria-live="polite"
 							data-full={draft.length >= MAX_CHARS || undefined}
 						>
@@ -306,9 +306,7 @@ export function Composer({
 							aria-pressed={simpleMode}
 							onClick={onToggleSimpleMode}
 							title={
-								simpleMode
-									? "Explain it simply: on"
-									: "Explain it simply: off"
+								simpleMode ? "Explain it simply: on" : "Explain it simply: off"
 							}
 						>
 							<SparkIcon />

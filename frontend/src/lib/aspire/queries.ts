@@ -18,10 +18,10 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { fetchConversation, fetchConversations } from "./conversations";
-import { currentSession } from "./session";
 import { fetchEligibilityState } from "./eligibility";
 import { fetchGameState } from "./games";
 import type { StoredConversation } from "./history";
+import { currentSession } from "./session";
 
 /**
  * Every cache key in the product.
@@ -94,7 +94,9 @@ export const keys = {
  * genuinely wanted: a conversation carried on in another tab should appear when
  * you come back to this one, and the list is cheap.
  */
-export const conversationsQuery = (ownerId = currentSession()?.userId ?? "anon") =>
+export const conversationsQuery = (
+	ownerId = currentSession()?.userId ?? "anon",
+) =>
 	queryOptions({
 		queryKey: keys.conversations(ownerId),
 		queryFn: fetchConversations,
@@ -238,7 +240,9 @@ function owner(): string {
 }
 
 export function readConversations(queryClient: QueryClient): Conversations {
-	return queryClient.getQueryData<Conversations>(keys.conversations(owner())) ?? [];
+	return (
+		queryClient.getQueryData<Conversations>(keys.conversations(owner())) ?? []
+	);
 }
 
 export function readConversation(
@@ -248,8 +252,9 @@ export function readConversation(
 	// The list carries no transcripts, so a full record is preferred when one
 	// has been loaded and the summary is the fallback.
 	return (
-		queryClient.getQueryData<StoredConversation>(keys.messages(owner(), threadId)) ??
-		readConversations(queryClient).find((c) => c.threadId === threadId)
+		queryClient.getQueryData<StoredConversation>(
+			keys.messages(owner(), threadId),
+		) ?? readConversations(queryClient).find((c) => c.threadId === threadId)
 	);
 }
 
@@ -262,11 +267,17 @@ export function upsertConversation(
 	// first message is sent, and it resolves with a list that does not contain
 	// the conversation being created — landing after this write and erasing the
 	// row from the rail a beat after it appeared.
-	void queryClient.cancelQueries({ queryKey: keys.conversations(owner()) }, { revert: false });
-	queryClient.setQueryData<Conversations>(keys.conversations(owner()), (previous) => [
-		conversation,
-		...(previous ?? []).filter((c) => c.threadId !== conversation.threadId),
-	]);
+	void queryClient.cancelQueries(
+		{ queryKey: keys.conversations(owner()) },
+		{ revert: false },
+	);
+	queryClient.setQueryData<Conversations>(
+		keys.conversations(owner()),
+		(previous) => [
+			conversation,
+			...(previous ?? []).filter((c) => c.threadId !== conversation.threadId),
+		],
+	);
 
 	// And the transcript itself, which is the half that was missing.
 	//
@@ -311,9 +322,13 @@ export function retitleInCache(
 
 	// Same reason as the optimistic insert: a list fetch already in flight
 	// answers with the old name and would land on top of this one.
-	void queryClient.cancelQueries({ queryKey: keys.conversations(owner()) }, { revert: false });
-	queryClient.setQueryData<Conversations>(keys.conversations(owner()), (previous) =>
-		(previous ?? []).map(apply),
+	void queryClient.cancelQueries(
+		{ queryKey: keys.conversations(owner()) },
+		{ revert: false },
+	);
+	queryClient.setQueryData<Conversations>(
+		keys.conversations(owner()),
+		(previous) => (previous ?? []).map(apply),
 	);
 	queryClient.setQueryData<StoredConversation>(
 		keys.messages(owner(), threadId),
@@ -341,12 +356,14 @@ export function clearTitleLockInCache(
 	queryClient: QueryClient,
 	threadId: string,
 ) {
-	queryClient.setQueryData<Conversations>(keys.conversations(owner()), (previous) =>
-		(previous ?? []).map((conversation) =>
-			conversation.threadId === threadId
-				? { ...conversation, titleSource: undefined }
-				: conversation,
-		),
+	queryClient.setQueryData<Conversations>(
+		keys.conversations(owner()),
+		(previous) =>
+			(previous ?? []).map((conversation) =>
+				conversation.threadId === threadId
+					? { ...conversation, titleSource: undefined }
+					: conversation,
+			),
 	);
 }
 
@@ -379,7 +396,9 @@ export function invalidateAfterTurn(
 	});
 	// Reaches this conversation's transcript too: `["conversations", id]` is a
 	// prefix of `["conversations", id, "messages"]`.
-	void queryClient.invalidateQueries({ queryKey: keys.conversation(owner(), threadId) });
+	void queryClient.invalidateQueries({
+		queryKey: keys.conversation(owner(), threadId),
+	});
 	// `exact`, because `["conversations", owner]` is a PREFIX of every
 	// transcript key for that owner. Without it this line invalidated every
 	// cached conversation on every settled turn -- making the line above

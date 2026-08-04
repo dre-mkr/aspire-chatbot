@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { Link, type LinkProps } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 /**
  * The shell both auth pages sit in.
@@ -106,7 +106,12 @@ export function AuthSurface({
 				<div className="auth__form">
 					{onBack ? (
 						<button type="button" className="auth__back" onClick={onBack}>
-							<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+							<svg
+								width="17"
+								height="17"
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
 								<path
 									d="M15 18l-6-6 6-6"
 									fill="none"
@@ -160,7 +165,9 @@ export function AuthSurface({
 									</Link>
 								) : null}
 							</span>
-							{footNote ? <span className="auth__foot-note">{footNote}</span> : null}
+							{footNote ? (
+								<span className="auth__foot-note">{footNote}</span>
+							) : null}
 						</div>
 					) : null}
 				</div>

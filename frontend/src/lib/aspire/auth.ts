@@ -9,11 +9,11 @@
  */
 
 import {
-	type Session,
 	authHeaders,
 	clearSession,
 	currentSession,
 	resetToFreshAnonymous,
+	type Session,
 	storeSession,
 } from "./session";
 
@@ -55,7 +55,8 @@ export class AuthError extends Error {
 function fieldFor(status: number, detail: string): AuthError["field"] {
 	if (status === 409) return "email";
 	if (status === 401) return "password";
-	if (status === 422 && /password|characters|guess/i.test(detail)) return "password";
+	if (status === 422 && /password|characters|guess/i.test(detail))
+		return "password";
 	if (status === 422 && /email|address/i.test(detail)) return "email";
 	return "form";
 }
@@ -163,7 +164,10 @@ export async function register(fields: SignUpFields): Promise<AuthResult> {
 	);
 }
 
-export async function signIn(email: string, password: string): Promise<AuthResult> {
+export async function signIn(
+	email: string,
+	password: string,
+): Promise<AuthResult> {
 	return adopt(await post<WireSession>("/api/auth/login", { email, password }));
 }
 
@@ -177,12 +181,17 @@ export async function requestSignInLink(email: string): Promise<void> {
 	await post<{ sent: boolean }>("/api/auth/signin-link", { email });
 }
 
-export async function completeReset(token: string, password: string): Promise<AuthResult> {
+export async function completeReset(
+	token: string,
+	password: string,
+): Promise<AuthResult> {
 	return adopt(await post<WireSession>("/api/auth/reset", { token, password }));
 }
 
 export async function redeemSignInLink(token: string): Promise<AuthResult> {
-	return adopt(await post<WireSession>("/api/auth/signin-link/redeem", { token }));
+	return adopt(
+		await post<WireSession>("/api/auth/signin-link/redeem", { token }),
+	);
 }
 
 /**
@@ -214,7 +223,8 @@ export function renewSessionIfStale(): void {
 	if (!session || renewing) return;
 	// Unknown expiry means a session stored before expiry was recorded. Left
 	// alone rather than renewed on a guess.
-	if (!session.expiresAt || session.expiresAt - Date.now() > RENEW_WITHIN_MS) return;
+	if (!session.expiresAt || session.expiresAt - Date.now() > RENEW_WITHIN_MS)
+		return;
 
 	renewing = post<WireSession>("/api/auth/refresh", {})
 		.then((wire) => {

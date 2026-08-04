@@ -45,17 +45,16 @@ EMBEDDING_MODEL_DIMENSIONS = {
     "BAAI/bge-small-en-v1.5": 384,
 }
 
-# The width the `documents.embedding` column was created with, and therefore the
-# only width that can be stored in it. Pinned rather than derived: a migration
-# has to produce the same DDL every time it runs, so it cannot read a setting
-# that someone may have changed since.
+# The width the `documents.embedding` column WAS created with.
 #
-# This must agree with `Settings.embeddings_model`. It is checked at startup
-# (`db.engine.check_embedding_dimensions`) rather than left to be discovered,
-# because the two live in different files and nothing else connects them.
+# The table is gone -- see migration 0008 and P7-007. Retrieval runs on Chroma
+# and always did; the pgvector schema was built, indexed, never written to, and
+# validated at every boot for a column nothing used.
 #
-# Changing the embedding model means a new migration AND a full re-embed. There
-# is no in-place conversion: the vectors themselves are different numbers.
+# These constants stay because the migration's `downgrade()` recreates the
+# column at this width, and because they are the record of what re-adopting
+# pgvector would have to match. Nothing reads them at runtime any more, and the
+# startup check that used to has been removed with the table.
 EMBEDDING_DIMENSIONS = 3072
 
 # pgvector indexes the `vector` type up to 2000 dimensions only. At 3072 the
@@ -74,40 +73,6 @@ def dimensions_for(model: str) -> int | None:
 
 class Base(DeclarativeBase):
     pass
-
-
-class Document(Base):
-    """One retrievable chunk of the knowledge base."""
-
-    __tablename__ = "documents"
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(
-        Vector(EMBEDDING_DIMENSIONS), nullable=False
-    )
-
-    # The filters that run *before* the similarity math. Real columns rather
-    # than JSONB keys because each one belongs in the WHERE clause of every
-    # search, and shrinking the candidate set first is both cheaper and more
-    # honest than fetching a wide top-N and discarding most of it afterwards.
-    language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
-    persona_tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}"
-    )
-    account_status_tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}"
-    )
-
-    source_url: Mapped[str | None] = mapped_column(Text)
-    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    # Whatever the source row carried that is worth keeping but not a column.
-    doc_metadata: Mapped[dict] = mapped_column(
-        "metadata", JSONB, nullable=False, server_default="{}"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
 
 
 class User(Base):

@@ -20,3 +20,10 @@ todos.json
 .impeccable/*.err
 .impeccable/*.txt
 .impeccable/*.png
+
+# One package manager. `deploy/update.sh` runs `bun install --frozen-lockfile`
+# and CI does the same, so a second lockfile is a second dependency tree that
+# can disagree with the one that actually ships.
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

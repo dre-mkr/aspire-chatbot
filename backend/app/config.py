@@ -117,6 +117,25 @@ class Settings(BaseSettings):
 
     # --- Retrieval --------------------------------------------------------
     retriever_k: int = Field(default=4, ge=1, le=20)
+    #: Minimum similarity for a chunk to reach the prompt. 0 disables the floor.
+    #:
+    #: Chroma's cosine relevance runs 0..1, higher being closer. 0.2 is
+    #: deliberately low: this exists to drop chunks that are plainly unrelated to
+    #: the question, not to adjudicate borderline ones. A floor that starves a
+    #: real question is a far worse failure than one that lets a weak chunk
+    #: through to a system prompt that already refuses correctly 10 times out
+    #: of 10. Raise it only with the eval set in front of you.
+    retriever_score_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
+
+    #: Generate follow-up chips on every turn, not just the opening one.
+    #:
+    #: They cost a full model call on EVERY non-card turn -- roughly a 2x
+    #: multiplier on per-turn model calls, for a UI affordance whose value is
+    #: entirely front-loaded: a reader on turn one does not yet know what to
+    #: ask, and by turn twelve they plainly do. The default is the opening turn
+    #: only. This exists to restore the old behaviour for anyone who wants to
+    #: measure the difference or disagrees with the trade.
+    follow_ups_always: bool = False
 
     # --- Postgres (Neon) --------------------------------------------------
     # MUST be the POOLED endpoint -- the host with `-pooler` in it. Neon's
@@ -198,8 +217,23 @@ class Settings(BaseSettings):
     title_requests_per_window: int = Field(default=20, ge=1, le=1000)
 
     # --- HTTP -------------------------------------------------------------
-    # Permissive for local dev. Tighten to the real frontend origin before deploying.
-    cors_allow_origins: list[str] = ["*"]
+    #: Origins allowed to call this API from a browser.
+    #:
+    #: The default was `["*"]`, which meant any website could drive `POST /chat`
+    #: from a visitor's browser at the programme's model cost. Production is
+    #: mitigated by nginx serving app and API on one origin so nothing
+    #: preflights, and `allow_credentials` is False so this was abuse exposure
+    #: rather than data theft -- but a wildcard default is a wildcard in any
+    #: deployment that does not happen to be behind that reverse proxy.
+    #:
+    #: The default is now the local dev origin, which is the only origin that
+    #: legitimately needs a cross-origin grant: the Vite dev server on :3000 is
+    #: a different origin from this API on :8000. Production sets
+    #: `CORS_ALLOW_ORIGINS=["https://aspire.eccugenai.app"]` explicitly.
+    #:
+    #: A deployment that genuinely wants the wildcard must now say so, which is
+    #: the point.
+    cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     log_level: str = "INFO"
 
     def resolved(self, path: Path) -> Path:

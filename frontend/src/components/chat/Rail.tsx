@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { AccountControl } from "#/components/auth/AccountControl";
 import {
 	ClockIcon,
@@ -34,7 +41,10 @@ interface RailProps {
 	onOpenPast: (conversation: StoredConversation) => void;
 	/** Writes one conversation out as a text file — any of them, not just the open one. */
 	onSaveConversation: (conversation: StoredConversation) => void;
-	onRenameConversation: (conversation: StoredConversation, title: string) => void;
+	onRenameConversation: (
+		conversation: StoredConversation,
+		title: string,
+	) => void;
 	onRegenerateTitle: (conversation: StoredConversation) => void;
 }
 
@@ -399,7 +409,13 @@ function HistoryRow({
 				<MoreIcon />
 			</button>
 
+			{/* The rule below suggests <fieldset>, which groups form CONTROLS inside
+			    a form. This is a positioned popover of actions -- rename, save,
+			    regenerate -- with no form anywhere near it, and a fieldset's own box
+			    model would land inside a fixed-position menu whose geometry is
+			    measured. role="group" with a label is what a screen reader needs. */}
 			{open && at ? (
+				// biome-ignore lint/a11y/useSemanticElements: a popover of actions, not a form control group
 				<div
 					className="row-menu"
 					ref={menuRef}
