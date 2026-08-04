@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import os
+import uuid
 
 import pytest
 
-os.environ.setdefault("SESSION_SECRET", "test-only-secret-not-for-production")
+os.environ.setdefault("SESSION_SECRET", "test-only-secret-not-for-production-32b+")
+
+# Give this run its own Valkey namespace.
+#
+# The per-IP session cap counts in Valkey, and that instance is shared -- with
+# other test runs and, in this deployment, with an unrelated application. Two
+# overlapping runs incremented the same counter, so `test_the_cap_eventually_
+# refuses` failed in a full run and passed in isolation. CI now runs pytest on
+# every push, so without this two PRs would flake each other on an abuse control.
+os.environ.setdefault("ASPIRE_CACHE_NAMESPACE", f"test-{uuid.uuid4().hex[:8]}:")
 
 # ── connections are never pooled across tests ────────────────────────────────
 #
