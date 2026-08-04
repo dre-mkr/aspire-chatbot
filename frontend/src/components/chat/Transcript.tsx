@@ -1,4 +1,12 @@
-import { useEffect, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import {
 	AlertIcon,
 	CheckIcon,
@@ -87,7 +95,42 @@ interface TranscriptProps {
 	 * chat from last week looked like it was being delivered live.
 	 */
 	animateAfterId: number;
+	/**
+	 * The scrolling ancestor, so the window can be measured against it.
+	 *
+	 * `.thread` in `AspireChat` owns the overflow, the remembered offset and the
+	 * follow-the-reveal effect. The virtualizer needs the same element, and
+	 * passing the ref down is cheaper than moving all of that in here.
+	 */
+	scrollRef: RefObject<HTMLDivElement | null>;
 }
+
+/**
+ * Below this many turns the list renders whole, exactly as it always did.
+ *
+ * Windowing is not free: it positions rows absolutely and sizes the container
+ * from estimates until the real heights are measured, which is a layout jump on
+ * first paint. Paying that on a three-turn conversation — the overwhelmingly
+ * common case, and the one where `.thread__inner`'s `margin-top: auto` bottom
+ * anchoring matters — would trade a measured problem nobody has for a visible
+ * one everybody has.
+ *
+ * 60 sits above the measured clean point (0 long tasks at 50 messages) and well
+ * below where it degrades (76ms at 200). By the time it engages the reader is
+ * deep in a conversation and pinned to the bottom, which is the cheapest moment
+ * to change strategy.
+ */
+const VIRTUALIZE_ABOVE = 60;
+
+/**
+ * Starting guess for a turn's height, refined by measurement.
+ *
+ * A question bubble is short and an answer with sources is tall; 220px is
+ * roughly their mean in the recorded conversations. Only unmeasured rows use
+ * it, so it decides how accurate the scrollbar is before you reach a row, not
+ * how anything renders.
+ */
+const ESTIMATED_TURN_PX = 220;
 
 export function Transcript({
 	messages,
@@ -100,6 +143,7 @@ export function Transcript({
 	game,
 	eligibility,
 	animateAfterId,
+	scrollRef,
 }: TranscriptProps) {
 	/**
 	 * The answer being revealed, rendered as the message it is about to become.
@@ -187,123 +231,204 @@ export function Transcript({
 					? settled.text
 					: "";
 
+	/**
+	 * Windowing, and how far down the scroller this list starts.
+	 *
+	 * Rows are positioned relative to the scroll container, not to `.transcript`,
+	 * so everything above it — the thread's top padding, the hero on the landing
+	 * phase — has to be subtracted or every row sits that much too low. Measured
+	 * rather than assumed: the hero collapses on the way into a conversation, so
+	 * the offset is not a constant.
+	 */
+	const listRef = useRef<HTMLDivElement>(null);
+	const [scrollMargin, setScrollMargin] = useState(0);
+	const windowed = turns.length > VIRTUALIZE_ABOVE;
+
+	useLayoutEffect(() => {
+		if (!windowed) return;
+		const list = listRef.current;
+		const scroller = scrollRef.current;
+		if (!list || !scroller) return;
+
+		const measure = () => {
+			setScrollMargin(
+				list.getBoundingClientRect().top -
+					scroller.getBoundingClientRect().top +
+					scroller.scrollTop,
+			);
+		};
+		measure();
+
+		// The hero's collapse changes the offset without resizing the list, so
+		// watching the list alone would miss it.
+		const observer = new ResizeObserver(measure);
+		observer.observe(scroller);
+		return () => observer.disconnect();
+	}, [windowed, scrollRef]);
+
+	const virtualizer = useVirtualizer({
+		// Zero while the list renders whole, so the virtualizer does no work at
+		// all on the common case rather than measuring a window nobody reads.
+		count: windowed ? turns.length : 0,
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => ESTIMATED_TURN_PX,
+		// Keyed by message id, not by index. The reveal and the answer it settles
+		// into are one element (see `turns` above); an index key would let a row
+		// be reused for a different turn and undo that.
+		getItemKey: useCallback((index: number) => turns[index]?.id ?? index, [turns]),
+		scrollMargin,
+		// Turns are tall — roughly 1.5 fit a 662px viewport — so 3 either side is
+		// already a screen and a half of runway. More is just DOM back again.
+		overscan: 3,
+	});
+
+	/**
+	 * One turn, wherever it is being drawn from.
+	 *
+	 * Extracted so the whole list and the windowed list render turns through the
+	 * same code. Two copies of this would drift, and the one that drifted would
+	 * be the windowed path — the one nobody looks at until a conversation is
+	 * sixty turns long.
+	 */
+	const renderTurn = (message: ChatMessage, index: number) => {
+		const arriving = message.id >= animateAfterId;
+
+		if (message.role === "user") {
+			return (
+				<div
+					key={message.id}
+					className="turn turn--user"
+					data-enter={arriving || undefined}
+				>
+					<p className="bubble">{message.text}</p>
+				</div>
+			);
+		}
+
+		// A game turn is the card and nothing else. It renders HERE, at its
+		// own place in the conversation, rather than being appended after
+		// the transcript — a card pinned to the end floated below every
+		// question asked after it.
+		//
+		// `game` is the live session from the server and there is only ever
+		// one, so an older game turn in a long conversation has nothing
+		// left to show and renders nothing. That is correct: the session it
+		// belonged to is over.
+		if (message.role === "game") {
+			if (!game || index !== liveGameIndex) return null;
+			return (
+				<div
+					key={message.id}
+					className="turn turn--assistant"
+					data-enter={arriving || undefined}
+				>
+					<div className="orb" aria-hidden="true" />
+					<div className="answer">
+						<h2 className="sr-only">ASPIRE AI</h2>
+						{game.state.prompt.kind === "statement" ? (
+							<TrueFalse
+								threadId={game.threadId}
+								state={game.state}
+								onChanged={game.onChanged}
+							/>
+						) : (
+							<WordScramble
+								threadId={game.threadId}
+								state={game.state}
+								onChanged={game.onChanged}
+							/>
+						)}
+					</div>
+				</div>
+			);
+		}
+
+		// An eligibility turn is the card and nothing else — no prose, no
+		// copy / Play / Ask again row. "Ask again" in particular would
+		// restart a flow someone is part-way through, and there is nothing
+		// to copy: the card is the answer.
+		if (message.role === "eligibility") {
+			if (!eligibility || index !== liveCheckIndex) return null;
+			return (
+				<div
+					key={message.id}
+					className="turn turn--assistant"
+					data-enter={arriving || undefined}
+				>
+					<div className="orb" aria-hidden="true" />
+					<div className="answer">
+						<h2 className="sr-only">ASPIRE AI</h2>
+						<EligibilityCheck
+							threadId={eligibility.threadId}
+							state={eligibility.state}
+							onChanged={eligibility.onChanged}
+							onSpeak={eligibility.onSpeak}
+							speakAvailable={eligibility.speakAvailable}
+						/>
+					</div>
+				</div>
+			);
+		}
+
+		if (message.role === "error") {
+			return (
+				<Failure
+					key={message.id}
+					text={message.text}
+					canRetry={message.canRetry}
+					tone={message.tone}
+					arriving={arriving}
+					onRetry={() => onRegenerate(message.id)}
+				/>
+			);
+		}
+
+		return (
+			<Answer
+				key={message.id}
+				message={message}
+				onRegenerate={onRegenerate}
+				playback={playback}
+				arriving={arriving}
+				// The same component draws the answer mid-reveal and the
+				// answer that has settled. Never two behind a conditional:
+				// that is the whole of the bug this replaced.
+				revealing={message.id === streaming?.id}
+				// How much of the conversation asking again would discard.
+				// The reveal always renders at the tail, so re-asking an
+				// older question necessarily drops what came after it —
+				// that is coherent, but it has to be consented to.
+				discards={messages.length - index - 1}
+			/>
+		);
+	};
+
 	return (
-		<div className="transcript">
+		<div className="transcript" ref={listRef}>
 			<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
 				{announcement}
 			</p>
-			{turns.map((message, index) => {
-				const arriving = message.id >= animateAfterId;
 
-				if (message.role === "user") {
-					return (
+			{windowed ? (
+				<div
+					className="transcript__window"
+					style={{ height: virtualizer.getTotalSize() }}
+				>
+					{virtualizer.getVirtualItems().map((row) => (
 						<div
-							key={message.id}
-							className="turn turn--user"
-							data-enter={arriving || undefined}
+							key={row.key}
+							data-index={row.index}
+							ref={virtualizer.measureElement}
+							className="transcript__row"
+							style={{ transform: `translateY(${row.start - scrollMargin}px)` }}
 						>
-							<p className="bubble">{message.text}</p>
+							{renderTurn(turns[row.index], row.index)}
 						</div>
-					);
-				}
-
-				// A game turn is the card and nothing else. It renders HERE, at its
-				// own place in the conversation, rather than being appended after
-				// the transcript — a card pinned to the end floated below every
-				// question asked after it.
-				//
-				// `game` is the live session from the server and there is only ever
-				// one, so an older game turn in a long conversation has nothing
-				// left to show and renders nothing. That is correct: the session it
-				// belonged to is over.
-				if (message.role === "game") {
-					if (!game || index !== liveGameIndex) return null;
-					return (
-						<div
-							key={message.id}
-							className="turn turn--assistant"
-							data-enter={arriving || undefined}
-						>
-							<div className="orb" aria-hidden="true" />
-							<div className="answer">
-								<h2 className="sr-only">ASPIRE AI</h2>
-								{game.state.prompt.kind === "statement" ? (
-									<TrueFalse
-										threadId={game.threadId}
-										state={game.state}
-										onChanged={game.onChanged}
-									/>
-								) : (
-									<WordScramble
-										threadId={game.threadId}
-										state={game.state}
-										onChanged={game.onChanged}
-									/>
-								)}
-							</div>
-						</div>
-					);
-				}
-
-				// An eligibility turn is the card and nothing else — no prose, no
-				// copy / Play / Ask again row. "Ask again" in particular would
-				// restart a flow someone is part-way through, and there is nothing
-				// to copy: the card is the answer.
-				if (message.role === "eligibility") {
-					if (!eligibility || index !== liveCheckIndex) return null;
-					return (
-						<div
-							key={message.id}
-							className="turn turn--assistant"
-							data-enter={arriving || undefined}
-						>
-							<div className="orb" aria-hidden="true" />
-							<div className="answer">
-								<h2 className="sr-only">ASPIRE AI</h2>
-								<EligibilityCheck
-									threadId={eligibility.threadId}
-									state={eligibility.state}
-									onChanged={eligibility.onChanged}
-									onSpeak={eligibility.onSpeak}
-									speakAvailable={eligibility.speakAvailable}
-								/>
-							</div>
-						</div>
-					);
-				}
-
-				if (message.role === "error") {
-					return (
-						<Failure
-							key={message.id}
-							text={message.text}
-							canRetry={message.canRetry}
-							tone={message.tone}
-							arriving={arriving}
-							onRetry={() => onRegenerate(message.id)}
-						/>
-					);
-				}
-
-				return (
-					<Answer
-						key={message.id}
-						message={message}
-						onRegenerate={onRegenerate}
-						playback={playback}
-						arriving={arriving}
-						// The same component draws the answer mid-reveal and the
-						// answer that has settled. Never two behind a conditional:
-						// that is the whole of the bug this replaced.
-						revealing={message.id === streaming?.id}
-						// How much of the conversation asking again would discard.
-						// The reveal always renders at the tail, so re-asking an
-						// older question necessarily drops what came after it —
-						// that is coherent, but it has to be consented to.
-						discards={messages.length - index - 1}
-					/>
-				);
-			})}
+					))}
+				</div>
+			) : (
+				turns.map(renderTurn)
+			)}
 
 			{isThinking ? (
 				<div className="thinking">

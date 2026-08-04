@@ -114,7 +114,8 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		streaming,
 		isThinking,
 		followUps,
-		history,
+		hasHistory,
+		activeStoredTitle,
 		threadId,
 		animateAfterId,
 		send,
@@ -338,7 +339,6 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const drawerMode = compact || phase === "landing";
 	const railClosed = drawerMode ? !drawerOpen : railCollapsed;
 	const drawerModal = drawerMode && drawerOpen;
-	const hasHistory = history.length > 0;
 
 	// Announce discrete events, not the stream. A live region around the
 	// transcript itself would read every four-word tick out loud.
@@ -701,10 +701,16 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	 * What the open conversation is called.
 	 *
 	 * Read from the same stored record the rail reads, so the bar and the list
-	 * can never disagree about a chat's name. `history` is the dependency
-	 * because it changes every time a title is written.
+	 * can never disagree about a chat's name.
+	 *
+	 * `activeStoredTitle` is the dependency and it is a trigger, not an input:
+	 * the value below comes from `readConversation`, which prefers a loaded
+	 * transcript over the list summary, but it needs a reason to re-run when a
+	 * rename lands. That reason used to be a subscription to the entire
+	 * conversation list, which re-rendered this whole surface whenever any row
+	 * moved. It is now one string, selected out of the same query.
 	 */
-	// biome-ignore lint/correctness/useExhaustiveDependencies: history is the trigger
+	// biome-ignore lint/correctness/useExhaustiveDependencies: activeStoredTitle is the trigger
 	const activeTitle = useMemo(() => {
 		const stored = threadId
 			? readConversation(queryClient, threadId)
@@ -718,7 +724,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		// to show, and it is the same string the fallback ladder would land on.
 		const firstQuestion = messages.find((m) => m.role === "user");
 		return firstQuestion?.role === "user" ? titleFor(firstQuestion.text) : "";
-	}, [threadId, history, messages]);
+	}, [threadId, activeStoredTitle, messages]);
 
 	// Browser tabs and history entries should say which chat this is.
 	useEffect(() => {
@@ -753,7 +759,6 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 				<Rail
 					collapsed={railClosed}
 					unreachable={drawerMode && !drawerOpen}
-					history={history}
 					activeThreadId={threadId}
 					onToggle={toggleRail}
 					onNewChat={startNewChat}
@@ -888,6 +893,7 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 										isThinking={isThinking}
 										followUps={followUps}
 										animateAfterId={animateAfterId}
+										scrollRef={threadRef}
 										onRegenerate={handleRegenerate}
 										onAsk={ask}
 										playback={{

@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AccountControl } from "#/components/auth/AccountControl";
 import {
 	ClockIcon,
@@ -11,9 +12,11 @@ import {
 } from "#/components/icons";
 import {
 	displayTitle,
-	type HistoryGroup,
+	groupByRecency,
 	type StoredConversation,
 } from "#/lib/aspire/history";
+import { conversationsQuery } from "#/lib/aspire/queries";
+import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 
 interface RailProps {
@@ -25,7 +28,6 @@ interface RailProps {
 	 * its controls stay in the tab order and focus vanishes into nothing.
 	 */
 	unreachable: boolean;
-	history: Array<HistoryGroup>;
 	activeThreadId: string | null;
 	onToggle: () => void;
 	onNewChat: () => void;
@@ -39,7 +41,6 @@ interface RailProps {
 export function Rail({
 	collapsed,
 	unreachable,
-	history,
 	activeThreadId,
 	onToggle,
 	onNewChat,
@@ -48,6 +49,21 @@ export function Rail({
 	onRenameConversation,
 	onRegenerateTitle,
 }: RailProps) {
+	/**
+	 * The list, subscribed here rather than passed in.
+	 *
+	 * It used to be read in `use-conversation` — the hook that owns the whole
+	 * chat surface — and threaded down as a prop, so every write to the list
+	 * re-rendered the transcript as well as the rail. Nothing else draws these
+	 * rows, so nothing else needs to hear about them changing.
+	 */
+	const { session } = useSession();
+	const conversations = useQuery(conversationsQuery(session?.userId ?? "anon"));
+	const history = useMemo(
+		() => groupByRecency(conversations.data ?? []),
+		[conversations.data],
+	);
+
 	// Anything folded away has to leave the tab order too, or focus lands on
 	// controls nobody can see.
 	const folded = collapsed || undefined;

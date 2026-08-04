@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type AskResult, AspireError, type Source } from "./api";
 import { blockIsClosed, settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
@@ -7,7 +7,6 @@ import { claimConversations, renameConversation } from "./conversations";
 import { ensureSession } from "./session";
 import { useSession } from "./use-session";
 import {
-	groupByRecency,
 	loadConversations,
 	type StoredConversation,
 	type StoredMessage,
@@ -413,24 +412,46 @@ export function useConversation({
 	const [isThinking, setIsThinking] = useState(false);
 	const queryClient = useQueryClient();
 
-	/**
-	 * Every conversation this browser owns.
-	 *
-	 * Server state now, not device state. It used to be read out of localStorage,
-	 * which quietly made a conversation a property of a browser: the transcripts
-	 * were already in Postgres, but nothing recorded whose they were, so nothing
-	 * could read them back.
-	 */
 	// Subscribed to the session, so a sign-in or sign-out re-renders this and
 	// the query picks up the new owner's key. Without it the hook would keep
 	// asking for the previous identity's list.
 	const { session } = useSession();
-	const conversations = useQuery(conversationsQuery(session?.userId ?? "anon"));
-	const history = useMemo(
-		() => groupByRecency(conversations.data ?? []),
-		[conversations.data],
-	);
 	const [threadId, setThreadId] = useState<string | null>(null);
+
+	/**
+	 * What this hook needs from the conversation list, and nothing more.
+	 *
+	 * This used to subscribe to the whole list and hand it down. That put the
+	 * rail's data inside the hook that owns the entire chat surface, so every
+	 * write to `["conversations", owner]` — the optimistic insert on send, a
+	 * retitle, the post-turn invalidation refetch — re-rendered the transcript
+	 * along with it. The list is now subscribed in `Rail`, which is the only
+	 * thing that draws it.
+	 *
+	 * Two facts about the list genuinely belong to the surface rather than the
+	 * rail, so they stay, each behind a `select` that narrows the subscription to
+	 * a primitive. A re-render then costs a shallow compare and happens only when
+	 * the value a consumer actually reads has changed — not on every row that
+	 * moved.
+	 */
+	const ownerId = session?.userId ?? "anon";
+	// Drives the layout: whether there is anything for the rail to offer at all.
+	const { data: hasHistory = false } = useQuery({
+		...conversationsQuery(ownerId),
+		select: (rows) => rows.length > 0,
+	});
+	/**
+	 * The open conversation's stored name, as the title bar's change trigger.
+	 *
+	 * The bar reads the full record imperatively (`readConversation`) so it can
+	 * prefer a loaded transcript over the list summary. What it lacked was a
+	 * reason to re-run when a rename landed, and subscribing to the whole list
+	 * for that was the expensive way to learn one string.
+	 */
+	const { data: activeStoredTitle } = useQuery({
+		...conversationsQuery(ownerId),
+		select: (rows) => rows.find((row) => row.threadId === threadId)?.title,
+	});
 	/**
 	 * The oldest message id allowed to play its entry animation.
 	 *
@@ -1381,7 +1402,8 @@ export function useConversation({
 		streaming,
 		isThinking,
 		followUps,
-		history,
+		hasHistory,
+		activeStoredTitle,
 		threadId,
 		animateAfterId,
 		send,

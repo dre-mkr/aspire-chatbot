@@ -1363,6 +1363,30 @@ body {
 	padding: 24px 0 18px;
 }
 
+/* Only present past 60 turns, where the transcript switches to windowing.
+   Its height is the virtualizer's total — every turn's, measured or estimated —
+   so the scrollbar and the remembered scroll offset stay honest even though
+   most of those turns are not in the DOM. */
+.transcript__window {
+	position: relative;
+	width: 100%;
+}
+
+/* Rows are taken out of flow and placed by transform, which is what lets the
+   list skip the ones nobody is looking at.
+
+   `position: absolute` also establishes a block formatting context, and that is
+   load-bearing rather than incidental: `.turn`'s 30px `margin-bottom` is
+   contained by it and therefore counted in `offsetHeight`. Measured heights
+   would otherwise all be 30px short and every row would creep upwards over the
+   one before it. */
+.transcript__row {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+}
+
 /* Restored by default, arriving only when the transcript says so.
    `rise` used to be unconditional, so every message read out of storage played
    its own entrance — reopening a forty-turn chat animated all forty at once,
