@@ -139,3 +139,77 @@ def test_the_window_requires_a_database():
 
     source = inspect.getsource(agent.build_agent)
     assert "memory_window_enabled and database_enabled()" in source
+
+
+# --- the opening turn does not read history (P13-003) --------------------
+
+
+@pytest.mark.anyio
+async def test_an_opening_turn_does_not_read_history(monkeypatch):
+    """`request.thread_id is None` means there is nothing to read, so nothing is.
+
+    The read being skipped is a ~680 ms round trip to Neon, paid ahead of the
+    model by every first-time reader, for a window that is empty by
+    construction: the thread id was minted by this same request.
+    """
+    from app import main
+    from app.schemas import ChatRequest
+
+    def explode(*args, **kwargs):  # pragma: no cover - the point is it is unreached
+        raise AssertionError("load_context was called on an opening turn")
+
+    monkeypatch.setattr(main, "load_context", explode)
+
+    messages = await main._prepare_messages(
+        ChatRequest(message="What is ASPIRE Day?"), "freshly-minted-id"
+    )
+    assert [m.content for m in messages] == ["What is ASPIRE Day?"]
+
+
+@pytest.mark.anyio
+async def test_an_opening_turn_sends_the_question_exactly_once(monkeypatch):
+    """The duplicate this removed, pinned so it cannot come back.
+
+    `_open_conversation` writes the question to Postgres before this runs, so a
+    window read would return it and `build_prompt` would then append it again --
+    sending the model the same sentence twice. Measured: input_token_count on an
+    opening turn roughly halved once the read was skipped.
+    """
+    from app import main
+    from app.schemas import ChatRequest
+
+    monkeypatch.setattr(
+        main, "load_context", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+
+    messages = await main._prepare_messages(
+        ChatRequest(message="How do I apply?"), "freshly-minted-id"
+    )
+    assert sum(1 for m in messages if m.content == "How do I apply?") == 1
+
+
+@pytest.mark.anyio
+async def test_a_continuing_turn_still_reads_history(monkeypatch):
+    """The saving must not extend to turns that actually have a past.
+
+    Without this, "skip the read" quietly becomes "never read", and the
+    assistant forgets every conversation while the latency table looks better
+    than ever.
+    """
+    from app import main
+    from app.schemas import ChatRequest
+
+    calls: list[str] = []
+
+    async def fake_load_context(db, conversation_id, *, window_turns):
+        calls.append(conversation_id)
+        return ConversationContext(recent=[_Turn(role="user", content="earlier question")])
+
+    monkeypatch.setattr(main, "load_context", fake_load_context)
+
+    messages = await main._prepare_messages(
+        ChatRequest(message="and after that?", thread_id="existing-thread"),
+        "existing-thread",
+    )
+    assert calls == ["existing-thread"]
+    assert [m.content for m in messages] == ["earlier question", "and after that?"]

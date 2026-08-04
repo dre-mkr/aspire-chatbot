@@ -521,16 +521,37 @@ async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMe
         record_stage(T_PROMPT_BUILD, 0.0)
         return [HumanMessage(content=request.message)]
 
-    # The window read: one round trip to Neon for the recent turns and the
-    # running summary. Summarisation itself is never here -- it runs in the arq
-    # worker, off the request path, which is what makes the window affordable.
-    with timed_stage(T_HISTORY):
+    # An opening turn has no history, so it does not read any.
+    #
+    # `request.thread_id is None` is exactly that case and nothing else: the id
+    # in `thread_id` was minted by this request microseconds ago, so no
+    # conversation and no message can predate it. Measured at ~700 ms of Neon
+    # round trip -- paid by every first-time reader, ahead of the model, for a
+    # window that is empty by construction.
+    #
+    # Not purely a saving. `_open_conversation` has already written this turn's
+    # question by the time we get here, so the read that is being skipped would
+    # have returned that question -- and `build_prompt` appends it again below.
+    # Skipping the read therefore also stops the opening question being sent to
+    # the model twice. That is a prompt change, it is an improvement, and it is
+    # NOT the whole of the bug: turns 2+ still duplicate their question, because
+    # there the window read is real and still contains it. Fixing that properly
+    # means ordering `_open_conversation` after this function -- a behaviour
+    # change that belongs in its own phase, not smuggled into a latency one.
+    if request.thread_id is None:
         context = ConversationContext()
-        async with session() as db:
-            if db is not None:
-                context = await load_context(
-                    db, thread_id, window_turns=settings.memory_window_turns
-                )
+        record_stage(T_HISTORY, 0.0)
+    else:
+        # The window read: one round trip to Neon for the recent turns and the
+        # running summary. Summarisation itself is never here -- it runs in the arq
+        # worker, off the request path, which is what makes the window affordable.
+        with timed_stage(T_HISTORY):
+            context = ConversationContext()
+            async with session() as db:
+                if db is not None:
+                    context = await load_context(
+                        db, thread_id, window_turns=settings.memory_window_turns
+                    )
 
     # Assembly plus the tiktoken pass `build_prompt` does to cost it. Local CPU,
     # no network -- and the encoding is fetched and cached on first use, which is
