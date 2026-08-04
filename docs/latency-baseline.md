@@ -588,3 +588,68 @@ Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-0
 Client-observed TTFT (cross-check, n=24): p50 4164.4 ms · p95 8051.3 ms
 
 Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+---
+
+# P13-004 — the question was being sent to the model twice
+
+Not a latency phase. A correctness fix, recorded here because P13-003 found it and
+only half-fixed it, and because it changes the prompt on every continuing turn.
+
+- **Change:** `app/main.py` — `_prepare_messages` now runs before `_open_conversation`, on both endpoints
+- **Tests:** `tests/test_streaming.py` (two, at the end)
+- **Date:** 2026-08-04
+
+## The bug
+
+`_open_conversation` wrote this turn's question to Postgres, and *then*
+`_prepare_messages` read the window back — which now contained that question — and
+`build_prompt` appended it again. Demonstrated on a real continuing turn, by
+capturing the messages the agent was actually handed:
+
+```
+AssertionError: the question was sent 2 times:
+  ['What is ASPIRE?', 'A savings programme.',
+   'And what about withdrawals?', 'And what about withdrawals?']
+```
+
+P13-003 removed it for opening turns as a side effect of skipping the empty
+window read. This removes it everywhere, by swapping the two calls. Both remain
+ahead of the model call, so `_open_conversation`'s actual guarantee — a question
+is recorded before it is answered, so a failed turn still leaves a conversation
+that can be reopened — is untouched.
+
+## Before/after
+
+The unit here is tokens, not milliseconds. A continuing turn with three prior
+exchanges in the window:
+
+| | input tokens | messages |
+|---|---:|---:|
+| before (question duplicated) | 162 | 8 |
+| after (question once) | 147 | 7 |
+| **saved** | **15 (9.3%)** | 1 |
+
+Opening turns were already covered by P13-003, where `input_token_count` fell from
+20–38 to 14–19.
+
+**No TTFT measurement for this phase, deliberately.** `latency_probe.py` fires
+opening turns only — every probe request omits `thread_id`, because that is the
+turn a first-time reader waits through — so it cannot exercise the path this
+changes. Running it would produce 60 turns of model-call noise around a null
+result on a code path the probe does not reach. The honest claim is the token
+figure above plus the demonstrated removal of the duplicate; there is no
+millisecond claim to make.
+
+## Why this was worth its own phase
+
+It changes what the model is shown on every turn past the first, which is exactly
+the kind of change a latency workstream is not allowed to make quietly. Bundling
+it into P13-003 would have buried a prompt change inside a commit whose headline
+was a 677 ms saving.
+
+Two tests pin it: one behavioural, asserting the question appears exactly once in
+what the agent receives on a continuing turn with real history; one structural,
+asserting the call order in `chat_stream`, so the ordering stays pinned even where
+the integration test skips for want of a database. Both were verified to FAIL on
+the old ordering — a test that passes either way would have been worthless here.

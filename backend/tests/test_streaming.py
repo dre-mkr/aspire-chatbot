@@ -394,3 +394,121 @@ def test_a_continuing_turn_does_not_pay_for_chips(client, monkeypatch):
     # and "no chips" is a value rather than an absence to time out on.
     assert [f["name"] for f in customs] == ["aspire.turn", "aspire.follow_ups"]
     assert customs[1]["value"]["follow_ups"] == []
+
+
+# --- the question must be sent exactly once (P13-004) --------------------
+
+
+def _run_db(coro) -> None:
+    """Run one database coroutine and leave nothing pooled behind it.
+
+    The dispose is the point. The engine is process-wide and its asyncpg
+    connections bind to whichever loop opened them, so a test that seeds on one
+    `asyncio.run` loop and cleans up on another hands the second loop a socket
+    belonging to the first and dies with "Event loop is closed" -- which is
+    exactly how this test first failed, masking the assertion it was written to
+    make. Disposing means the next caller, on whatever loop, opens a fresh one.
+    """
+    import asyncio
+
+    from app.db import dispose
+
+    async def go():
+        try:
+            await coro
+        finally:
+            await dispose()
+
+    asyncio.run(go())
+
+
+def _capturing_agent(chunks, captured: list):
+    """A fake agent that records the messages it was asked to answer."""
+
+    class Agent:
+        async def astream(self, inputs, config=None, stream_mode=None):
+            captured.append(list(inputs["messages"]))
+            for chunk in chunks:
+                yield chunk, {}
+
+    return lambda _simple=False: Agent()
+
+
+def test_a_continuing_turn_sends_the_question_exactly_once(client, monkeypatch):
+    """The bug: `_open_conversation` wrote the question, then history read it back.
+
+    Ordering `_open_conversation` before `_prepare_messages` meant the window read
+    returned the question this very turn had just recorded, and `build_prompt`
+    appended it again -- so the model received the same sentence twice, on every
+    turn past the opening one.
+
+    Asserted on the messages the agent is actually handed, because that is the
+    only place the duplicate was ever visible. Nothing about the response shape
+    changed when it was there, which is why it survived this long.
+    """
+    import uuid as _uuid
+
+    from app.db import database_enabled, session
+    from app.db.repository import append_turn, ensure_conversation
+
+    if not database_enabled():
+        pytest.skip("history comes from Postgres; nothing to duplicate without it")
+
+    thread_id = f"t-dup-{_uuid.uuid4()}"
+    question = "And what about withdrawals?"
+
+    async def seed():
+        async with session() as db:
+            await ensure_conversation(db, thread_id, language="en")
+            await append_turn(db, thread_id, role="user", content="What is ASPIRE?")
+            await append_turn(db, thread_id, role="assistant", content="A savings programme.")
+
+    async def clean():
+        from sqlalchemy import text
+
+        async with session() as db:
+            await db.execute(
+                text("DELETE FROM messages WHERE conversation_id=:t"), {"t": thread_id}
+            )
+            await db.execute(
+                text("DELETE FROM conversations WHERE id=:t"), {"t": thread_id}
+            )
+
+    _run_db(seed())
+    try:
+        captured: list[list] = []
+        answer = [AIMessageChunk(content=[{"type": "text", "text": "Yes."}], id="m-1")]
+        monkeypatch.setattr(main, "get_agent", _capturing_agent(answer, captured))
+
+        response = client.post(
+            "/chat/stream", json={"message": question, "thread_id": thread_id}
+        )
+        assert response.status_code == 200
+
+        assert captured, "the agent was never invoked"
+        contents = [m.content for m in captured[0]]
+        assert contents.count(question) == 1, (
+            f"the question was sent {contents.count(question)} times: {contents}"
+        )
+        # And the prior turn is still there -- the fix must not cost the history.
+        assert "What is ASPIRE?" in contents
+        assert "A savings programme." in contents
+    finally:
+        _run_db(clean())
+
+
+def test_history_is_read_before_the_question_is_recorded(client, monkeypatch):
+    """Structural guard on the ordering, independent of any database.
+
+    The behavioural test above needs Postgres. This one does not, so the ordering
+    stays pinned even where the integration test skips.
+    """
+    import inspect
+
+    source = inspect.getsource(main.chat_stream)
+    prepare = source.index("_prepare_messages(request, thread_id)")
+    record = source.index("_open_conversation(request, thread_id, who)")
+    assert prepare < record, (
+        "_open_conversation runs before _prepare_messages again; the window read "
+        "will return this turn's question and it will be sent to the model twice"
+    )

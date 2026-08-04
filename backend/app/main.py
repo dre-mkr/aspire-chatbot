@@ -529,15 +529,13 @@ async def _prepare_messages(request: ChatRequest, thread_id: str) -> list[BaseMe
     # round trip -- paid by every first-time reader, ahead of the model, for a
     # window that is empty by construction.
     #
-    # Not purely a saving. `_open_conversation` has already written this turn's
-    # question by the time we get here, so the read that is being skipped would
-    # have returned that question -- and `build_prompt` appends it again below.
-    # Skipping the read therefore also stops the opening question being sent to
-    # the model twice. That is a prompt change, it is an improvement, and it is
-    # NOT the whole of the bug: turns 2+ still duplicate their question, because
-    # there the window read is real and still contains it. Fixing that properly
-    # means ordering `_open_conversation` after this function -- a behaviour
-    # change that belongs in its own phase, not smuggled into a latency one.
+    # Both callers now run this BEFORE `_open_conversation`, and that ordering is
+    # load-bearing rather than incidental. It used to be the other way round, so
+    # the window read returned the question this very turn had just written and
+    # the `build_prompt` call below appended it again -- the model was sent the
+    # user's question twice, on every turn past the first. Anything that moves
+    # `_open_conversation` back in front of this reintroduces that;
+    # `tests/test_streaming.py` asserts the question appears exactly once.
     if request.thread_id is None:
         context = ConversationContext()
         record_stage(T_HISTORY, 0.0)
@@ -874,10 +872,11 @@ async def chat(
             annotate_timings(cache_hit=True, output_token_count=count_tokens(cached.reply))
             return cached
 
-        # Before the model, not after: see `_open_conversation`.
-        await _open_conversation(request, thread_id, who)
-
+        # History first, then record the question -- same ordering and the same
+        # reason as `/chat/stream`. Both are still ahead of the model, which is
+        # what `_open_conversation` actually promises.
         prepared = await _prepare_messages(request, thread_id)
+        await _open_conversation(request, thread_id, who)
 
         return await _serve_chat(request, thread_id, who, prepared)
 
@@ -1113,10 +1112,12 @@ async def chat_stream(
                 yield event
 
     async def _run() -> AsyncIterator[dict]:
-        # Recorded before the model runs, exactly as `/chat` does, so a turn
-        # that fails still leaves a conversation that can be reopened.
-        await _open_conversation(request, thread_id, who)
+        # Read the history BEFORE recording this turn's question, or the read
+        # returns the question and `build_prompt` appends it again -- see
+        # `_prepare_messages`. Still recorded before the model runs, which is the
+        # guarantee `_open_conversation` actually makes.
         prepared = await _prepare_messages(request, thread_id)
+        await _open_conversation(request, thread_id, who)
 
         collected: list[BaseMessage] = []
         #: The answer as it was actually sent, for persistence and the done
