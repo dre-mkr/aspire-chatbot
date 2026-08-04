@@ -242,11 +242,15 @@ Recorded here as measurements, not as decisions. Nothing below has been changed.
 
 ## Not yet measured
 
-- **Refusal and ambiguous turns.** Expected to have a materially worse TTFT than
-  the population above, because a turn that never calls the retriever is held by
-  `TurnBuffer` until its message ends — making TTFT equal to full generation time.
-  Stated as a hypothesis; it has not been measured and should not be quoted as a
-  finding.
+- **Refusal and ambiguous turns.** ~~Expected to have a materially worse TTFT.~~
+  **Measured in P13-004; the hypothesis was wrong.** A refusal is much *faster*
+  overall — `t_ttft` 3.3–3.5 s against 8.0 s for a grounded turn — because it makes
+  one model call and skips retrieval entirely. The half that was right is the
+  mechanism, and it now has a number: a turn calling no tool is held by
+  `TurnBuffer` until its message ends, and `d_buffer_hold` measured **383–398 ms**
+  on those turns against 0.1 ms on a grounded one. That hold is the tail of a
+  ~20-token refusal, so it scales with answer length — which is why removing the
+  retriever tool call cannot be done without redesigning the release rule.
 - **Multi-turn conversations.** Every turn here is an opening turn, so `t_history`
   is measured against an empty window and the summary path never runs.
 - **The voice path end to end**, including `t_tts_first_byte` against a real
@@ -509,20 +513,23 @@ phase rather than smuggled into a latency one. **Open, unfixed, recommended next
 
 ## Note on the config this was measured under
 
-`RETRIEVER_K` was 4 for P13-001 and P13-002 and is 3 here, and
-`FOLLOW_UPS_ALWAYS` is now true. Both changed outside this workstream, mid-session.
-The before and after above were taken minutes apart under identical settings, so
-the comparison holds — but these numbers are **not** comparable to the P13-001 and
-P13-002 tables above, which were taken at k=4. `retrieved_chunk_count` in the
-structured log is the way to tell which regime a measurement came from.
+`RETRIEVER_K` was 4 for P13-001 and P13-002 and is 3 here (set in `.env`), and
+`FOLLOW_UPS_ALWAYS` was **true at the time these two runs were taken** and has
+since been reverted to false. Both changed outside this workstream, mid-session.
 
-`FOLLOW_UPS_ALWAYS=true` also breaks
+The before and after above were taken minutes apart under identical settings, so
+this comparison holds — but these numbers are **not** comparable to the P13-001 and
+P13-002 tables, which were taken at k=4 with chips on opening turns only.
+`retrieved_chunk_count` in the structured log is the way to tell which regime any
+given measurement came from; it is 4 in the earlier tables and 3 here.
+
+While `FOLLOW_UPS_ALWAYS` was true it broke
 `tests/test_streaming.py::test_a_continuing_turn_does_not_pay_for_chips`, which
-exists to assert that a continuing turn does not spend a model call on chips.
-Confirmed by running that test under both values. It is a real assertion about
-per-turn cost, and turning the flag on in a latency workstream is worth a second
-look: its own config comment calls it "roughly a 2x multiplier on per-turn model
-calls".
+exists to assert that a continuing turn does not spend a model call on chips —
+confirmed by running that test under both values. It passes again now the flag is
+back to false. Worth knowing that the assertion is there, because the flag's own
+config comment calls it "roughly a 2x multiplier on per-turn model calls", which
+is a thing to turn on deliberately rather than by accident.
 ### after (k=3, opening turn skips the history read) run
 
 30 turns · cold-start turns: 1 · cache hits: 0 · turns with a visible token: 24
