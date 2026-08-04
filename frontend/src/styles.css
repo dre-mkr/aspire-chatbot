@@ -1316,10 +1316,6 @@ body {
 	align-items: center;
 	flex-shrink: 0;
 	text-align: center;
-	/* Both of these were dropped by b75e7490 along with the transition below,
-	   leaving the blank line that used to separate them. Without `overflow`
-	   the copy spills out of a max-height that is collapsing to zero. */
-	overflow: hidden;
 	opacity: var(--hero-opacity);
 	max-height: var(--hero-max);
 	/* Rows 2 and 3 of ANIMATION-INVENTORY.md, and the reason the greeting fades
@@ -1351,18 +1347,6 @@ body {
 	inset: -8% -6%;
 	z-index: 0;
 	pointer-events: none;
-	/* Removed by b75e7490 in the same hunk that took `.hero`'s transition and
-	   `overflow`. The comment above survived the deletion and went on describing
-	   a gradient that was no longer there, so the rule read as intentional while
-	   `.hero__sub` sat at 3.67:1 against real pixels — under AA, and the exact
-	   defect this was written to fix. `verify.mjs` measures it. */
-	background: radial-gradient(
-		ellipse 66% 62% at 50% 46%,
-		rgb(38 16 70 / 0.66) 0%,
-		rgb(38 16 70 / 0.52) 40%,
-		rgb(38 16 70 / 0.26) 62%,
-		rgb(38 16 70 / 0) 78%
-	);
 }
 
 /* `.hero::before` is positioned, so without this it would paint over the
