@@ -91,7 +91,7 @@ function toResult(payload: TurnPayload, language: string): AskResult {
 
 /** One turn, streamed. Resolves with the whole answer, as `askAspire` does. */
 export async function streamAspire(
-	input: AskInput & { onDelta?: (delta: string) => void },
+	input: AskInput & { onDelta?: (delta: string) => void; onTextEnd?: () => void },
 ): Promise<AskResult> {
 	const {
 		message,
@@ -100,6 +100,7 @@ export async function streamAspire(
 		persona,
 		language = "en",
 		onDelta,
+		onTextEnd,
 		signal,
 	} = input;
 
@@ -138,6 +139,16 @@ export async function streamAspire(
 
 			if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) {
 				onDelta?.(event.delta);
+				continue;
+			}
+			// The prose is final, but the turn is not: sources, follow-ups and
+			// persistence still have to land. Worth its own signal, because the
+			// two used to arrive together and the reveal therefore had to treat
+			// the last word it was holding as possibly-still-growing for as long
+			// as that bookkeeping took — two to four seconds, at the end of every
+			// answer.
+			if (event.type === "TEXT_MESSAGE_END") {
+				onTextEnd?.();
 				continue;
 			}
 			if (event.type === "CUSTOM" && event.name === "aspire.turn") {

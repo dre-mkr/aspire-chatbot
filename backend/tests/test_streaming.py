@@ -203,6 +203,76 @@ def test_a_tool_result_alone_streams_nothing(client, monkeypatch):
     assert streamed == ""
 
 
+def test_the_message_closes_before_the_follow_ups_are_generated(client, monkeypatch):
+    """The prose ends when the model stops writing, not when the turn finishes.
+
+    Follow-ups are a second model call and persistence is a database round trip.
+    Both happen after the last token and took two to four seconds against the
+    real service. While they ran, the client could not tell a finished answer
+    from one still being written, so it held the last word back for the whole of
+    it — the answer visibly completed itself seconds late.
+
+    Asserted by ordering rather than by timing: `TEXT_MESSAGE_END` must come
+    before anything the follow-up call produces. A clock would make this flaky
+    for the sake of measuring what the order already proves.
+    """
+    answer = [
+        AIMessageChunk(content=[{"type": "text", "text": part}], id="msg-1")
+        for part in ("ASPIRE helps young people ", "build savings.")
+    ]
+
+    async def _slow_follow_ups(_message, _reply):
+        return ["Who is eligible?"]
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent(answer))
+    monkeypatch.setattr(main, "suggest_follow_ups", _slow_follow_ups)
+
+    response = client.post(
+        "/chat/stream", json={"message": "What is ASPIRE?", "thread_id": "t-stream-4"}
+    )
+    kinds = [f["type"] for f in _frames(response)]
+
+    assert "TEXT_MESSAGE_END" in kinds
+    # Exactly one: `done` must not close a message `text_end` already closed.
+    assert kinds.count("TEXT_MESSAGE_END") == 1
+    assert kinds.index("TEXT_MESSAGE_END") < kinds.index("CUSTOM")
+    # And the answer itself is unchanged by having been closed earlier.
+    frames = _frames(response)
+    streamed = "".join(f["delta"] for f in frames if f["type"] == "TEXT_MESSAGE_CONTENT")
+    assert streamed == "ASPIRE helps young people build savings."
+    done = next(f for f in frames if f["type"] == "CUSTOM")
+    assert done["value"]["follow_ups"] == ["Who is eligible?"]
+
+
+def test_a_card_turn_closes_no_message_at_all(client, monkeypatch):
+    """A turn with no prose must not announce a message that never started.
+
+    `text_end` closes the message only if one was opened, so the silent path
+    stays silent: a game turn's narration is dropped before it crosses the wire,
+    and an empty `TEXT_MESSAGE_END` would tell the client to settle a turn that
+    has no text to settle.
+    """
+    tool_call = AIMessageChunk(
+        content=[{"type": "text", "text": "Let me start that for you."}],
+        tool_call_chunks=[
+            {"name": "start_game", "args": "{}", "id": "call-1", "index": 0}
+        ],
+        id="msg-1",
+    )
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent([tool_call]))
+    monkeypatch.setattr(main, "suggest_follow_ups", _no_follow_ups)
+
+    response = client.post(
+        "/chat/stream", json={"message": "Can we play a game?", "thread_id": "t-stream-5"}
+    )
+    kinds = [f["type"] for f in _frames(response)]
+
+    assert "TEXT_MESSAGE_START" not in kinds
+    assert "TEXT_MESSAGE_END" not in kinds
+    assert "TEXT_MESSAGE_CONTENT" not in kinds
+
+
 async def _no_follow_ups(_message, _reply):
     """Follow-ups are a second model call and are not what these tests measure."""
     return []

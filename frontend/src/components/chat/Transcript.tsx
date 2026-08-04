@@ -417,8 +417,13 @@ function Block({ block }: { block: AnswerBlock }) {
 	}
 	return (
 		<ul>
-			{block.items.map((item) => (
-				<li key={item}>
+			{block.items.map((item, index) => (
+				// Positional, not keyed by text: the last item grows word by word
+				// while it is being revealed, and keying by content would make
+				// every word a new <li> — remounting the node, replaying its
+				// entrance, and throwing away the selection inside it.
+				// biome-ignore lint/suspicious/noArrayIndexKey: append-only by construction
+				<li key={index}>
 					<Rich text={item} />
 				</li>
 			))}

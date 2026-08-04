@@ -133,6 +133,22 @@ async def agui_stream(
     run_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
     buffer = TurnBuffer()
+    #: `TEXT_MESSAGE_END` has been sent, so `done` must not send a second one.
+    text_closed = False
+
+    def start() -> str | None:
+        """The `TEXT_MESSAGE_START` this message owes, the first time it is due."""
+        if buffer.started:
+            return None
+        buffer.started = True
+        return sse(
+            {"type": "TEXT_MESSAGE_START", "messageId": message_id, "role": "assistant"}
+        )
+
+    def content(text: str) -> str:
+        return sse(
+            {"type": "TEXT_MESSAGE_CONTENT", "messageId": message_id, "delta": text}
+        )
 
     yield sse({"type": "RUN_STARTED", "threadId": thread_id, "runId": run_id})
 
@@ -141,22 +157,10 @@ async def agui_stream(
             if "message" in event:
                 held = buffer.end_message()
                 if held:
-                    if not buffer.started:
-                        buffer.started = True
-                        yield sse(
-                            {
-                                "type": "TEXT_MESSAGE_START",
-                                "messageId": message_id,
-                                "role": "assistant",
-                            }
-                        )
-                    yield sse(
-                        {
-                            "type": "TEXT_MESSAGE_CONTENT",
-                            "messageId": message_id,
-                            "delta": held,
-                        }
-                    )
+                    opening = start()
+                    if opening:
+                        yield opening
+                    yield content(held)
                 continue
 
             if "tool" in event:
@@ -167,22 +171,28 @@ async def agui_stream(
                 text = buffer.add(event["delta"])
                 if not text:
                     continue
-                if not buffer.started:
-                    buffer.started = True
-                    yield sse(
-                        {
-                            "type": "TEXT_MESSAGE_START",
-                            "messageId": message_id,
-                            "role": "assistant",
-                        }
-                    )
-                yield sse(
-                    {
-                        "type": "TEXT_MESSAGE_CONTENT",
-                        "messageId": message_id,
-                        "delta": text,
-                    }
-                )
+                opening = start()
+                if opening:
+                    yield opening
+                yield content(text)
+                continue
+
+            if "text_end" in event:
+                # The model has stopped writing, and the turn has not finished:
+                # sources, follow-ups and persistence are still to come. Closing
+                # the message here is what lets the client reveal the last word
+                # of the answer on time rather than holding it until all of that
+                # lands. Anything still held back that turned out to be safe is
+                # released first, because after this nothing more will be.
+                held = buffer.end_message()
+                if held:
+                    opening = start()
+                    if opening:
+                        yield opening
+                    yield content(held)
+                if buffer.started:
+                    text_closed = True
+                    yield sse({"type": "TEXT_MESSAGE_END", "messageId": message_id})
                 continue
 
             if "error" in event:
@@ -198,26 +208,16 @@ async def agui_stream(
             if "done" in event:
                 # Anything held back that turned out to be safe — a reply the
                 # model produced without calling a tool never met the release
-                # condition, so it is still in hand here.
+                # condition, so it is still in hand here. Normally `text_end`
+                # has already drained this; a caller that does not send one
+                # still gets a correctly closed message.
                 held = buffer.end_message()
                 if held:
-                    if not buffer.started:
-                        buffer.started = True
-                        yield sse(
-                            {
-                                "type": "TEXT_MESSAGE_START",
-                                "messageId": message_id,
-                                "role": "assistant",
-                            }
-                        )
-                    yield sse(
-                        {
-                            "type": "TEXT_MESSAGE_CONTENT",
-                            "messageId": message_id,
-                            "delta": held,
-                        }
-                    )
-                if buffer.started:
+                    opening = start()
+                    if opening:
+                        yield opening
+                    yield content(held)
+                if buffer.started and not text_closed:
                     yield sse({"type": "TEXT_MESSAGE_END", "messageId": message_id})
                 # Everything `/chat` returns beside the prose: the sources, the
                 # follow-ups, and which card -- if any -- this turn opened. One

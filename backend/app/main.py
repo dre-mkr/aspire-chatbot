@@ -822,6 +822,16 @@ async def chat_stream(
             yield {"error": "The assistant is temporarily unavailable. Please try again."}
             return
 
+        # The prose is complete here, and everything below this line is not
+        # prose: follow-ups are a second model call, persistence is a database
+        # round trip, and together they were taking two to four seconds. The
+        # client could not tell the difference between "still being written" and
+        # "written, and waiting on bookkeeping", so it held the last word of the
+        # answer back for the whole of it and then popped it in.
+        #
+        # Saying so costs one event and lets the reveal finish on time.
+        yield {"text_end": True}
+
         game = _started_game(collected)
         eligibility = _started_eligibility(collected)
         reply = "".join(streamed).strip() or _extract_reply(collected)

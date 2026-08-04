@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AskResult, AspireError, type Source } from "./api";
-import { settledBlocks } from "./settled";
+import { blockIsClosed, settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
 import { claimConversations, renameConversation } from "./conversations";
 import { ensureSession } from "./session";
@@ -98,18 +98,87 @@ export type Phase = "landing" | "chat";
 
 /** Pacing of the typewriter reveal. Tuned to read as thinking, not as lag. */
 const TICK_MS = 40;
-const WORDS_PER_TICK = 4;
-/** Ticks between list items — bullets land slower than prose reads. */
-const TICKS_PER_ITEM = 3;
+
+/**
+ * How the reveal decides how much to draw, and why it is not a constant.
+ *
+ * It was a constant — four words every tick, about a hundred words a second.
+ * No model writes that fast. The typewriter therefore drained whatever had
+ * arrived almost instantly and then sat frozen waiting for more, which is the
+ * stutter this pacing exists to remove: `reveal-sim.mjs` measured a 2.16-second
+ * freeze in the middle of a perfectly ordinary answer.
+ *
+ * So the rate is a fraction of the backlog instead. That one change makes the
+ * reveal self-tuning, because it is a proportional controller: draw
+ * `pending / SMOOTH_TICKS` words a tick and, in the steady state, the reveal
+ * rate converges on whatever rate the words are arriving at, whatever that
+ * happens to be. The reader sees an even cadence without anything having to
+ * know or measure how fast the model is.
+ *
+ * What it converges to is a constant *lag* rather than a constant speed:
+ * roughly `SMOOTH_TICKS` ticks of text held in hand at any moment. That reserve
+ * is the entire point — it is what a pause in generation is spent against, so a
+ * hitch on the wire costs a slightly slower reveal instead of a dead screen.
+ */
+const SMOOTH_TICKS = 8;
+/**
+ * Words per tick, floor and ceiling.
+ *
+ * The floor keeps a nearly-caught-up reveal visibly moving. The ceiling is what
+ * stops a burst — a reconnect, a proxy flushing, the whole reply arriving at
+ * once — from dumping a paragraph into one frame.
+ */
+const MIN_RATE = 0.3;
+const MAX_RATE = 5;
+/**
+ * The same, once the turn is over.
+ *
+ * Nothing more is coming, so there is no reserve worth keeping and the only job
+ * left is to finish at a speed that still reads as typing. Without a raised
+ * floor the proportional term decays toward zero and the last few words crawl.
+ */
+const MIN_RATE_ENDED = 2.5;
+const MAX_RATE_ENDED = 8;
+
+/** Words in a block. Lists count every word of every item, not the items. */
+function blockWords(block: AnswerBlock): number {
+	if (block.kind === "paragraph") return block.text ? block.text.split(" ").length : 0;
+	return block.items.reduce(
+		(total, item) => total + (item ? item.split(" ").length : 0),
+		0,
+	);
+}
+
+/**
+ * A block cut to its first `words` words.
+ *
+ * A list is cut across its items rather than at an item boundary, so a long
+ * bullet types itself out instead of appearing whole after a wait. The items
+ * before the cut are complete; the one containing it is a prefix of itself,
+ * which is the same append-only growth a paragraph has.
+ */
+function sliceBlock(block: AnswerBlock, words: number): AnswerBlock {
+	if (block.kind === "paragraph") {
+		return { kind: "paragraph", text: block.text.split(" ").slice(0, words).join(" ") };
+	}
+
+	const items: Array<string> = [];
+	let left = words;
+	for (const item of block.items) {
+		if (left <= 0) break;
+		const parts = item.split(" ");
+		items.push(left >= parts.length ? item : parts.slice(0, left).join(" "));
+		left -= parts.length;
+	}
+	return { kind: "list", items };
+}
 
 interface StreamCursor {
 	/**
-	 * The whole answer, parsed, before a word of it has been revealed.
+	 * The answer as far as it is known, reparsed as more of it arrives.
 	 *
-	 * The reveal is a presentation effect over text that has already arrived —
-	 * not a window onto text still being written. That is the difference between
-	 * a steady four-words-a-tick cadence and one that stalls wherever the model
-	 * paused, which is what the live drain actually looked like on screen.
+	 * Only ever grows, and only over settled text — see `settled.ts` — so the
+	 * indices below stay valid and the reveal is never rewound.
 	 */
 	answer: Answer;
 	sources: Array<Source>;
@@ -117,15 +186,57 @@ interface StreamCursor {
 	/**
 	 * Whether the service has said the turn is over.
 	 *
-	 * The reveal runs alongside the wire now, so reaching the end of `answer` no
-	 * longer means the answer is finished -- it usually means the typewriter has
-	 * caught up and should wait. Only `ended` settles the turn.
+	 * The reveal runs alongside the wire, so reaching the end of `answer` does
+	 * not mean the answer is finished -- it usually means the typewriter has
+	 * caught up and should wait. Only `ended` settles the turn, because only the
+	 * final payload carries the sources and follow-ups that settle with it.
 	 */
 	ended: boolean;
+	/**
+	 * Whether the prose is final, which happens earlier.
+	 *
+	 * These are two different questions and were one flag. The text stops
+	 * growing when the model stops writing; the *turn* stops when the follow-ups
+	 * have been generated and the transcript persisted, which is seconds later.
+	 * Conflating them meant the reveal spent those seconds treating a finished
+	 * answer as one that might still grow — holding back its last word, since
+	 * `settledText` cannot know a word is complete until something says so.
+	 *
+	 * So this governs everything about *drawing*: the pacing, whether the last
+	 * block may be stepped past, and whether the trailing word is safe. `ended`
+	 * governs only when the turn leaves the typewriter and joins the transcript.
+	 */
+	textEnded: boolean;
 	blockIndex: number;
+	/** Words revealed within the current block. */
 	wordIndex: number;
-	holdTicks: number;
+	/**
+	 * Fractional words carried between ticks.
+	 *
+	 * The controller's rate is usually well under one word per tick — at a
+	 * realistic 25 tokens a second it is about 0.7 — and truncating that every
+	 * tick would floor it to zero and stall outright. Carrying the remainder is
+	 * what turns a fractional rate into "a word every tick and a half".
+	 */
+	credit: number;
 	built: Array<AnswerBlock>;
+}
+
+/** Words to draw this tick, given how much is waiting. */
+function paceFor(pending: number, ended: boolean): number {
+	const rate = pending / SMOOTH_TICKS;
+	return ended
+		? Math.min(MAX_RATE_ENDED, Math.max(MIN_RATE_ENDED, rate))
+		: Math.min(MAX_RATE, Math.max(MIN_RATE, rate));
+}
+
+/** Words known but not yet drawn. The controller's only input. */
+function pendingWords(state: StreamCursor): number {
+	let total = -state.wordIndex;
+	for (let i = state.blockIndex; i < state.answer.blocks.length; i += 1) {
+		total += blockWords(state.answer.blocks[i]);
+	}
+	return Math.max(0, total);
 }
 
 function prefersReducedMotion() {
@@ -516,48 +627,86 @@ export function useConversation({
 		]);
 	}, [clearTimers]);
 
+	/**
+	 * Settles only what has actually been revealed.
+	 *
+	 * Deliberately not `finishStream`, which appends `state.answer` — the whole
+	 * reply, including the words the reveal had not reached. Calling that from
+	 * `stop` made the stop button a reveal-everything button for the entire
+	 * length of the typewriter, which is the opposite of what it says.
+	 *
+	 * Follow-ups are dropped: they belong to an answer that finished.
+	 *
+	 * Used by the two ways a turn can end early — the reader pressing Stop, and
+	 * the stream dying mid-flight. Defined here rather than beside `stop` because
+	 * `ask` needs it too, and a `useCallback` cannot depend on one declared
+	 * further down the component.
+	 */
+	const settleRevealed = useCallback(() => {
+		clearTimers();
+		const state = cursor.current;
+		cursor.current = undefined;
+		setStreaming(null);
+		if (!state) return;
+
+		const revealed = state.built.filter(Boolean);
+		if (revealed.length === 0) return;
+
+		setMessages((current) => [
+			...current,
+			{
+				id: state.id,
+				role: "assistant",
+				blocks: revealed,
+				followUps: [],
+				sources: state.sources,
+			},
+		]);
+	}, [clearTimers]);
+
 	const tick = useCallback(() => {
 		const state = cursor.current;
 		if (!state) return;
 
-		const block = state.answer.blocks[state.blockIndex];
-		if (!block) {
-			// Out of blocks. If the service has finished, so have we; if it has
-			// not, the typewriter has simply outrun the wire and waits for the
-			// next chunk. Finishing here would truncate the answer mid-sentence.
+		const pending = pendingWords(state);
+		if (pending === 0) {
+			// Caught up. Everything written has been drawn; the turn settles only
+			// once the payload has arrived, because the sources and follow-ups
+			// have to appear in the same commit as the answer they belong to.
+			// Finishing before that would truncate the answer mid-sentence.
 			if (state.ended) finishStream();
 			return;
 		}
 
-		if (block.kind === "paragraph") {
-			const words = block.text.split(" ");
-			state.wordIndex = Math.min(
-				words.length,
-				state.wordIndex + WORDS_PER_TICK,
-			);
-			state.built[state.blockIndex] = {
-				kind: "paragraph",
-				text: words.slice(0, state.wordIndex).join(" "),
-			};
-			if (state.wordIndex >= words.length) {
-				state.blockIndex += 1;
-				state.wordIndex = 0;
+		state.credit += paceFor(pending, state.textEnded);
+		const budget = Math.floor(state.credit);
+		// Less than a whole word owed. The remainder carries; drawing nothing is
+		// correct and costs one frame, not a stall.
+		if (budget < 1) return;
+		state.credit -= budget;
+
+		let left = budget;
+		while (left > 0) {
+			const block = state.answer.blocks[state.blockIndex];
+			if (!block) break;
+
+			const total = blockWords(block);
+			const take = Math.min(left, total - state.wordIndex);
+			if (take > 0) {
+				state.wordIndex += take;
+				left -= take;
+				state.built[state.blockIndex] = sliceBlock(block, state.wordIndex);
 			}
-		} else {
-			state.built[state.blockIndex] ??= { kind: "list", items: [] };
-			state.holdTicks += 1;
-			if (state.holdTicks >= TICKS_PER_ITEM) {
-				state.holdTicks = 0;
-				state.wordIndex = Math.min(block.items.length, state.wordIndex + 1);
-				state.built[state.blockIndex] = {
-					kind: "list",
-					items: block.items.slice(0, state.wordIndex),
-				};
-				if (state.wordIndex >= block.items.length) {
-					state.blockIndex += 1;
-					state.wordIndex = 0;
-				}
-			}
+
+			if (state.wordIndex < total) break;
+			// This block is fully drawn. Stepping past it is only safe once it can
+			// no longer grow -- otherwise the words that arrive next are written
+			// into a block the typewriter has already left behind, and never
+			// appear until the finished answer replaces the revealed one.
+			if (!blockIsClosed(state.blockIndex, state.answer.blocks, state.textEnded))
+				break;
+			state.blockIndex += 1;
+			state.wordIndex = 0;
 		}
 
 		setStreaming({
@@ -569,19 +718,13 @@ export function useConversation({
 	}, [finishStream]);
 
 	/**
-	 * Starts revealing an answer that has already arrived whole. Returns its id.
+	 * Starts revealing an answer. Returns its id.
 	 *
-	 * The reveal is paced by the typewriter alone — four words every 40ms, from
-	 * the first word to the last. It was briefly driven by the tokens as they
-	 * came off the wire instead, and the cadence that produced is what this
-	 * exists to undo: the reveal could only ever advance as far as the last
-	 * *terminated line* the service had sent, so it emptied its buffer, stalled
-	 * wherever the model paused, then emptied it again. Read as a reply arriving
-	 * in two or three lurches rather than being typed.
-	 *
-	 * Whatever the wire does is therefore hidden here on purpose. Waiting for
-	 * the whole reply costs time-to-first-word and buys back the one property
-	 * this animation has to have, which is an even one.
+	 * `ended` says whether the whole reply is already in hand. When it is — the
+	 * non-streaming fallback, a restored turn — the typewriter simply plays it
+	 * out. When it is not, the same loop runs against an answer that is still
+	 * growing, and the pacing controller above is what keeps the cadence even
+	 * across the difference.
 	 */
 	const beginStream = useCallback(
 		(answer: Answer, sources: Array<Source>, ended = true) => {
@@ -600,9 +743,11 @@ export function useConversation({
 				sources,
 				id,
 				ended,
+				// A reply handed over whole is finished in both senses at once.
+				textEnded: ended,
 				blockIndex: 0,
 				wordIndex: 0,
-				holdTicks: 0,
+				credit: 0,
 				built: [],
 			};
 			setStreaming({
@@ -631,20 +776,17 @@ export function useConversation({
 			/**
 			 * Feeds the reveal from the wire, without letting the wire pace it.
 			 *
-			 * This used to wait for the whole reply and then run the typewriter
-			 * over it. That bought a perfectly even cadence and paid for it with
-			 * time-to-first-word: nothing appeared at all until the model had
-			 * finished writing, which on a long answer is many seconds of an orb.
+			 * Two separate things have to be true at once, and they pull against
+			 * each other. Nothing may be shown before it is safe to show —
+			 * `settledBlocks` owns that, and holds back only an ambiguous prefix
+			 * and a partial word. And the reveal has to advance evenly whatever
+			 * the model is doing — the controller above owns that, by drawing a
+			 * fraction of the backlog rather than a fixed number of words.
 			 *
-			 * The even cadence is kept and that price is not paid. `settledBlocks`
-			 * decides what is safe to show -- text whose terminating newline has
-			 * arrived can no longer change what it *is*, so revealing it cannot
-			 * cause a line already on screen to re-render as something else. The
-			 * typewriter reveals out of that settled region at its own steady four
-			 * words a tick, and when it catches up to the wire it waits rather
-			 * than finishing.
-			 *
-			 * So the reveal simply starts sooner. Nothing about its pacing changed.
+			 * Neither alone is enough. Safe-but-unpaced empties its buffer and
+			 * freezes; paced-but-unsafe rewrites lines that have already been
+			 * read. Together they are a reveal that starts within a word or two
+			 * of the first token and keeps moving until the last one.
 			 */
 			let buffer = "";
 			let streamingId = -1;
@@ -670,10 +812,28 @@ export function useConversation({
 				state.answer = { ...state.answer, blocks };
 			};
 
+			/**
+			 * The model has stopped writing. The turn has not finished.
+			 *
+			 * Re-settles the buffer with nothing held back — the trailing word is
+			 * safe now, and it is the one `settledText` was keeping — and lets the
+			 * reveal draw to the end at its finishing pace. The turn itself still
+			 * waits for the payload, so the sources and follow-ups appear in the
+			 * same commit as the answer settling, exactly as before.
+			 */
+			const onTextEnd = () => {
+				if (turnToken.current !== token) return;
+				const state = cursor.current;
+				if (!state) return;
+				state.answer = { ...state.answer, blocks: settledBlocks(buffer, true) };
+				state.textEnded = true;
+			};
+
 			try {
 				const result: AskResult = await streamAspire({
 					message: question,
 					onDelta,
+					onTextEnd,
 					signal: controller.signal,
 					// Read now, not closed over: see `threadRef`. This is also why
 					// `ask` no longer depends on `threadId` — the send pipeline used
@@ -808,6 +968,10 @@ export function useConversation({
 					live.answer = finalAnswer;
 					live.sources = result.sources;
 					live.ended = true;
+					// Usually already true, from `TEXT_MESSAGE_END`. Not always:
+					// the service may end a turn without one — a card turn, or an
+					// older deployment that does not send it.
+					live.textEnded = true;
 				} else {
 					// Nothing was ever revealed -- a reply with no newline in it, or
 					// the non-streaming fallback inside `streamAspire`. Start whole.
@@ -817,6 +981,22 @@ export function useConversation({
 			} catch (error) {
 				if (turnToken.current !== token) return;
 
+				// A reveal may still be running against a stream that has died.
+				// Nothing more is coming, so the typewriter would tick forever
+				// waiting for words that will never arrive -- and because the
+				// composer is busy for as long as something is being revealed,
+				// that left it stuck with no way to ask anything again.
+				//
+				// Settled rather than dropped, for the same reason `stop` settles
+				// it: the words are already on screen and taking them back as the
+				// error appears is worse than leaving them.
+				//
+				// This could not happen before the reveal began mid-line. A
+				// dropped connection almost always cut in before the first
+				// newline, so there was never anything running to leave behind --
+				// the bug was real, and unreachable, and starting sooner is what
+				// reached it.
+				if (cursor.current) settleRevealed();
 				setIsThinking(false);
 				setMessages((current) => [
 					...current,
@@ -832,10 +1012,11 @@ export function useConversation({
 				]);
 			}
 		},
-		// `nameConversation` and `queryClient` are both stable references, so
-		// naming them here does not rebuild the send pipeline every turn — which
-		// is the property these dependency lists have always been protecting.
-		[beginStream, persona, nameConversation],
+		// `nameConversation`, `queryClient` and `settleRevealed` are all stable
+		// references, so naming them here does not rebuild the send pipeline every
+		// turn — which is the property these dependency lists have always been
+		// protecting.
+		[beginStream, persona, nameConversation, settleRevealed],
 	);
 
 	const send = useCallback(
@@ -952,38 +1133,6 @@ export function useConversation({
 	 * revealed answer is settled rather than thrown away — the words are already
 	 * on screen and deleting them as you read is its own small betrayal.
 	 */
-	/**
-	 * Settles only what has actually been revealed.
-	 *
-	 * Deliberately not `finishStream`, which appends `state.answer` — the whole
-	 * reply, including the words the reveal had not reached. Calling that from
-	 * `stop` made the stop button a reveal-everything button for the entire
-	 * length of the typewriter, which is the opposite of what it says.
-	 *
-	 * Follow-ups are dropped: they belong to an answer that finished.
-	 */
-	const settleRevealed = useCallback(() => {
-		clearTimers();
-		const state = cursor.current;
-		cursor.current = undefined;
-		setStreaming(null);
-		if (!state) return;
-
-		const revealed = state.built.filter(Boolean);
-		if (revealed.length === 0) return;
-
-		setMessages((current) => [
-			...current,
-			{
-				id: state.id,
-				role: "assistant",
-				blocks: revealed,
-				followUps: [],
-				sources: state.sources,
-			},
-		]);
-	}, [clearTimers]);
-
 	const stop = useCallback(() => {
 		turnToken.current += 1;
 		// The half that was missing. Without this, Stop only hid the answer.

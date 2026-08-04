@@ -233,6 +233,17 @@ export function startSseServer({ port = 8000 } = {}) {
 		chunks: ["Hello.\n"],
 		/** Milliseconds between chunks. Real gaps, or the test proves nothing. */
 		gap: 25,
+		/**
+		 * Milliseconds between the message closing and the turn's payload.
+		 *
+		 * The real service takes two to five seconds here: follow-ups are a
+		 * second model call and the transcript has to be persisted, and both
+		 * happen after the last token. A stub that sends `TEXT_MESSAGE_END` and
+		 * the payload back to back cannot tell whether a client is finishing on
+		 * the first or waiting for the second — which is exactly the distinction
+		 * the reveal now depends on.
+		 */
+		tailGap: 0,
 		done: {
 			reply: "Hello.",
 			thread_id: "t",
@@ -302,6 +313,9 @@ export function startSseServer({ port = 8000 } = {}) {
 			}
 			if (event.type === "TEXT_MESSAGE_CONTENT" && state.gap) {
 				await new Promise((r) => setTimeout(r, state.gap));
+			}
+			if (event.type === "TEXT_MESSAGE_END" && state.tailGap) {
+				await new Promise((r) => setTimeout(r, state.tailGap));
 			}
 		}
 		res.end();

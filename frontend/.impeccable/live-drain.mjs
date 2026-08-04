@@ -64,7 +64,13 @@ const MIXED = [
  */
 const SHORT_MIXED = ["Interest compounds.", "", "- Open an account", "- Leave it alone"].join("\n");
 
-const server = await startSseServer({ port: 8000 });
+// The stub stands in for the API, so it has to answer on whatever port the
+// build under test was pointed at. Overridable because a developer running the
+// real backend already owns 8000, and the harness must not have to fight it:
+//
+//   VITE_ASPIRE_API_URL=http://localhost:8123 npm run build
+//   ASPIRE_API_PORT=8123 node .impeccable/live-drain.mjs
+const server = await startSseServer({ port: Number(process.env.ASPIRE_API_PORT ?? 8000) });
 const browser = await puppeteer.launch({ headless: "new" });
 
 /**
@@ -139,8 +145,16 @@ function findMovement(frames) {
 				return `block ${b} text rewritten at frame ${i}: "${was.text.slice(0, 40)}" → "${now.text.slice(0, 40)}"`;
 			}
 			if (was.kind === "ul") {
+				if (now.items.length < was.items.length) {
+					return `block ${b} lost items at frame ${i}: ${was.items.length} → ${now.items.length}`;
+				}
 				for (let j = 0; j < was.items.length; j += 1) {
-					if (now.items[j] !== was.items[j]) {
+					// Append-only, not immutable. A bullet's text grows word by
+					// word now, exactly as a paragraph's does — the reveal no
+					// longer waits for a whole item to arrive before drawing any
+					// of it, which is what removed the stall between bullets.
+					// Rewriting is still the bug; extending is the feature.
+					if (!now.items[j].startsWith(was.items[j])) {
 						return `block ${b} item ${j} rewritten at frame ${i}: "${was.items[j]}" → "${now.items[j]}"`;
 					}
 				}
