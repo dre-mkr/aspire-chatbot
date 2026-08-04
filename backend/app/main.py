@@ -44,8 +44,7 @@ from app.jobs import enqueue_summary
 from app.memory import build_prompt, count_tokens, log_prompt_cost
 from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
-from app.ingest import ingest_if_empty
-from app.rag import count_documents, get_vector_store
+from app.ingest import count_corpus, ingest_if_empty
 from app.streaming import agui_stream
 from app.timing import (
     RING as TIMING_RING,
@@ -82,18 +81,70 @@ MAX_SOURCES = 6
 MAX_SOURCE_CHARS = 600
 
 
+async def _require_corpus(settings) -> None:
+    """Refuse to start without a knowledge base. No fallback, by design.
+
+    Postgres is the source of truth as of P13-002, which makes an unreachable or
+    empty corpus a fatal condition rather than a degraded one. The alternative --
+    starting anyway and letting retrieval return nothing -- is the worst outcome
+    available: every turn would be a confident, ungrounded answer or a refusal to
+    a question the programme can actually answer, on a government product serving
+    minors, and nothing about it would look broken from the outside.
+
+    Ordered after `check_schema` on purpose: `database_enabled()` only tells the
+    truth once that has run.
+    """
+    if not database_enabled():
+        raise RuntimeError(
+            "The knowledge base lives in Postgres and the database is not "
+            "available, so there is nothing to retrieve from. Set DATABASE_URL "
+            "and run, from the backend directory:\n"
+            "    alembic upgrade head\n"
+            "    python -m app.ingest"
+        )
+
+    # Auto-ingest on a cold start so a fresh deployment is usable out of the box,
+    # exactly as it was before the move off Chroma. Concurrency-safe: see the
+    # advisory lock in `ingest_if_empty`.
+    await ingest_if_empty(settings)
+
+    chunks = await count_corpus()
+    if chunks <= 0:
+        raise RuntimeError(
+            "The documents table is empty and auto-ingest wrote nothing. Refusing "
+            "to serve: retrieval would return no context for every question. Run "
+            "`python -m app.ingest` and check the log for why it produced no rows."
+        )
+    logger.info("Corpus holds %d chunks in Postgres.", chunks)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Prepare the vector store and agent before the first request."""
+    """Prepare the corpus and agent before the first request."""
     settings = get_settings()
     logging.basicConfig(
         level=settings.log_level.upper(),
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    # Auto-ingest on a cold start so the service is usable out of the box.
-    ingest_if_empty(settings)
-    logger.info("Vector store holds %d chunks.", count_documents(get_vector_store()))
+    # Neon scales to zero, so without this the first message after an idle
+    # period pays the wake-up. Warming here rather than disabling scale-to-zero
+    # keeps the overnight compute bill at zero and moves the cost to deploy
+    # time, where nobody is waiting on it.
+    #
+    # Moved ahead of the corpus check, which now depends on it: the knowledge
+    # base is in Postgres, so "is the database up and migrated" has to be settled
+    # before anything can ask "is there a corpus".
+    if database_enabled():
+        await warm(settings)
+        # Reachable is not the same as ready. Without this an unmigrated
+        # database looks perfectly healthy until the first message of the first
+        # conversation, which then 500s on a missing table. Checking here turns
+        # a user-facing error into one loud startup log naming the command to
+        # run, and persistence simply stays off.
+        await check_schema()
+
+    await _require_corpus(settings)
 
     # Build the agent eagerly so model/config errors surface at boot, not mid-request.
     get_agent()
@@ -103,19 +154,6 @@ async def lifespan(app: FastAPI):
     if get_voice_settings().voice_enabled:
         validate_registry()
         logger.info("Voice layer enabled.")
-
-    # Neon scales to zero, so without this the first message after an idle
-    # period pays the wake-up. Warming here rather than disabling scale-to-zero
-    # keeps the overnight compute bill at zero and moves the cost to deploy
-    # time, where nobody is waiting on it.
-    if database_enabled():
-        await warm(settings)
-        # Reachable is not the same as ready. Without this an unmigrated
-        # database looks perfectly healthy until the first message of the first
-        # conversation, which then 500s on a missing table. Checking here turns
-        # a user-facing error into one loud startup log naming the command to
-        # run, and persistence simply stays off.
-        await check_schema()
 
     # Verified at boot rather than discovered mid-request. arq and redis-py talk
     # to Valkey unchanged -- it implements the Redis 7.2 command set -- so a

@@ -152,7 +152,7 @@ STAGE_NOTES: dict[str, str] = {
     T_PROMPT_BUILD: "local: assemble messages, count tokens (tiktoken)",
     D_MODEL_CALL_1: "derived: request -> tool call, less the measured work above",
     T_EMBED: "OpenAI text-embedding-3-large: network round trip",
-    T_RETRIEVE: "Chroma: local HNSW query over 338 rows",
+    T_RETRIEVE: "Neon: exact cosine scan over 332 rows (network round trip)",
     D_MODEL_CALL_2: "derived: tool call -> model's first delta, less retrieval",
     D_BUFFER_HOLD: "derived: TurnBuffer holding text until a tool had run",
     T_AGENT_FIRST_TOOL: "cumulative from request received",

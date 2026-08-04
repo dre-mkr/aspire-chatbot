@@ -32,7 +32,7 @@ from app.prompts import (
     SUMMARY_PROMPT,
     TITLE_PROMPT,
 )
-from app.rag import build_retriever, get_vector_store
+from app.rag import build_retriever
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
     settings = settings or get_settings()
     model = build_chat_model(settings)
 
-    retriever = build_retriever(get_vector_store(), settings)
+    retriever = build_retriever(settings)
     retriever_tool = create_retriever_tool(
         retriever,
         name=RETRIEVER_TOOL_NAME,

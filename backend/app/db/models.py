@@ -45,16 +45,18 @@ EMBEDDING_MODEL_DIMENSIONS = {
     "BAAI/bge-small-en-v1.5": 384,
 }
 
-# The width the `documents.embedding` column WAS created with.
+# The width of the `documents.embedding` column.
 #
-# The table is gone -- see migration 0008 and P7-007. Retrieval runs on Chroma
-# and always did; the pgvector schema was built, indexed, never written to, and
-# validated at every boot for a column nothing used.
+# Live again as of migration 0009 (P13-002): pgvector is now the retrieval
+# corpus and the source of truth, and Chroma is gone. This number has to agree
+# with what `EMBEDDINGS_MODEL` produces or every INSERT fails, one row at a
+# time, forever -- `ingest` checks it against `dimensions_for()` before writing
+# anything so that failure happens once, up front, with a message naming both
+# numbers.
 #
-# These constants stay because the migration's `downgrade()` recreates the
-# column at this width, and because they are the record of what re-adopting
-# pgvector would have to match. Nothing reads them at runtime any more, and the
-# startup check that used to has been removed with the table.
+# History worth keeping: 0001/0002 built this column and its indexes, nothing
+# ever wrote to it, 0008 dropped it as dead weight, and 0009 recreated it for
+# real use. See 0009 for why it has no vector index this time.
 EMBEDDING_DIMENSIONS = 3072
 
 # pgvector indexes the `vector` type up to 2000 dimensions only. At 3072 the
@@ -73,6 +75,49 @@ def dimensions_for(model: str) -> int | None:
 
 class Base(DeclarativeBase):
     pass
+
+
+class Document(Base):
+    """One chunk of the knowledge base, with the vector retrieval searches.
+
+    The filter columns are real columns rather than JSONB keys because each one
+    belongs in the WHERE clause of a search, and Postgres can only shrink the
+    candidate set before the similarity math with a real column to index.
+
+    `metadata_` carries the original CSV row verbatim. That is not redundancy:
+    the retriever hands it straight back as `langchain_core.documents.Document`
+    metadata, and `main._extract_sources` puts it on the wire, so the shape the
+    client already receives is preserved exactly by preserving this.
+    """
+
+    __tablename__ = "documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(EMBEDDING_DIMENSIONS), nullable=False
+    )
+
+    language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    persona_tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list
+    )
+    account_status_tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list
+    )
+    source_url: Mapped[str | None] = mapped_column(Text)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The knowledge-base row this chunk came from ("ASP-042"). Not unique: a long
+    # row splits into several chunks that share it.
+    kb_id: Mapped[str | None] = mapped_column(Text)
+
+    # `metadata` is taken by SQLAlchemy's Declarative API, so the attribute is
+    # renamed and the column keeps the name the migration created.
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class User(Base):
