@@ -362,12 +362,39 @@ If the deploy is green but the site is wrong, the box is the place to look —
 - **In-flight conversations are dropped on every deploy**, for the reason in
   "Two things that will bite you". Auto-deploy means this now happens on every
   push to `main` rather than when you chose it.
-- **Nothing gates the deploy on tests.** There is no test job in the workflow
-  yet; `main` goes to production as-is.
-- **It restarts two units.** If the arq worker (`arq app.jobs.WorkerSettings`,
-  needed once `MEMORY_WINDOW_ENABLED` is on) becomes a third service, add it to
-  the `systemctl restart` line in `update.sh` *and* to `/etc/sudoers.d/aspire-deploy`
-  — the sudo rule matches the whole command, so it will fail closed otherwise.
+- **The deploy is gated on tests.** `.github/workflows/deploy.yml` runs a
+  `verify` job — typecheck, lint, backend suite, production build — and the
+  deploy job will not start unless it passes.
+- **It restarts three units.** `aspire-api`, `aspire-web` and `aspire-worker`.
+  The worker is not optional: `app/jobs.py` registers the retention cron that
+  enforces the 180-day deletion commitment in `backend/PRIVACY.md`, and nothing
+  else runs it. (It also hosts the summarisation job, which only has work when
+  `MEMORY_WINDOW_ENABLED` is on — that flag does not make the unit optional.)
+
+  The sudo rule in `/etc/sudoers.d/aspire-deploy` matches the **whole** command,
+  so it must name all three units or the deploy fails closed:
+
+  ```
+  aspire ALL=(root) NOPASSWD: /usr/bin/systemctl restart aspire-api aspire-web aspire-worker
+  ```
+
+  Installing the worker on an existing box:
+
+  ```sh
+  sudo cp deploy/aspire-worker.service /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now aspire-worker
+  systemctl status aspire-worker
+  ```
+
+  It will not clear the existing backlog until 03:15. To sweep immediately once,
+  after checking what it would delete:
+
+  ```sh
+  cd /srv/aspire/backend
+  .venv/bin/python -c "import asyncio; from app.retention import sweep_anonymous; \
+      print(asyncio.run(sweep_anonymous(dry_run=True)))"
+  ```
 
 ## Operating notes
 
