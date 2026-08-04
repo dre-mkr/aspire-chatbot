@@ -57,9 +57,20 @@ export const keys = {
 	messages: (ownerId: string, threadId: string) =>
 		["conversations", ownerId, threadId, "messages"] as const,
 
+	/**
+	 * The prefix every game cache entry sits under.
+	 *
+	 * Here rather than inline at the call sites, for exactly the reason stated at
+	 * the top of this file: `["games"]` was being written by hand in three
+	 * separate files, which is the "a key written twice is a key that will
+	 * eventually be written differently" failure already happening.
+	 */
+	allGames: () => ["games"] as const,
 	/** The running game for a thread, or null once it is over. */
 	gameState: (threadId: string) => ["games", "state", threadId] as const,
 
+	/** The prefix every eligibility cache entry sits under. See `allGames`. */
+	allEligibility: () => ["eligibility"] as const,
 	/** The eligibility flow's server-side state for a thread. */
 	eligibilityState: (threadId: string) =>
 		["eligibility", "state", threadId] as const,
@@ -102,6 +113,11 @@ export const conversationQuery = (
 		queryFn: () => fetchConversation(threadId as string),
 		enabled: Boolean(threadId) && Boolean(currentSession()),
 		staleTime: Number.POSITIVE_INFINITY,
+		// Without this, `gcTime` defaults to five minutes and the entry is evicted
+		// that long after the last observer goes -- and this query is never
+		// mounted, only read imperatively, so it is unobserved almost always. The
+		// docstring above says "kept for the session"; this is what makes that true.
+		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		retry: 1,
 	});
@@ -133,6 +149,10 @@ export const gameStateQuery = (threadId: string | null, settled = true) =>
 		// one moment the answer to it is guaranteed not to have changed yet.
 		enabled: Boolean(threadId) && settled,
 		staleTime: Number.POSITIVE_INFINITY,
+		// See `conversationQuery`: a five-minute default gcTime would evict a card
+		// that is merely off-screen, and the next read would refetch a session the
+		// player is part-way through.
+		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		refetchOnReconnect: false,
 		refetchOnMount: false,
@@ -166,6 +186,10 @@ export const eligibilityStateQuery = (
 		// Same gate, same reason as the game query above.
 		enabled: Boolean(threadId) && settled,
 		staleTime: Number.POSITIVE_INFINITY,
+		// See `conversationQuery`: a five-minute default gcTime would evict a card
+		// that is merely off-screen, and the next read would refetch a session the
+		// player is part-way through.
+		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		refetchOnReconnect: false,
 		refetchOnMount: false,
@@ -315,5 +339,13 @@ export function invalidateAfterTurn(
 	// Reaches this conversation's transcript too: `["conversations", id]` is a
 	// prefix of `["conversations", id, "messages"]`.
 	void queryClient.invalidateQueries({ queryKey: keys.conversation(owner(), threadId) });
-	void queryClient.invalidateQueries({ queryKey: keys.conversations(owner()) });
+	// `exact`, because `["conversations", owner]` is a PREFIX of every
+	// transcript key for that owner. Without it this line invalidated every
+	// cached conversation on every settled turn -- making the line above
+	// redundant and quietly defeating the `staleTime: Infinity` that exists to
+	// keep flipping between chats fast.
+	void queryClient.invalidateQueries({
+		queryKey: keys.conversations(owner()),
+		exact: true,
+	});
 }

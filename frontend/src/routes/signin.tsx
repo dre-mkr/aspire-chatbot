@@ -27,7 +27,10 @@ interface SignInSearch {
 /** Only same-origin paths. Anything else falls back to the empty state. */
 function safeNext(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
-	if (!value.startsWith("/") || value.startsWith("//")) return undefined;
+	// Reject any second character that is a slash OR a backslash. `//evil.com` is
+	// the obvious protocol-relative form; `/\evil.com` is the same attack wearing
+	// the other slash, and some browsers normalise it to the first.
+	if (!value.startsWith("/") || /^[/\\]/.test(value.slice(1))) return undefined;
 	return value;
 }
 
@@ -62,8 +65,8 @@ function SignIn() {
 	 */
 	function resetScopedCaches() {
 		queryClient.removeQueries({ queryKey: keys.allConversations() });
-		queryClient.removeQueries({ queryKey: ["games"] });
-		queryClient.removeQueries({ queryKey: ["eligibility"] });
+		queryClient.removeQueries({ queryKey: keys.allGames() });
+		queryClient.removeQueries({ queryKey: keys.allEligibility() });
 	}
 
 	async function submit(event: React.FormEvent) {
