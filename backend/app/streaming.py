@@ -218,11 +218,16 @@ async def agui_stream(
                         yield opening
                     yield content(held)
                 if buffer.started and not text_closed:
+                    text_closed = True
                     yield sse({"type": "TEXT_MESSAGE_END", "messageId": message_id})
-                # Everything `/chat` returns beside the prose: the sources, the
-                # follow-ups, and which card -- if any -- this turn opened. One
-                # event so the client applies them together, in the same commit
-                # as the answer settling.
+                # Everything `/chat` returns beside the prose: the sources and
+                # which card -- if any -- this turn opened. One event so the
+                # client applies them together, in the same commit as the answer
+                # settling.
+                #
+                # No `return` here any more. The turn is announced as soon as it
+                # is known, and the follow-up chips are still being written; the
+                # run finishes when they arrive, below.
                 yield sse(
                     {
                         "type": "CUSTOM",
@@ -230,10 +235,26 @@ async def agui_stream(
                         "value": event["done"],
                     }
                 )
+                continue
+
+            if "follow_ups" in event:
+                # Chips, late and on their own. They cost a second model call,
+                # which is the whole reason they are not in `aspire.turn`: making
+                # the sources and the action row wait for them left a finished
+                # answer looking unfinished for seconds at a time.
                 yield sse(
-                    {"type": "RUN_FINISHED", "threadId": thread_id, "runId": run_id}
+                    {
+                        "type": "CUSTOM",
+                        "name": "aspire.follow_ups",
+                        "value": {"follow_ups": event["follow_ups"]},
+                    }
                 )
-                return
+                continue
+
+        # Reached when `run_events` is exhausted. A turn that ended without a
+        # `follow_ups` event -- a card turn, an error path that returned early --
+        # still has to be closed.
+        yield sse({"type": "RUN_FINISHED", "threadId": thread_id, "runId": run_id})
     except Exception:
         logger.exception("Streaming turn failed for thread %s", thread_id)
         yield sse(

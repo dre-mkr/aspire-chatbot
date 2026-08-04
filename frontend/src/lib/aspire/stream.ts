@@ -91,7 +91,11 @@ function toResult(payload: TurnPayload, language: string): AskResult {
 
 /** One turn, streamed. Resolves with the whole answer, as `askAspire` does. */
 export async function streamAspire(
-	input: AskInput & { onDelta?: (delta: string) => void; onTextEnd?: () => void },
+	input: AskInput & {
+		onDelta?: (delta: string) => void;
+		onTextEnd?: () => void;
+		onTurn?: (result: AskResult) => void;
+	},
 ): Promise<AskResult> {
 	const {
 		message,
@@ -101,6 +105,7 @@ export async function streamAspire(
 		language = "en",
 		onDelta,
 		onTextEnd,
+		onTurn,
 		signal,
 	} = input;
 
@@ -151,8 +156,21 @@ export async function streamAspire(
 				onTextEnd?.();
 				continue;
 			}
+			// The turn, as soon as the service knows it. Handed over immediately
+			// rather than waited for, because the chips that used to travel with
+			// it cost a second model call and everything else here — the sources,
+			// the action row, the card — has been ready since the last token.
 			if (event.type === "CUSTOM" && event.name === "aspire.turn") {
 				payload = event.value as TurnPayload;
+				onTurn?.(toResult(payload, language));
+				continue;
+			}
+			// The chips, once they exist. Folded into the payload so the resolved
+			// result is still the whole turn, exactly as it was when the service
+			// sent it in one piece.
+			if (event.type === "CUSTOM" && event.name === "aspire.follow_ups") {
+				const late = event.value as { follow_ups?: Array<string> };
+				if (payload) payload.follow_ups = late.follow_ups ?? [];
 				continue;
 			}
 			if (event.type === "RUN_ERROR") {

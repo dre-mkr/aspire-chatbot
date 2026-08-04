@@ -889,24 +889,23 @@ export function useConversation({
 				state.textEnded = true;
 			};
 
-			try {
-				const result: AskResult = await streamAspire({
-					message: question,
-					onDelta,
-					onTextEnd,
-					signal: controller.signal,
-					// Read now, not closed over: see `threadRef`. This is also why
-					// `ask` no longer depends on `threadId` — the send pipeline used
-					// to be rebuilt on every turn for a value it can read directly.
-					threadId: threadRef.current,
-					simpleMode,
-					persona,
-					// Read at call time for the same reason the title call does: the
-					// voice layer that owns this setting is built after this hook.
-					// It decides which language the eligibility card opens in.
-					language: getLanguageRef.current(),
-				});
-
+			/**
+			 * Everything that happens once the service has said what the turn is.
+			 *
+			 * Called the moment `aspire.turn` lands rather than when the stream
+			 * finishes, and those are no longer the same instant: the chips cost a
+			 * second model call, so the run stays open for seconds after the answer,
+			 * the sources and the card are all known. Waiting for it left a finished
+			 * answer on screen with no sources, no action row and no chips.
+			 *
+			 * Idempotent, because it still runs after the await for the paths that
+			 * never announce a turn separately -- the non-streaming fallback inside
+			 * `streamAspire`, and any deployment older than the split.
+			 */
+			let settled = false;
+			const settleTurn = (result: AskResult) => {
+				if (settled) return;
+				settled = true;
 				if (turnToken.current !== token) return; // the turn was abandoned
 
 				// Adopt the server's id only when we had none to begin with.
@@ -1038,6 +1037,58 @@ export function useConversation({
 					streamingId = beginStream(finalAnswer, result.sources, true);
 				}
 				onAnswerRef.current?.(streamingId, result.reply);
+			};
+
+			/**
+			 * The chips, which arrive after the turn has already settled.
+			 *
+			 * Two places to put them, because it is genuinely a race: a long answer
+			 * may still be revealing when they land, and a short one will have joined
+			 * the transcript already. The cursor settles with whatever it holds, so
+			 * handing them over there is enough; once it is gone the settled message
+			 * is the only copy and has to be patched.
+			 */
+			const applyFollowUps = (followUps: Array<string>) => {
+				if (turnToken.current !== token || followUps.length === 0) return;
+
+				const live = cursor.current;
+				if (live && live.id === streamingId) {
+					live.answer = { ...live.answer, followUps };
+					return;
+				}
+
+				setMessages((current) =>
+					current.map((message) =>
+						message.id === streamingId && message.role === "assistant"
+							? { ...message, followUps }
+							: message,
+					),
+				);
+			};
+
+			try {
+				const result: AskResult = await streamAspire({
+					message: question,
+					onDelta,
+					onTextEnd,
+					onTurn: settleTurn,
+					signal: controller.signal,
+					// Read now, not closed over: see `threadRef`. This is also why
+					// `ask` no longer depends on `threadId` — the send pipeline used
+					// to be rebuilt on every turn for a value it can read directly.
+					threadId: threadRef.current,
+					simpleMode,
+					persona,
+					// Read at call time for the same reason the title call does: the
+					// voice layer that owns this setting is built after this hook.
+					// It decides which language the eligibility card opens in.
+					language: getLanguageRef.current(),
+				});
+
+				// Usually a no-op by now: `onTurn` settled this when the service
+				// announced the turn, which on a streamed reply is seconds earlier.
+				settleTurn(result);
+				applyFollowUps(result.followUps);
 			} catch (error) {
 				if (turnToken.current !== token) return;
 

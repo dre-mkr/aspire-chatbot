@@ -2751,6 +2751,102 @@ body {
 	}
 }
 
+/* ── Route states: not found, error, pending ─────────────────────────────── */
+
+/* The whole viewport, because these replace the view rather than sit inside
+   it. Centred and quiet: something has already gone wrong, and a loud screen
+   about it does not help a child get back to where they were. */
+.route-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	height: 100dvh;
+	padding: 24px;
+	text-align: center;
+}
+
+.route-state__orb {
+	width: 56px;
+	height: 56px;
+	border-radius: 50%;
+	background: radial-gradient(circle at 34% 30%, #fff 0%, var(--magenta) 42%, var(--plum) 100%);
+	box-shadow: 0 10px 30px -8px rgb(194 47 153 / 0.5);
+}
+
+.route-state__orb--pulse {
+	animation: route-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes route-pulse {
+	0%,
+	100% {
+		opacity: 0.55;
+		transform: scale(0.94);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.route-state__orb--pulse {
+		animation: none;
+		opacity: 0.8;
+	}
+}
+
+.route-state__title {
+	margin: 0;
+	font-size: 1.375rem;
+	font-weight: 600;
+	color: var(--prose);
+}
+
+.route-state__body {
+	margin: 0;
+	max-width: 40ch;
+	color: var(--quiet);
+	line-height: 1.6;
+	text-wrap: pretty;
+}
+
+.route-state__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: center;
+}
+
+.route-state__action {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	padding: 0 20px;
+	border: none;
+	border-radius: 12px;
+	background: linear-gradient(135deg, var(--plum), var(--magenta));
+	color: #fff;
+	font: inherit;
+	font-weight: 600;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.route-state__action--quiet {
+	border: 1px solid var(--wash-12);
+	background: transparent;
+	color: var(--slate);
+}
+
+/* Nothing but the orb. The pending state is an acknowledgement that something
+   is happening, not an announcement about it. */
+.route-state--pending {
+	gap: 0;
+}
+
 /* ── Persona picker ──────────────────────────────────────────────────────── */
 
 /* Who the assistant is answering for, chosen from the composer's tool row.

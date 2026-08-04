@@ -35,6 +35,13 @@ function safeNext(value: unknown): string | undefined {
 }
 
 export const Route = createFileRoute("/signin")({
+	// Full-document SSR, stated rather than inherited. This form is entirely
+	// client-interactive, but it is also the first paint a signed-out visitor
+	// gets, so the shell should arrive as HTML rather than after the bundle.
+	// It was rendering this way already -- by inheriting `defaultSsr` from a
+	// declaration that lived in a generated file. Saying so here means the mode
+	// is a decision on the record and survives the next regeneration.
+	ssr: true,
 	validateSearch: (search: Record<string, unknown>): SignInSearch => {
 		const next = safeNext(search.next);
 		return next ? { next } : {};

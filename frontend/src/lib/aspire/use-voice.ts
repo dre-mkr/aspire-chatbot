@@ -100,9 +100,29 @@ export interface UseVoiceOptions {
 	/** Transcribed text is handed back for the user to check before sending. */
 	onTranscript: (text: string) => void;
 	threadId: string | null;
+	/**
+	 * The language from the URL, when the URL says.
+	 *
+	 * Language used to live here alone, in `useState` seeded from localStorage
+	 * after mount — which the server cannot read, so every load painted English
+	 * and swapped. The address is the one place the server can see, so it wins
+	 * when it has an opinion and the stored preference fills in when it does not.
+	 */
+	language?: VoiceLanguage;
+	/**
+	 * Where a change goes. The URL is written by the caller, which owns routing;
+	 * this hook still writes localStorage, so the next visit without a link
+	 * remembers.
+	 */
+	onLanguageChange?: (next: VoiceLanguage) => void;
 }
 
-export function useVoice({ onTranscript, threadId }: UseVoiceOptions) {
+export function useVoice({
+	onTranscript,
+	threadId,
+	language: languageFromUrl,
+	onLanguageChange,
+}: UseVoiceOptions) {
 	const [available, setAvailable] = useState(false);
 	const [phase, setPhase] = useState<VoicePhase>("rest");
 	const [consented, setConsented] = useState(false);
@@ -110,10 +130,36 @@ export function useVoice({ onTranscript, threadId }: UseVoiceOptions) {
 	const [captured, setCaptured] = useState(0);
 	const [level, setLevel] = useState(2);
 	const [note, setNote] = useState<VoiceNote | null>(null);
-	// Defaults on the server render, real preferences once mounted.
-	const [language, setLanguage] = useState<VoiceLanguage>(
+	// Defaults on the server render, real preferences once mounted — unless the
+	// URL says, in which case the server already knew and there is nothing to
+	// swap in.
+	const [storedLanguage, setStoredLanguage] = useState<VoiceLanguage>(
 		DEFAULT_PREFS.language,
 	);
+	/**
+	 * The language in force: the address when it has an opinion, otherwise this
+	 * device's remembered preference.
+	 *
+	 * The URL is the half the server can see, which is what removes the paint
+	 * flash -- there is nothing to swap in on mount because the first render
+	 * already had it.
+	 */
+	const language = languageFromUrl ?? storedLanguage;
+
+	/**
+	 * Both places, deliberately.
+	 *
+	 * The address so the choice is shareable and survives SSR; storage so a
+	 * later visit with no link still opens in the language this device chose.
+	 */
+	const setLanguage = useCallback(
+		(next: VoiceLanguage) => {
+			setStoredLanguage(next);
+			onLanguageChange?.(next);
+		},
+		[onLanguageChange],
+	);
+
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
 	const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -132,7 +178,7 @@ export function useVoice({ onTranscript, threadId }: UseVoiceOptions) {
 	// localStorage is unavailable during SSR, so preferences load after mount.
 	useEffect(() => {
 		const prefs = readPrefs();
-		setLanguage(prefs.language);
+		setStoredLanguage(prefs.language);
 		setAutoSpeak(prefs.autoSpeak);
 		setSpeed(prefs.speed);
 		setPrefsLoaded(true);

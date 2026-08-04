@@ -14,6 +14,13 @@ import { AuthError, redeemSignInLink } from "#/lib/aspire/auth";
  */
 
 export const Route = createFileRoute("/verify")({
+	// Full-document SSR, stated rather than inherited. This form is entirely
+	// client-interactive, but it is also the first paint a signed-out visitor
+	// gets, so the shell should arrive as HTML rather than after the bundle.
+	// It was rendering this way already -- by inheriting `defaultSsr` from a
+	// declaration that lived in a generated file. Saying so here means the mode
+	// is a decision on the record and survives the next regeneration.
+	ssr: true,
 	validateSearch: (search: Record<string, unknown>) => ({
 		token: typeof search.token === "string" ? search.token : "",
 	}),

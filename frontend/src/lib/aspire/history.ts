@@ -67,6 +67,16 @@ export interface StoredConversation {
 	 * and generation must never touch it again.
 	 */
 	titleSource?: "generated" | "manual";
+	/**
+	 * The language it was held in, and who it was answered for.
+	 *
+	 * Both are stored server-side and were never sent, so reopening a French
+	 * conversation reopened it in whatever the device happened to be set to.
+	 * Only present on a conversation loaded whole — the rail's list does not
+	 * carry them, because the rail does not need them.
+	 */
+	language?: "en" | "es" | "fr";
+	persona?: string;
 	updatedAt: number;
 	messages: Array<StoredMessage>;
 }

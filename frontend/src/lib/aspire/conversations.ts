@@ -39,6 +39,9 @@ interface WireConversation {
 	title?: string | null;
 	title_source?: "generated" | "manual" | null;
 	updated_at: number;
+	/** Detail only — the rail's list does not carry these. */
+	language?: string | null;
+	persona?: string | null;
 	messages?: Array<WireMessage>;
 }
 
@@ -135,11 +138,21 @@ function toStoredMessage(message: WireMessage): StoredMessage | null {
 	return null;
 }
 
+const LANGUAGES = ["en", "es", "fr"] as const;
+
 function toStored(wire: WireConversation): StoredConversation {
+	const language = (LANGUAGES as ReadonlyArray<string>).includes(
+		wire.language ?? "",
+	)
+		? (wire.language as "en" | "es" | "fr")
+		: undefined;
+
 	return {
 		threadId: wire.thread_id,
 		title: wire.title ?? "",
 		...(wire.title_source ? { titleSource: wire.title_source } : {}),
+		...(language ? { language } : {}),
+		...(wire.persona ? { persona: wire.persona } : {}),
 		updatedAt: wire.updated_at,
 		messages: (wire.messages ?? [])
 			.map(toStoredMessage)

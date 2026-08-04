@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, type LinkProps } from "@tanstack/react-router";
 
 /**
  * The shell both auth pages sit in.
@@ -28,7 +28,15 @@ interface AuthSurfaceProps {
 	/** The line under the form: "New to ASPIRE?" and its link. */
 	footText?: string;
 	footLinkLabel?: string;
-	footLinkTo?: string;
+	/**
+	 * A real route, checked against the route tree.
+	 *
+	 * It was `string`, which widened `<Link to>` back to an unchecked value and
+	 * was the only such escape in the codebase — a typo'd route compiled cleanly
+	 * and landed on the not-found handler at runtime. `LinkProps["to"]` is the
+	 * router's own union, so the route tree is what validates this.
+	 */
+	footLinkTo?: LinkProps["to"];
 	footNote?: string;
 }
 

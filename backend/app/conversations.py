@@ -77,6 +77,17 @@ class TranscriptMessage(BaseModel):
 
 class ConversationDetail(ConversationSummary):
     messages: list[TranscriptMessage] = Field(default_factory=list)
+    #: The language the conversation was held in.
+    #:
+    #: Stored on the row since the schema was written and never sent, so the
+    #: client had no way to reopen a French conversation in French -- it
+    #: reopened in whatever the device happened to be set to. Only on the
+    #: detail, not the summary: the rail lists titles and does not need it, and
+    #: the list is the hot path.
+    language: str = "en"
+    #: Who it was being answered for, on the same reasoning. Null means the
+    #: conversation was held before anybody chose, which is a real state.
+    persona: str | None = None
 
 
 class RenameRequest(BaseModel):
@@ -190,6 +201,8 @@ async def get_conversation(
         title=row.title if row else None,
         title_source=row.title_source if row else None,
         updated_at=int(row.updated_at.timestamp() * 1000) if row else 0,
+        language=row.language if row else "en",
+        persona=row.persona if row else None,
         messages=messages,
     )
 

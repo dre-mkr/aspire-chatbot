@@ -113,7 +113,7 @@ export function AspireChat() {
 	 * Read here, above `useConversation`, because the hook takes `persona` as an
 	 * input — this is not merely a display concern, it is on the request.
 	 */
-	const { simple, persona: personaParam } = useSearch({ from: "/_shell" });
+	const { simple, persona: personaParam, lang } = useSearch({ from: "/_shell" });
 	const persona = personaParam ?? null;
 	/**
 	 * The language each eligibility check opened in, by thread.
@@ -250,7 +250,28 @@ export function AspireChat() {
 	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
 
-	const voice = useVoice({ onTranscript: setDraft, threadId });
+	// `replace`, like the other two answer settings: switching language adjusts
+	// the current view rather than going somewhere.
+	const setLanguageInUrl = useCallback(
+		(next: "en" | "es" | "fr") => {
+			void navigate({
+				to: ".",
+				search: (previous: ShellSearch): ShellSearch => ({
+					...previous,
+					lang: next,
+				}),
+				replace: true,
+			});
+		},
+		[navigate],
+	);
+
+	const voice = useVoice({
+		onTranscript: setDraft,
+		threadId,
+		language: lang,
+		onLanguageChange: setLanguageInUrl,
+	});
 
 	// Only new answers are spoken. Reopening a past conversation restores its
 	// messages without going through onAnswer, so nothing replays on load.
@@ -690,9 +711,20 @@ export function AspireChat() {
 			void navigate({
 				to: "/chat/$chatId",
 				params: { chatId: conversation.threadId },
-				// The setting belongs to the reader, not to the conversation, so it
-				// survives moving between them — exactly as it did as component state.
-				search: (previous: ShellSearch) => previous,
+				search: (previous: ShellSearch): ShellSearch => ({
+					// "Explain it simply" belongs to the reader, not to the
+					// conversation, so it survives moving between them — exactly as it
+					// did as component state.
+					...previous,
+					// Language does not. A conversation was held in a language and its
+					// answers are in that language; reopening it in another one leaves
+					// a French transcript being continued in English. The stored value
+					// wins here, and it is only known for a conversation that has been
+					// loaded whole — the rail's summary does not carry it, so flipping
+					// between chats from the rail keeps whatever is current until the
+					// transcript arrives.
+					...(conversation.language ? { lang: conversation.language } : {}),
+				}),
 			});
 		},
 		[navigate],

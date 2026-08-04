@@ -822,16 +822,9 @@ async def chat_stream(
             yield {"error": "The assistant is temporarily unavailable. Please try again."}
             return
 
-        # The prose is complete here, and everything below this line is not
-        # prose: follow-ups are a second model call, persistence is a database
-        # round trip, and together they were taking two to four seconds. The
-        # client could not tell the difference between "still being written" and
-        # "written, and waiting on bookkeeping", so it held the last word of the
-        # answer back for the whole of it and then popped it in.
-        #
-        # Saying so costs one event and lets the reveal finish on time.
-        yield {"text_end": True}
-
+        # Everything the reader's screen needs is derivable from `collected`
+        # right now, without another round trip anywhere. Computed before the
+        # turn is announced so that announcing it costs nothing.
         game = _started_game(collected)
         eligibility = _started_eligibility(collected)
         reply = "".join(streamed).strip() or _extract_reply(collected)
@@ -842,29 +835,25 @@ async def chat_stream(
 
         sources = _extract_sources(collected)
         quiet_turn = game is not None or eligibility is not None
-        follow_ups = [] if quiet_turn else await suggest_follow_ups(request.message, reply)
 
-        await _persist_turn(
-            request,
-            thread_id,
-            reply=reply,
-            sources=sources,
-            follow_ups=follow_ups,
-            game=game,
-            eligibility=eligibility,
-            owner_id=who,
-        )
+        # The prose is complete here, and nothing below this line is prose.
+        yield {"text_end": True}
 
-        settings = get_settings()
-        if settings.memory_window_enabled and database_enabled():
-            await enqueue_summary(thread_id)
-
+        # The turn, as soon as it is known -- and crucially before the two slow
+        # things left to do. Follow-ups are a second model call and persistence
+        # is a database round trip; together they measured two to five seconds,
+        # and the client cannot settle a turn until this event arrives. So the
+        # answer sat finished on screen with no sources, no actions and no
+        # chips, waiting on work that none of them depend on.
+        #
+        # Follow-ups are the one thing here that genuinely is not ready yet, so
+        # they are sent on their own once they are.
         yield {
             "done": {
                 "reply": reply,
                 "thread_id": thread_id,
                 "sources": [source.model_dump() for source in sources],
-                "follow_ups": follow_ups,
+                "follow_ups": [],
                 "game_started": game,
                 "eligibility_started": (
                     {"check": eligibility["check"], "language": request.language}
@@ -873,6 +862,32 @@ async def chat_stream(
                 ),
             }
         }
+
+        follow_ups = [] if quiet_turn else await suggest_follow_ups(request.message, reply)
+
+        # Past this point the reader already has the answer, so nothing here may
+        # take it away. Persistence failing is a real fault and is logged as one,
+        # but it is not a reason to replace a correct answer on screen with an
+        # error -- which is what letting it raise would now do.
+        try:
+            await _persist_turn(
+                request,
+                thread_id,
+                reply=reply,
+                sources=sources,
+                follow_ups=follow_ups,
+                game=game,
+                eligibility=eligibility,
+                owner_id=who,
+            )
+
+            settings = get_settings()
+            if settings.memory_window_enabled and database_enabled():
+                await enqueue_summary(thread_id)
+        except Exception:
+            logger.exception("Persisting the turn failed for thread %s", thread_id)
+
+        yield {"follow_ups": follow_ups}
 
     return StreamingResponse(
         agui_stream(thread_id=thread_id, run_events=run()),
