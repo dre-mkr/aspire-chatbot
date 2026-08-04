@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type AskResult, AspireError, type Source } from "./api";
 import { blockIsClosed, settledBlocks } from "./settled";
@@ -19,6 +19,7 @@ import {
 	conversationsQuery,
 	readConversation,
 	retitleInCache,
+	titleSnapshot,
 	upsertConversation,
 } from "./queries";
 import {
@@ -596,24 +597,62 @@ export function useConversation({
 	 *
 	 * Cache first so the rail changes now rather than after a round trip — a
 	 * title crossfading in is a deliberate moment in this product, and putting a
-	 * network hop in front of it would turn it into a stutter. The PATCH is
-	 * fire-and-forget for the same reason every title path here is: a name that
-	 * fails to save is worth strictly less than the answer the reader is looking
-	 * at, and must never interrupt it.
+	 * network hop in front of it would turn it into a stutter.
+	 *
+	 * It was `setQueryData` plus `void renameConversation(...).catch(() => {})`,
+	 * and that last clause was the defect: a rename that failed left the rail
+	 * showing a name the server had never heard of, indefinitely, until some
+	 * unrelated invalidation happened to refetch. Failure was indistinguishable
+	 * from success — and because there was no mutation object anywhere in the
+	 * product, it could not even be forced into an error state to observe.
+	 *
+	 * As a mutation it keeps the optimism and gains the half that was missing:
+	 * `onMutate` snapshots the name being replaced, `onError` puts it back, and
+	 * `onSettled` asks the server what is actually true.
 	 */
+	const renameMutation = useMutation({
+		mutationFn: ({
+			id,
+			title,
+			source,
+		}: {
+			id: string;
+			title: string;
+			source: "generated" | "manual";
+		}) => renameConversation(id, title, source),
+		onMutate: ({ id, title, source }) => {
+			const previous = titleSnapshot(queryClient, id);
+			retitleInCache(queryClient, id, title, source);
+			return { id, previous };
+		},
+		onError: (_error, _variables, context) => {
+			if (!context) return;
+			retitleInCache(
+				queryClient,
+				context.id,
+				context.previous.title,
+				context.previous.titleSource,
+			);
+		},
+		// Runs on success and on failure alike. On success it settles a race: the
+		// completion handoff invalidates the list at almost exactly this moment,
+		// and a refetch that started before the rename landed answers with the old
+		// name -- which would put the truncated question back a beat after the
+		// generated title crossfaded in. On failure it replaces the rolled-back
+		// guess with whatever the server actually holds.
+		onSettled: () =>
+			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
+	});
+
+	// Still fire-and-forget at the call sites, and deliberately so: a name that
+	// fails to save is worth strictly less than the answer the reader is looking
+	// at and must never interrupt it. What changed is that the failure now
+	// resolves to the truth instead of persisting as a lie.
 	const nameConversation = useCallback(
 		(id: string, title: string, source: "generated" | "manual") => {
-			retitleInCache(queryClient, id, title, source);
-			void renameConversation(id, title, source)
-				// Only once the service has it. The completion handoff invalidates
-				// the list at almost exactly this moment, and a refetch that started
-				// before the rename landed answers with the old name — which would
-				// put the truncated question back a beat after the generated title
-				// crossfaded in. Re-asking after the write is what settles it.
-				.then(() => queryClient.invalidateQueries({ queryKey: keys.allConversations() }))
-				.catch(() => undefined);
+			renameMutation.mutate({ id, title, source });
 		},
-		[queryClient],
+		[renameMutation.mutate],
 	);
 
 	const clearTimers = useCallback(() => {

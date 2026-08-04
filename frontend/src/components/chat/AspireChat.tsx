@@ -107,6 +107,19 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	const awaitingUrl = useRef<string | null>(null);
 	/** One press of "New chat" is one navigation, however fast it is repeated. */
 	const startingNew = useRef(false);
+	/**
+	 * The language each eligibility check opened in, by thread.
+	 *
+	 * A check opens in a language and finishes in it — that is the rule the
+	 * eligibility key is shaped around. Holding the language here is what makes
+	 * the rule true rather than merely stated: the query function is handed this
+	 * captured value instead of reading the live one, so a refetch under the
+	 * unchanged key cannot switch the card's language part-way through.
+	 *
+	 * A ref, not state: it is read during render but changing it must never
+	 * itself cause one, and every path that sets it is already re-rendering.
+	 */
+	const checkLanguage = useRef(new Map<string, string>());
 
 	const {
 		phase,
@@ -165,6 +178,9 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 		onEligibilityStart: (id, language) => {
 			clearEligibilityResult(id);
 			setEligibility(null);
+			// The language the check opened in, captured here and not read again.
+			// See `checkLanguage` below.
+			checkLanguage.current.set(id, language);
 			// Same treatment, same reason as the game turn above.
 			void queryClient
 				.fetchQuery({ ...eligibilityStateQuery(id, language), staleTime: 0 })
@@ -276,7 +292,25 @@ export function AspireChat({ persona = null }: AspireChatProps = {}) {
 	 * from a check that was restarted.
 	 */
 	const eligibilityQuery = useQuery(
-		eligibilityStateQuery(threadId, voice.language, settled),
+		// The captured language, not the live one.
+		//
+		// The key is deliberately not language-scoped — switching the interface
+		// language part-way through a check must not refetch and redraw the card
+		// being answered. But the query function used to close over the live
+		// `voice.language`, so any refetch under that unchanged key re-ran the
+		// request in whatever language was current and wrote it back to the same
+		// entry: the card changed language mid-check, which is exactly what the
+		// key's comment says must not happen.
+		//
+		// `checkLanguage` holds what the flow opened in. The fallback is only
+		// reached when a check is restored after a reload, where nothing captured
+		// it and the current language is the best available answer.
+		eligibilityStateQuery(
+			threadId,
+			(threadId ? checkLanguage.current.get(threadId) : undefined) ??
+				voice.language,
+			settled,
+		),
 	);
 
 	/**

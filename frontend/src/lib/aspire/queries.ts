@@ -66,14 +66,24 @@ export const keys = {
 	 * eventually be written differently" failure already happening.
 	 */
 	allGames: () => ["games"] as const,
-	/** The running game for a thread, or null once it is over. */
-	gameState: (threadId: string) => ["games", "state", threadId] as const,
+	/**
+	 * The running game for a thread, or null once it is over.
+	 *
+	 * The owner is in the key for the same reason it is in `conversations`: it is
+	 * the structural half of not showing one person's state to the next. These
+	 * two keys used to omit it and rely entirely on somebody remembering to clear
+	 * the cache at sign-in and sign-out — one class of problem defended two
+	 * different ways, one of them manual. A different identity is now a different
+	 * key and the question does not arise.
+	 */
+	gameState: (threadId: string, ownerId = "anon") =>
+		["games", "state", ownerId, threadId] as const,
 
 	/** The prefix every eligibility cache entry sits under. See `allGames`. */
 	allEligibility: () => ["eligibility"] as const,
-	/** The eligibility flow's server-side state for a thread. */
-	eligibilityState: (threadId: string) =>
-		["eligibility", "state", threadId] as const,
+	/** The eligibility flow's server-side state for a thread. See `gameState`. */
+	eligibilityState: (threadId: string, ownerId = "anon") =>
+		["eligibility", "state", ownerId, threadId] as const,
 } as const;
 
 /**
@@ -140,7 +150,7 @@ export const conversationQuery = (
  */
 export const gameStateQuery = (threadId: string | null, settled = true) =>
 	queryOptions({
-		queryKey: keys.gameState(threadId ?? ""),
+		queryKey: keys.gameState(threadId ?? "", owner()),
 		queryFn: () => fetchGameState(threadId as string),
 		// Gated on the turn being over, not merely on having a thread. The effect
 		// this replaced opened with `if (!threadId || !settled) return`, and
@@ -165,9 +175,20 @@ export const gameStateQuery = (threadId: string | null, settled = true) =>
  * Keyed by thread and NOT by language, which is not an oversight. The language
  * is read when the request is made, but a change to it must not re-key: someone
  * switching the interface language part-way through a check would otherwise
- * refetch and redraw the card they are answering. That was the behaviour before
- * this became a query and it is the behaviour worth keeping — the flow opened in
- * a language and finishes in it.
+ * refetch and redraw the card they are answering. The flow opened in a language
+ * and finishes in it.
+ *
+ * That is what the key said and it was not what happened. `queryFn` closed over
+ * the LIVE language, so any refetch under the unchanged key — the explicit
+ * invalidation after a turn, a window focus, a reconnect — re-ran the request
+ * with whatever the language was *now* and wrote the result back under the same
+ * key. The card switched language mid-check: the classic shape of a key that
+ * omits a variable its query function depends on.
+ *
+ * The fix keeps the key and fixes the closure. `language` here is captured at
+ * the moment the check opens and passed down; it is not read again. So the key
+ * is honest — nothing the query function depends on is missing from it, because
+ * the language is no longer something that can change underneath it.
  *
  * Only half the story lives here. Once a verdict exists the server deletes the
  * session, and the result is read from device storage instead — see
@@ -181,7 +202,7 @@ export const eligibilityStateQuery = (
 	settled = true,
 ) =>
 	queryOptions({
-		queryKey: keys.eligibilityState(threadId ?? ""),
+		queryKey: keys.eligibilityState(threadId ?? "", owner()),
 		queryFn: () => fetchEligibilityState(threadId as string, language),
 		// Same gate, same reason as the game query above.
 		enabled: Boolean(threadId) && settled,
@@ -278,7 +299,10 @@ export function retitleInCache(
 	queryClient: QueryClient,
 	threadId: string,
 	title: string,
-	titleSource: "generated" | "manual",
+	// `undefined` is a real value here and not a missing argument: it is the
+	// "nobody typed this" state, which is what a rollback restores when the
+	// title being undone was the generated one.
+	titleSource: "generated" | "manual" | undefined,
 ) {
 	const apply = (conversation: StoredConversation) =>
 		conversation.threadId === threadId
@@ -295,6 +319,21 @@ export function retitleInCache(
 		keys.messages(owner(), threadId),
 		(previous) => (previous ? apply(previous) : previous),
 	);
+}
+
+/**
+ * What a conversation is called right now, for putting back if a write fails.
+ *
+ * Only the two fields a rename touches. Restoring a whole cached list would
+ * also undo an optimistic insert that happened in between, which is a bigger
+ * claim than "this rename did not stick".
+ */
+export function titleSnapshot(
+	queryClient: QueryClient,
+	threadId: string,
+): { title: string; titleSource: "generated" | "manual" | undefined } {
+	const current = readConversation(queryClient, threadId);
+	return { title: current?.title ?? "", titleSource: current?.titleSource };
 }
 
 /** Drops the "a person typed this" lock, so a regenerate may replace it. */
@@ -332,9 +371,11 @@ export function invalidateAfterTurn(
 	threadId: string | null,
 ) {
 	if (!threadId) return;
-	void queryClient.invalidateQueries({ queryKey: keys.gameState(threadId) });
 	void queryClient.invalidateQueries({
-		queryKey: keys.eligibilityState(threadId),
+		queryKey: keys.gameState(threadId, owner()),
+	});
+	void queryClient.invalidateQueries({
+		queryKey: keys.eligibilityState(threadId, owner()),
 	});
 	// Reaches this conversation's transcript too: `["conversations", id]` is a
 	// prefix of `["conversations", id, "messages"]`.

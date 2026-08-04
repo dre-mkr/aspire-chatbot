@@ -554,6 +554,73 @@ body {
 	text-wrap: pretty;
 }
 
+/* The quiet way back from a failed load. A link rather than a button shape:
+   the failure is not worth a control that competes with "New chat". */
+.rail__retry {
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: var(--ink);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+/* Three rows of nothing, so first load reads as "still arriving" rather than
+   as "you have none" -- which is what it said before, on every slow connection,
+   right up until the rows popped in.
+
+   `aria-hidden`: a screen reader is told nothing at all here, which is correct.
+   The list that follows is what has meaning, and announcing placeholder shapes
+   would be announcing the absence of information. */
+.rail__skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 4px 10px;
+}
+
+.rail__skeleton i {
+	height: 30px;
+	border-radius: 8px;
+	background: linear-gradient(
+		90deg,
+		color-mix(in oklab, var(--quiet) 10%, transparent) 0%,
+		color-mix(in oklab, var(--quiet) 18%, transparent) 50%,
+		color-mix(in oklab, var(--quiet) 10%, transparent) 100%
+	);
+	background-size: 200% 100%;
+	animation: rail-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Each row starts a beat after the one above, so the group reads as one
+   loading surface rather than three synchronised bars. */
+.rail__skeleton i:nth-child(2) {
+	animation-delay: 0.12s;
+	width: 82%;
+}
+.rail__skeleton i:nth-child(3) {
+	animation-delay: 0.24s;
+	width: 64%;
+}
+
+@keyframes rail-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+/* Nothing in a loading placeholder is worth motion sickness. */
+@media (prefers-reduced-motion: reduce) {
+	.rail__skeleton i {
+		animation: none;
+	}
+}
+
 /* 12px, the documented body floor: "Today" and "Yesterday" are read as words,
    not scanned as a tracked label. */
 .rail__group-title {

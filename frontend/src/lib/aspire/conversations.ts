@@ -42,7 +42,36 @@ interface WireConversation {
 	messages?: Array<WireMessage>;
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * A failed request that still knows what the server said.
+ *
+ * The plain `Error` this replaces put the status in a message string, which
+ * meant nothing could act on it: Query's retry policy could not tell a 401 from
+ * a 503, so it retried both. Retrying a 404 for a deleted conversation is three
+ * round trips to be told the same thing.
+ */
+export class HttpError extends Error {
+	readonly status: number;
+
+	constructor(path: string, status: number) {
+		super(`${path} failed: ${status}`);
+		this.name = "HttpError";
+		this.status = status;
+	}
+}
+
+async function call<T>(
+	path: string,
+	init?: RequestInit,
+	/**
+	 * Checked before the value is handed back, where a shape matters.
+	 *
+	 * Same reasoning as `isChatResponseBody` in `api.ts`: `as T` is a claim
+	 * nothing verifies, and a backend shape change would surface as a rail full
+	 * of blank rows rather than as an error.
+	 */
+	guard?: (value: unknown) => value is T,
+): Promise<T> {
 	const response = await fetch(`${API_URL}${path}`, {
 		...init,
 		headers: {
@@ -52,9 +81,34 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 		},
 		signal: AbortSignal.timeout(TIMEOUT_MS),
 	});
-	if (!response.ok) throw new Error(`${path} failed: ${response.status}`);
+	if (!response.ok) throw new HttpError(path, response.status);
 	if (response.status === 204) return undefined as T;
-	return (await response.json()) as T;
+
+	const body: unknown = await response.json();
+	if (guard && !guard(body)) {
+		throw new Error(`${path} returned a shape this client cannot read`);
+	}
+	return body as T;
+}
+
+/** Shallow: `toStored` already tolerates every optional field being absent. */
+function isWireConversation(value: unknown): value is WireConversation {
+	if (typeof value !== "object" || value === null) return false;
+	const row = value as Record<string, unknown>;
+	return (
+		typeof row.thread_id === "string" &&
+		typeof row.updated_at === "number" &&
+		(row.messages === undefined || Array.isArray(row.messages))
+	);
+}
+
+function isConversationList(
+	value: unknown,
+): value is { conversations: Array<WireConversation> } {
+	if (typeof value !== "object" || value === null) return false;
+	const body = (value as Record<string, unknown>).conversations;
+	// Absent is legitimate and means "none"; present and wrong is not.
+	return body === undefined || (Array.isArray(body) && body.every(isWireConversation));
 }
 
 /**
@@ -97,6 +151,8 @@ function toStored(wire: WireConversation): StoredConversation {
 export async function fetchConversations(): Promise<Array<StoredConversation>> {
 	const body = await call<{ conversations: Array<WireConversation> }>(
 		"/api/conversations",
+		undefined,
+		isConversationList,
 	);
 	return (body.conversations ?? []).map(toStored);
 }
@@ -108,6 +164,8 @@ export async function fetchConversation(
 	return toStored(
 		await call<WireConversation>(
 			`/api/conversations/${encodeURIComponent(threadId)}`,
+			undefined,
+			isWireConversation,
 		),
 	);
 }

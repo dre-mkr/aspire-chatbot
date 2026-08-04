@@ -128,6 +128,38 @@ interface ChatResponseBody {
 	eligibility_started?: { check?: string; language?: string } | null;
 }
 
+/**
+ * The response boundary, checked rather than asserted.
+ *
+ * `as ChatResponseBody` is a claim TypeScript believes and nothing verifies. A
+ * backend shape change compiles clean and fails at render: the fields become
+ * `undefined`, the `?? []` and `?? ""` defaults absorb it, and the reader gets a
+ * confidently empty answer instead of an error. That is the worst possible
+ * failure mode for this particular product — a child cannot tell an empty
+ * answer from a wrong one.
+ *
+ * Hand-written rather than a schema library, deliberately: the repo's rule is no
+ * new dependencies without justification, and there are two shapes to check.
+ *
+ * Only the fields the client cannot do without are required. `sources`,
+ * `follow_ups` and the two card markers are genuinely optional on the wire and
+ * their absence is normal, so they are checked for *type* when present and not
+ * for presence.
+ */
+function isChatResponseBody(value: unknown): value is ChatResponseBody {
+	if (typeof value !== "object" || value === null) return false;
+	const body = value as Record<string, unknown>;
+	if (typeof body.reply !== "string") return false;
+	if (typeof body.thread_id !== "string") return false;
+	if (body.sources !== undefined && !Array.isArray(body.sources)) return false;
+	if (body.follow_ups !== undefined && !Array.isArray(body.follow_ups)) return false;
+	for (const marker of ["game_started", "eligibility_started"]) {
+		const held = body[marker];
+		if (held !== undefined && held !== null && typeof held !== "object") return false;
+	}
+	return true;
+}
+
 export async function askAspire({
 	message,
 	threadId,
@@ -200,7 +232,16 @@ export async function askAspire({
 		);
 	}
 
-	const body = (await response.json()) as ChatResponseBody;
+	const parsed: unknown = await response.json();
+	if (!isChatResponseBody(parsed)) {
+		// Retryable: the likeliest cause is a deploy mid-flight serving one side
+		// of a shape change, which the next attempt may well get right.
+		throw new AspireError(
+			"I got an answer I could not read. Try asking again.",
+			true,
+		);
+	}
+	const body = parsed;
 	const started = body.game_started;
 	const check = body.eligibility_started;
 	return {

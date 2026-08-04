@@ -144,11 +144,43 @@ export function Rail({
 					<span className="rail__fold">History</span>
 				</p>
 
+				{/* Four states, not two.
+
+				    Every one of these used to render as the settled-empty message.
+				    No component read a Query status flag anywhere in the product, so
+				    "still loading" and "you have no conversations" were the same
+				    screen — on a slow connection the rail asserted there was nothing
+				    here and then popped rows in, and a failed load was invisible with
+				    no way to ask again.
+
+				    The error case still does not throw anything in the reader's face:
+				    history failing to load is not worth a dialog, and the rail showing
+				    what it has is the right default. What it now also does is say so
+				    quietly and offer the retry. */}
 				<div className="rail__groups rail__fold" inert={folded}>
-					{history.length === 0 ? (
-						<p className="rail__empty">
-							Your conversations will appear here once you ask something.
-						</p>
+					{conversations.isPending ? (
+						<div className="rail__skeleton" aria-hidden="true">
+							<i />
+							<i />
+							<i />
+						</div>
+					) : history.length === 0 ? (
+						conversations.isError ? (
+							<p className="rail__empty">
+								Your conversations could not be loaded.{" "}
+								<button
+									type="button"
+									className="rail__retry"
+									onClick={() => void conversations.refetch()}
+								>
+									Try again
+								</button>
+							</p>
+						) : (
+							<p className="rail__empty">
+								Your conversations will appear here once you ask something.
+							</p>
+						)
 					) : (
 						history.map((group) => (
 							<section key={group.label} aria-label={group.label}>
