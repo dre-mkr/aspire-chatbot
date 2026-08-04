@@ -26,10 +26,17 @@ The last three were added in P12, because "fixed" was doing work it should not:
 | wontfix | 2 |
 | decided | 2 |
 | measured, not changed | 1 |
-| **open** | **0** |
+| **open** | **1** (P12-001, newly found -- see below) |
 
-Every row is terminal. Three things are worth reading before treating that as
-"done":
+Every audited row is terminal. One NEW finding was surfaced by the work and is
+open: **P12-001** -- the response cache sits on `POST /chat`, and the client
+has used `POST /chat/stream` since P0-001 was adopted. So the caching work in
+P7-003, P7-004 and P7-006 is correct and currently unreached in production.
+It is left open deliberately: fixing it changes the primary transport and
+deserves its own commit and tests rather than a hurried one at the end of a
+batch.
+
+Three more things are worth reading before treating this as "done":
 
 1. **P9-001, P9-002, P7-002 are deferred, not solved.** CSP, HSTS, the `:80`
    redirect and the co-tenanted Valkey instance are all still exactly as the
@@ -131,6 +138,7 @@ Harnesses added in P12, all runnable against `.impeccable/preview-server.mjs`:
 | P10-007 | P10 | S3 | A11y (measured) | `frontend/src/components/chat/Rail.tsx:131` | One dead Tab stop per cycle: at position 3 focus lands on `<body>` while passing the collapsed sidebar's `[inert]` region. | Harmless — `inert` is doing its job and the 10 focusable elements inside are correctly skipped — but one Tab press appears to do nothing. | Low priority. Move focus past the inert container rather than into it. | **fixed** (P12 b13; tabIndex -1 on the scroller while folded) |
 | P11-001 | P11 | S2 | Testing / infra | `backend/tests/test_session_cap.py`, `app/sessions.py:91-108` | **The test suite is not safe to run concurrently.** The per-IP anonymous-session cap counts in Valkey, and `conftest.py`'s `_reset_anonymous_session_cap` fixture resets a counter in a **shared instance** (P7-002: co-tenanted with a foreign BullMQ app). Found the hard way: two pytest runs overlapping made `test_the_cap_eventually_refuses` fail; **it passes in isolation (2 passed)**. | Two CI runs on two PRs will flake each other, and the failure looks like a real regression in an abuse control. Now that P9-007 makes CI actually run pytest, this becomes reachable rather than theoretical. | Namespace the cap key per test run (a random prefix from an env var), or point tests at a dedicated Valkey DB index. Either removes the shared-state coupling entirely. | **fixed** (P11 b7; ASPIRE_CACHE_NAMESPACE per run) |
 | P11-002 | P11 | S2 | Security | `backend/app/auth.py:78-87` | `_secret()` checks only that `SESSION_SECRET` is **non-empty** — any length is accepted. Surfaced by PyJWT during this batch: `InsecureKeyLengthWarning: The HMAC key is 7 bytes long, which is below the minimum recommended length of 32 bytes for SHA256` (RFC 7518 §3.2). | The module's own docstring argues at length that a signing key with a fallback is a key an attacker also has — but a 7-byte key gets the same acceptance as a 256-bit one. It also keys `hash_ip`, so a short secret weakens IP pseudonymisation too. The check that exists is the *presence* check, not the *strength* check. | Reject anything under 32 bytes in `_secret()`, with the same refuse-at-boot behaviour as the unset case. Small, testable, and the failure mode stays "won't start" rather than "quietly weak". | **fixed** (P11 b5; 2 tests) |
+| P12-001 | P12 | S2 | Cache / cost | `backend/app/main.py:747,883` vs `:929` | **The response cache is on the transport the client no longer uses.** `_cached_reply` and `put_answer` are called only from `POST /chat`. `POST /chat/stream` -- which P0-001 adopted as the live transport in P11 -- neither reads nor writes the answer cache. Verified by grep: no `response_cache` reference anywhere in the streaming endpoint. | Every first-turn question is a full agent run in production. The six-hour TTL, the corpus fingerprint that closed P7-004, the hit-rate window from P7-006 and the single-flight from P7-003 all apply to a fallback path that the shipped client only reaches when SSE fails. `/health` will report a hit rate near zero and that will be accurate rather than broken. | Wire the cache into the streaming path: check before opening the stream and replay a hit as the same `aspire.turn` + `aspire.follow_ups` frames the live path emits; write and release the lease when the turn settles. Not done here -- it is a change to the primary transport and it arrived at the end of the batch, so it wants its own commit and its own tests. | open (found by P12, not part of the original audit) |
 
 ## Verified sound (recorded so later passes do not re-litigate)
 
