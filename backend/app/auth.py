@@ -75,6 +75,10 @@ class Principal:
         return self.account_type == ACCOUNT_ANONYMOUS
 
 
+#: Below this, HMAC-SHA256 offers less than its nominal strength (RFC 7518 3.2).
+MIN_SECRET_BYTES = 32
+
+
 def _secret() -> str:
     settings = get_settings()
     secret = getattr(settings, "session_secret", None)
@@ -83,6 +87,17 @@ def _secret() -> str:
         # a signing key an attacker also has.
         raise RuntimeError(
             "SESSION_SECRET is not set. Sessions cannot be signed without it."
+        )
+    if len(secret.encode("utf-8")) < MIN_SECRET_BYTES:
+        # The presence check above is not the strength check. A short key is
+        # accepted by every JWT library and signs perfectly valid tokens, so
+        # nothing downstream would ever complain -- and this key also feeds
+        # `hash_ip`, so a weak one makes the address pseudonymisation weak too.
+        # Refused at the same point and in the same way as an absent one.
+        raise RuntimeError(
+            f"SESSION_SECRET is {len(secret.encode('utf-8'))} bytes; it must be at "
+            f"least {MIN_SECRET_BYTES}. Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
         )
     return secret
 

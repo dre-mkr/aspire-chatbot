@@ -98,11 +98,29 @@ async def send(message: Message) -> bool:
     api_key = settings.resend_api_key
 
     if not api_key:
-        # The default. Not a silent no-op: the link is right there in the log,
-        # which is what makes a local password reset possible at all.
-        logger.info(
-            "[mail:console] to=%s subject=%s\n%s", message.to, message.subject, message.text
-        )
+        # The default in development, where having the link in the log is the
+        # only way to complete a password reset without a mail provider.
+        #
+        # The body is a working sign-in or reset token, so it is logged ONLY when
+        # something has explicitly said this is a development environment. A
+        # production deploy that forgets RESEND_API_KEY used to start writing
+        # credentials and children's email addresses to the journal instead of
+        # failing -- the wrong direction to fail in.
+        if settings.mail_console_logs_links:
+            logger.info(
+                "[mail:console] to=%s subject=%s\n%s",
+                message.to,
+                message.subject,
+                message.text,
+            )
+        else:
+            logger.error(
+                "No RESEND_API_KEY is set, so %r could not be delivered. The link "
+                "is NOT logged: it is a working credential. Set RESEND_API_KEY, or "
+                "set MAIL_CONSOLE_LOGS_LINKS=true if this really is a development "
+                "environment.",
+                message.subject,
+            )
         return True
 
     try:

@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     # which keeps development and the test suite off the network entirely.
     resend_api_key: str = ""
     mail_from: str = "ASPIRE <no-reply@aspire.kn>"
+    # Whether the console provider may write message bodies to the log.
+    #
+    # Those bodies contain working sign-in and password-reset links. Logging them
+    # is genuinely useful in development and is how a local password reset is
+    # completed at all -- and it is a credential leak anywhere else. OFF by
+    # default so the unsafe behaviour has to be asked for rather than inherited
+    # by a deploy that forgot RESEND_API_KEY.
+    mail_console_logs_links: bool = False
 
     # --- Chat model -------------------------------------------------------
     # Passed straight to init_chat_model, so the "provider:model" form selects

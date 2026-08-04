@@ -19,6 +19,7 @@ import logging
 import re
 import unicodedata
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import redis.asyncio as redis
@@ -48,6 +49,30 @@ def normalise(query: str) -> str:
     return text.casefold().strip()
 
 
+@lru_cache(maxsize=1)
+def corpus_fingerprint() -> str:
+    """A short digest of the knowledge base the answers were built from.
+
+    Part of every cache key, so re-ingesting an edited corpus retires every
+    answer derived from the old one atomically. Without it a cached answer
+    outlives the fact it was based on for up to RESPONSE_CACHE_TTL_SECONDS --
+    six hours by default, on a government FAQ where a correction is usually the
+    reason for the edit.
+
+    Cached for the process: the CSV does not change under a running service, and
+    ingest is a separate command that restarts it.
+    """
+    path = get_settings().resolved(get_settings().knowledge_base_csv)
+    try:
+        digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()[:12]
+    except OSError:
+        # No corpus to fingerprint is not a reason to stop answering. A constant
+        # simply means the cache behaves as it did before this existed.
+        logger.warning("Could not fingerprint %s; caching without one.", path)
+        return "nocorpus"
+    return digest
+
+
 def cache_key(
     query: str,
     *,
@@ -73,6 +98,9 @@ def cache_key(
             "lang": (language or "en").lower(),
             "persona": persona or "",
             "status": account_status or "",
+            # See `corpus_fingerprint`: an edited knowledge base must not keep
+            # serving answers built from the old one.
+            "kb": corpus_fingerprint(),
         },
         sort_keys=True,
         ensure_ascii=False,
