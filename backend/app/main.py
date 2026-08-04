@@ -53,6 +53,7 @@ from app.timing import (
     RING as TIMING_RING,
     T_AGENT_FIRST_DELTA,
     T_AGENT_FIRST_TOOL,
+    T_CACHE_LOOKUP,
     T_HISTORY,
     T_IDENTITY,
     T_OPEN_CONVERSATION,
@@ -713,6 +714,137 @@ async def _cached_reply(request: ChatRequest) -> ChatResponse | None:
     )
 
 
+async def _cache_the_answer(
+    request: ChatRequest,
+    *,
+    reply: str,
+    sources: list[Source],
+    follow_ups: list[str],
+    quiet_turn: bool,
+) -> None:
+    """Store the answer and release the single-flight lease.
+
+    Shared by both transports since P13-006, and shared rather than copied for
+    the reason `chat_stream`'s docstring gives: two paths that answer the same
+    question differently is how the streaming version becomes a second product.
+    Before this, `/chat` populated the cache and `/chat/stream` never did -- so
+    the only writer was the transport nobody used, and the cache stayed empty.
+
+    Only the opening turn is cacheable -- see `_cached_reply` -- and never a game
+    or eligibility turn: both create server-side session state, so replaying a
+    cached "answer" would render a card for a flow nobody started.
+
+    This matters more for eligibility than for games, because "Who is eligible for
+    ASPIRE?" is a landing-page starter chip and therefore the most cacheable
+    string in the product. Caching that turn would serve every later asker an
+    empty reply with no card at all.
+    """
+    if request.thread_id:
+        return
+
+    key = response_cache.cache_key(
+        request.message,
+        language=request.language,
+        persona=request.persona,
+        account_status=request.account_status,
+    )
+    if quiet_turn is False:
+        await response_cache.put_answer(
+            request.message,
+            {
+                "reply": reply,
+                "sources": [source.model_dump() for source in sources],
+                "follow_ups": follow_ups,
+            },
+            language=request.language,
+            persona=request.persona,
+            account_status=request.account_status,
+        )
+    # Released whether or not anything was cached. A card turn is not cacheable,
+    # but callers waiting on the lease must still be let go rather than sitting
+    # out the full wait for an answer that is never coming. The lease also expires
+    # on its own, so a crash costs the next caller a lease's worth of waiting and
+    # nothing more.
+    await response_cache.release_lease(key)
+
+
+async def _replay_cached(
+    request: ChatRequest,
+    thread_id: str,
+    owner_id: uuid_module.UUID | None,
+    cached: ChatResponse,
+) -> AsyncIterator[dict]:
+    """Serve a cache hit as a streamed turn, then record it.
+
+    The whole reply in ONE delta, deliberately. Splitting it into several would
+    not improve time-to-first-token -- the first chunk is the first chunk either
+    way -- and pacing them out to imitate a model typing would mean adding delay
+    on purpose, in a workstream about removing it. A cached answer arriving at
+    once is what a cached answer is.
+
+    ## Persistence happens here, and `/chat`'s cached path is why
+
+    `/chat` returns its cached reply and stops: no `_open_conversation`, no
+    `_persist_turn`. A cached first turn therefore leaves nothing in Postgres and
+    never appears in anybody's history. That is survivable on `/chat`, which is
+    the fallback transport. It is not survivable here: the client commits the chat
+    to the rail and the address bar the moment it is sent, so a conversation that
+    does not exist server-side is a chat on screen with a dead end behind it --
+    exactly what `_open_conversation` exists to prevent.
+
+    So it is recorded, and recorded AFTER the reply has gone out. On the miss path
+    persistence already sits behind `done` for the same reason: the reader has
+    their answer, and nothing that happens afterwards may delay it.
+
+    `thread_id` is the one this request minted, not the fresh id `_cached_reply`
+    puts in its `ChatResponse`. The client is told this id and the conversation is
+    stored under it, so the two agree -- on `/chat` they cannot, because nothing
+    is stored at all.
+    """
+    annotate_timings(
+        cache_hit=True,
+        output_token_count=count_tokens(cached.reply),
+        retrieved_chunk_count=len(cached.sources),
+    )
+
+    if cached.reply:
+        yield {"delta": cached.reply}
+    yield {"text_end": True}
+    yield {
+        "done": {
+            "reply": cached.reply,
+            "thread_id": thread_id,
+            "sources": [source.model_dump() for source in cached.sources],
+            "follow_ups": [],
+            # A card turn is never cached -- see the note in `_serve_chat` -- so
+            # there is nothing here to replay, and replaying one would render a
+            # card for a flow no server-side session was ever opened for.
+            "game_started": None,
+            "eligibility_started": None,
+        }
+    }
+    yield {"follow_ups": cached.follow_ups}
+
+    # Counted so the card-rate denominator stays honest: a cache hit is a real
+    # non-card turn, and leaving it out would inflate the rate.
+    await response_cache.record_turn(False)
+
+    try:
+        await _open_conversation(request, thread_id, owner_id)
+        await _persist_turn(
+            request,
+            thread_id,
+            reply=cached.reply,
+            sources=list(cached.sources),
+            follow_ups=cached.follow_ups,
+            owner_id=owner_id,
+        )
+    except Exception:
+        # Same rule as the miss path: the reader already has the answer, so
+        # losing the record of it is our problem and not theirs.
+        logger.exception("Persisting a cached turn failed for thread %s", thread_id)
+
+
 async def _follow_ups_for(
     request: ChatRequest, reply: str, *, quiet_turn: bool
 ) -> list[str]:
@@ -1108,39 +1240,9 @@ async def _serve_chat(
     if settings.memory_window_enabled and database_enabled():
         await enqueue_summary(thread_id)
 
-    # Only the opening turn is cacheable -- see `_cached_reply` -- and never a
-    # game or eligibility turn: both create server-side session state, so
-    # replaying a cached "answer" would render a card for a flow nobody started.
-    #
-    # This matters more for eligibility than for games, because "Who is eligible
-    # for ASPIRE?" is a landing-page starter chip and therefore the most
-    # cacheable string in the product. Caching that turn would serve every later
-    # asker an empty reply with no card at all.
-    if not request.thread_id:
-        key = response_cache.cache_key(
-            request.message,
-            language=request.language,
-            persona=request.persona,
-            account_status=request.account_status,
-        )
-        if quiet_turn is False:
-            await response_cache.put_answer(
-                request.message,
-                {
-                    "reply": reply,
-                    "sources": [source.model_dump() for source in sources],
-                    "follow_ups": follow_ups,
-                },
-                language=request.language,
-                persona=request.persona,
-                account_status=request.account_status,
-            )
-        # Released whether or not anything was cached. A card turn is not
-        # cacheable, but callers waiting on the lease must still be let go
-        # rather than sitting out the full wait for an answer that is never
-        # coming. The lease also expires on its own, so a crash costs the next
-        # caller a lease's worth of waiting and nothing more.
-        await response_cache.release_lease(key)
+    await _cache_the_answer(
+        request, reply=reply, sources=sources, follow_ups=follow_ups, quiet_turn=quiet_turn
+    )
 
     return ChatResponse(
         reply=reply,
@@ -1199,9 +1301,19 @@ async def chat_stream(
     # generator is ever driven, so without it `t_identity` would have no turn to
     # attach to and would land in the derived model-call figure instead.
     with bind_timings(timings, finish_on_exit=False):
-        # First thing, before any awaiting: the search only needs the question,
-        # so everything below overlaps it instead of queueing behind it.
+        # First thing, before any awaiting: neither of these needs anything but
+        # the question, so everything below overlaps them instead of queueing
+        # behind them.
+        #
+        # Both, concurrently, and that ordering is the point. Checking the cache
+        # first and only then starting the search would make every MISS pay the
+        # two serially -- and misses are the common case for a corpus of 332 rows
+        # asked about in three languages. Started together, a miss absorbs the
+        # lookup into the search it was going to run anyway, and a hit throws away
+        # one embedding call. That is the right way round: the hit is the path
+        # worth being fast.
         retrieval = start_retrieval(request.message)
+        lookup = asyncio.create_task(_cached_reply(request))
         with timed_stage(T_IDENTITY):
             who = await owner_id_for(principal)
 
@@ -1219,6 +1331,18 @@ async def chat_stream(
                 yield event
 
     async def _run() -> AsyncIterator[dict]:
+        # The cache, on the transport the client actually uses (P12-001). It has
+        # sat on `/chat` only since it was written, so every repeat of the four
+        # landing starter chips -- the highest-collision strings in the product --
+        # has been paying for a full agent turn.
+        with timed_stage(T_CACHE_LOOKUP):
+            cached = await lookup
+        if cached is not None:
+            retrieval.cancel()
+            async for event in _replay_cached(request, thread_id, who, cached):
+                yield event
+            return
+
         # Read the history BEFORE recording this turn's question, or the read
         # returns the question and `build_prompt` appends it again -- see
         # `_prepare_messages`. Still recorded before the model runs, which is the
@@ -1370,6 +1494,18 @@ async def chat_stream(
                 await enqueue_summary(thread_id)
         except Exception:
             logger.exception("Persisting the turn failed for thread %s", thread_id)
+
+        # Populated here as well as on `/chat`, and this is the other half of
+        # P12-001: a cache only the unused transport wrote to was a cache that
+        # stayed empty. After the answer has gone out, like everything else on
+        # this side of `done`.
+        await _cache_the_answer(
+            request,
+            reply=reply,
+            sources=sources,
+            follow_ups=follow_ups,
+            quiet_turn=quiet_turn,
+        )
 
         yield {"follow_ups": follow_ups}
 

@@ -57,6 +57,49 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "no_cap_reset: leave the anonymous session counter alone"
     )
+    config.addinivalue_line(
+        "markers", "live_response_cache: let the endpoint consult the real cache"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _response_cache_always_misses(request, monkeypatch):
+    """Make `/chat` and `/chat/stream` see a cache miss unless a test says otherwise.
+
+    Added in P13-006, when the response cache moved onto `/chat/stream` -- the
+    transport every test drives. Two problems appeared the moment it did, and both
+    are about tests depending on state they did not set.
+
+    The first was cross-run: `cache_key` did not use `namespace()`, so a pytest run
+    read and wrote PRODUCTION answer keys. `test_streaming.py` started receiving
+    real cached answers in place of its fake agent's. That is fixed in
+    `app/cache.py`, properly, by namespacing the key.
+
+    The second is within a run and cannot be fixed there: two tests that post the
+    same opening question now share a cache entry, so the first to run computes and
+    caches, and the second silently takes the replay path. Whichever assertion goes
+    first wins, and the failure names neither the cache nor the other test.
+
+    So the endpoint sees a miss by default. Tests about caching either patch
+    `_cached_reply` themselves -- which beats this, being applied later -- or mark
+    themselves `live_response_cache`. The cache's own unit tests are untouched:
+    this patches the call site in `app.main`, not `app.cache`.
+    """
+    if request.node.get_closest_marker("live_response_cache"):
+        yield
+        return
+
+    try:
+        from app import main as _main
+
+        async def _miss(_request):
+            return None
+
+        monkeypatch.setattr(_main, "_cached_reply", _miss)
+    except Exception:  # pragma: no cover - app not importable in this suite
+        pass
+
+    yield
 
 
 @pytest.fixture(autouse=True)

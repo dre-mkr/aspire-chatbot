@@ -521,3 +521,178 @@ def test_history_is_read_before_the_question_is_recorded(client, monkeypatch):
         "the question is recorded before the window is read again; the read will "
         "return this turn's question and it will be sent to the model twice"
     )
+
+
+# --- helpers for the cache tests (P13-006) --------------------------------
+
+
+async def _ready(value):
+    """An already-decided awaitable, so `_cached_reply` can be a plain value."""
+    return value
+
+
+async def _noop(*_args, **_kwargs):
+    """Swallows any signature. Used where the call is not what is being tested."""
+    return None
+
+# --- the response cache, on the transport the client uses (P13-006) -------
+
+
+def _cached(reply="ASPIRE Day is a sign-up drive.", sources=None, follow_ups=None):
+    from app.schemas import ChatResponse, Source
+
+    return ChatResponse(
+        reply=reply,
+        thread_id="a-fresh-id-from-the-cache",
+        sources=[Source(**s) for s in (sources or [{"content": "row", "metadata": {"id": "ASP-184"}}])],
+        follow_ups=follow_ups if follow_ups is not None else ["What is ASPIRE?"],
+    )
+
+
+def test_a_cache_hit_streams_the_answer_without_a_model_call(client, monkeypatch):
+    """P12-001: the cache existed on `/chat` while the client used `/chat/stream`.
+
+    The assertion that matters is `calls == []`. A version that consulted the
+    cache and then ran the agent anyway would produce identical frames and cost
+    exactly as much, which is the failure this is written against.
+    """
+    calls: list = []
+
+    def _exploding_agent(_simple=False):
+        calls.append(1)
+        raise AssertionError("the agent ran on a cache hit")
+
+    monkeypatch.setattr(main, "get_agent", _exploding_agent)
+    monkeypatch.setattr(main, "_cached_reply", lambda _request: _ready(_cached()))
+    monkeypatch.setattr(main, "_open_conversation", _noop)
+    monkeypatch.setattr(main, "_persist_turn", _noop)
+
+    response = client.post("/chat/stream", json={"message": "What is ASPIRE Day?"})
+    assert response.status_code == 200
+
+    frames = _frames(response)
+    kinds = [f["type"] for f in frames]
+    assert calls == [], "the agent was invoked on a cache hit"
+
+    # The full envelope, in order, exactly as a computed turn produces.
+    assert kinds[0] == "RUN_STARTED"
+    assert "TEXT_MESSAGE_START" in kinds
+    assert "TEXT_MESSAGE_END" in kinds
+    assert kinds[-1] == "RUN_FINISHED"
+
+    streamed = "".join(f["delta"] for f in frames if f["type"] == "TEXT_MESSAGE_CONTENT")
+    assert streamed == "ASPIRE Day is a sign-up drive."
+
+    turn = next(f for f in frames if f.get("name") == "aspire.turn")
+    assert turn["value"]["reply"] == "ASPIRE Day is a sign-up drive."
+    assert turn["value"]["sources"][0]["metadata"]["id"] == "ASP-184"
+    # Never a card: cards are not cacheable, and replaying one would render a
+    # card for a flow no server-side session was opened for.
+    assert turn["value"]["game_started"] is None
+    assert turn["value"]["eligibility_started"] is None
+
+    chips = next(f for f in frames if f.get("name") == "aspire.follow_ups")
+    assert chips["value"]["follow_ups"] == ["What is ASPIRE?"]
+
+
+def test_a_cache_hit_reports_the_thread_id_it_will_be_stored_under(client, monkeypatch):
+    """The client continues the conversation with this id, so it must be the one
+    the turn is persisted under -- not the throwaway id `_cached_reply` mints."""
+    recorded: dict = {}
+
+    async def _capture_open(request, thread_id, owner_id):
+        recorded["opened"] = thread_id
+
+    async def _capture_persist(request, thread_id, **kwargs):
+        recorded["persisted"] = thread_id
+        recorded["reply"] = kwargs["reply"]
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent([]))
+    monkeypatch.setattr(main, "_cached_reply", lambda _request: _ready(_cached()))
+    monkeypatch.setattr(main, "_open_conversation", _capture_open)
+    monkeypatch.setattr(main, "_persist_turn", _capture_persist)
+
+    response = client.post("/chat/stream", json={"message": "What is ASPIRE Day?"})
+    turn = next(f for f in _frames(response) if f.get("name") == "aspire.turn")
+    announced = turn["value"]["thread_id"]
+
+    assert announced != "a-fresh-id-from-the-cache", (
+        "the id from _cached_reply leaked to the client; it is never persisted"
+    )
+    assert recorded["opened"] == announced
+    assert recorded["persisted"] == announced
+    assert recorded["reply"] == "ASPIRE Day is a sign-up drive."
+
+
+def test_a_cache_hit_is_still_recorded_in_postgres(client, monkeypatch):
+    """The bug `/chat` has and this path must not.
+
+    `/chat` returns its cached reply and stops, so a cached first turn leaves no
+    conversation and no messages. Here the client has already committed the chat
+    to the rail and the address bar, so an unrecorded conversation is a chat on
+    screen with a dead end behind it.
+    """
+    persisted: list[str] = []
+
+    async def _note(name, *args, **kwargs):
+        persisted.append(name)
+
+    monkeypatch.setattr(main, "get_agent", _fake_agent([]))
+    monkeypatch.setattr(main, "_cached_reply", lambda _request: _ready(_cached()))
+    monkeypatch.setattr(
+        main, "_open_conversation", lambda *a, **k: _note("open", *a, **k)
+    )
+    monkeypatch.setattr(main, "_persist_turn", lambda *a, **k: _note("persist", *a, **k))
+
+    client.post("/chat/stream", json={"message": "What is ASPIRE Day?"})
+    assert persisted == ["open", "persist"], (
+        "a cached turn must be recorded, and the question before the answer"
+    )
+
+
+def test_a_continuing_turn_never_consults_the_cache(client, monkeypatch):
+    """Mid-thread questions depend on what came before, so two identical strings
+    in two conversations are not the same question."""
+    asked: list = []
+
+    async def _watch(request):
+        asked.append(request.thread_id)
+        return None
+
+    answer = [AIMessageChunk(content=[{"type": "text", "text": "Yes."}], id="m-1")]
+    monkeypatch.setattr(main, "get_agent", _fake_agent(answer))
+    monkeypatch.setattr(main, "suggest_follow_ups", _no_follow_ups)
+    monkeypatch.setattr(main, "_cached_reply", _watch)
+
+    client.post(
+        "/chat/stream", json={"message": "And savings?", "thread_id": "t-continuing"}
+    )
+    # `_cached_reply` is consulted but returns None for a thread_id -- the guard
+    # lives inside it, and this pins that the streaming path relies on it rather
+    # than reimplementing the rule.
+    assert asked == ["t-continuing"]
+
+
+def test_the_streaming_path_populates_the_cache(client, monkeypatch):
+    """The other half of P12-001: only `/chat` ever wrote to the cache, so the
+    only writer was the transport nobody used and the cache stayed empty."""
+    written: list[dict] = []
+
+    async def _put(query, payload, **kwargs):
+        written.append({"query": query, **payload})
+
+    answer = [
+        AIMessageChunk(content=[{"type": "text", "text": "A savings programme."}], id="m-1")
+    ]
+    monkeypatch.setattr(main, "get_agent", _fake_agent(answer))
+    monkeypatch.setattr(main, "suggest_follow_ups", _no_follow_ups)
+    monkeypatch.setattr(main, "_open_conversation", _noop)
+    monkeypatch.setattr(main, "_persist_turn", _noop)
+    monkeypatch.setattr(main.response_cache, "put_answer", _put)
+    monkeypatch.setattr(main.response_cache, "release_lease", _noop)
+
+    client.post("/chat/stream", json={"message": "What is ASPIRE?"})
+
+    assert len(written) == 1, "the computed answer was not cached"
+    assert written[0]["query"] == "What is ASPIRE?"
+    assert written[0]["reply"] == "A savings programme."

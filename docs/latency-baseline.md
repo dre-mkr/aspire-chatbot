@@ -882,3 +882,182 @@ Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-0
 Client-observed TTFT (cross-check, n=24): p50 1821.5 ms · p95 2943.7 ms
 
 Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+---
+
+# P13-006 — the response cache, on the transport the client uses
+
+P12-001, closed. The cache was written for `POST /chat`; the client speaks
+`POST /chat/stream`. So the only reader was a transport nobody used, and — found
+while wiring this — the only *writer* was too, which is why `cache_hit` was false
+for all 60 turns in P13-001.
+
+- **Lookup and replay:** `app/main.py::_replay_cached`, `_cache_the_answer`
+- **Key fix:** `app/cache.py::cache_key`
+- **Tests:** `tests/test_streaming.py` (five), `tests/test_cache_keys.py`
+- **Date:** 2026-08-04
+
+## Deliverable: before/after
+
+Measured as a clean pair on one process: clear the 30 probe questions, run once
+(every turn a miss), run again (every cacheable turn a hit).
+
+| | `t_ttft` p50 | `t_ttft` p95 |
+|---|---:|---:|
+| before this phase (P13-005, no cache on the stream) | 1819.3 ms | 2941.3 ms |
+| after — **first** ask (cache miss) | 1658.0 ms | 2401.4 ms |
+| after — **repeat** ask (cache hit) | **6.2 ms** | **9.1 ms** |
+
+A repeat question went from **1819 ms to 6.2 ms — 293× faster**, and the four
+landing starter chips are the highest-collision strings in the product.
+
+**The miss pays almost nothing**, which is the other half of the claim and the
+part that needed checking: `t_cache_lookup` is **3.3 ms p50 / 9.0 ms p95**, 0.2%
+of TTFT. The lookup is started as a task alongside the corpus search rather than
+awaited before it, so a miss absorbs it into work it was going to do anyway. The
+first-ask figures above are indistinguishable from P13-005's at this sample size —
+the difference is smaller than the model-call variance either side of it.
+
+On a hit, `t_cache_lookup` is 77.5% of the turn. That is the shape of a cache
+working: the lookup *is* the turn.
+
+**24 of 30 turns hit.** The other six open the eligibility card and are never
+cached, by design — a card creates server-side session state, so replaying one
+would render a card for a flow nobody started. That property held without being
+touched: `_cache_the_answer` refuses card turns exactly as `/chat` always did.
+
+## A correctness bug this had to fix, not inherit
+
+`/chat` returns its cached reply and stops — no `_open_conversation`, no
+`_persist_turn`. A cached first turn therefore leaves **nothing in Postgres** and
+never appears in anybody's history.
+
+That is survivable on `/chat`, the fallback transport. It is not survivable here:
+the client commits the chat to the rail and the address bar the moment it is sent,
+so a conversation that does not exist server-side is a chat on screen with a dead
+end behind it — precisely what `_open_conversation` exists to prevent.
+
+So `_replay_cached` records the turn, *after* the reply has gone out. Verified
+against the real database rather than against a mock: over the miss-then-hit pair,
+**60 of 60 conversations exist with both a question and an answer**.
+
+`/chat`'s own gap is left as it is. Fixing it means changing what that endpoint
+returns and persists, which is a behaviour change on a path this phase does not
+otherwise touch. Recorded here as open.
+
+## Two bugs found while wiring it
+
+**`cache_key` never used `namespace()`.** The function existed, its docstring said
+"any key this module invents needs the same treatment, or the same flake comes
+back", and it was used by the metrics counters and by nothing else. Answer keys —
+and the lease keys derived from them — sat in the shared production namespace, so
+a pytest run read and wrote the live cache.
+
+Invisible for as long as `/chat/stream` never consulted the cache: tests wrote
+entries nothing read back. Putting the cache on the transport every test drives
+made it visible in one run, with `test_streaming.py` receiving real production
+answers in place of its fake agent's. Fixed by namespacing the key, which retires
+existing entries — one cold turn per distinct question, the cheapest possible
+consequence.
+
+`test_key_is_namespaced_and_bounded` asserted `startswith("aspire:answer:v1:")` —
+the *un*-namespaced form. The test encoded the bug rather than catching it, because
+the literal it pinned was exactly what the bug produced. It now asserts against
+`namespace()`, and a second test checks two namespaces cannot collide on the same
+question.
+
+**The probe could not render a mixed population.** With 24 hits and 6 uncached card
+turns in one run, the share column divided one population's p50 by another's and
+produced **15880.6%**, with an unaccounted residual of **−874.1 ms**. The table now
+carries an `n` column and shows a share only where a stage covers TTFT's turns; a
+stage recorded on *fewer* turns is marked `n/a` rather than divided. Shares from a
+stage measured over *more* turns are approximations and can exceed 100%, which the
+table now says on its own face.
+
+## What a cached answer looks like
+
+The whole reply in one delta. Splitting it would not improve TTFT — the first chunk
+is the first chunk either way — and pacing the pieces to imitate a model typing
+would mean adding delay on purpose, in a workstream about removing it. The client
+buffers deltas and reveals settled blocks, so it renders correctly either way.
+
+A cached answer therefore appears at once rather than typing out. That is what a
+cached answer is; if it should instead be paced to match a computed turn, that is a
+deliberate decision to add latency and belongs to whoever owns the reading
+experience.
+
+## Cold and warm tables
+
+### cache MISS (first ask) run
+
+30 turns · cold-start turns: 0 · cache hits: 0 · turns with a visible token: 24
+
+| stage | n | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---:|---|
+| *`n` is how many turns recorded the stage. A share is shown only when `n` covers TTFT's turns, and is an approximation when `n` is larger — which is why one can exceed 100%.* | | | | | | | |
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | | |
+| `t_lang` | 0 | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | 0 | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | 0 | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_cache_lookup` | 30 | 3.3 | 9.0 | 26.4 | 0.2% | 0.4% | Valkey: response-cache read (the whole turn on a hit) |
+| `t_history` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: window read + running summary |
+| `t_concurrent_wait` | 30 | 838.4 | 1464.8 | 1536.3 | 50.6% | 61.0% | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 30 | 0.4 | 0.5 | 0.5 | 0.0% | 0.0% | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 24 | 769.3 | 1243.3 | 1263.8 | 46.4% | 51.8% | derived: the one answering call, less every pre-model stage |
+| `d_buffer_hold` | 24 | 0.1 | 0.3 | 0.3 | 0.0% | 0.0% | derived: TurnBuffer holding text before releasing it |
+| *unaccounted at p50* | 24 | 46.5 | | | 2.8% | | framework overhead not inside any measured span |
+| **Milestones** (cumulative from request received) | | | | | | | |
+| `t_agent_first_tool` | 6 | 1624.8 | 2919.0 | 2919.0 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 24 | 1657.9 | 2401.3 | 2732.8 | — | — | cumulative from request received |
+| `t_ttft` | 24 | 1658.0 | 2401.4 | 2732.9 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 30 | 4163.2 | 5924.4 | 5985.7 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | | |
+| `t_open_conversation` | 30 | 817.9 | 943.6 | 1461.9 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 30 | 838.4 | 1464.8 | 1536.3 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 30 | 316.2 | 596.4 | 674.6 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 30 | 528.5 | 1104.4 | 1135.3 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 30 | 843.0 | 1469.0 | 1541.5 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | 0 | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 1659.2 ms · p95 2403.1 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+### cache HIT (repeat ask) run
+
+30 turns · cold-start turns: 0 · cache hits: 24 · turns with a visible token: 24
+
+| stage | n | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---:|---|
+| *`n` is how many turns recorded the stage. A share is shown only when `n` covers TTFT's turns, and is an approximation when `n` is larger — which is why one can exceed 100%.* | | | | | | | |
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | | |
+| `t_lang` | 0 | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | 0 | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | 0 | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 30 | 0.0 | 0.0 | 0.0 | 0.2% | 0.2% | local: asyncio.create_task for the concurrent search |
+| `t_identity` | 30 | 0.0 | 0.0 | 0.0 | 0.0% | 0.0% | Neon: resolve the caller's owner id |
+| `t_cache_lookup` | 30 | 4.8 | 7.1 | 7.9 | 77.5% | 77.7% | Valkey: response-cache read (the whole turn on a hit) |
+| `t_history` | 6 | 0.0 | 0.0 | 0.0 | n/a | n/a | Neon: window read + running summary |
+| `t_concurrent_wait` | 6 | 864.6 | 932.0 | 932.0 | n/a | n/a | what the reader waits for the search AND the write, overlapped |
+| `t_prompt_build` | 6 | 0.3 | 0.6 | 0.6 | n/a | n/a | local: assemble messages, count tokens (tiktoken) |
+| `d_model_call` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `d_buffer_hold` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| *unaccounted at p50* | 24 | 1.4 | | | 22.3% | | framework overhead not inside any measured span — excludes `t_history`, `t_concurrent_wait`, `t_prompt_build`, recorded on FEWER turns than t_ttft and so on a different population |
+| **Milestones** (cumulative from request received) | | | | | | | |
+| `t_agent_first_tool` | 6 | 1853.6 | 4398.5 | 4398.5 | — | — | cumulative from request received |
+| `t_agent_first_delta` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_ttft` | 24 | 6.2 | 9.1 | 11.1 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 30 | 1634.9 | 6146.4 | 6185.9 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | | |
+| `t_open_conversation` | 30 | 804.2 | 826.3 | 897.2 | — | — | concurrent: Neon upsert + question write (off the critical path) |
+| `t_retrieve_wait` | 6 | 864.6 | 932.0 | 932.0 | — | — | of that block, the search alone (overlaps the write) |
+| `t_embed` | 30 | 7.4 | 394.2 | 410.2 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 30 | 0.1 | 531.4 | 535.8 | — | — | concurrent: Neon cosine scan over 332 rows (off the critical path) |
+| `t_retrieve_total` | 30 | 7.4 | 925.6 | 937.1 | — | — | t_embed + t_retrieve; excluded from the budget to avoid double-counting |
+| `t_tts_first_byte` | 0 | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=24): p50 8.2 ms · p95 29.1 ms
+
+Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.

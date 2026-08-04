@@ -77,6 +77,14 @@ T_TTS_FIRST_BYTE = "t_tts_first_byte"
 T_IDENTITY = "t_identity"
 T_OPEN_CONVERSATION = "t_open_conversation"
 
+#: What the reader waits for the response-cache lookup (P13-006).
+#:
+#: On a HIT this is essentially the whole turn: no model call, no retrieval, no
+#: history. On a MISS it is pure added cost, which is the trade this phase makes --
+#: so it is measured rather than assumed cheap. It overlaps the corpus search, so
+#: on a miss most of it should be absorbed.
+T_CACHE_LOOKUP = "t_cache_lookup"
+
 #: Cost of *starting* the concurrent corpus search, not of running it (P13-005).
 #: Should be microseconds -- it is `asyncio.create_task`. Recorded so that if it
 #: ever stops being free, the reason is visible rather than hidden inside the
@@ -142,6 +150,7 @@ DURATION_STAGES: tuple[str, ...] = (
     T_ACCOUNT,
     T_RETRIEVE_KICKOFF,
     T_IDENTITY,
+    T_CACHE_LOOKUP,
     T_HISTORY,
     T_CONCURRENT_WAIT,
     T_PROMPT_BUILD,
@@ -157,6 +166,7 @@ DURATION_STAGES: tuple[str, ...] = (
 PRE_MODEL_STAGES: tuple[str, ...] = (
     T_RETRIEVE_KICKOFF,
     T_IDENTITY,
+    T_CACHE_LOOKUP,
     T_HISTORY,
     T_CONCURRENT_WAIT,
     T_PROMPT_BUILD,
@@ -210,6 +220,7 @@ STAGE_NOTES: dict[str, str] = {
     T_IDENTITY: "Neon: resolve the caller's owner id",
     T_OPEN_CONVERSATION: "concurrent: Neon upsert + question write (off the critical path)",
     T_HISTORY: "Neon: window read + running summary",
+    T_CACHE_LOOKUP: "Valkey: response-cache read (the whole turn on a hit)",
     T_RETRIEVE_KICKOFF: "local: asyncio.create_task for the concurrent search",
     T_CONCURRENT_WAIT: "what the reader waits for the search AND the write, overlapped",
     T_RETRIEVE_WAIT: "of that block, the search alone (overlaps the write)",
