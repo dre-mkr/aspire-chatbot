@@ -686,7 +686,12 @@ Both runs at `RETRIEVER_K=3`, `FOLLOW_UPS_ALWAYS=false`.
 | **`t_ttft` warm p95** | 8049.6 ms | **2941.3 ms** | **−5108.3 ms (−63.5%)** |
 | `t_ttft` cold p50 | 4022.5 ms | 1841.2 ms | −2181.2 ms (−54.2%) |
 | `t_ttft` cold p95 | 10743.5 ms | 4267.1 ms | −6476.5 ms (−60.3%) |
-| `t_total` warm p50 | 7001.9 ms | 4594.7 ms | −2407.2 ms |
+
+`t_total` also fell (7001.9 → 4594.7 ms warm p50) but **that comparison is not
+trustworthy and should not be quoted.** `FOLLOW_UPS_ALWAYS` was changed outside this
+workstream between the two runs, and follow-up chips are generated after
+`text_end` — so they sit inside `t_total` and not inside `t_ttft`. The TTFT figures
+above are unaffected by the flag; the total is confounded by it.
 
 **This one is signal, not noise, and that is worth stating because the previous
 phases' p95 figures were not.** Three reasons: the p50 improvement (~2.3 s)
