@@ -28,18 +28,38 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			{ name: "theme-color", content: "#33165c" },
 		],
 		links: [
-			{ rel: "preconnect", href: "https://fonts.googleapis.com" },
+			{ rel: "stylesheet", href: appCss },
+			/*
+			 * The two families in the first paint, fetched alongside the CSS
+			 * rather than after it.
+			 *
+			 * A `@font-face` is only discovered once the stylesheet has been
+			 * downloaded and parsed, which puts the font one hop behind the thing
+			 * that names it. Preloading collapses that: Sora carries every word of
+			 * chrome and prose, Instrument Serif carries the hero, and both are
+			 * wanted at the same moment the CSS is.
+			 *
+			 * JetBrains Mono is deliberately NOT preloaded -- it appears in code
+			 * spans inside answers, which do not exist yet at first paint, and
+			 * preloading it would compete for bandwidth with the two that do.
+			 *
+			 * `crossOrigin` is required even same-origin: fonts are fetched in
+			 * CORS mode, and a preload without it is a second, unused download.
+			 */
 			{
-				rel: "preconnect",
-				href: "https://fonts.gstatic.com",
+				rel: "preload",
+				as: "font",
+				type: "font/woff2",
+				href: "/fonts/sora-var-latin.woff2",
 				crossOrigin: "anonymous",
 			},
 			{
-				rel: "stylesheet",
-				// impeccable-disable-next-line overused-font -- deliberate display face, see above
-				href: "https://fonts.googleapis.com/css2?family=Instrument+Serif&family=JetBrains+Mono:wght@400&family=Sora:wght@300;400;500;600;700&display=swap",
+				rel: "preload",
+				as: "font",
+				type: "font/woff2",
+				href: "/fonts/instrument-serif-400-latin.woff2",
+				crossOrigin: "anonymous",
 			},
-			{ rel: "stylesheet", href: appCss },
 			{ rel: "icon", href: "/favicon.ico", sizes: "32x32" },
 			{
 				rel: "icon",

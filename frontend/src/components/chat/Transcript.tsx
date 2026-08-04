@@ -1,6 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+	lazy,
 	type RefObject,
+	Suspense,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -32,10 +34,45 @@ import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
-import { EligibilityCheck } from "./EligibilityCheck";
-import { TrueFalse } from "./TrueFalse";
 import { PlayingStars } from "./Voice";
-import { WordScramble } from "./WordScramble";
+
+/**
+ * The card surfaces, fetched when one is actually started.
+ *
+ * All three shipped in `_shell` eagerly: WordScramble 10.3KB, EligibilityCheck
+ * 10.3KB, TrueFalse 10.2KB — 30.8KB raw carried by every user on every cold
+ * load, for surfaces most sessions never open.
+ *
+ * Splitting them costs nothing perceptible because of where they appear. A card
+ * only renders when the *server* says a game or a check has started, which is
+ * already the far side of a network round trip; a chunk fetch that begins at
+ * that moment lands well inside the reveal that follows it.
+ *
+ * Never rendered during SSR. `game` and `eligibility` come from queries gated on
+ * a client-only session, so they are null on the server and these are not
+ * reached — which is why suspending here cannot hold up the document.
+ */
+const EligibilityCheck = lazy(() =>
+	import("./EligibilityCheck").then((m) => ({ default: m.EligibilityCheck })),
+);
+const TrueFalse = lazy(() =>
+	import("./TrueFalse").then((m) => ({ default: m.TrueFalse })),
+);
+const WordScramble = lazy(() =>
+	import("./WordScramble").then((m) => ({ default: m.WordScramble })),
+);
+
+/**
+ * Held space, not a spinner.
+ *
+ * The card is about to occupy this room; a spinner that is replaced by content
+ * of a different height is a layout shift, and the thread is pinned to the
+ * bottom so a shift here moves everything above it. `aria-hidden` because there
+ * is nothing to say yet — the card announces itself when it arrives.
+ */
+function CardLoading() {
+	return <div className="card-loading" aria-hidden="true" />;
+}
 
 /** Read-aloud controls, threaded down to each finished answer. */
 export interface Playback {
@@ -325,19 +362,21 @@ export function Transcript({
 					<div className="orb" aria-hidden="true" />
 					<div className="answer">
 						<h2 className="sr-only">ASPIRE AI</h2>
-						{game.state.prompt.kind === "statement" ? (
-							<TrueFalse
-								threadId={game.threadId}
-								state={game.state}
-								onChanged={game.onChanged}
-							/>
-						) : (
-							<WordScramble
-								threadId={game.threadId}
-								state={game.state}
-								onChanged={game.onChanged}
-							/>
-						)}
+						<Suspense fallback={<CardLoading />}>
+							{game.state.prompt.kind === "statement" ? (
+								<TrueFalse
+									threadId={game.threadId}
+									state={game.state}
+									onChanged={game.onChanged}
+								/>
+							) : (
+								<WordScramble
+									threadId={game.threadId}
+									state={game.state}
+									onChanged={game.onChanged}
+								/>
+							)}
+						</Suspense>
 					</div>
 				</div>
 			);
@@ -358,13 +397,15 @@ export function Transcript({
 					<div className="orb" aria-hidden="true" />
 					<div className="answer">
 						<h2 className="sr-only">ASPIRE AI</h2>
-						<EligibilityCheck
-							threadId={eligibility.threadId}
-							state={eligibility.state}
-							onChanged={eligibility.onChanged}
-							onSpeak={eligibility.onSpeak}
-							speakAvailable={eligibility.speakAvailable}
-						/>
+						<Suspense fallback={<CardLoading />}>
+							<EligibilityCheck
+								threadId={eligibility.threadId}
+								state={eligibility.state}
+								onChanged={eligibility.onChanged}
+								onSpeak={eligibility.onSpeak}
+								speakAvailable={eligibility.speakAvailable}
+							/>
+						</Suspense>
 					</div>
 				</div>
 			);

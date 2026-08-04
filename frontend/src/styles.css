@@ -1,10 +1,85 @@
-/* The webfonts are NOT imported here on purpose.
-   A remote @import cannot be discovered until this file has been downloaded and
-   parsed, which puts the font CSS and then the font files on a three-hop serial
-   critical path. The stylesheet link lives in `src/routes/__root.tsx` instead, so
-   the browser finds it in the first HTML scan and fetches it in parallel with
-   this file. Change the families there, not here. */
 @import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Webfonts — self-hosted
+   ─────────────────────────────────────────────────────────────────────────
+
+   These used to come from `fonts.googleapis.com`, linked from `__root.tsx`.
+   That was two problems wearing one hat.
+
+   Privacy, and it is the one that decided this: every child using this service
+   sent their IP, user-agent and referer to Google before the page painted. On a
+   government product for minors, a third-party disclosure needs a reason, and
+   "it is the convenient way to load a font" is not one.
+
+   Latency: a render-blocking stylesheet on a third origin, gating first paint
+   behind DNS, TLS and two round trips to two hosts, before the font files
+   themselves were even discovered. Self-hosted they are same-origin, already
+   warm, and preloaded from the document head.
+
+   Only the `latin` subset is shipped. It covers U+0000-00FF plus U+0152-0153,
+   which is every character English, Spanish and French need -- including œ and
+   every accented vowel. `latin-ext` is deliberately not here; adding a language
+   outside that range means adding it back.
+
+   Sora is a variable font, so 400 through 700 is one 25KB file rather than
+   four. Weight 300 was requested and never used by any rule in this file, so it
+   is gone. Three files, 67KB total, versus five requests to two third-party
+   origins.
+
+   `font-display: swap` is unchanged: text is readable in a fallback face from
+   the first paint and reflows once, which is the right trade for a reading
+   product. P5 measured the fonts contributing 0.0003 CLS, so this is not a
+   layout-shift risk. */
+
+@font-face {
+	font-family: "Sora";
+	font-style: normal;
+	/* The variable range. One file answers every weight in it. */
+	font-weight: 400 700;
+	font-display: swap;
+	src: url("/fonts/sora-var-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+		U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "Instrument Serif";
+	font-style: normal;
+	font-weight: 400;
+	/* `optional`, not `swap`, and this is the only face that differs.
+
+	   It draws one thing: the hero title, at ~44px. A swap on type that large
+	   moves the most visible element on the landing screen, and measuring showed
+	   it was the single largest remaining CLS contributor — blocking the fonts
+	   entirely took landing CLS from 0.0176 to 0.0001.
+
+	   `optional` gives it ~100ms and then commits either way, so there is no
+	   second reflow. Preloaded and same-origin it almost always wins that race;
+	   when it does not, the hero renders in Georgia, which is the declared
+	   fallback and a perfectly good serif for one heading.
+
+	   Sora keeps `swap` deliberately: it sets every word of prose in the
+	   product, and a whole session stuck in a fallback because a network hiccup
+	   cost 100ms is a much worse outcome than one reflow. */
+	font-display: optional;
+	src: url("/fonts/instrument-serif-400-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+		U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("/fonts/jetbrains-mono-400-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+		U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    ASPIRE design system
@@ -2749,6 +2824,13 @@ body {
 		border-color: Highlight;
 		border-width: 2px;
 	}
+}
+
+/* Space held for a card whose chunk is still arriving. Sized to the shortest
+   of the three so it can only ever grow into place, never shrink -- the thread
+   is pinned to the bottom, so a shrink would pull the answer above it down. */
+.card-loading {
+	min-height: 180px;
 }
 
 /* ── Route states: not found, error, pending ─────────────────────────────── */

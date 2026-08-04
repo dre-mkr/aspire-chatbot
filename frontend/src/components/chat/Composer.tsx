@@ -1,11 +1,33 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+	type KeyboardEvent,
+	lazy,
+	Suspense,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
 import type { PersonaId } from "#/lib/aspire/personas";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { PersonaPicker } from "./PersonaPicker";
 import { VoiceListening, VoiceTranscribing } from "./Voice";
-import { VoiceSettings, type VoiceSettingsProps } from "./VoiceSettings";
+import type { VoiceSettingsProps } from "./VoiceSettings";
+
+/**
+ * The voice settings panel, fetched only where voice actually exists.
+ *
+ * `VOICE_ENABLED` is a *server* flag. When it is off the endpoints 404, the mic
+ * is unavailable and this panel is unreachable — and it still shipped in the
+ * initial chunk, 5KB of code that could never execute. Gated on the runtime
+ * config response now, so a deployment with voice off never downloads it.
+ *
+ * `import type` above rather than a value import: the props type is needed at
+ * compile time and must not drag the module into the graph.
+ */
+const VoiceSettings = lazy(() =>
+	import("./VoiceSettings").then((m) => ({ default: m.VoiceSettings })),
+);
 
 /** No hover means no pointer to hover with, which here means no Space key. */
 const TOUCH = "(hover: none)";
@@ -216,8 +238,18 @@ export function Composer({
 
 						{/* Voice settings live here, not beside the mic. The mic is
 						    already a voice affordance; a second voice-looking control
-						    next to it would leave neither meaning anything. */}
-						<VoiceSettings voice={voice} />
+						    next to it would leave neither meaning anything.
+
+						    Only where voice exists. `voice.available` is the runtime
+						    config answer, so a deployment with VOICE_ENABLED off does
+						    not render — or download — a panel for a feature it does
+						    not have. No fallback: nothing was here before it loaded
+						    and nothing should be, or the tool row would reflow. */}
+						{voice.available ? (
+							<Suspense fallback={null}>
+								<VoiceSettings voice={voice} />
+							</Suspense>
+						) : null}
 
 						{/* The label collapses to the icon on a narrow screen rather than
 						    the whole control disappearing — this is the plain-words
