@@ -74,7 +74,6 @@ def test_open_conversation_records_the_question(monkeypatch):
 # ── P1-001 — the LLM endpoints are unauthenticated and unmetered ────────────
 
 
-@pytest.mark.xfail(strict=True, reason="open finding; remove this marker with the fix")
 def test_title_endpoint_requires_a_session(monkeypatch):
     """`/api/title` is a model call behind no auth and no rate limit.
 
@@ -107,7 +106,6 @@ def test_title_endpoint_requires_a_session(monkeypatch):
     )
 
 
-@pytest.mark.xfail(strict=True, reason="open finding; remove this marker with the fix")
 @pytest.mark.parametrize("route", ["/chat", "/chat/stream", "/api/title"])
 def test_llm_routes_are_rate_limited(route):
     """Every endpoint that spends a model call must be metered per caller.

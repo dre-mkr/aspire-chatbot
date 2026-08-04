@@ -154,6 +154,21 @@ class Settings(BaseSettings):
     # Used only for accounting. o200k_base is the GPT-4o/5 family's encoding.
     token_encoding: str = "o200k_base"
 
+    # --- Rate limits on the endpoints that spend model calls ---------------
+    # Counted per proven identity where there is one, otherwise per hashed
+    # address -- see app/limits.py for why in-process rather than Valkey.
+    #
+    # Sized for a classroom on one school connection rather than for one child:
+    # unauthenticated callers share an address, so the anonymous case is the one
+    # these numbers have to survive. Thirty questions in ten minutes is far more
+    # than a lesson generates and far less than a script does.
+    chat_rate_window_seconds: int = Field(default=600, ge=10, le=3600)
+    chat_messages_per_window: int = Field(default=30, ge=1, le=1000)
+    # Titles are one per conversation, so this only has to allow starting a lot
+    # of chats. It is lower than the message limit on purpose: a title request is
+    # a model call with a 28,000-character payload and no conversation behind it.
+    title_requests_per_window: int = Field(default=20, ge=1, le=1000)
+
     # --- HTTP -------------------------------------------------------------
     # Permissive for local dev. Tighten to the real frontend origin before deploying.
     cors_allow_origins: list[str] = ["*"]
