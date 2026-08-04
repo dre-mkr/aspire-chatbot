@@ -41,10 +41,22 @@ function fileStamp(date: Date) {
 export function transcriptToText(
 	messages: ReadonlyArray<ExportableMessage>,
 	savedAt = new Date(),
+	/**
+	 * The language the conversation was held in.
+	 *
+	 * `toLocaleString()` with no argument follows the *browser's* locale, which
+	 * is a different question from the one this product asks. A conversation
+	 * held in French, saved on a device set to English, was stamped with an
+	 * English date — the file disagreed with its own contents.
+	 *
+	 * `undefined` means "no opinion", which is the old behaviour and correct for
+	 * a caller that genuinely does not know.
+	 */
+	language?: string,
 ) {
 	const lines = [
 		"ASPIRE AI — saved conversation",
-		savedAt.toLocaleString(),
+		savedAt.toLocaleString(language),
 		"",
 	];
 
@@ -91,13 +103,40 @@ export function transcriptToText(
 	return lines.join("\n");
 }
 
+/**
+ * An amount of money, in the currency this programme actually uses.
+ *
+ * There is no `Intl.NumberFormat` anywhere in the client today, and no UI
+ * renders an amount — every figure a reader sees is literal text inside a
+ * knowledge-base answer. This exists so that stops being true safely: the first
+ * component to render an amount should reach for this rather than invent its
+ * own, because that is the moment a French conversation starts showing
+ * `$1,234.50` instead of `1 234,50 $EC`.
+ *
+ * XCD is the East Caribbean dollar, the currency of St. Kitts and Nevis.
+ */
+export function formatXCD(amount: number, language = "en") {
+	return new Intl.NumberFormat(language, {
+		style: "currency",
+		currency: "XCD",
+	}).format(amount);
+}
+
+/** A date, in the language the conversation is being held in. */
+export function formatDate(date: Date, language = "en") {
+	return new Intl.DateTimeFormat(language, {
+		dateStyle: "long",
+	}).format(date);
+}
+
 /** Writes the transcript out as a download. No-op with nothing to save. */
 export function downloadTranscript(
 	messages: ReadonlyArray<ExportableMessage>,
+	language?: string,
 ) {
 	if (messages.length === 0) return;
 
-	const blob = new Blob([transcriptToText(messages)], {
+	const blob = new Blob([transcriptToText(messages, new Date(), language)], {
 		type: "text/plain;charset=utf-8",
 	});
 	const url = URL.createObjectURL(blob);

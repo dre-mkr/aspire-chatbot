@@ -2833,6 +2833,37 @@ body {
 	min-height: 180px;
 }
 
+/* Out of the way until a keyboard asks for it, then a real control in a real
+   place. Not `display: none` and not `width: 1px` — both would take it out of
+   the tab order, which is the one thing it exists to be in. */
+.skip-link {
+	position: absolute;
+	z-index: 60;
+	top: 8px;
+	left: 50%;
+	/* Parked above the viewport rather than hidden, so it slides in from where
+	   it will land instead of appearing out of nowhere. */
+	transform: translate(-50%, -200%);
+	padding: 10px 18px;
+	border-radius: 12px;
+	background: var(--plum);
+	color: #fff;
+	font-size: 0.84375rem;
+	font-weight: 600;
+	text-decoration: none;
+	transition: transform var(--swift);
+}
+
+.skip-link:focus-visible {
+	transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skip-link {
+		transition: none;
+	}
+}
+
 /* ── Route states: not found, error, pending ─────────────────────────────── */
 
 /* The whole viewport, because these replace the view rather than sit inside
@@ -5262,10 +5293,32 @@ body {
 	color: var(--prose);
 }
 
+/* "Create an account" and "Sign in" — the route between the two auth screens,
+   and measured at 18px tall.
+
+   That is a WCAG 2.2 **2.5.8 (AA)** failure: the minimum is 24x24, and these
+   were the only controls in the product actually under it. The programme's
+   choice is to hold the 2.2 AA bar rather than the 44px AAA one (2.5.5), so
+   this raises the target to 24px and stops there.
+
+   Same technique as the touch-target block above: the painted text is
+   untouched and an invisible overlay carries the target. An inline link cannot
+   simply be given a height without breaking the sentence it sits in. */
 .auth__foot-link {
+	position: relative;
 	color: var(--plum);
 	font-weight: 600;
 	text-decoration: none;
+}
+
+.auth__foot-link::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 100%;
+	height: max(100%, 24px);
+	transform: translate(-50%, -50%);
 }
 
 .auth__foot-link:hover {

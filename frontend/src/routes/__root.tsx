@@ -4,6 +4,7 @@ import {
 	createRootRouteWithContext,
 	HeadContent,
 	Scripts,
+	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
@@ -84,9 +85,37 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 	shellComponent: RootDocument,
 });
 
+/**
+ * The document's language, from the address.
+ *
+ * `<html lang="en">` was hardcoded. Confirmed at runtime during the audit: after
+ * switching to ES or FR and reloading, `document.documentElement.lang` was still
+ * `"en"` — so a screen reader pronounced Spanish and French answers with English
+ * phonetics. WCAG 3.1.1 (A) and 3.1.2 (AA), and combined with the missing live
+ * regions it made the assistive-technology experience in ES and FR broken twice
+ * over.
+ *
+ * Read from the router's location rather than from the voice hook, because this
+ * renders above every provider and must work during SSR — which is the whole
+ * reason `lang` is a search param (P3-004) rather than device state.
+ *
+ * Read defensively: this is the document shell, and it renders for the
+ * not-found and error routes too, where the search may not have been validated
+ * by `_shell` at all.
+ */
+const LANGUAGES = new Set(["en", "es", "fr"]);
+
+function useDocumentLanguage() {
+	const raw = useRouterState({
+		select: (state) => (state.location.search as { lang?: unknown }).lang,
+	});
+	return typeof raw === "string" && LANGUAGES.has(raw) ? raw : "en";
+}
+
 function RootDocument({ children }: { children: React.ReactNode }) {
+	const lang = useDocumentLanguage();
 	return (
-		<html lang="en">
+		<html lang={lang}>
 			<head>
 				<HeadContent />
 			</head>

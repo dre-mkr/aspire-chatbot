@@ -823,7 +823,13 @@ export function AspireChat() {
 	const handleSaveConversation = useCallback(
 		(conversation: StoredConversation) => {
 			const live = conversation.threadId === threadId && messages.length > 0;
-			downloadTranscript(live ? messages : conversation.messages);
+			downloadTranscript(
+				live ? messages : conversation.messages,
+				// The conversation's own language when it is known, the interface
+				// language otherwise. A saved file should be stamped in the language
+				// its contents are in, not the one the device happens to be set to.
+				conversation.language ?? voice.language,
+			);
 		},
 		[messages, threadId],
 	);
@@ -869,6 +875,23 @@ export function AspireChat() {
 				) : null}
 
 				<main className="workspace" inert={drawerModal || undefined}>
+					{/* The way to the input without walking the whole conversation.
+
+					    The composer is LAST in the tab order, and the measured cycle
+					    makes that worse the longer you talk: 25 focusable elements at
+					    3 turns, 99 at 40. A keyboard user reaching the primary control
+					    of a chat product had to Tab past every message's copy, replay
+					    and ask-again button first, and past more of them every turn.
+
+					    A skip link rather than reordering the DOM: the composer's
+					    position in the grid is what puts it under the conversation it
+					    belongs to, and moving it in source would either break that or
+					    require positioning it back, which reintroduces the reading-order
+					    mismatch this is meant to fix. Visible on focus only, first in
+					    the workspace, so it is the first thing a keyboard reaches. */}
+					<a href="#aspire-composer" className="skip-link">
+						Skip to the message box
+					</a>
 					{/* The top bar is gone. Its three pieces moved: voice settings to
 					    the composer, Save chat to each conversation's row in the rail,
 					    and the identity line into the empty state.

@@ -134,7 +134,20 @@ export function Rail({
 				</button>
 			</div>
 
-			<div className="rail__body">
+			{/* `tabIndex={-1}` while folded, and only while folded.
+
+			    This is the scroll container, and Chrome gives a scrollable element
+			    its own tab stop so a keyboard can scroll it. When the rail is
+			    collapsed everything inside is `inert` and correctly skipped — but
+			    the scroller itself is not inert, so focus landed on it and one Tab
+			    press appeared to do nothing at all. Measured as a dead stop at
+			    position 3 of the cycle.
+
+			    Not inert, because that would also hide the section label from
+			    assistive technology; and not permanently -1, because when the rail
+			    IS open this stop is doing its job — a long history needs to be
+			    scrollable by keyboard. */}
+			<div className="rail__body" tabIndex={folded ? -1 : undefined}>
 				{/* Not a heading: the rail is a labelled landmark, and a heading here
 				    would sit above the page's own h1 in document order. */}
 				<p className="rail__section-label">
