@@ -1242,3 +1242,597 @@ implemented.
 - **`t_total`.** It fell (5888.5 → 5412.9 / 5588.1 p50) but `FOLLOW_UPS_ALWAYS`
   puts a whole model call inside it, so that comparison is confounded in the same
   way P13-005's was. Not quoted.
+
+---
+
+# P14 — prompt cost, a second cache layer, streaming audio, and the overhead
+
+Four workstreams in one tree, measured together because they touch the same
+request. **Nothing here is committed**; this document is the record for review.
+
+- **Date:** 2026-08-05
+- **Probes:** `scripts/latency_probe.py` (unchanged), `scripts/voice_probe.py`
+  (new), `scripts/semantic_margin.py` (new), `scripts/flush_probe_answers.py` (new)
+- **Server:** `TIMINGS_ENDPOINT_ENABLED=1 CHAT_MESSAGES_PER_WINDOW=500 uvicorn app.main:app --port 8014`
+
+## Where the briefs and the codebase disagree, again
+
+Five assumptions did not survive contact with the code. Recorded rather than
+worked around quietly, because each one changes what the phase could deliver.
+
+1. **There are no four persona system prompts, and no few-shot blocks.** There
+   is ONE `ASPIRE_SYSTEM_PROMPT` (1,138 tokens) shared by every persona, plus
+   two additive tool sections. Nothing in it is a worked example, so the
+   instruction to "cut long few-shot example blocks" has nothing to cut. Full
+   per-block census below.
+2. **k=3 was already live** (`RETRIEVER_K=3` in `.env`, set during P13-003).
+   Re-validated rather than changed; the sweep is below and confirms k=3 is
+   the knee.
+3. **Embeddings are not BGE-M3 and do not run on CPU.** They are OpenAI
+   `text-embedding-3-large` over the network, so "export to ONNX with int8
+   quantization and warm up at startup" describes a deployment this service
+   does not have. The latency it targets is real, and is addressed the other
+   way: by not embedding repeat queries at all (P14-D).
+4. **There is no account-status router injecting personalised content.** The
+   field arrives on the request and nothing reads it (P13-001 finding 4, still
+   true). It is in the cache key regardless, so the isolation the brief asks
+   for holds by construction — verified below.
+5. **The reverse proxy is nginx, not Caddy** (`deploy/nginx-aspire.conf`).
+
+## The knowledge base changed underneath this phase
+
+**Not by this workstream.** `backend/data/knowledge_base.csv` was edited at
+**23:34 on 2026-08-04**, mid-session, adding **374 new `FIN-*` rows** (general
+financial education: what money is, the EC$ peg, banknotes, budgeting) and
+trimming one trailing space in `ASP-287`. The corpus went from **332 rows to
+706** and has been re-ingested — Neon and the CSV agree at 706, fingerprint
+`85d3e3efff0a`.
+
+Rule 3 says not to touch the knowledge base and this workstream did not: no edit
+here wrote that file. It is recorded because it **confounds the behaviour
+comparison** — every "before" figure in this document's eval baselines was
+measured against 332 rows and every "after" figure against 706. Five of the 75
+eval cases now retrieve at least one of the new rows.
+
+Two things it did NOT affect, checked rather than assumed:
+
+- **Retrieval quality is unchanged**: 0.9500 hit rate / 0.9056 MRR, en 1.00 /
+  es 0.90 / fr 0.95, the same three cases missing — identical to four decimal
+  places against the 332-row corpus. Adding 374 rows neither helped nor hurt
+  the golden set.
+- **The cache handled it correctly and automatically.** The fingerprint is part
+  of every key, so answers computed against the old corpus became unreachable
+  the moment the file changed. That is the mechanism this phase raised the TTL
+  to 7 days on the strength of, exercised for real by accident.
+
+---
+
+## P14-A — prompt cost, prefix caching, per-persona routing
+
+### Every prompt block, counted
+
+| block | tokens | on every turn? |
+|---|---:|---|
+| `ASPIRE_SYSTEM_PROMPT` | 1,138 | yes |
+| `GAMES_INSTRUCTIONS` | 649 | yes, when games enabled |
+| `ELIGIBILITY_INSTRUCTIONS` | 332 | yes, when eligibility enabled |
+| `SIMPLE_MODE_INSTRUCTIONS` | 60 | only with the toggle on |
+| `KNOWLEDGE_CONTEXT_PREFACE` | 36 | yes |
+| `KNOWLEDGE_CONTEXT_EMPTY` | 95 | only when retrieval found nothing |
+| **fixed system prefix** | **2,117** | |
+
+**Nothing was cut, and that is the finding.** The 981 tokens of card
+instructions are the only plausible cut, and P8-003 already made that
+conditional on a number: how often a card actually starts. That number is now
+measured — **16.4% of turns** (72 cards / 438 turns, 7-hour window) — which is
+too high to call the instructions dead weight, and the cost of removing them is
+a behaviour change on the two flows with the most test coverage in the product.
+
+More decisively: **the prefix is already cached by the provider**, so its
+marginal cost is a fraction of its token count. Measured below.
+
+### Deliverable: input tokens and prefix-cache rate, per persona
+
+93 streamed turns, all four personas, three languages.
+
+| persona | n | our count (tiktoken) | provider input p50 | of which cached | **prefix cache rate** | t_ttft p50 | t_ttft p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| stella | 19 | 346 | 4,034 | 3,685 | **91.3%** | 5 ms | 1,851 ms |
+| orion | 28 | 356 | 4,115 | 4,040 | **95.3%** | 5 ms | 1,997 ms |
+| aurora | 28 | 369 | 4,134 | 4,054 | **95.8%** | 6 ms | 2,667 ms |
+| nova | 18 | 350 | 4,038 | 3,685 | **91.0%** | 6 ms | 2,554 ms |
+
+Two things this table says that are worth stating plainly.
+
+**The prefix cache is already working at 91–96%**, without this phase enabling
+anything: `openai:` models cache a static prefix above 1,024 tokens
+automatically, and the assembly order — system prompt, then summary, then
+window, then retrieved corpus, then the question — was already arranged so the
+stable part is contiguous. P13-005's `memory.build_prompt` docstring says so in
+as many words. **The brief's item 3 was already satisfied; this phase measured
+it rather than implemented it.**
+
+**Our token count and the provider's disagree by an order of magnitude** (≈350
+against ≈4,100) because `input_token_count` counts only the messages the
+endpoint assembles, and the provider counts those *plus* the system prompt and
+tool schemas that `create_agent` holds. Both are correct about different things;
+the provider's is the billed one, and it is the one now logged.
+
+The `t_ttft p50` column is 5–6 ms because most probe turns were cache hits. Miss
+figures are in the P14-B table.
+
+### Per-persona model routing and output caps
+
+Both are config dicts read in exactly one place each
+(`agent.resolve_model_for`, `agent.resolve_max_tokens_for`), so they are tunable
+from the environment without a code change — which is what the brief asked for.
+
+**`CHAT_MODEL_BY_PERSONA` ships EMPTY, deliberately.** Routing Stella and Orion
+to a smaller model changes the wording of every answer those personas get, and
+rule 2 forbids shipping that silently in a latency phase. The mechanism is done;
+the decision needs `python -m evals.run --answers` in front of it. Available
+models on this account: `gpt-5.6-luna` (current), `gpt-5.6-sol`, `gpt-5.6-terra`,
+`gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4-pro`.
+
+**`MAX_TOKENS_BY_PERSONA={"": 4096}` ships ON**, as a runaway guard. Sizing it
+needed a measurement the brief did not anticipate: on the Responses API the cap
+covers **reasoning tokens too**, which the reader never sees. Measured on a real
+grounded turn: 191 output tokens, of which **81 were reasoning** and 110 visible.
+Across 123 probe turns the visible maximum was 100 tokens. So 4,096 leaves
+**21x headroom on the real total** and no turn came within 41x of it. A cap
+sized to the visible answer alone — say 512 — would have spent the budget on
+thinking and truncated mid-sentence.
+
+### k=3, re-validated
+
+`--sweep-k` over all 60 golden cases:
+
+| k | hit_rate | MRR | en | es | fr |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.8667 | 0.8667 | 0.90 | 0.85 | 0.85 |
+| 2 | 0.9333 | 0.9000 | 0.95 | 0.90 | 0.95 |
+| **3** | **0.9500** | **0.9056** | **1.00** | **0.90** | **0.95** |
+| 4 | 0.9500 | 0.9056 | 1.00 | 0.90 | 0.95 |
+| 6, 8, 12 | 0.9500 | 0.9056 | 1.00 | 0.90 | 0.95 |
+
+**k=3 is the knee: k=4 and above buy exactly nothing** — identical hit rate,
+identical MRR, identical per-language split, and the same three cases miss
+(`es-x2`, `es-x4`, `fr-x4`). The brief's instruction to drop to k=3 was already
+in force and is confirmed correct.
+
+---
+
+## P14-B — the second cache layer
+
+### Layer 1 (exact, normalised) — already shipped in P13-006
+
+Measured again here as the baseline for layer 2, and to report the deliverable.
+
+| | `t_ttft` p50 | `t_ttft` p95 | `t_total` p50 |
+|---|---:|---:|---:|
+| miss (embedding cache warm) | 1,696.7 ms | 2,369.6 ms | 4,500.4 ms |
+| **hit** | **4.3 ms** | **8.3 ms** | **2,264.3 ms** |
+
+**Hit rate on the probe set: 24 of 30 (80%).** The other six open the
+eligibility card and are never cached by design — a card creates server-side
+session state, so replaying one would render a card for a flow nobody started.
+Against the cacheable population the hit rate is **24/24 = 100%**.
+
+`t_total` on a hit is 2.26 s rather than ~5 ms because the follow-up chips are
+still a model call after the answer has gone out. The reader has the whole
+answer at 4.3 ms; the chips land later. **Cached-response target (<50 ms end to
+end): MET at 4.3 ms p50 / 8.3 ms p95.**
+
+### Layer 2 (semantic) — built, measured, and left OFF
+
+The machinery is complete: a per-(persona, language, account_status) shelf of
+truncated query embeddings in Valkey, cosine-compared against the vector the
+turn already computed for retrieval, with the threshold as an env var. It costs
+a miss nothing — the probe runs concurrently and is consulted after the prompt
+is assembled.
+
+**`SEMANTIC_CACHE_ENABLED=false`, on the evidence of `scripts/semantic_margin.py`.**
+
+At the brief's proposed 0.95 threshold, the two populations this gate must
+separate **overlap**:
+
+| population | n | cosine range (shelf dims) | misclassified at 0.95 |
+|---|---:|---|---:|
+| paraphrases of one question (want HIT) | 16 | 0.66 – 0.94 | **16** (none would hit) |
+| distinct questions (want MISS) | 28 | 0.10 – 0.76 | 0 |
+| adversarial near-pairs (must MISS) | 6 | 0.83 – **0.9645** | **1** |
+
+The failing pair is the one that matters most on a product serving minors:
+
+```
+"Is ASPIRE for children aged 5 to 18?"  ~  "Is ASPIRE for children aged 5 to 12?"
+cosine 0.9645  →  would be served the wrong eligibility answer, confidently
+```
+
+Meanwhile **not one genuine paraphrase reached 0.95**, so at any threshold safe
+enough to exclude the adversarial pair, the layer's hit rate is zero. There is
+no setting that is both useful and safe: cosine similarity on this embedding
+model cannot distinguish "same question, different words" from "different
+question, similar words" at the granularity a government FAQ needs.
+
+Shipping it enabled would have traded a correctness guarantee for speed, which
+rule 5 says to flag rather than implement. **Flagged.** It becomes viable with
+either a different embedding model or an entailment check in front of the
+threshold; the code is in place for whoever does that work.
+
+### TTL, flush, and the safety properties
+
+- **TTL raised to 7 days** (`RESPONSE_CACHE_TTL_SECONDS=604800`). Safe at that
+  length only because the corpus fingerprint is part of every key, so a
+  knowledge-base edit retires answers by key rotation rather than by expiry.
+- **`flush_answers()` runs at the end of `ingest()`.** Verified live: 71 keys
+  deleted, 0 remaining. Best effort — an unreachable Valkey must not fail an
+  ingest that already committed, and the fingerprint carries correctness anyway.
+- **`cache_layer` is logged** on every turn (`"exact"`, `"semantic"`, or null).
+
+Verified against the live cache, not asserted:
+
+| property | result |
+|---|---|
+| an answer stored under `account_status="holder"` is readable by | **nobody else** (anon, guardian, applicant all miss) |
+| key separates on account_status / persona / language | yes / yes / yes |
+| an edited corpus changes the key | yes |
+| card turns cached | never (`quiet_turn` gate) |
+| mid-thread turns cached | never (`thread_id` gate, both directions) |
+
+---
+
+## P14-C — first audio byte, decoupled from full synthesis
+
+### The bug this phase actually found
+
+The first implementation streamed `text_to_speech.convert()`'s iterator and
+measured **no improvement at all** — first byte 1.6–2.1 s, statistically
+identical to the buffered endpoint. `convert()` returns an iterator over a
+response body the vendor only begins sending once synthesis is **complete**, so
+chunking it client-side chunks a file that already exists.
+
+`text_to_speech.stream()` is the API that emits audio as it is generated. One
+word changed; the entire result follows from it. **Measuring before believing is
+what caught this** — the code looked correct both times.
+
+### Deliverable: before/after first audio byte
+
+`eleven_flash_v2_5`, the lowest-latency tier, confirmed serving **all three
+languages** (log: `model=eleven_flash_v2_5` on every EN/ES/FR row). No language
+needs routing to the slower model.
+
+| language | `/speak` (buffered) first byte p50 | `/speak-stream` first byte p50 | delta |
+|---|---:|---:|---:|
+| en | 1,030 ms | **221 ms** | **−809 ms (−79%)** |
+| es | 658 ms | **265 ms** | **−393 ms (−60%)** |
+| fr | 554 ms | **264 ms** | **−290 ms (−52%)** |
+
+| language | `/speak` first-byte max | `/speak-stream` first-byte max |
+|---|---:|---:|
+| en | 1,418 ms | 263 ms |
+| es | 763 ms | 292 ms |
+| fr | 568 ms | 302 ms |
+
+**First-audio-byte target (<800 ms): MET, 221–265 ms p50 and 302 ms worst
+observed.** n is 2–3 per cell rather than 5: the voice rate limiter
+(`MAX_SPEECH_PER_WINDOW=40`) returned 429 for the tail of the run, which is the
+limiter working as designed. The separation is large enough that the small n is
+not load-bearing — every streaming observation beat every buffered one in the
+same language.
+
+An earlier run of this probe measured the **quality** tier by accident, because
+its cache-busting salt was a hex UUID and `has_many_numbers(text, threshold=3)`
+routes any text with three or more digits to `eleven_multilingual_v2`. A hex
+salt averages 3.75 digits. The probe now salts with letters only, and the
+server log is checked for the model id rather than assumed.
+
+### Failure isolation
+
+The text response and the audio are separate requests, so a TTS failure cannot
+touch the answer on screen — that property predates this phase and is unchanged.
+What is new is discipline *within* the audio stream:
+
+- **before the first chunk:** raises `VoiceUnavailable` → the same 503 and the
+  same browser-speech fallback the buffered path gives. The first chunk is
+  awaited before the `StreamingResponse` exists, because a `StreamingResponse`
+  has already committed a 200 by the time its generator runs.
+- **after bytes have gone out:** the stream ends early at the last complete
+  frame; the player fires `onended` and the UI returns to Play. A truncated
+  stream is **never cached**, so the truncation cannot be replayed.
+- **on client abort:** the producer thread is signalled and the queue drained,
+  so a cancelled playback stops billing instead of finishing into a queue
+  nobody reads.
+
+The client prefers MediaSource where the browser supports MP3 in MSE and falls
+back to the blob path otherwise (Safari); the fallback still gains the
+server-side half, because the download overlaps synthesis instead of following
+it.
+
+### The client half, verified in a real browser
+
+A server that streams proves nothing about a client that has to consume it —
+MSE is exactly the API that works in theory and throws `InvalidStateError` in
+practice, and nothing else in the suite exercises it.
+`.impeccable/voice-stream.mjs` drives the real page, clicks Play on a real
+answer, and reports what the audio element actually did:
+
+| measurement | result |
+|---|---|
+| endpoint the client chose | `/api/voice/speak-stream` |
+| MediaSource buffers opened | 1 |
+| chunks appended / append errors | **192 / 0** |
+| `endOfStream()` calls | 1 |
+| duration the element reported | 13.56 s |
+| `currentTime` after 3.5 s | **3.20 s (playback advancing)** |
+| media error / console errors | none / none |
+
+All seven assertions pass. The audio is genuinely being fed in incrementally
+and played, not downloaded whole and handed over.
+
+---
+
+## P14-D — the overhead
+
+### Query-embedding cache
+
+Keyed on the normalised query plus the embedding model name, so a model change
+is a cold cache rather than a stale vector. Values are packed float32 (≈12 KB
+for 3,072 dims, against ≈70 KB as JSON).
+
+| stage | before (cold) | after (warm) | delta |
+|---|---:|---:|---:|
+| `t_embed` p50 | 345.7 ms | **3.0 ms** | **−342.7 ms (−99.1%)** |
+| `t_embed` p95 | 874.2 ms | **14.6 ms** | **−859.6 ms (−98.3%)** |
+| `t_concurrent_wait` p95 | 2,127.7 ms | **1,155.9 ms** | −971.8 ms |
+| `t_ttft` p95 | 3,134.0 ms | 2,369.6 ms | −764.4 ms |
+| `t_ttft` p50 | 1,713.2 ms | 1,696.7 ms | −16.5 ms |
+
+**The stage figure is the claim; the p50 TTFT figure is honestly ~nothing.**
+Embedding has been concurrent since P13-005, so removing 343 ms from it does not
+remove 343 ms from the critical path — the conversation write (~830 ms) is still
+what the reader waits on. What the cache genuinely removes is the embedding's
+**tail**: `t_concurrent_wait` p95 falls by 972 ms because a slow embedding can no
+longer be the thing the concurrent block is waiting for.
+
+Retrieval quality is **unchanged and identical**: hit_rate 0.9500, MRR 0.9056,
+en 1.00 / es 0.90 / fr 0.95 — the same figures to four decimal places as before
+the refactor, which is the check that `retrieve_with_vector` returns what
+`get_retriever().ainvoke()` returned.
+
+### Connection and buffering
+
+- **One module-level `httpx.AsyncClient`** for the readiness probe, closed at
+  shutdown. It was constructed per probe, paying a TCP and TLS handshake on
+  traffic that arrives like clockwork forever.
+- **SSE is not compressed and not buffered.** Requested with
+  `Accept-Encoding: gzip, deflate, br`; the response carries **no
+  `content-encoding` header**, plus `x-accel-buffering: no`,
+  `cache-control: no-cache`, `transfer-encoding: chunked`. `text/event-stream`
+  is deliberately absent from `gzip_types`.
+- **First byte before generation completes, confirmed with curl:**
+  `ttfb=0.0032s` against `total=4.858s` — **1,500x** apart.
+- **nginx**: `proxy_buffering off` added to `/chat` and `/api/`, plus
+  `proxy_http_version 1.1`. The app already sent `X-Accel-Buffering: no` and
+  nginx honours it per-response, but that put the guarantee in application code
+  where a refactor can lose it silently. Now it is stated in both places.
+  *(Config edited; not reloaded — this box does not run the production nginx.)*
+
+### BGE-M3 / ONNX quantization
+
+**Not applicable.** Embeddings are OpenAI over the network
+(`EMBEDDINGS_PROVIDER=openai`), so there is no CPU model to quantize and no cold
+start to warm. `fastembed` is wired and available as a provider if the service
+ever moves local — at which point the ONNX work becomes real, and the
+determinism argument in P13-002 makes it attractive for a second reason.
+
+### Frontend typewriter — the reveal is not the bottleneck
+
+`.impeccable/live-cadence.mjs` against the running service, measuring every
+animation frame:
+
+| measurement | value |
+|---|---:|
+| **token arrival → first paint** | **49 ms** |
+| worst gap mid-answer | 19 ms |
+| characters in the final frame | 13 |
+| reveal finishing after text declared final | 226 ms |
+| the service, before its first token | 3,178 ms |
+
+**The render loop is not throttling below the token arrival rate.** The service
+wrote for 269 ms; the reveal drew 270 characters over 679 ms and finished 226 ms
+after the last token — it keeps up and lands just behind, which is the intended
+feel. All six harness assertions pass.
+
+The number worth staring at is the last row: **3,178 ms of that turn was the
+service before its first token, against 49 ms of client**. Backend work is
+visible to the user; the frontend is not where the remaining latency is.
+
+---
+
+## Final gate
+
+### L0 baseline against current, every stage
+
+L0 is the P13-001 warm baseline. "Current" is the P14 tree, warm, cache MISS —
+the honest comparison, since L0 had no working cache.
+
+| stage | L0 p50 | L0 p95 | P14 p50 | P14 p95 | note |
+|---|---:|---:|---:|---:|---|
+| `t_lang` | n/a | n/a | n/a | n/a | no detection; client supplies |
+| `t_persona` | n/a | n/a | n/a | n/a | no resolution |
+| `t_account` | n/a | n/a | n/a | n/a | no lookup |
+| `t_identity` | 0.0 | 0.0 | 0.0 | 0.0 | anonymous probe; concurrent since P13-007 |
+| `t_history` | 708.8 | 952.8 | 0.0 | 0.0 | opening turns skip it (P13-003) |
+| `t_open_conversation` | 851.0 | 973.7 | ~830 | ~950 | concurrent since P13-005 |
+| `t_embed` | 506.6 | 1,015.1 | **3.0** | **14.6** | Valkey cache (P14-D) |
+| `t_retrieve` | 8.9 | 11.7 | 569.3 | 1,146.4 | Chroma local → pgvector network (P13-002) |
+| `t_concurrent_wait` | — | — | 857.8 | 1,155.9 | did not exist at L0 |
+| `t_prompt_build` | 0.2 | 0.4 | ~0.4 | ~0.9 | |
+| `d_model_call_1` | 959.0 | 2,505.6 | **gone** | **gone** | one call now (P13-005) |
+| `d_model_call_2` | 1,563.0 | 3,716.9 | 785.4 | 1,345.7 | now `d_model_call` |
+| `d_buffer_hold` | 0.3 | 0.5 | ~0.1 | ~0.3 | |
+| **`t_ttft`** | **4,825.2** | **7,563.0** | **1,696.7** | **2,369.6** | **−64.8% / −68.7%** |
+| **`t_ttft` (cache hit)** | — | — | **4.3** | **8.3** | cache never hit at L0 |
+| `t_total` | 7,860.9 | 12,964.6 | 4,500.4 | 7,432.4 | −42.7% / −42.7% |
+
+### Targets
+
+Reported as numbers, not softened.
+
+| target | goal | actual | verdict |
+|---|---|---:|---|
+| Retrieval | ~10 ms | **569 ms** p50 | **MISSED — 57x over** |
+| Embedding | ~30 ms (0 on hit) | **3.0 ms** warm / 345.7 cold | **MET on cache hit** |
+| TTFT | 200–400 ms | **1,697 ms** miss / **4.3 ms** hit | **MISSED on miss; MET on hit** |
+| First audio byte | < 800 ms | **221–265 ms** | **MET** |
+| Cached response, end to end | < 50 ms | **4.3 ms** | **MET** |
+
+**Why retrieval misses by 57x.** The ~10 ms target describes a local index.
+Retrieval is a network round trip to Neon (P13-002 moved it there deliberately,
+to get one source of truth). The scan itself is single-digit milliseconds; the
+other ~560 ms is the round trip.
+
+**But making retrieval faster would not improve TTFT by one millisecond**, and
+the budget is what says so. At p50:
+
+```
+t_concurrent_wait   857.8   <- what the reader actually waits
+t_open_conversation 856.8   <- the Neon write, inside it
+t_retrieve_wait     567.1   <- the search, inside it, ENTIRELY in the write's shadow
+```
+
+The concurrent block costs the **slower** of its two members, and the write wins
+by 290 ms. Retrieval is already free. Cutting it to 10 ms would leave
+`t_concurrent_wait` at ~857 ms and TTFT unchanged. This corrects the obvious
+reading of the retrieval row, and it reorders the work: **an in-memory index is
+not the next change, it is the second one.**
+
+**Why TTFT misses on a miss, and the only two levers that exist.** The p50
+budget is `858 (concurrent block) + 785 (model call) + 53 (everything else)`.
+Nothing else is big enough to matter, so there are exactly two levers:
+
+1. **The conversation write, 858 ms.** It is awaited before the model because a
+   question must be recorded before it is answered, so a failed turn still
+   leaves a conversation somebody can reopen. Worth noting: the guarantee is
+   about the *answer*, not the *prompt* — awaiting the write after the model
+   call is launched but before the turn is announced would preserve it and take
+   up to 290 ms off TTFT immediately (down to retrieval's 567 ms floor). That is
+   a real change to a correctness-bearing ordering, so per rule 5 it is
+   **flagged, not implemented**.
+2. **The model call, 785 ms.** Provider latency for the first token. Only a
+   smaller model touches this — which is what `CHAT_MODEL_BY_PERSONA` exists for
+   and why it ships empty pending an eval.
+
+Do (1) and then the in-memory index, and the floor becomes the model call alone:
+roughly **840 ms**. Still not 200–400 ms. **That target is not reachable on a
+cache miss with a hosted model and a durable write**, and saying so is more
+useful than a plan that cannot get there. On the path the reader travels most it
+is already met with room to spare: **a repeat question answers in 4.3 ms.**
+
+### Configuration this phase added or changed
+
+`.env` is gitignored, so these do not appear in a diff and are listed here for
+whoever reviews the change.
+
+| key | value | effect |
+|---|---|---|
+| `RESPONSE_CACHE_TTL_SECONDS` | `21600` → **`604800`** | 6 hours → 7 days |
+| `SEMANTIC_CACHE_ENABLED` | **`false`** (new) | layer 2 built but off — see the margin measurement |
+| `SEMANTIC_CACHE_THRESHOLD` | `0.95` (new) | inert while the layer is off |
+| `EMBEDDING_CACHE_ENABLED` | **`true`** (new) | the −343 ms `t_embed` saving |
+| `MAX_TOKENS_BY_PERSONA` | **`{"": 4096}`** (new) | runaway guard, 21x headroom |
+| `CHAT_MODEL_BY_PERSONA` | `{}` (new) | routing mechanism, deliberately empty |
+
+Every new key has a default in `config.py` matching the value above except
+`RESPONSE_CACHE_TTL_SECONDS`, whose code default stays at 6 hours — the 7-day
+setting is a deployment decision, and its `Field` ceiling was raised from 1 day
+to 14 to permit it.
+
+### The test suite: 602 passed, 3 failed, 1 xfailed
+
+```
+3 failed, 602 passed, 1 xfailed in 1314.53s (0:21:54)
+FAILED tests/test_retriever_equivalence.py::test_both_backends_hold_the_same_number_of_chunks
+FAILED tests/test_retriever_equivalence.py::test_any_top_5_difference_is_confined_to_near_ties
+FAILED tests/test_streaming.py::test_a_continuing_turn_does_not_pay_for_chips
+```
+
+**None of the three is this phase's**, and each was predicted from the code
+before the run finished rather than explained afterwards.
+
+**The two equivalence failures are the corpus re-ingest.** That file compares
+Neon against the legacy Chroma snapshot, and the two have desynced:
+
+```
+chroma.sqlite3 embeddings : 332   (P13-002 snapshot, never re-ingested)
+Neon documents            : 706   (re-ingested 2026-08-04 23:34)
+```
+
+`test_both_backends_hold_the_same_number_of_chunks` asserts those counts are
+equal, so it fails by arithmetic. `test_any_top_5_difference_is_confined_to_near_ties`
+fails because pgvector can now return `FIN-*` rows that Chroma does not contain
+at all — a set difference far outside the near-tie band it allows. Nothing in
+P14 touches either store.
+
+Worth noting what did **not** fail:
+`test_rank_one_matches_chroma_for_every_probe_question` **passed**. Adding 374
+rows changes what appears at ranks 2–5 on some questions and never displaces the
+best chunk on any of the 30. That is a reassuring property of the corpus
+addition, obtained for free from a test written for a different purpose.
+
+These tests have been measuring a migration that completed in P13-002. With the
+corpus diverged they now measure the divergence, and they want either a Chroma
+re-ingest or retirement.
+
+**The third failure is pre-existing**, recorded in P13-007 and confirmed then by
+running it on an unmodified checkout: `FOLLOW_UPS_ALWAYS` defaults to `true`, so
+a continuing turn does spend a model call on chips and the test that forbids it
+fails. Unchanged by this phase, still open.
+
+### Behaviour confirmations
+
+| claim | how it was checked | result |
+|---|---|---|
+| no persona voice changed | no prompt file edited at all; `CHAT_MODEL_BY_PERSONA` empty, so every persona runs the same model with the same system prompt as before | **confirmed** |
+| retrieval unchanged | `--retrieval` over all 60 golden cases | **confirmed, identical to 4 d.p.** |
+| output cap cannot truncate | 4,096 against a measured 191-token real turn (110 visible + 81 reasoning); visible max 100 across 123 turns | **confirmed, 21x headroom** |
+| no account-specific response reachable from cache | live Valkey: stored under `holder`, read attempted as anon / guardian / applicant | **confirmed, nobody else** |
+| KB reload flushes the cache | `flush_answers()` at the end of `ingest()` | **confirmed, 71 → 0** |
+| card turns never cached | `quiet_turn` gate, both endpoints | **confirmed** |
+| no factual answer changed | `--answers`, 75 cases, LLM-judged | **see below — cannot be asserted cleanly** |
+
+### The answers eval, reported rather than softened
+
+75 cases, 0 errors, against the **706-row** corpus.
+
+| metric | P13-005 baseline (332 rows) | now (706 rows) | delta |
+|---|---:|---:|---:|
+| retrieval hit rate | 0.9500 | 0.9500 | — |
+| answerable correct | 0.9167 (55/60) | 0.9000 (54/60) | **−1 case** |
+| grounded | 39/42 | 39/42 | — |
+| exact | 15/18 | 15/18 | — |
+| ambiguous correct | 5/5 | **5/5** | — |
+| refusals correct | 10/10 | 9/10 | **−1 case** |
+| refusals refused | 9/10 | 8/10 | −1 case |
+
+**One case moved on each of two axes, in a suite this document already records
+as having roughly that much run-to-run variance** (P13-005: "one case in sixty
+on a single LLM-judged run… not treated as a finding").
+
+The flagged refusal is `ref-09`, and it is worth reading rather than counting.
+The harness's own `refused` flag is **True**; the reply opens *"No puedo decirte
+si deberías retirar tu dinero"* — "I cannot tell you whether you should withdraw
+your money" — and then explains the withdrawal rule, which is exactly what the
+LIMITS rule requires ("offer the explanation instead"). The **judge** marked it
+incorrect. Its retrieved context is `ASP-092, ASP-069`, both pre-existing rows,
+so the corpus change is not the cause here either.
+
+**What can be said honestly:** P14 contains no mechanism that could change an
+answer — the prompts are untouched, persona routing and the semantic cache are
+both disabled, the output cap has 21x headroom and truncated nothing, and
+retrieval returns byte-identical results. What cannot be said is "no factual
+answer changed, proven": the eval moved by one case on two axes, and the
+baseline it is compared against was taken on a different corpus. **Re-run
+`--answers` against a stable 706-row corpus to get a clean baseline before
+reading anything into these two cases.**
