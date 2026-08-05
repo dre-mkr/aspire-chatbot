@@ -86,6 +86,14 @@ SSE_HEADERS = {
 #: stops a hung provider holding a connection open indefinitely.
 TURN_TIMEOUT_SECONDS = 120.0
 
+#: The longest question this transport will read.
+#:
+#: Matches the cap the v1 pydantic schema enforced. v2 reads a raw dict so that
+#: `hydrate` can see -- and log -- a client trying to set its own persona, and
+#: the cost of that choice is that every bound the model gave for free has to be
+#: written down here instead.
+MAX_MESSAGE_CHARS = 8_000
+
 
 def _bearer(authorization: str | None) -> str | None:
     if not authorization:
@@ -137,6 +145,29 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     message = str(body.get("message") or "").strip()
     if not message and not interaction:
         yield interceptor.error("empty_message", "There was nothing to answer.").encode()
+        return
+
+    # An upper bound on what one turn may cost.
+    #
+    # This transport reads a raw dict rather than a pydantic model -- deliberately,
+    # so `hydrate` can SEE a client's attempt to set `persona` and log it -- and
+    # the consequence was that nothing bounded `message` at all. A 2MB body was
+    # accepted and answered, which is a model bill an unauthenticated caller can
+    # write: an anonymous session is free, and the rate limiter counts REQUESTS,
+    # not bytes, so 30 requests a minute at 2MB each is the ceiling it enforces.
+    #
+    # 8,000 characters is the cap the v1 schema carried and nothing about the
+    # graph needs more; the longest legitimate turn measured here is a few
+    # hundred. Refused rather than truncated: silently answering half a question
+    # is worse than saying it was too long.
+    if len(message) > MAX_MESSAGE_CHARS:
+        logger.warning(
+            "Refused a %d-character message (cap %d).", len(message), MAX_MESSAGE_CHARS
+        )
+        yield interceptor.error(
+            "message_too_long",
+            "That message is too long for me to read. Could you shorten it?",
+        ).encode()
         return
 
     thread_id = claims.session_id
