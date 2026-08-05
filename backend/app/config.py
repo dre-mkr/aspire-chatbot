@@ -79,6 +79,27 @@ class Settings(BaseSettings):
     # you know accepts it (e.g. Claude, gpt-4o).
     chat_temperature: float | None = None
 
+    # --- Per-persona model routing (P14-A) --------------------------------
+    # Persona name -> "provider:model" override. Any persona not in the dict --
+    # and the no-persona case -- uses `chat_model`. A dict rather than four
+    # fields so it can be tuned from the environment without a code change:
+    #
+    #   CHAT_MODEL_BY_PERSONA={"stella": "openai:gpt-5.6-halley"}
+    #
+    # EMPTY BY DEFAULT, DELIBERATELY. Routing a persona to a different model
+    # changes the wording of every answer that persona gets, which rule 2 of the
+    # latency workstream forbids shipping silently. The mechanism is here so the
+    # decision is one config edit -- but the decision needs an eval run in front
+    # of it (`python -m evals.run --answers`), not a default.
+    chat_model_by_persona: dict[str, str] = {}
+
+    # Persona name -> max output tokens, with "" as the key for the no-persona
+    # case. Empty means "no cap", today's behaviour. A cap is a guard against a
+    # runaway generation, not a style control: set it comfortably above the
+    # longest legitimate answer (measured p99 output on the probe set is ~350
+    # tokens) or it will truncate real answers mid-sentence.
+    max_tokens_by_persona: dict[str, int] = {}
+
     # OpenAI only, and required for the GPT-5 family: on /v1/chat/completions those
     # models reject function tools whenever reasoning is active, which breaks the
     # retriever tool. Routing through /v1/responses instead keeps tool calling and
@@ -160,11 +181,46 @@ class Settings(BaseSettings):
     # Unset disables the response cache and the background queue; nothing else
     # changes.
     valkey_url: str | None = None
-    # How long a cached answer stays servable. Knowledge-base answers are stable
-    # for far longer than this, but a few hours is the point past which a
-    # corrected answer should have reached everyone.
-    response_cache_ttl_seconds: int = Field(default=6 * 3600, ge=60, le=86_400)
+    # How long a cached answer stays servable. The ceiling was one day when the
+    # corpus fingerprint was not part of the key; now that it is (P13-006), an
+    # edited knowledge base retires its answers by key rotation rather than by
+    # expiry, so a long TTL cannot outlive a correction and the cap is raised to
+    # accommodate the 7-day setting (P14-B).
+    response_cache_ttl_seconds: int = Field(default=6 * 3600, ge=60, le=1_209_600)
     response_cache_enabled: bool = True
+
+    # --- Semantic response cache (P14-B, layer 2) --------------------------
+    # On a layer-1 miss, a query whose embedding is close enough to a cached
+    # query's -- same persona, language and account status -- is served that
+    # cached answer. The embedding is the one the turn computes for retrieval
+    # anyway, so a miss costs one Valkey read and a dot product, not a model
+    # call.
+    #
+    # OFF BY DEFAULT, on a measurement rather than a hunch. At the proposed 0.95
+    # threshold, `scripts/semantic_margin.py` measured the two populations this
+    # gate must separate OVERLAPPING: "Is ASPIRE for children aged 5 to 18?" ~
+    # "...aged 5 to 12?" sits at 0.9645 cosine (a wrong eligibility answer for a
+    # minor, served confidently), while every genuine paraphrase pair measured
+    # BELOW 0.95 (0 of 16 would hit). There is no threshold that is both useful
+    # and safe on this embedding model; cosine similarity cannot tell "same
+    # question, different words" from "different question, similar words" at
+    # the granularity a government FAQ needs. The machinery is complete and this
+    # flag is the decision, deliberately left to a human with these numbers.
+    semantic_cache_enabled: bool = False
+    semantic_cache_threshold: float = Field(default=0.95, ge=0.80, le=1.0)
+    # How many cached-query embeddings one (persona, language, status) shelf
+    # holds. Oldest out first past the cap: the point is the head of the
+    # distribution -- the starter chips and their paraphrases -- not an archive.
+    semantic_cache_max_entries: int = Field(default=512, ge=8, le=4096)
+
+    # --- Query-embedding cache (P14-D) -------------------------------------
+    # Embedding a query is a ~400 ms network round trip to OpenAI; a repeat of
+    # the same normalised text is the same vector every time (modulo provider
+    # nondeterminism measured at ~1e-4, far below anything retrieval can
+    # distinguish). Keyed on the normalised query and the embedding model name,
+    # so a model change can never serve stale vectors.
+    embedding_cache_enabled: bool = True
+    embedding_cache_ttl_seconds: int = Field(default=30 * 86_400, ge=3600, le=90 * 86_400)
 
     # --- Conversation memory ---------------------------------------------
     # ON by default, since the worker that backs it is now actually deployed.

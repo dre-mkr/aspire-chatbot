@@ -102,7 +102,8 @@ def _fake_agent(chunks):
             for chunk in chunks:
                 yield chunk, {}
 
-    return lambda _simple=False: Agent()
+    # Accepts the persona `get_agent` now takes (P14-A); the fake ignores it.
+    return lambda _simple=False, _persona=None: Agent()
 
 
 @pytest.fixture()
@@ -431,7 +432,7 @@ def _capturing_agent(chunks, captured: list):
             for chunk in chunks:
                 yield chunk, {}
 
-    return lambda _simple=False: Agent()
+    return lambda _simple=False, _persona=None: Agent()
 
 
 def test_a_continuing_turn_sends_the_question_exactly_once(client, monkeypatch):
@@ -558,7 +559,7 @@ def test_a_cache_hit_streams_the_answer_without_a_model_call(client, monkeypatch
     """
     calls: list = []
 
-    def _exploding_agent(_simple=False):
+    def _exploding_agent(_simple=False, _persona=None):
         calls.append(1)
         raise AssertionError("the agent ran on a cache hit")
 

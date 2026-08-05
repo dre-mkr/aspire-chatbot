@@ -35,6 +35,7 @@ from app.timing import (
     T_RETRIEVE_KICKOFF,
     T_RETRIEVE_TOTAL,
     T_RETRIEVE_WAIT,
+    T_SESSION_WAIT,
     T_CONCURRENT_WAIT,
     T_TOTAL,
     T_TTFT,
@@ -105,8 +106,10 @@ def test_the_model_call_excludes_every_pre_model_stage():
     payload = _turn(
         **{
             T_RETRIEVE_KICKOFF: 0.2,
-            T_IDENTITY: 10.0,
-            T_HISTORY: 700.0,
+            # The owner lookup and the window read, overlapped (P13-007). They
+            # were two budget lines of 10 and 700; the pair is now one line worth
+            # the slower of them, which is what the reader actually waits.
+            T_SESSION_WAIT: 710.0,
             T_CONCURRENT_WAIT: 850.0,
             T_PROMPT_BUILD: 1.0,
             T_AGENT_FIRST_DELTA: 2500.0,
@@ -114,6 +117,27 @@ def test_the_model_call_excludes_every_pre_model_stage():
     ).payload()
     # 2500 cumulative, less the 1561.2 accounted for ahead of the model.
     assert payload[D_MODEL_CALL] == pytest.approx(938.8)
+
+
+def test_the_model_call_does_not_subtract_the_concurrent_session_reads():
+    """The owner lookup and the window read overlap, so only the WAIT is on the path.
+
+    Same rule as the retrieval stages below, one layer earlier and for the same
+    reason: subtracting `t_identity` and `t_history` on top of `t_session_wait`
+    would deduct time twice that was only ever spent once, and flatter the model
+    figure by the overlap.
+    """
+    payload = _turn(
+        **{
+            T_SESSION_WAIT: 700.0,
+            T_IDENTITY: 300.0,
+            T_HISTORY: 690.0,
+            T_AGENT_FIRST_DELTA: 2000.0,
+        }
+    ).payload()
+    # 2000 - 700 = 1300. Neither the 300 lookup nor the 690 read is deducted
+    # again: both are inside the 700 of session wait.
+    assert payload[D_MODEL_CALL] == pytest.approx(1300.0)
 
 
 def test_the_model_call_does_not_subtract_concurrent_retrieval():
@@ -167,7 +191,7 @@ def test_buffer_hold_is_the_gap_between_a_token_existing_and_being_sent():
 
 def test_derived_durations_are_never_negative():
     """Measured stages exceeding the milestone must not publish -900 ms."""
-    payload = _turn(**{T_AGENT_FIRST_DELTA: 100.0, T_HISTORY: 1000.0}).payload()
+    payload = _turn(**{T_AGENT_FIRST_DELTA: 100.0, T_SESSION_WAIT: 1000.0}).payload()
     assert payload[D_MODEL_CALL] == 0.0
 
 

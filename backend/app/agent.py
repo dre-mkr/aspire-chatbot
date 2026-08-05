@@ -41,9 +41,39 @@ from app.prompts import (
 logger = logging.getLogger(__name__)
 
 
-def build_chat_model(settings: Settings | None = None):
-    """Construct the configured chat model with provider-specific arguments."""
+def resolve_model_for(persona: str | None, settings: Settings | None = None) -> str:
+    """The "provider:model" string this persona's turns run on.
+
+    One dict lookup with `chat_model` as the fallback -- the whole point of
+    `chat_model_by_persona` is that this is the only place that reads it, so
+    routing is tuned in config and never in scattered conditionals.
+    """
     settings = settings or get_settings()
+    return settings.chat_model_by_persona.get(persona or "", settings.chat_model)
+
+
+def resolve_max_tokens_for(persona: str | None, settings: Settings | None = None) -> int | None:
+    """The output-token cap for this persona's turns, or None for uncapped.
+
+    The "" entry is the fallback for every persona without one of its own, so a
+    single `{"": 4096}` caps everybody and per-persona entries only exist to
+    differ from it.
+    """
+    settings = settings or get_settings()
+    caps = settings.max_tokens_by_persona
+    return caps.get(persona or "") or caps.get("") or None
+
+
+def build_chat_model(settings: Settings | None = None, *, model: str | None = None,
+                     max_tokens: int | None = None):
+    """Construct the configured chat model with provider-specific arguments.
+
+    `model` overrides `settings.chat_model`; the auxiliary calls (follow-ups,
+    title, summary) pass nothing and keep the default, so persona routing can
+    never change what a title or summary is written by.
+    """
+    settings = settings or get_settings()
+    chosen = model or settings.chat_model
 
     # "provider:model" string keeps the provider swappable from config alone.
     # temperature is omitted unless explicitly configured: the GPT-5 family rejects
@@ -52,12 +82,23 @@ def build_chat_model(settings: Settings | None = None):
     if settings.chat_temperature is not None:
         model_kwargs["temperature"] = settings.chat_temperature
 
+    # A cap on output, not a style control. langchain-openai maps `max_tokens`
+    # to the parameter the Responses API expects, so one name covers both routes.
+    if max_tokens is not None:
+        model_kwargs["max_tokens"] = max_tokens
+
     # Applied only for OpenAI, since it is an OpenAI-specific argument. Without it
     # the GPT-5 family refuses to use function tools -- see config for details.
-    if settings.chat_model.startswith("openai:") and settings.openai_use_responses_api:
+    if chosen.startswith("openai:") and settings.openai_use_responses_api:
         model_kwargs["use_responses_api"] = True
 
-    return init_chat_model(settings.chat_model, **model_kwargs)
+    if chosen.startswith("openai:"):
+        # Ask for usage in the stream, so the turn can report the provider's own
+        # input-token count and prefix-cache reads (P14-A). Without it the chat
+        # completions route reports no usage on streamed responses at all.
+        model_kwargs["stream_usage"] = True
+
+    return init_chat_model(chosen, **model_kwargs)
 
 
 # One checkpointer shared by every agent variant. Conversation memory belongs to
@@ -77,10 +118,17 @@ def build_chat_model(settings: Settings | None = None):
 _CHECKPOINTER = InMemorySaver()
 
 
-def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
+def build_agent(
+    settings: Settings | None = None,
+    *,
+    simple_mode: bool = False,
+    model: str | None = None,
+    max_tokens: int | None = None,
+):
     """Wire up the model, the card tools, and the shared checkpointer."""
     settings = settings or get_settings()
-    model = build_chat_model(settings)
+    model_name = model or settings.chat_model
+    model = build_chat_model(settings, model=model, max_tokens=max_tokens)
 
     system_prompt = ASPIRE_SYSTEM_PROMPT
     if simple_mode:
@@ -138,7 +186,7 @@ def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
     logger.info(
         "Agent ready (model=%s, k=%d, simple_mode=%s, games=%s, eligibility=%s, "
         "tools=%d, memory=%s)",
-        settings.chat_model,
+        model_name,
         settings.retriever_k,
         simple_mode,
         games_enabled(),
@@ -149,10 +197,23 @@ def build_agent(settings: Settings | None = None, *, simple_mode: bool = False):
     return agent
 
 
-@lru_cache(maxsize=2)
-def get_agent(simple_mode: bool = False):
-    """Process-wide agent, one per mode. Both share `_CHECKPOINTER`."""
-    return build_agent(simple_mode=simple_mode)
+@lru_cache(maxsize=8)
+def _agent_for(simple_mode: bool, model: str, max_tokens: int | None):
+    """One agent per DISTINCT configuration, not per persona.
+
+    Keyed on the resolved model string and cap rather than the persona name, so
+    four personas mapped to one model share one agent -- and with the default
+    empty routing dict this cache holds exactly the two entries it always did.
+    All variants share `_CHECKPOINTER`.
+    """
+    return build_agent(simple_mode=simple_mode, model=model, max_tokens=max_tokens)
+
+
+def get_agent(simple_mode: bool = False, persona: str | None = None):
+    """The agent for this turn: mode plus whatever the persona's config resolves to."""
+    return _agent_for(
+        simple_mode, resolve_model_for(persona), resolve_max_tokens_for(persona)
+    )
 
 
 class _FollowUps(BaseModel):

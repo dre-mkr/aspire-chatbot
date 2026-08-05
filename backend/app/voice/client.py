@@ -210,6 +210,135 @@ class VoiceClient:
         self._breaker.record_success()
         return audio
 
+    async def synthesise_stream(
+        self,
+        text: str,
+        voice_id: str,
+        model_id: str,
+        settings: ElevenVoiceSettings,
+        output_format: str = "mp3_44100_128",
+    ):
+        """Text-to-speech, yielded chunk by chunk as the vendor produces it.
+
+        The whole point of P14-C: `synthesise` above joins the entire MP3 before
+        anyone may play a byte, so first audio lands at first-byte PLUS the rest
+        of synthesis. This yields each chunk the moment it exists -- the caller
+        streams it on, and the reader hears sentence one while the vendor is
+        still writing sentence five.
+
+        The vendor SDK's iterator is synchronous, so it runs in a worker thread
+        and hands chunks across on a queue. The timeout is per-GAP rather than
+        per-call, because a stream that is producing audio is healthy however
+        long the whole answer takes -- what must not hang is the wait for the
+        NEXT chunk.
+
+        Failure discipline differs from `synthesise` by necessity. Before the
+        first chunk, failure is clean: raise `VoiceUnavailable`, exactly as the
+        buffered path does. After bytes have gone out they cannot be unsent, so
+        a mid-stream failure ends the stream early and the caller decides what a
+        truncated answer means for it. The breaker records the failure either way.
+        """
+        if self._breaker.is_open:
+            raise VoiceUnavailable("Voice temporarily disabled by circuit breaker.")
+
+        queue: asyncio.Queue = asyncio.Queue(maxsize=8)
+        loop = asyncio.get_running_loop()
+        started = time.perf_counter()
+        sentinel_done, sentinel_failed = object(), object()
+        #: Set when the consumer walks away -- a disconnect, a cancel -- so the
+        #: producer stops pulling (and billing) instead of finishing into a
+        #: queue nobody drains.
+        abandoned = threading.Event()
+
+        def produce() -> None:
+            try:
+                # `stream`, NOT `convert`. Measured before this distinction was
+                # made: `convert`'s iterator yields chunks of a body the vendor
+                # only starts sending once synthesis is COMPLETE, so the
+                # "streaming" endpoint's first byte landed at the buffered
+                # endpoint's total (~1.7-2.1 s, scripts/voice_probe.py). The
+                # /stream API is the one that emits audio as it is generated.
+                stream = self._client.text_to_speech.stream(
+                    voice_id=voice_id,
+                    text=text,
+                    model_id=model_id,
+                    output_format=output_format,
+                    voice_settings=settings,
+                    apply_text_normalization="auto",
+                    request_options=RequestOptions(
+                        timeout_in_seconds=int(self._settings.tts_timeout_seconds)
+                    ),
+                )
+                for chunk in stream:
+                    if abandoned.is_set():
+                        return
+                    if chunk:
+                        # Blocks when the consumer is slower than the vendor,
+                        # which is the backpressure keeping memory flat. The
+                        # shutdown path drains the queue until this thread
+                        # exits, so a blocked put can always complete.
+                        asyncio.run_coroutine_threadsafe(queue.put(chunk), loop).result()
+                asyncio.run_coroutine_threadsafe(queue.put(sentinel_done), loop).result()
+            except Exception:
+                if abandoned.is_set():
+                    return
+                logger.warning("Streaming synthesis failed mid-flight.", exc_info=True)
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(sentinel_failed), loop
+                    ).result()
+                except Exception:  # pragma: no cover - loop torn down under us
+                    pass
+
+        worker = loop.run_in_executor(None, produce)
+
+        produced_any = False
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(), timeout=self._settings.tts_timeout_seconds
+                    )
+                except TimeoutError:
+                    self._breaker.record_failure()
+                    if produced_any:
+                        logger.warning("Streaming synthesis stalled; ending early.")
+                        return
+                    raise VoiceUnavailable("Speech synthesis timed out.") from None
+
+                if item is sentinel_done:
+                    break
+                if item is sentinel_failed:
+                    self._breaker.record_failure()
+                    if produced_any:
+                        # Bytes are on the wire; a truncated stream is the
+                        # honest remainder of this turn.
+                        return
+                    raise VoiceUnavailable("Speech synthesis failed.")
+
+                if not produced_any:
+                    record_stage(
+                        T_TTS_FIRST_BYTE, (time.perf_counter() - started) * 1000.0
+                    )
+                    produced_any = True
+                yield item
+        finally:
+            # Orderly on every exit: tell the producer to stop, then drain until
+            # it has -- a put blocked on a full queue completes into the drain,
+            # sees the flag, and the thread ends. Without the drain, awaiting a
+            # blocked worker here is a deadlock.
+            abandoned.set()
+            while not worker.done():
+                while not queue.empty():
+                    queue.get_nowait()
+                await asyncio.sleep(0.02)
+            await worker
+
+        if not produced_any:
+            self._breaker.record_failure()
+            raise VoiceUnavailable("Speech synthesis returned no audio.")
+        self._breaker.record_success()
+
 
 def _duration_of(raw: object) -> float:
     """Duration is not always on the response; treat absence as unknown."""

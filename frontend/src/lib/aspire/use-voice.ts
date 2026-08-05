@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	fetchVoiceConfig,
 	pickRecorderMimeType,
-	speak,
+	speakStream,
 	transcribe,
 	VoiceError,
 	type VoiceFailure,
@@ -427,7 +427,9 @@ export function useVoice({
 			synthesis.current = controller;
 			let url: string;
 			try {
-				url = await speak(text, language, threadId, controller.signal);
+				// Streaming (P14-C): playback starts on the vendor's first chunk
+				// instead of after the whole file is synthesised and downloaded.
+				url = await speakStream(text, language, threadId, controller.signal);
 			} catch (error) {
 				// An abort is this component's own doing -- another answer was
 				// played, the reader stopped it, the shell unmounted. Saying "the

@@ -14,11 +14,14 @@ ask pgvector, which is right there and exact about what it is doing.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
+import math
 import os
 import re
+import struct
 import time
 import unicodedata
 from functools import lru_cache
@@ -477,3 +480,252 @@ async def ping() -> bool:
     except Exception:
         logger.warning("Valkey did not respond to PING.", exc_info=True)
         return False
+
+
+# --- Query-embedding cache (P14-D) ------------------------------------------
+#
+# Embedding a query is a ~400 ms network round trip to OpenAI, paid before the
+# corpus can be searched. The same normalised question is the same vector every
+# time -- provider nondeterminism measures ~1e-4 per component (P13-002), two
+# orders below anything retrieval or the semantic layer can distinguish -- so a
+# repeat question re-buying the round trip is pure waste.
+#
+# Keyed on the embedding model name as well as the text: a model change must be
+# a cold cache, never a silently served stale vector. Values are packed float32
+# rather than JSON -- 12 KB instead of ~70 KB for 3072 dims.
+
+def _pack_vector(vector: list[float]) -> str:
+    return base64.b64encode(struct.pack(f"<{len(vector)}f", *vector)).decode("ascii")
+
+
+def _unpack_vector(packed: str) -> list[float]:
+    raw = base64.b64decode(packed.encode("ascii"))
+    return list(struct.unpack(f"<{len(raw) // 4}f", raw))
+
+
+def embedding_key(text: str, model: str) -> str:
+    digest = hashlib.sha256(f"{model}\x00{normalise(text)}".encode()).hexdigest()[:32]
+    return f"{namespace()}embed:v1:{digest}"
+
+
+def _embedding_cache_on() -> bool:
+    # Deliberately NOT gated on `response_cache_enabled`: they are different
+    # trade-offs and one being off says nothing about the other.
+    return get_client() is not None and get_settings().embedding_cache_enabled
+
+
+async def get_embedding(text: str, model: str) -> list[float] | None:
+    """A previously computed query embedding, or None. Never raises."""
+    if not _embedding_cache_on():
+        return None
+    try:
+        raw = await get_client().get(embedding_key(text, model))
+    except Exception:
+        logger.warning("Embedding-cache read failed; treating as a miss.", exc_info=True)
+        return None
+    if not raw:
+        return None
+    try:
+        return _unpack_vector(raw)
+    except Exception:
+        logger.warning("Discarding malformed embedding-cache entry.")
+        return None
+
+
+async def put_embedding(text: str, model: str, vector: list[float]) -> None:
+    """Store one query embedding. Never raises."""
+    if not _embedding_cache_on():
+        return
+    try:
+        await get_client().set(
+            embedding_key(text, model),
+            _pack_vector(vector),
+            ex=get_settings().embedding_cache_ttl_seconds,
+        )
+    except Exception:
+        logger.warning("Embedding-cache write failed.", exc_info=True)
+
+
+# --- Semantic response cache, layer 2 (P14-B) --------------------------------
+#
+# Layer 1 collapses different SPELLINGS of one question; this collapses
+# different PHRASINGS. On a layer-1 miss, a query whose embedding sits within
+# `semantic_cache_threshold` cosine of a cached query's -- same persona,
+# language and account status, so the isolation properties of `cache_key` carry
+# over unchanged -- is served that question's stored answer.
+#
+# An entry points at the layer-1 key of its answer rather than duplicating the
+# payload, so the answer's TTL governs both layers: an expired answer turns the
+# semantic entry into a dead pointer, which reads as a miss.
+#
+# Vectors on the shelf are TRUNCATED to `_SEMANTIC_DIMS` and renormalised.
+# text-embedding-3 models are Matryoshka-trained, so a prefix of the vector is
+# itself a valid embedding; at 384 dims an entry is ~2 KB instead of 16 KB and a
+# full shelf read stays in the hundreds of kilobytes. The truncation shifts
+# cosines slightly, which is measured against the probe set rather than assumed
+# away -- see scripts/semantic_margin.py.
+
+_SEMANTIC_DIMS = 384
+
+
+def _shelf_vector(vector: list[float]) -> list[float]:
+    head = vector[:_SEMANTIC_DIMS]
+    norm = math.sqrt(sum(component * component for component in head)) or 1.0
+    return [component / norm for component in head]
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    # Both sides are unit vectors by construction, so the dot product is the
+    # cosine. Guarded on length so a dims change cannot silently compare
+    # prefixes of different shapes.
+    if len(a) != len(b):
+        return -1.0
+    return sum(x * y for x, y in zip(a, b))
+
+
+def semantic_shelf_key(*, language: str, persona: str | None, account_status: str | None) -> str:
+    material = json.dumps(
+        {
+            "lang": (language or "en").lower(),
+            "persona": persona or "",
+            "status": account_status or "",
+            "kb": corpus_fingerprint(),
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(material.encode()).hexdigest()[:32]
+    return f"{namespace()}semindex:v1:{digest}"
+
+
+def semantic_enabled() -> bool:
+    return cache_enabled() and get_settings().semantic_cache_enabled
+
+
+async def semantic_lookup(
+    vector: list[float],
+    *,
+    language: str,
+    persona: str | None,
+    account_status: str | None,
+) -> dict[str, Any] | None:
+    """The cached answer of the nearest same-audience question, if close enough.
+
+    Returns the layer-1 payload dict, or None. Never raises: every failure path
+    is a miss, exactly as layer 1 behaves.
+    """
+    if not semantic_enabled():
+        return None
+
+    probe = _shelf_vector(vector)
+    shelf = semantic_shelf_key(
+        language=language, persona=persona, account_status=account_status
+    )
+    try:
+        entries = await get_client().lrange(shelf, 0, -1)
+    except Exception:
+        logger.warning("Semantic-shelf read failed; treating as a miss.", exc_info=True)
+        return None
+
+    threshold = get_settings().semantic_cache_threshold
+    best_key: str | None = None
+    best_cosine = -1.0
+    for raw in entries:
+        try:
+            entry = json.loads(raw)
+            cosine = _cosine(probe, _unpack_vector(entry["v"]))
+        except Exception:
+            continue
+        if cosine > best_cosine:
+            best_cosine = cosine
+            best_key = entry.get("k")
+
+    if best_key is None or best_cosine < threshold:
+        return None
+
+    try:
+        raw = await get_client().get(best_key)
+    except Exception:
+        return None
+    if not raw:
+        # The answer expired out from under its index entry: a dead pointer,
+        # which is a miss. The entry itself ages off the shelf via LTRIM.
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    logger.info(
+        "semantic cache hit (cosine=%.4f, threshold=%.2f, language=%s)",
+        best_cosine,
+        threshold,
+        language,
+    )
+    payload["_semantic_cosine"] = round(best_cosine, 4)
+    return payload
+
+
+async def semantic_register(
+    query: str,
+    vector: list[float],
+    *,
+    language: str,
+    persona: str | None,
+    account_status: str | None,
+) -> None:
+    """Add this turn's query to the shelf its future paraphrases will search.
+
+    Runs after the answer has been cached and after the reply has gone out, so
+    it is never on anybody's critical path. Never raises.
+    """
+    if not semantic_enabled():
+        return
+
+    entry = json.dumps(
+        {
+            "v": _pack_vector(_shelf_vector(vector)),
+            "k": cache_key(
+                query, language=language, persona=persona, account_status=account_status
+            ),
+        }
+    )
+    shelf = semantic_shelf_key(
+        language=language, persona=persona, account_status=account_status
+    )
+    try:
+        pipe = get_client().pipeline()
+        # Newest first; the trim keeps the shelf at its cap by dropping the
+        # oldest. No dedupe pass: a repeat of the same normalised question maps
+        # to the same layer-1 key, so duplicates waste a slot and nothing else,
+        # and they age out.
+        pipe.lpush(shelf, entry)
+        pipe.ltrim(shelf, 0, get_settings().semantic_cache_max_entries - 1)
+        pipe.expire(shelf, get_settings().response_cache_ttl_seconds)
+        await pipe.execute()
+    except Exception:
+        logger.warning("Semantic-shelf write failed.", exc_info=True)
+
+
+# --- Flush on knowledge-base reload (P14-B) ----------------------------------
+#
+# Belt and braces, not the primary mechanism. The corpus fingerprint inside
+# every answer key and shelf key already guarantees an edited knowledge base is
+# never served from cache -- the keys simply stop matching. This exists so a
+# reload also RECLAIMS the dead entries instead of leaving them to age out, and
+# so the guarantee holds even for a hypothetical future key that forgets the
+# fingerprint.
+
+async def flush_answers() -> int:
+    """Delete every cached answer, semantic shelf and embedding. Returns count."""
+    client = get_client()
+    if client is None:
+        return 0
+    deleted = 0
+    try:
+        for prefix in ("answer:v1:", "semindex:v1:", "embed:v1:"):
+            async for key in client.scan_iter(match=f"{namespace()}{prefix}*", count=200):
+                await client.delete(key)
+                deleted += 1
+    except Exception:
+        logger.warning("Cache flush failed part-way (deleted %d).", deleted, exc_info=True)
+    return deleted
