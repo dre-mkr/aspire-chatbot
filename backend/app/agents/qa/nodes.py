@@ -56,7 +56,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from typing import Any
+from typing import Any, Final
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import Command
@@ -466,6 +466,12 @@ def make_generate(invoke=None):
         chunks = list(state.get("retrieved") or [])
         question = _latest_user_text(state)
 
+        # An aside needs no context and no generation. Returning before the
+        # model call saves the tokens; `ground_check` is what actually emits the
+        # reply, so that there is exactly one place it can come from.
+        if _small_talk_reply(state) is not None:
+            return {"groundedness": 1.0}
+
         if not chunks:
             # No context at all. Generating here would be generating from the
             # model's own weights, which is the single thing this subgraph
@@ -624,6 +630,17 @@ def make_ground_check(threshold: float | None = None):
         settings = get_settings()
         floor = threshold if threshold is not None else settings.qa_relevance_floor
         coverage_floor = settings.qa_coverage_floor
+        # BEFORE every floor, not just the no-context one.
+        #
+        # Placing this in the `not chunks` branch fixed three of eight asides and
+        # left five, because "who are you?" and "can you say that again?" DO
+        # retrieve chunks -- BM25 matches a word somewhere in a corpus about
+        # savings accounts -- and then escalate through `below_relevance_floor`
+        # instead. An aside must not reach any of these branches.
+        aside = _small_talk_reply(state)
+        if aside is not None:
+            return aside
+
         chunks = list(state.get("retrieved") or [])
         messages = state.get("messages") or []
         answer = _text_of(messages[-1]) if messages else ""
@@ -871,6 +888,113 @@ def _last_question(state: AspireState) -> str:
             content = getattr(message, "content", "")
             return content if isinstance(content, str) else ""
     return ""
+
+
+# ── small talk ───────────────────────────────────────────────────────────────
+#
+# "Ungrounded means escalate, not guess" is right for a QUESTION the corpus
+# cannot answer. It was also being applied to "hello".
+#
+# Measured: eight ordinary conversational turns -- hello, thanks!, ok, can you
+# say that again?, who are you? -- opened eight rows in `tickets`, one each. A
+# ticket is read by staff and exported to a case system, so the greeting a child
+# opens with cost a person's attention. The child meanwhile was told "A grown-up
+# who helps with ASPIRE is going to look at this. You have not done anything
+# wrong", which tells a five-year-old that saying hello was possibly wrong.
+#
+# The matcher is a CLOSED list and every pattern is fully anchored, which is the
+# only property that makes this safe to add. `hello` matches; `hello, my dad hits
+# me when he is angry` does not match anything here and escalates exactly as
+# before. Nothing that is not literally one of these phrases takes this path.
+#
+# Crisis turns cannot reach here in any case -- `safety_in` runs before the
+# agent does -- but the anchoring is what means this does not have to rely on
+# that being true forever.
+_SMALL_TALK: Final[tuple[tuple[str, str], ...]] = (
+    ("greeting", r"(hi|hey|hello|good\s+(morning|afternoon|evening)|hola|buenos\s+d[ií]as|bonjour|salut)"),
+    ("thanks", r"(thanks|thank\s+you|ty|cheers|gracias|merci)"),
+    ("ack", r"(ok|okay|k|sure|got\s+it|cool|nice|yes|no|yeah|yep|vale|d'accord)"),
+    ("identity", r"(who\s+are\s+you|what\s+are\s+you|qui\s+es-tu|qui[eé]n\s+eres)"),
+    ("repeat", r"((can|could)\s+you\s+)?(say\s+that\s+again|repeat\s+that|explain\s+that\s+(again|more\s+simply)|"
+               r"sorry,?\s+(can|could)\s+you\s+explain\s+that\s+more\s+simply|"
+               r"wait,?\s+i\s+don'?t\s+understand|i\s+don'?t\s+understand|"
+               r"what\s+did\s+i\s+(just\s+)?ask(\s+you)?)"),
+    ("bye", r"(bye|goodbye|see\s+you|adios|adi[oó]s|au\s+revoir)"),
+)
+
+#: What to say instead of opening a ticket. Short, and every one ends by
+#: offering the thing this service is actually for.
+_SMALL_TALK_REPLIES: Final[dict[str, dict[str, str]]] = {
+    "greeting": {
+        "en": "Hello! I can tell you about ASPIRE — saving money, and how the programme works. What would you like to know?",
+        "es": "¡Hola! Puedo contarte sobre ASPIRE: cómo ahorrar dinero y cómo funciona el programa. ¿Qué te gustaría saber?",
+        "fr": "Bonjour ! Je peux te parler d'ASPIRE : comment épargner et comment le programme fonctionne. Que veux-tu savoir ?",
+    },
+    "thanks": {
+        "en": "You're welcome! Ask me anything else about ASPIRE.",
+        "es": "¡De nada! Pregúntame lo que quieras sobre ASPIRE.",
+        "fr": "Avec plaisir ! Pose-moi d'autres questions sur ASPIRE.",
+    },
+    "ack": {
+        "en": "Got it. What else would you like to know about ASPIRE?",
+        "es": "Entendido. ¿Qué más te gustaría saber sobre ASPIRE?",
+        "fr": "D'accord. Que veux-tu savoir d'autre sur ASPIRE ?",
+    },
+    "identity": {
+        "en": "I'm the ASPIRE assistant. I answer questions about the programme — saving, the accounts, and how to join. What would you like to know?",
+        "es": "Soy el asistente de ASPIRE. Respondo preguntas sobre el programa: el ahorro, las cuentas y cómo unirte. ¿Qué te gustaría saber?",
+        "fr": "Je suis l'assistant ASPIRE. Je réponds aux questions sur le programme : l'épargne, les comptes et comment s'inscrire. Que veux-tu savoir ?",
+    },
+    "repeat": {
+        "en": "Of course — ask me again and I'll explain it a different way.",
+        "es": "Claro, pregúntamelo otra vez y te lo explico de otra manera.",
+        "fr": "Bien sûr — repose-moi la question et je l'expliquerai autrement.",
+    },
+    "bye": {
+        "en": "Bye for now! Come back any time you have a question about ASPIRE.",
+        "es": "¡Hasta pronto! Vuelve cuando tengas una pregunta sobre ASPIRE.",
+        "fr": "À bientôt ! Reviens quand tu as une question sur ASPIRE.",
+    },
+}
+
+_SMALL_TALK_RE: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
+    # Anchored, and the only permitted extras are leading/trailing punctuation
+    # and whitespace. This is what stops a greeting prefix from swallowing the
+    # sentence that follows it.
+    (kind, re.compile(rf"^[\s\W]*{pattern}[\s\W]*$", re.I))
+    for kind, pattern in _SMALL_TALK
+)
+
+
+def _small_talk_reply(state: AspireState) -> Command | None:
+    """A conversational reply for a conversational turn, or None.
+
+    None means "not small talk", and the caller escalates exactly as it did
+    before. Returning a reply here skips the ticket, which is the entire point.
+    """
+    text = (_latest_user_text(state) or "").strip()
+    # Length is a second guard on top of the anchoring: no phrase in the closed
+    # list is anywhere near this long, so anything longer cannot be one of them
+    # however it is punctuated.
+    if not text or len(text) > 64:
+        return None
+
+    for kind, pattern in _SMALL_TALK_RE:
+        if pattern.match(text):
+            locale = str(state.get("locale") or "en")
+            replies = _SMALL_TALK_REPLIES[kind]
+            logger.info(
+                "Answering a %s turn conversationally rather than opening a ticket.",
+                kind,
+            )
+            return Command(
+                update={
+                    "messages": [AIMessage(content=replies.get(locale) or replies["en"])],
+                    "groundedness": 1.0,
+                    "citations": [],
+                }
+            )
+    return None
 
 
 def _escalate(state: AspireState, reason: str, detail: str) -> Command:
