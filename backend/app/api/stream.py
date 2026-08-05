@@ -543,7 +543,11 @@ async def presign(
     path silently stops being used the moment a key is missing -- see
     `storage/presign.py`.
     """
-    from app.storage.presign import StorageUnavailable, presign_upload
+    from app.storage.presign import (
+        StorageUnavailable,
+        owns_application,
+        presign_upload,
+    )
 
     claims = decode_session_token(_bearer(authorization))
     if claims is None:
@@ -556,9 +560,30 @@ async def presign(
     if not isinstance(body, dict):
         body = {}
 
+    # The application id is a RESOURCE IDENTIFIER supplied by the client, and it
+    # was previously trusted. Anyone could mint an anonymous session at
+    # `/v2/session` and ask for a signed PUT scoped to somebody else's
+    # application -- including their `national_id` slot -- because nothing
+    # compared the id to the caller.
+    #
+    # `owns_application` is the same shape as `turn.owns_thread`, which this API
+    # already applies to conversations one file over. The default is unchanged:
+    # a caller who names no application still gets their own session's.
+    requested = str(body.get("application_id") or claims.session_id)
+    if not await owns_application(requested, claims):
+        # 404, not 403. Confirming that an application id exists but belongs to
+        # somebody else is itself a disclosure -- the same reasoning
+        # `load_transcript` uses for "not yours" and "not there".
+        logger.warning(
+            "Refused a presign for application %s from session %s.",
+            requested,
+            claims.session_id,
+        )
+        raise HTTPException(status_code=404, detail="No such application.")
+
     try:
         signed = presign_upload(
-            application_id=str(body.get("application_id") or claims.session_id),
+            application_id=requested,
             slot=str(body.get("slot") or "document"),
             mime=str(body.get("mime") or ""),
             size_bytes=int(body.get("size") or 0),

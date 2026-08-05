@@ -116,6 +116,86 @@ def check_upload(mime: str, size_bytes: int) -> str | None:
     return None
 
 
+async def owns_application(application_id: str, claims: Any) -> bool:
+    """Whether this caller may upload into this application.
+
+    The counterpart to `turn.owns_thread`, and written to the same rules,
+    because the failure it prevents is the same one: a resource identifier that
+    arrives in a request body and is trusted.
+
+    `applications` carries both halves of an identity -- `session_id` for a draft
+    started anonymously and `owner_user_id` once an account is attached -- so a
+    caller matches if either matches.
+
+    Fail-closed only where there is something to be closed against:
+
+      * an application id that is the caller's OWN session id is theirs by
+        definition; that is the default the endpoint has always used, and it is
+        allowed before any row exists;
+      * a row that is not there yet belongs to whoever is starting it, exactly as
+        a new thread does;
+      * a row stored with neither a session nor an owner is unowned and stays
+        open, matching `owns_thread`'s treatment of an anonymous thread;
+      * a row belonging to somebody ELSE is refused.
+
+    A database that cannot be read does NOT fail open here, and that is the one
+    place this deliberately differs from `owns_thread`. Being unable to check
+    conversation ownership costs a reader their own history; being unable to
+    check application ownership would hand out a signed write into a stranger's
+    identity-document folder. The safe default is opposite in the two cases.
+    """
+    from app.db import database_enabled, session
+
+    # No database means no applications table, so there is nothing this could be
+    # granting access to beyond the caller's own session-scoped prefix.
+    if not database_enabled():
+        return application_id == str(getattr(claims, "session_id", ""))
+
+    session_id = str(getattr(claims, "session_id", "") or "")
+    user_id = getattr(claims, "user_id", None)
+
+    if application_id == session_id and session_id:
+        return True
+
+    from sqlalchemy import text as sql
+
+    try:
+        async with session() as db:
+            if db is None:
+                return application_id == session_id
+            row = (
+                await db.execute(
+                    sql(
+                        "SELECT session_id, owner_user_id FROM applications "
+                        "WHERE id = CAST(:id AS uuid)"
+                    ),
+                    {"id": application_id},
+                )
+            ).first()
+    except Exception:
+        # Includes a malformed id, which never matches a real application.
+        logger.warning(
+            "Could not check ownership of application %s; refusing.",
+            application_id,
+            exc_info=True,
+        )
+        return False
+
+    if row is None:
+        # Not created yet. Only the caller's own session id reaches here, and
+        # that was allowed above, so anything else is a guess at somebody's id.
+        return False
+
+    row_session, row_owner = row
+    if row_session is None and row_owner is None:
+        return True
+    if row_session is not None and str(row_session) == session_id and session_id:
+        return True
+    if row_owner is not None and user_id is not None and str(row_owner) == str(user_id):
+        return True
+    return False
+
+
 def presign_upload(
     *,
     application_id: str,
