@@ -125,6 +125,39 @@ function isConversationList(
  * agreement. A game or eligibility turn carries no prose at all — the card is
  * the whole turn — so it is reconstructed as the marker it is.
  */
+/**
+ * Give a stored citation the shape the renderer expects.
+ *
+ * The two producers disagreed. A STREAMED source is assembled by
+ * `stream.ts` as `{ content, metadata: { kb_id, title } }`. A source loaded
+ * from history is whatever `turn.py` persisted, which is the `Citation` model
+ * itself -- `{ kb_id, title }`, with no `metadata` at all.
+ *
+ * `Source.metadata` is not optional in the type, so nothing warned, and
+ * `Transcript.tsx` reads `source.metadata.question` directly. Reopening any
+ * past conversation that had citations therefore threw "Cannot read properties
+ * of undefined (reading 'question')" and React tore down the whole <Sources>
+ * subtree.
+ *
+ * Normalising here rather than loosening the type keeps one shape flowing
+ * through the renderer, which is what let the type be non-optional in the
+ * first place.
+ */
+function normaliseSource(source: Source | Record<string, unknown>): Source {
+	if (
+		source &&
+		typeof source === "object" &&
+		"metadata" in source &&
+		source.metadata
+	)
+		return source as Source;
+	const { content, ...rest } = (source ?? {}) as Record<string, unknown>;
+	return {
+		content: typeof content === "string" ? content : "",
+		metadata: rest as Record<string, string | number>,
+	};
+}
+
 function toStoredMessage(message: WireMessage): StoredMessage | null {
 	if (message.role === "user")
 		return { role: "user", text: message.text ?? "" };
@@ -135,7 +168,7 @@ function toStoredMessage(message: WireMessage): StoredMessage | null {
 		return {
 			role: "assistant",
 			blocks: parseAnswer(message.text ?? ""),
-			sources: message.sources ?? [],
+			sources: (message.sources ?? []).map(normaliseSource),
 			followUps: message.follow_ups ?? [],
 		};
 	}

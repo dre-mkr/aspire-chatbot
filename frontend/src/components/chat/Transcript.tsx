@@ -745,7 +745,7 @@ function Sources({ sources }: { sources: Array<Source> }) {
 
 			<ul className="sources__list">
 				{sources.map((source, index) => {
-					const label = source.metadata.question ?? source.metadata.category;
+					const label = source.metadata?.question ?? source.metadata?.category;
 					return (
 						// Snippets can repeat text; position is their identity.
 						// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
