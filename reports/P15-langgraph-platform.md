@@ -1,7 +1,7 @@
 # P15 — The LangGraph platform
 
-Branch: `feat/aspire-langgraph-platform`. **Not committed**; the working tree is
-the deliverable for review.
+Branch: `feat/aspire-langgraph-platform`, committed as `efbaec6` — 208 files,
++38,749/−3,772. Not merged; the branch is the deliverable for review.
 
 ## What this is
 
