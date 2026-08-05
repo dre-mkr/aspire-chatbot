@@ -53,6 +53,7 @@ answer anyway.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from typing import Any
@@ -89,9 +90,10 @@ def make_rewrite_query(invoke=None):
     rules for a son?" embeds to the eligibility rows. This is the cheapest
     retrieval improvement available and it is why it runs on a small model.
 
-    Both the original and the rewrite are logged. A retrieval that returns
-    nothing is nearly always a rewrite that went wrong, and without the pair in
-    the log there is no way to see that.
+    The rewrite is logged as a SHA and a length, never as text. A retrieval
+    that returns nothing is nearly always a rewrite that went wrong, and the
+    pair of hashes is enough to find that turn again -- whereas the questions
+    themselves are children's, and this runs at INFO.
     """
 
     async def rewrite_query(state: AspireState) -> dict[str, Any]:
@@ -121,7 +123,18 @@ def make_rewrite_query(invoke=None):
             rewritten = original
 
         if rewritten != original:
-            logger.info("rewrote %r -> %r", original[:80], rewritten[:80])
+            # Shape, not text. The debugging value of this line is "the rewrite
+            # changed the question, and by how much" -- a retrieval that returns
+            # nothing is usually a rewrite that went wrong, and the lengths plus
+            # the sha are enough to find that turn again. The question itself is
+            # a child's, at INFO, in the system journal; it does not go here.
+            logger.info(
+                "rewrote query sha=%s (%d chars) -> sha=%s (%d chars)",
+                hashlib.sha256(original.encode("utf-8")).hexdigest()[:12],
+                len(original),
+                hashlib.sha256(rewritten.encode("utf-8")).hexdigest()[:12],
+                len(rewritten),
+            )
         return {"qa_query": rewritten}
 
     return rewrite_query
@@ -276,12 +289,24 @@ def make_hybrid_retrieve(search=None, corpus=None):
                 )
             )
 
+        # The QUERY IS NOT LOGGED, and that is the point of this shape.
+        #
+        # This logged `query[:60]` at INFO, which is the default level, so every
+        # question a child typed went into the system journal verbatim -- name,
+        # address, school and parent's email included when they volunteered
+        # them, which children do. On a minors' programme that is the single
+        # worst thing this service could write down.
+        #
+        # The counts are what the line was for; they are kept. `qa_query_sha` is
+        # the correlation handle that replaces the text: it ties this line to a
+        # later one about the same question without recording what was asked.
         logger.info(
-            "hybrid retrieval: %d dense, %d lexical, %d fused for %r",
+            "hybrid retrieval: %d dense, %d lexical, %d fused (query sha=%s len=%d)",
             len(dense),
             len(lexical),
             len(chunks),
-            query[:60],
+            hashlib.sha256(query.encode("utf-8")).hexdigest()[:12],
+            len(query),
         )
         return {"retrieved": chunks}
 

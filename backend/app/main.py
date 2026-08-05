@@ -128,6 +128,21 @@ async def lifespan(app: FastAPI):
         format="%(levelname)s %(name)s: %(message)s",
     )
 
+    # Third-party HTTP clients are capped at INFO however loud this service is
+    # told to be, and that is a privacy control rather than tidiness.
+    #
+    # The OpenAI SDK logs the full request at DEBUG -- `Request options:
+    # {'method': 'post', 'url': '/chat/completions', ...}` with the entire
+    # message array in it. So an operator raising LOG_LEVEL to DEBUG to
+    # investigate anything at all would start writing children's questions,
+    # verbatim, into the system journal: names, addresses, schools and parents'
+    # email addresses, because that is what children type.
+    #
+    # Debugging this service must not require choosing between visibility and a
+    # minors' data-protection breach, so the choice is removed.
+    for noisy in ("openai", "httpx", "httpcore", "anthropic", "urllib3"):
+        logging.getLogger(noisy).setLevel(max(logging.INFO, logging.getLogger().level))
+
     # Neon scales to zero, so without this the first message after an idle
     # period pays the wake-up. Warming here rather than disabling scale-to-zero
     # keeps the overnight compute bill at zero and moves the cost to deploy
