@@ -230,6 +230,17 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 	let usage: TurnUsage = {};
 	let failure: { code: string; message: string } | null = null;
 
+	/** The one place the result shape is written, so an early return cannot
+	 *  drift from the normal one. */
+	const result = () => ({
+		text: buffer.text(),
+		directives: buffer
+			.placed()
+			.map(({ directive, ordinal }) => ({ directive, ordinal })),
+		usage,
+		error: failure,
+	});
+
 	try {
 		const response = await fetch(`${apiUrl()}${path}`, {
 			method: "POST",
@@ -243,6 +254,31 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 		});
 
 		if (!response.ok || !response.body) {
+			// A refusal decided BEFORE the stream opens arrives as a real status
+			// code carrying the same `{code, message}` shape an SSE `error` frame
+			// uses — see the 401 in `api/stream.py`. Reading it here is what keeps
+			// the reader's message ("Please sign in again to keep chatting.")
+			// instead of collapsing every non-200 into a generic transport error.
+			//
+			// Guarded rather than assumed: a proxy returning an HTML 502 must not
+			// throw inside the error path.
+			const refusal = await response
+				.json()
+				.then((body: unknown) =>
+					body &&
+					typeof body === "object" &&
+					typeof (body as { code?: unknown }).code === "string" &&
+					typeof (body as { message?: unknown }).message === "string"
+						? (body as { code: string; message: string })
+						: null,
+				)
+				.catch(() => null);
+
+			if (refusal) {
+				failure = refusal;
+				onError?.(refusal.code, refusal.message);
+				return result();
+			}
 			throw new Error(`stream did not open: ${response.status}`);
 		}
 
@@ -295,12 +331,5 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 		signal?.removeEventListener("abort", onExternalAbort);
 	}
 
-	return {
-		text: buffer.text(),
-		directives: buffer
-			.placed()
-			.map(({ directive, ordinal }) => ({ directive, ordinal })),
-		usage,
-		error: failure,
-	};
+	return result();
 }

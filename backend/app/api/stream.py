@@ -46,7 +46,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
 from app import turn as turn_service
@@ -491,6 +491,27 @@ async def chat_stream_v2(
         body = {}
     if not isinstance(body, dict):
         body = {}
+
+    # Authentication is settled BEFORE the response starts, so it can be a real
+    # status code.
+    #
+    # This used to return 200 with `event: error data: {"code":"unauthenticated"}`
+    # inside the body for an unauthenticated caller. SSE does not force that --
+    # nothing had been written yet at this point -- and a 200 carrying a failure
+    # is a lie to every monitoring system, which counts it as a success.
+    #
+    # The body keeps the same `{code, message}` shape the SSE error frame uses,
+    # so the client has one thing to read whichever way the failure arrives.
+    # `_events` still re-checks: it is reachable from the widget path too, and a
+    # guard that exists in one caller is a guard that goes missing in the next.
+    if decode_session_token(token) is None:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": "unauthenticated",
+                "message": "Please sign in again to keep chatting.",
+            },
+        )
 
     return StreamingResponse(
         _events(token, body),

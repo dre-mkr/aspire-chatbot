@@ -89,6 +89,17 @@ def post(client, *, auth: str | None, **body):
         )
 
 
+def post_raw(client, *, auth: str | None, **body):
+    """For refusals decided BEFORE the stream opens, which are plain JSON.
+
+    `post` above reads an SSE body; a 401 has no frames to parse, so a separate
+    helper keeps both readable rather than making one of them conditional.
+    """
+    headers = {"Authorization": f"Bearer {auth}"} if auth else {}
+    response = client.post("/v2/chat/stream", json=body, headers=headers)
+    return response.status_code, response.json()
+
+
 class TestTheHappyTurn:
     def test_tokens_then_a_quick_replies_directive_then_done(self, client):
         status, events = post(client, auth=token(), message="what is saving")
@@ -144,35 +155,48 @@ class TestTheHappyTurn:
 
 
 class TestFailures:
-    def test_no_token_is_an_error_event_not_a_500(self, client):
-        """A truncated 200 is indistinguishable from a short answer.
+    def test_no_token_is_a_401_carrying_the_error_shape(self, client):
+        """Authentication is settled BEFORE the response starts, so it is a status.
 
-        Every failure inside the generator has to arrive as an `error` event or
-        the client cannot tell that anything went wrong.
+        This used to be a 200 with the error inside the SSE body. Nothing had
+        been written at that point -- SSE does not force it -- and a 200 carrying
+        a failure is a lie to every monitoring system, which counts it a success.
+
+        The body keeps the same `{code, message}` shape an `error` frame uses, so
+        the client reads one thing whichever way the refusal arrives.
         """
-        status, events = post(client, auth=None, message="hi")
-        assert status == 200
-        assert events == [
-            {
-                "event": "error",
-                "data": {
-                    "code": "unauthenticated",
-                    "message": "Please sign in again to keep chatting.",
-                },
-            }
-        ]
+        status, body = post_raw(client, auth=None, message="hi")
+        assert status == 401
+        assert body == {
+            "code": "unauthenticated",
+            "message": "Please sign in again to keep chatting.",
+        }
 
-    def test_a_bad_token_is_the_same_error(self, client):
-        _status, events = post(client, auth="not-a-token", message="hi")
-        assert events[0]["data"]["code"] == "unauthenticated"
+    def test_a_bad_token_is_the_same_refusal(self, client):
+        status, body = post_raw(client, auth="not-a-token", message="hi")
+        assert status == 401
+        assert body["code"] == "unauthenticated"
+
+    def test_a_failure_INSIDE_the_turn_is_still_an_error_event(self, client):
+        """The original property, which still has to hold for everything else.
+
+        Once the stream has opened the status is spent, so a failure after that
+        point must arrive as an `error` frame -- a truncated 200 is
+        indistinguishable from a short answer. An empty message is the cheapest
+        case that gets past authentication.
+        """
+        status, events = post(client, auth=token(), message="   ")
+        assert status == 200
+        assert events[0]["event"] == "error"
+        assert events[0]["data"]["code"] == "empty_message"
 
     def test_an_empty_message_is_refused_before_any_model_call(self, client):
         _status, events = post(client, auth=token(), message="   ")
         assert events[0]["data"]["code"] == "empty_message"
 
     def test_an_error_message_names_no_internals(self, client):
-        _status, events = post(client, auth=None, message="hi")
-        text = events[0]["data"]["message"].lower()
+        _status, body = post_raw(client, auth=None, message="hi")
+        text = body["message"].lower()
         for leak in ("token", "jwt", "graph", "langgraph", "postgres", "openai"):
             assert leak not in text
 
