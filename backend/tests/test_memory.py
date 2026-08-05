@@ -213,3 +213,135 @@ async def test_a_continuing_turn_still_reads_history(monkeypatch):
     )
     assert calls == ["existing-thread"]
     assert [m.content for m in messages] == ["earlier question", "and after that?"]
+
+
+# --- the owner lookup and the window read overlap (P13-007) --------------
+
+
+#: Long enough that the difference between one and two of them is unmistakable,
+#: short enough that the test stays cheap.
+_LEG = 0.15
+
+
+@pytest.mark.anyio
+async def test_the_owner_lookup_and_the_window_read_overlap(monkeypatch):
+    """Two independent Neon round trips, awaited as one.
+
+    They used to run in sequence -- `owner_id_for`, then `load_context` -- so an
+    authenticated caller on a continuing turn paid both end to end before the
+    model was called. Nothing links them: the lookup needs only the session token
+    and the read needs only the thread id.
+
+    Measured on the clock rather than asserted structurally, because "these two
+    overlap" is a claim about time and only a clock can settle it. The structural
+    half is the test below; this one would pass on any arrangement that genuinely
+    overlaps and fail on any that does not, which is the property worth pinning.
+
+    Verified to FAIL on the sequential arrangement this replaced: 2 x `_LEG`
+    against the 1 x it now takes.
+    """
+    import asyncio
+    import time
+
+    from app import main
+    from app.schemas import ChatRequest
+
+    async def slow_history(request, thread_id):
+        await asyncio.sleep(_LEG)
+        return ConversationContext(recent=[_Turn(role="user", content="earlier")])
+
+    async def slow_identity():
+        await asyncio.sleep(_LEG)
+        return "owner-id"
+
+    monkeypatch.setattr(main, "_load_history", slow_history)
+
+    # Warm tiktoken first: `_assemble_prompt` counts tokens, and the encoding is
+    # fetched and cached on first use. Paying that inside the timed block would
+    # be measuring the encoder, not the overlap.
+    await main._prepare_messages(
+        ChatRequest(message="warm the encoder", thread_id="t"), "t"
+    )
+
+    started = time.perf_counter()
+    messages = await main._prepare_messages(
+        ChatRequest(message="and after that?", thread_id="existing-thread"),
+        "existing-thread",
+        identity=slow_identity(),
+    )
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < _LEG * 1.8, (
+        f"the two reads took {elapsed:.3f}s; one leg is {_LEG:.3f}s and two are "
+        f"{_LEG * 2:.3f}s, so they are running in sequence rather than together"
+    )
+    # The overlap must not have cost the history it was overlapping with.
+    assert [m.content for m in messages] == ["earlier", "and after that?"]
+
+
+@pytest.mark.anyio
+async def test_the_owner_id_reaches_the_conversation_write(monkeypatch):
+    """The gather must hand the resolved id on, not drop it.
+
+    `after_history` opens the conversation, and it is the owner id that decides
+    whose history list the chat appears in. Resolving it concurrently is only
+    safe if the value still arrives -- a gather that returned the id and then
+    wrote the row as anonymous would look fast and lose the conversation.
+    """
+    import asyncio
+
+    from app import main
+    from app.schemas import ChatRequest
+
+    async def identity():
+        return "owner-42"
+
+    seen: list = []
+
+    async def slow_history(request, thread_id):
+        await asyncio.sleep(0)
+        return ConversationContext()
+
+    monkeypatch.setattr(main, "_load_history", slow_history)
+
+    await main._prepare_messages(
+        ChatRequest(message="anything", thread_id="t-1"),
+        "t-1",
+        identity=identity(),
+        after_history=lambda owner: seen.append(owner),
+    )
+
+    assert seen == ["owner-42"], (
+        "the conversation write was handed %r instead of the resolved owner id" % seen
+    )
+
+
+def test_the_two_reads_are_gathered_not_sequential():
+    """Structural guard, so the overlap cannot be undone by an innocent edit.
+
+    The timing test above is the real assertion. This one names the mechanism, so
+    that a refactor which splits the gather back into two awaits fails with a
+    message saying what it broke rather than as an unexplained slowdown nobody
+    measures again.
+    """
+    import inspect
+
+    from app import main
+
+    source = inspect.getsource(main._prepare_messages)
+
+    assert "asyncio.gather(" in source, (
+        "`_prepare_messages` no longer gathers anything: the owner lookup and the "
+        "window read are two sequential Neon round trips again, and an "
+        "authenticated caller pays both before the model is called"
+    )
+
+    gather = source.index("asyncio.gather(")
+    assert gather < source.index("_resolved("), (
+        "the owner lookup is resolved outside the gather, so it no longer overlaps "
+        "the window read"
+    )
+    assert gather < source.index("_load_history("), (
+        "the window read is outside the gather, so it no longer overlaps the owner "
+        "lookup"
+    )

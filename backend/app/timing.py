@@ -74,8 +74,25 @@ T_TTS_FIRST_BYTE = "t_tts_first_byte"
 #: inside an opaque "first model call" milestone where nobody would look for it.
 #: `t_identity` is also the nearest real thing to the brief's `t_account`: there is
 #: no account-status lookup on this path, but there is an ownership lookup.
+#:
+#: Both are auxiliary as of P13-007: `t_identity` now runs concurrently with the
+#: window read, so it is no longer time the reader waits -- `t_session_wait` is.
 T_IDENTITY = "t_identity"
 T_OPEN_CONVERSATION = "t_open_conversation"
+
+#: Wall time waiting for the identity lookup and the history window read, which
+#: P13-007 made concurrent (P13-005 did the same for the search and the write).
+#:
+#: They are independent -- `owner_id_for` needs only the token, `load_context`
+#: needs only the thread id -- and were awaited one after the other, so an
+#: authenticated caller paid two Neon round trips end to end before the model was
+#: called. One `asyncio.gather` makes the pair cost the slower of the two.
+#:
+#: ONE stage for the pair, for the same reason `t_concurrent_wait` is one stage:
+#: summing two overlapping durations is not a budget, it is an over-count. The
+#: individual figures stay in the auxiliary block, where comparing them against
+#: this one shows how much of the shorter leg the overlap absorbed.
+T_SESSION_WAIT = "t_session_wait"
 
 #: What the reader waits for the response-cache lookup (P13-006).
 #:
@@ -149,9 +166,8 @@ DURATION_STAGES: tuple[str, ...] = (
     T_PERSONA,
     T_ACCOUNT,
     T_RETRIEVE_KICKOFF,
-    T_IDENTITY,
     T_CACHE_LOOKUP,
-    T_HISTORY,
+    T_SESSION_WAIT,
     T_CONCURRENT_WAIT,
     T_PROMPT_BUILD,
     D_MODEL_CALL,
@@ -165,9 +181,8 @@ DURATION_STAGES: tuple[str, ...] = (
 #: understated by the overlap.
 PRE_MODEL_STAGES: tuple[str, ...] = (
     T_RETRIEVE_KICKOFF,
-    T_IDENTITY,
     T_CACHE_LOOKUP,
-    T_HISTORY,
+    T_SESSION_WAIT,
     T_CONCURRENT_WAIT,
     T_PROMPT_BUILD,
 )
@@ -194,7 +209,12 @@ MILESTONE_STAGES: tuple[str, ...] = (
 #:
 #: `t_retrieve_total` is `t_embed` plus `t_retrieve` and would double-count those
 #: in turn. TTS is a different request entirely.
+#: `t_identity` and `t_history` joined them in P13-007, for exactly the same
+#: reason: the pair now runs concurrently, so `t_session_wait` is what the reader
+#: waits and these two are the diagnostic breakdown of it.
 AUXILIARY_STAGES: tuple[str, ...] = (
+    T_IDENTITY,
+    T_HISTORY,
     T_OPEN_CONVERSATION,
     T_RETRIEVE_WAIT,
     T_EMBED,
@@ -217,9 +237,10 @@ ABSENT_REASONS: dict[str, str] = {
 
 #: Printed under a stage name so a table explains its own arithmetic.
 STAGE_NOTES: dict[str, str] = {
-    T_IDENTITY: "Neon: resolve the caller's owner id",
+    T_IDENTITY: "concurrent: Neon owner-id lookup (overlaps the window read)",
     T_OPEN_CONVERSATION: "concurrent: Neon upsert + question write (off the critical path)",
-    T_HISTORY: "Neon: window read + running summary",
+    T_HISTORY: "concurrent: Neon window read + running summary (overlaps the owner lookup)",
+    T_SESSION_WAIT: "what the reader waits for the owner lookup AND the window read, overlapped",
     T_CACHE_LOOKUP: "Valkey: response-cache read (the whole turn on a hit)",
     T_RETRIEVE_KICKOFF: "local: asyncio.create_task for the concurrent search",
     T_CONCURRENT_WAIT: "what the reader waits for the search AND the write, overlapped",

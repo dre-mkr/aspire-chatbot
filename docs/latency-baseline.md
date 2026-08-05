@@ -1061,3 +1061,184 @@ Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-0
 Client-observed TTFT (cross-check, n=24): p50 8.2 ms · p95 29.1 ms
 
 Turns that yielded no visible token (6): en-02, en-03, es-02, es-03, fr-02, fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.
+
+---
+
+# P13-007 — the audit: what is left in the pre-generation path
+
+Two things: an audit of every LLM call that blocks the first token, and the one
+change the audit found still to make.
+
+- **Change:** `app/main.py::_prepare_messages`, `_resolve_owner`, both endpoints
+- **Accounting:** `app/timing.py` — `t_session_wait` added, `t_identity` and
+  `t_history` moved to auxiliary
+- **Probe:** `backend/scripts/session_probe.py` (new — see *Why a second probe*)
+- **Tests:** `tests/test_memory.py` (three, at the end), `tests/test_timing.py` (one)
+- **Date:** 2026-08-04
+
+## Deliverable: every LLM call that was in the pre-generation path
+
+"Pre-generation" means *before the first visible token* — the thing the reader
+waits through. Measured against the code, not against the brief's assumptions.
+
+| # | Call the brief expected | Found? | What serves that purpose now | Effect on `t_ttft` |
+|---|---|---|---|---|
+| 1 | *(not in the brief)* **agent tool-selection round trip** | **Yes, and removed** | Fixed retrieve-then-answer. The corpus is searched on the request path, concurrently with the database work, and is in the prompt before the model is called at all — `app/agent.py` | **warm p95 8049.6 → 2941.3 ms (−5108.3, −63.5%)**; p50 4160.7 → 1819.3 (−56.3%). P13-005 |
+| 2 | LLM language detection | **No — never existed** | `ChatRequest.language`, the client's own setting. The UI selection is already trusted; there is nothing to replace | none: `t_lang` reported absent, not zero |
+| 3 | LLM persona classification | **No — never existed** | `ChatRequest.persona`, forwarded to the agent config unread | none: `t_persona` absent |
+| 4 | LLM account-status routing | **No — never existed** | `ChatRequest.account_status`, carried so it can key the cache; nothing decides from it. Eligibility verdicts are deterministic Python in `app/eligibility/rules.py`, which imports no LangChain and calls no model | none: `t_account` absent |
+| 5 | `condense_question` / history-aware retriever | **No — never existed** | Retrieval embeds the reader's own words verbatim. There is no rewrite step to remove | none |
+| 6 | Rolling history summarisation on the request path | **No — already off it** | `summarise_conversation` is called only from the arq worker (`app/jobs.py`). `enqueue_summary` runs *after* the `done` event and never raises | none |
+
+**There are now zero LLM calls in the pre-generation path.** Every model
+invocation left in the backend, and where it sits:
+
+| site | what | when |
+|---|---|---|
+| `main.py::chat_stream` | the answering call | **is** generation |
+| `main.py::chat` | the answering call on the `/chat` fallback | is generation |
+| `agent.py::suggest_follow_ups` | follow-up chips | after `text_end` **and** after `done` |
+| `agent.py::suggest_title` | conversation title | a separate `/api/title` request |
+| `agent.py::summarise_conversation` | rolling summary | arq worker only |
+
+The embedding call (`app/rag.py`) is not a chat model and is not on the path
+either: it is started as a task before anything is awaited.
+
+So five of the brief's six items needed no work — three describe calls this
+service never had, one was retired in P13-005, one was already in a worker. The
+sixth is below.
+
+## Item 6: the last sequential work before the model
+
+`owner_id_for` and `load_context` are two independent Neon round trips and were
+awaited one after the other. Nothing links them — the lookup needs only the
+session token, the read needs only the thread id — so an authenticated caller on
+a continuing turn paid both end to end before the model was called.
+
+One `asyncio.gather` makes the pair cost the slower of the two.
+
+This is invisible to `latency_probe.py` by construction, which is why it survived
+six phases: that probe fires **anonymous opening turns**, and on those
+`owner_id_for(None)` returns without touching the database (`t_identity` 0.0 ms)
+and the window read is skipped by P13-003 (`t_history` 0.0 ms). Two stages that
+are always zero cannot be overlapped.
+
+### Why a second probe
+
+`scripts/session_probe.py` mints a real anonymous session and asks on a thread
+that already has a past. That is the only population where either stage costs
+anything. It is additive: `latency_probe.py` is untouched and remains the
+instrument for the opening-turn figures every table above reports.
+
+## Deliverable: before/after
+
+20 authenticated continuing turns per run, same host, same corpus, minutes apart.
+
+| | before (sequential) | after (gathered) | after, repeat | delta |
+|---|---:|---:|---:|---:|
+| **what the reader waits for the pair** | **1214.8 ms** (`t_identity`+`t_history`) | **673.4 ms** (`t_session_wait`) | **692.5 ms** | **−541.4 / −522.3 ms** |
+| **the same, p95** | **1597.1 ms** | **896.5 ms** | **906.4 ms** | **−700.6 / −690.7 ms** |
+| `t_identity` p50 (the leg) | 530.2 | 520.0 | 526.1 | — |
+| `t_history` p50 (the leg) | 684.6 | 673.2 | 692.3 | — |
+| `t_concurrent_wait` p50 | 836.9 | 823.8 | 839.7 | unchanged |
+| `t_ttft` p50 | 3032.7 | 2579.8 | 2618.0 | −452.9 / −414.7 ms |
+| `t_ttft` p95 | 4327.5 | 3440.7 | **5640.0** | **see below** |
+
+**The reliable number is the stage: ~541 ms removed at p50 and ~701 ms at p95,
+reproduced on two separate runs.** What makes it reliable is not the size of the
+delta but that the *legs barely moved between runs* — identity 530.2 → 520.0 →
+526.1, history 684.6 → 673.2 → 692.3, under 2% drift. Neon was equally fast in
+all three runs; the difference is the overlap and nothing else.
+
+The mechanism is visible in the numbers: after the change `t_session_wait`
+(673.4, 692.5) equals `t_history` (673.2, 692.3) to within 0.3 ms. The identity
+lookup is absorbed **completely** — it costs the reader nothing, because it
+finishes inside the window read it now runs beside.
+
+### `t_ttft` p95 must not be quoted for this phase
+
+It moved **−886.8 ms on one run and +1312.5 ms on the next**, on identical code.
+`d_model_call` p95 over the same three runs: 2270.9 → 1437.1 → 4100.7. A single
+slow provider response at n=19 owns that column outright, exactly as this
+document has warned since P13-001.
+
+`t_ttft` **p50** improved by 414.7–452.9 ms on both runs — same direction, and
+slightly less than the 541 ms the stage saved, which is what it should be: the
+model call moved the other way by ~85 ms between the before and after runs.
+
+Quote 541 ms at p50 on the stage. Do not quote a p95 TTFT win.
+
+### Who this helps, stated plainly
+
+**Nobody anonymous, and nobody on an opening turn.** For the population
+`latency_probe.py` measures this change is exactly 0 ms, and the tables from
+P13-005 and P13-006 stand unaltered. It pays an authenticated reader continuing a
+conversation — which is every returning user of a product built around a savings
+account they come back to.
+
+## Accounting: two stages left the budget
+
+`t_identity` and `t_history` moved to the auxiliary block and `t_session_wait`
+took their place, for the reason P13-005 established when `t_embed` and
+`t_retrieve` moved: **summing two concurrent durations is not a budget, it is an
+over-count.** Leaving both in would have deducted 1,193 ms of pre-model work from
+a turn that only spent 673 ms on it, and understated the model call by the
+overlap.
+
+The budget closes to **1.8 ms unaccounted at p50** on the after run
+(673.4 + 823.8 + 0.4 + 1084.0 = 2581.6 against `t_ttft` 2579.8), the tightest
+figure any phase in this workstream has recorded.
+
+## Behaviour: unchanged, and here is what was checked
+
+No prompt, persona voice, factual content or safety behaviour is touched — this
+phase moves two `await`s and adds no instruction to any model.
+
+The one property that could have broken is *whose* conversation this is. The
+owner id is resolved concurrently and then handed to `_open_conversation`; a
+gather that returned the id but wrote the row anonymously would look fast and
+quietly lose the conversation from its owner's history list.
+`test_the_owner_id_reaches_the_conversation_write` pins exactly that.
+
+The P13-004 ordering guarantee survives intact: the window is still read before
+the question is recorded, because the write is still fired from `after_history`.
+`test_history_is_read_before_the_question_is_recorded` and the behavioural
+`test_a_continuing_turn_sends_the_question_exactly_once` both still pass.
+
+Three tests were added, and two of them **verified to fail on the sequential
+arrangement** — which is the only thing that makes them worth having:
+
+| test | what it pins | fails before? |
+|---|---|---|
+| `test_the_owner_lookup_and_the_window_read_overlap` | the pair takes 1x a leg, not 2x — measured on the clock | **yes** (2 x 0.15 s) |
+| `test_the_two_reads_are_gathered_not_sequential` | the mechanism, named, so a refactor fails loudly | **yes** |
+| `test_the_owner_id_reaches_the_conversation_write` | the resolved id still reaches the write | no — it guards the new risk, not the old shape |
+
+## Two things found while auditing, neither fixed here
+
+**`FOLLOW_UPS_ALWAYS` defaults to `true`.** `config.py` sets
+`follow_ups_always: bool = True` and nothing in `.env` overrides it, so every
+continuing turn spends a second model call on chips — the flag's own comment calls
+it "roughly a 2x multiplier on per-turn model calls". The test written to catch
+this, `test_streaming.py::test_a_continuing_turn_does_not_pay_for_chips`, **is
+failing on `main` today**, confirmed by running it on an unmodified checkout. It
+is after `text_end`, so it costs `t_total` and not `t_ttft` — which is why it is
+recorded here rather than fixed inside a TTFT phase. The P13-003 note predicted
+exactly this and the flag has since drifted back.
+
+**`_open_conversation` is still awaited before the model call**, and at
+823–840 ms it is now the largest pre-model item left. It is ahead of the agent by
+deliberate design — a question must be recorded before it is answered, so a failed
+turn still leaves a conversation that can be reopened. Removing that await trades
+a correctness guarantee for latency, so per rule 5 it is flagged and not
+implemented.
+
+## Not measured
+
+- **The `/chat` fallback**, which got the same change so the two endpoints do not
+  diverge. It has no TTFT to report and was not probed.
+- **An authenticated *opening* turn.** `t_history` is 0 there, so the gather saves
+  nothing and the identity lookup is exposed in full.
+- **`t_total`.** It fell (5888.5 → 5412.9 / 5588.1 p50) but `FOLLOW_UPS_ALWAYS`
+  puts a whole model call inside it, so that comparison is confounded in the same
+  way P13-005's was. Not quoted.

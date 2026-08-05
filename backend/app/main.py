@@ -61,6 +61,7 @@ from app.timing import (
     T_CONCURRENT_WAIT,
     T_RETRIEVE_KICKOFF,
     T_RETRIEVE_WAIT,
+    T_SESSION_WAIT,
     annotate as annotate_timings,
     begin as begin_timings,
     bind as bind_timings,
@@ -561,6 +562,27 @@ async def _await_retrieval(retrieval: asyncio.Task[list[Document]] | None) -> st
     return context_from(documents)
 
 
+async def _resolved(identity: Awaitable[uuid_module.UUID | None] | None):
+    """`await` that tolerates nothing to await, so the gather stays one call.
+
+    A caller with no principal to resolve -- the memory tests -- would otherwise
+    force a branch around the gather, and two arrangements of the same three
+    awaits is how the two endpoints drift apart.
+    """
+    return await identity if identity is not None else None
+
+
+async def _resolve_owner(principal: Principal | None) -> uuid_module.UUID | None:
+    """The caller's owner id, timed so the lookup can be started and left running.
+
+    Exists only so `owner_id_for` can be wrapped in a task without the timing
+    call moving to the point of *await*, which would measure how long the result
+    sat waiting rather than how long Neon took to produce it.
+    """
+    with timed_stage(T_IDENTITY):
+        return await owner_id_for(principal)
+
+
 async def _load_history(request: ChatRequest, thread_id: str) -> ConversationContext:
     """The window of recent turns, or an empty one.
 
@@ -619,25 +641,44 @@ async def _prepare_messages(
     thread_id: str,
     retrieval: asyncio.Task[list[Document]] | None = None,
     *,
-    after_history: Callable[[], Awaitable[None] | None] | None = None,
+    identity: Awaitable[uuid_module.UUID | None] | None = None,
+    after_history: Callable[[uuid_module.UUID | None], Awaitable[None] | None]
+    | None = None,
 ) -> list[BaseMessage]:
     """The messages for this turn: history, the retrieved corpus, the question.
 
-    `after_history` is called the moment the window read is done and may return an
-    awaitable to be waited on alongside retrieval. It exists so the caller can put
-    the conversation write in flight at the one point where doing so is both safe
-    and useful: safe because the read has already happened (see `_load_history`),
-    and useful because retrieval is still outstanding and now has something to
-    overlap with.
+    `identity` is the owner-id lookup, already in flight. It is gathered with the
+    window read rather than awaited before it (P13-007) because the two are
+    independent -- `owner_id_for` needs only the token, `load_context` needs only
+    the thread id -- and awaiting them in sequence made an authenticated caller pay
+    two Neon round trips end to end ahead of the model. Gathered, the pair costs
+    the slower of the two. Passing None keeps the old shape for callers that have
+    no principal to resolve, which is what the memory tests do.
+
+    `after_history` is called the moment the window read is done, is handed the
+    resolved owner id, and may return an awaitable to be waited on alongside
+    retrieval. It exists so the caller can put the conversation write in flight at
+    the one point where doing so is both safe and useful: safe because the read has
+    already happened (see `_load_history`), and useful because retrieval is still
+    outstanding and now has something to overlap with.
 
     Both are awaited inside ONE timed block, and that is deliberate. They run
     concurrently, so timing them separately double-counts the overlap: measured
     `t_open_conversation` 855 ms plus a separate retrieval wait of 1030 ms against
     1534 ms actually elapsed, which is not a budget, it is an over-count that
-    clamped the derived model figure to zero.
+    clamped the derived model figure to zero. `t_session_wait` exists for the same
+    reason, one layer earlier.
     """
-    context = await _load_history(request, thread_id)
-    pending = after_history() if after_history is not None else None
+    # One gather, one budget line. `_load_history` short-circuits to 0 ms on an
+    # opening turn, so on that turn this costs exactly the identity lookup and the
+    # gather is free rather than wasteful.
+    with timed_stage(T_SESSION_WAIT):
+        who, context = await asyncio.gather(
+            _resolved(identity),
+            _load_history(request, thread_id),
+        )
+
+    pending = after_history(who) if after_history is not None else None
 
     try:
         with timed_stage(T_CONCURRENT_WAIT):
@@ -1092,27 +1133,40 @@ async def chat(
         endpoint="/chat", persona=request.persona, lang=request.language
     ):
         retrieval = start_retrieval(request.message)
-        with timed_stage(T_IDENTITY):
-            who = await owner_id_for(principal)
+        # In flight rather than awaited, for the reasons set out in
+        # `/chat/stream`. This endpoint has no TTFT to improve, but the two paths
+        # share `_prepare_messages` and having them arrange the same three awaits
+        # differently is how the streaming version quietly becomes a second
+        # product.
+        identity = asyncio.create_task(_resolve_owner(principal))
 
         cached = await _cached_reply(request)
         if cached is not None:
             # The search is already running and its answer is not needed. Cancel
-            # it rather than leaving an orphan task to finish into nothing.
+            # it rather than leaving an orphan task to finish into nothing. The
+            # owner lookup is awaited instead of cancelled: a cached reply is
+            # returned without recording anything, so nothing here needs the id,
+            # but cancelling a task mid-query leaves the connection to unwind
+            # through the cancellation rather than through the pool.
             retrieval.cancel()
+            with timed_stage(T_SESSION_WAIT):
+                await identity
             annotate_timings(cache_hit=True, output_token_count=count_tokens(cached.reply))
             return cached
 
-        # History first, then record the question concurrently with the rest of
-        # retrieval -- same ordering and the same reasons as `/chat/stream`.
+        # History and the owner lookup together, then record the question
+        # concurrently with the rest of retrieval -- same ordering and the same
+        # reasons as `/chat/stream`.
         prepared = await _prepare_messages(
             request,
             thread_id,
             retrieval,
-            after_history=lambda: asyncio.create_task(
-                _open_conversation(request, thread_id, who)
+            identity=identity,
+            after_history=lambda owner: asyncio.create_task(
+                _open_conversation(request, thread_id, owner)
             ),
         )
+        who = await identity
 
         return await _serve_chat(request, thread_id, who, prepared)
 
@@ -1297,25 +1351,30 @@ async def chat_stream(
     timings = begin_timings(
         endpoint="/chat/stream", persona=request.persona, lang=request.language
     )
-    # Bound here as well as inside `run()`: this await happens before the
-    # generator is ever driven, so without it `t_identity` would have no turn to
+    # Bound here as well as inside `run()`: these tasks are created before the
+    # generator is ever driven, so without it their stages would have no turn to
     # attach to and would land in the derived model-call figure instead.
     with bind_timings(timings, finish_on_exit=False):
-        # First thing, before any awaiting: neither of these needs anything but
-        # the question, so everything below overlaps them instead of queueing
+        # First thing, before any awaiting: none of these needs anything but the
+        # request itself, so everything below overlaps them instead of queueing
         # behind them.
         #
-        # Both, concurrently, and that ordering is the point. Checking the cache
-        # first and only then starting the search would make every MISS pay the
-        # two serially -- and misses are the common case for a corpus of 332 rows
-        # asked about in three languages. Started together, a miss absorbs the
+        # All three, concurrently, and that ordering is the point. Checking the
+        # cache first and only then starting the search would make every MISS pay
+        # the two serially -- and misses are the common case for a corpus of 332
+        # rows asked about in three languages. Started together, a miss absorbs the
         # lookup into the search it was going to run anyway, and a hit throws away
         # one embedding call. That is the right way round: the hit is the path
         # worth being fast.
+        #
+        # The owner lookup joins them as of P13-007. It was awaited here, ahead of
+        # everything, so an authenticated caller paid a whole Neon round trip
+        # before the cache was even consulted. Nothing above needs the answer: it
+        # is needed by the conversation write and by persistence, both of which
+        # are further down the turn than the work it now runs beside.
         retrieval = start_retrieval(request.message)
         lookup = asyncio.create_task(_cached_reply(request))
-        with timed_stage(T_IDENTITY):
-            who = await owner_id_for(principal)
+        identity = asyncio.create_task(_resolve_owner(principal))
 
     async def run() -> AsyncIterator[dict]:
         """Publishes the turn's timings for everything below, including the agent.
@@ -1339,6 +1398,11 @@ async def chat_stream(
             cached = await lookup
         if cached is not None:
             retrieval.cancel()
+            # A hit still has to know who to file the conversation under, and the
+            # lookup has been running since before the cache was consulted -- so
+            # this is the same cost it was when it came first, not a new one.
+            with timed_stage(T_SESSION_WAIT):
+                who = await identity
             async for event in _replay_cached(request, thread_id, who, cached):
                 yield event
             return
@@ -1356,10 +1420,15 @@ async def chat_stream(
             request,
             thread_id,
             retrieval,
-            after_history=lambda: asyncio.create_task(
-                _open_conversation(request, thread_id, who)
+            identity=identity,
+            after_history=lambda owner: asyncio.create_task(
+                _open_conversation(request, thread_id, owner)
             ),
         )
+        # Settled inside the gather above, so this is a completed task and costs
+        # nothing. Read back out here because persistence, several steps below,
+        # still needs it.
+        who = await identity
 
         collected: list[BaseMessage] = []
         #: The answer as it was actually sent, for persistence and the done
