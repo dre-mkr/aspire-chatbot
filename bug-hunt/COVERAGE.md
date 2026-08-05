@@ -2,11 +2,15 @@
 
 Branch `bug-hunt/2026-08-05` against `e5c4466`. Companion to `FINDINGS.md`.
 
-The short version: **roughly a third of the brief was executed.** Phases 0–3 are
-substantially done, 4 and 10 are partial, and 5–9 were not started. The
-untested part is the part a government client is most exposed by, and it is
-untested because it needs model spend I stopped short of committing without
-asking.
+The short version: **roughly half the brief was executed.** Phases 0, 1 and 5 are
+substantially done; 2, 3, 4 and 10 are partial; 6–9 were not started. The largest
+remaining hole is Phase 6 — all conversational safety testing — which is the area
+a children's product is most exposed by.
+
+Phase 5 is worth calling out because it changed a conclusion rather than
+confirming one: a suspected S1 (cross-lingual retrieval returning nothing on an
+eligibility question) was **refuted** by end-to-end measurement, and what remained
+was a smaller, differently-shaped defect in the eval harness itself (S2-006).
 
 ---
 
@@ -19,7 +23,7 @@ asking.
 | **2 — Static sweep** | 🟡 Partial | `ruff check --select F,E9` (7 errors, 2 of them live crash bugs). `tsc --noEmit` clean. Suppression census (10 `type: ignore`, 2 `noqa`). AST scan for blocking calls inside `async def` — clean. | **No mypy/pyright run** — neither is installed or configured, and adding a type checker to 128 untyped-checked files would produce noise, not findings, without a baseline. No N+1 / unbounded-SELECT analysis of the history and retrieval paths. Suppressions counted but not individually judged. |
 | **3 — Contract drift** | 🟡 Partial | Persona / age-band / language vocabularies enumerated on the backend and cross-checked against `frontend/src/lib/aspire/personas.ts`. Streaming envelope inspected structurally. | **No systematic field-by-field diff** of every request/response shape. Optionality, nullability, date formats and numeric types not compared. Gamification and eligibility payloads not diffed. No test of what the UI does with an unhandled enum value. |
 | **4 — API assault** | 🟡 Partial | Malformed bodies (empty, wrong type, null) on `/v2/chat/stream`; unauthenticated reads on `/api/conversations`; malformed id. Error bodies checked for `Traceback`, `site-packages`, `asyncpg`, `SELECT`, filesystem paths, `sk-`, connection strings — all clean. Honest-status-code check → found S2-005. | **Oversized inputs** (50k-char message, 10MB payload, 500-message history). **Unicode/injection corpus** (emoji, RTL, ZWJ, accented ES/FR, SQL-ish, `{{template}}`, newline floods). **Idempotency/replay** under concurrency. 43 of 48 routes were never called. |
-| **5 — KB & retrieval** | ❌ Not started | Row count observed incidentally (706 in `documents`, 706 in the CSV), all at 3072 dims, single ingest batch. Dimension guard attacked and held. | **Everything that matters.** No duplicate/empty/orphan/null-embedding audit. No 30-question hit-rate scoring. No 10 unanswerable questions (does it invent a government fact?). No cross-lingual EN/ES/FR retrieval comparison. **No numeric-precision testing on interest rates, age eligibility, deposit minimums or account types** — the brief rates a drifted number S0. |
+| **5 — KB & retrieval** | 🟢 Mostly done | Full integrity audit (706 DB rows = 706 CSV rows, 0 duplicates / empties / orphans / null embeddings, all 3072-dim, ids verified). `EXPLAIN ANALYZE` + 15-run latency at 706 rows. Golden-set scoring: 60 expectation-bearing cases, hit 0.95 / MRR 0.906, split EN 1.00 / ES 0.90 / FR 0.95. Cross-lingual answering verified end to end through `/v2/chat/stream` in ES and FR with a cold cache. Retrieval-floor asymmetry characterised (S2-006). | **The 10 unanswerable-question refusal cases were not run** (`--answers --kind refuse` needs chat completions). **Numeric precision beyond the one eligibility row is untested** — no systematic check of interest rates, deposit minimums or account types against the CSV; the brief rates a drifted number S0. Golden set covers only 20 distinct rows of 706 (2.8%). |
 | **6 — Conversational** | ❌ Not started | — | Persona fidelity (10 turns × 4). Persona bleed on mid-session switch. Language switching and mixed-language messages. Memory at turn 20 / summarizer threshold. Account-status routing incl. unknown/null. Gamification (3 games × complete/abandon/refresh/out-of-order/empty/duplicate/post-end). **All safety testing** — prompt injection, PII solicitation, investment guarantees, medical/legal, in 3 languages. |
 | **7 — Frontend E2E** | ❌ Not started | — | Journeys per persona, desktop + iPhone SE. Compositor→dock transition ×20 with interrupt / 4× CPU throttle / back-nav / hard-refresh. Streaming typewriter and settled-block parser across fast/slow/markdown-mid-token/code/lists/links/emoji/ends-mid-block. Abort-by-navigation, second message while streaming. Back/forward, deep links, refresh mid-conversation, two tabs, offline-5s. Error-state screenshots. Keyboard and focus management. |
 | **8 — Auth & session** | ❌ Not started | Observed only that `POST /v2/session` mints a token for an unauthenticated caller (used as step 1 of the S1-005 repro). | Signature validation against forged / expired / mutated-device-id / cross-environment tokens. Two devices one identity. Cleared storage. **IDOR enumeration of conversation ids across sessions.** Anonymous→identified upgrade and its mid-upgrade failure case. |
@@ -30,12 +34,14 @@ asking.
 
 ## Why the gaps exist
 
-**Phases 5, 6 and most of 10's behavioural half need real model calls.** Doing
-them properly is ~80 prompts × 3 languages × 4 personas, plus a 30-question
-retrieval set and a 10-question refusal set. I stopped rather than commit that
-spend unasked, and rather than produce a token version of the two phases that
-matter most on a children's financial product — a shallow safety pass is worse
-than none, because it reads as clearance.
+**Phase 5 is now largely done** — it cost about $0.10 and refuted a suspected S1,
+which is the best possible outcome for that spend. What remains of it (the 10
+refusal cases, systematic numeric precision) needs chat completions per case.
+
+**Phase 6 and most of 10's behavioural half still need real model calls.** Doing
+them properly is ~80 prompts × 3 languages × 4 personas. I stopped rather than
+produce a token version of the phase that matters most on a children's financial
+product — a shallow safety pass is worse than none, because it reads as clearance.
 
 **Phase 7 needs a running frontend + backend pair** and would use puppeteer, not
 Playwright (see below). Standing that up is straightforward; it was a time
@@ -88,7 +94,16 @@ Teardown: `docker rm -f aspire-bughunt-pg`
 
 ## If you approve one thing
 
-Close Phase 5's numeric-precision testing first. It is the only untested area
+**Phase 6's safety pass**, now that Phase 5 has cleared the retrieval layer.
+Prompt injection, PII solicitation and investment guarantees, in three languages,
+against a product whose youngest users are five. It is the only remaining area
+where a defect is S0 by the brief's own rubric, and the anonymous default session
+lands on `persona=stella, band=5-8` — the most exposed configuration there is.
+
+Second: the 10 unanswerable-question refusal cases (`--answers --kind refuse`),
+which is the "does it invent a government fact" test and is already wired.
+
+Previously recommended, now partly done: Phase 5's numeric-precision testing. It is the only untested area
 where a defect is **S0 by the brief's own rubric** — a drifted interest rate or
 age threshold on a government financial programme for children — and it is
 cheap: ~40 targeted questions against the real corpus, scored by hand against

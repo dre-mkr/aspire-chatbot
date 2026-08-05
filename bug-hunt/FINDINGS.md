@@ -27,9 +27,12 @@ finds both in under a second. Fix the seven S1s, add the linter, and this is
 defensible. Ship it as-is and the first thing the ministry's ops team does —
 wire up `/ready` — fails.
 
-I did not reach Phases 5–9 (retrieval quality, conversational behaviour, frontend
-E2E, load). See **Coverage gaps**; that is a large, deliberate, and honestly
-declared hole, not a clean bill of health.
+Phase 5 is now done and it moved the verdict in the product's favour: the corpus
+is clean, retrieval latency is fine at 706 rows, and cross-lingual answering
+works correctly in Spanish and French — a suspected S1 there was refuted by
+measurement. Phases 6–9 (conversational behaviour and safety, frontend E2E,
+auth, load) remain untouched. See **Coverage gaps**; that is a large, deliberate,
+and honestly declared hole, not a clean bill of health.
 
 ---
 
@@ -47,6 +50,7 @@ declared hole, not a clean bill of health.
 | S2-002 | S2 | docs | `backend/README.md` documents an architecture that no longer exists (5 instances) |
 | S2-003 | S2 | config | 55 settings referenced in code are absent from `.env.example`; 2 documented ones bind to nothing |
 | S2-004 | S2 | backend / dev-ex | `ssl: "require"` is hardcoded — the backend cannot run against any non-TLS Postgres |
+| S2-006 | S2 | eval / CI | Nightly retrieval gate scores a retriever no request touches; its 3 misses are false alarms |
 | S2-005 | S2 | API contract | `POST /v2/chat/stream` returns HTTP 200 for an unauthenticated request, with the error inside the body |
 | S3-001 | S3 | hygiene | 4 unused imports and 1 placeholder-free f-string (`ruff F401/F541`) |
 
@@ -351,6 +355,61 @@ all), the practical requirement to run this project is a Neon account.
 
 ---
 
+### [S2-006] The nightly retrieval gate scores a retriever no request touches
+
+**Area:** eval / CI
+**Severity:** S2
+**Confidence:** Confirmed — and it began as a suspected S1 that measurement refuted
+
+**This finding is mostly a retraction, and the retraction is the important half.**
+
+I first read the eval's three misses as a cross-lingual retrieval failure on the
+eligibility cut-off row. Measured end to end, that is **false** — see
+"Verified sound". What survives is narrower: the gate measures the wrong component.
+
+`.github/workflows/evals.yml:62` gates nightly on:
+
+```
+uv run python -m evals.run --retrieval --fail-under 0.95
+```
+
+`--retrieval` scores `build_retriever` — vector-only, with an absolute similarity
+floor of 0.434315. The product does not use it. `app/agents/qa/nodes.py` runs
+`rewrite_query → hybrid_retrieve → rerank → generate → ground_check`, RRF-fusing a
+vector and a lexical retriever.
+
+Measured through `build_retriever`, same question, same target row ASP-031:
+
+| lang | similarity to ASP-031 | vs 0.434315 floor | eval result |
+|---|---|---|---|
+| en | 0.7026 | PASS | hit |
+| es | 0.3837 | cut | **got []** |
+| fr | 0.4011 | cut | **got []** |
+
+ASP-031 ranks *first* in all three languages — ranking is fine cross-lingually.
+Cross-lingual pairs simply score in a lower absolute band (~0.38–0.40) than
+same-language pairs (~0.70), and the floor sits between them.
+
+Measured through the real transport with a cold cache, the same two questions are
+answered correctly (see Verified sound). So:
+
+- its 3 reported misses are **false alarms**;
+- its `0.95` is not a measure of product retrieval quality;
+- a real regression in `hybrid_retrieve` / `rerank` / `ground_check` would be
+  **invisible** to it;
+- and it is brittle — `hit_rate` is `0.95` against `--fail-under 0.95`, exactly on
+  the line, so one more cross-lingual case scored this way turns the nightly red
+  for a reason no user would ever experience.
+
+**Evidence:** `evidence/S2-006-eval-measures-wrong-retriever.log`
+**Repro script:** `repro/S1-007-crosslingual-eligibility.sh` (floor asymmetry),
+`repro/S1-007b-what-the-bot-says.sh` (end-to-end refutation)
+**Blast radius:** False assurance on the one automated quality signal this product
+has for retrieval. Also a coverage note: 60 expectation-bearing cases cover
+**20 distinct rows of 706** (2.8% of the corpus).
+
+---
+
 ### [S2-005] `POST /v2/chat/stream` returns 200 for an unauthenticated request
 
 **Area:** API contract
@@ -407,6 +466,9 @@ Recorded so a later pass does not re-litigate, and so the verdict is not read as
 | Error surfaces | Empty / wrong-type / null bodies, unauthenticated reads, malformed ids | No `Traceback`, `site-packages`, `asyncpg`, `SELECT`, filesystem path, `sk-`, or connection string in any response body |
 | Committed secrets | Repo-wide scan for `sk-…`, `AKIA…`, private keys, connection strings; `.env` tracking | Clean. `.env` correctly untracked |
 | Frontend types | `tsc --noEmit` | Clean |
+| **Cross-lingual answering (EN/ES/FR)** | Same eligibility question asked through `POST /v2/chat/stream` in all 3 languages, cold cache, unique namespace | **Correct in all three.** `agent=qa_agent_public`, `cached=None`. ES and FR both state "18 años o menos" / "18 ans ou moins" on 13 Dec 2023, matching ASP-031 |
+| **Corpus integrity** | 706 rows vs 706 CSV rows, duplicates, empties, orphans, null embeddings, dims | Exact match. 0 duplicates, 0 empties, 0 nulls, all 3072-dim |
+| **Retrieval latency** | `EXPLAIN ANALYZE` + 15 runs at 706 rows | Seq scan, 4.6ms in-DB, p50 6.89ms / p95 9.41ms. Migration 0009's no-index argument still holds at 2x the row count it was written for |
 | Vector index absence | `documents` has no HNSW index | **Deliberate and documented** (migration 0009) with a sound argument. Flagged as a *suspicion* below, not a finding — the argument cites "332 rows" and the corpus is now 706 |
 
 ---
@@ -416,26 +478,20 @@ Recorded so a later pass does not re-litigate, and so the verdict is not read as
 Things that smell wrong and that I could **not** reproduce or measure. No claim is
 made about any of these.
 
-1. **The no-vector-index decision may have outgrown its justification.**
-   Migration `0009_documents_live` argues at length for omitting the HNSW index,
-   and the argument is good — but it rests on *"332 rows"*, and `documents` now
-   holds **706**. I did not measure retrieval latency, so I cannot say whether the
-   sequential scan is still single-digit milliseconds. Worth one `EXPLAIN ANALYZE`.
-
-2. **`_record_document` trusts a client-supplied `storage_key`.**
+1. **`_record_document` trusts a client-supplied `storage_key`.**
    `app/agents/register/graph.py:679` uses `payload.get("storage_key")` when
    present, falling back to a derived key. The DB row's `application_id` is
    server-side (correct), so I could not construct an exploit — a victim's key
    ends in a UUID the attacker cannot guess. Combined with S1-005 this deserves a
    second look by someone who knows the upload client.
 
-3. **Persona/age-band caching.** `cache_key()` gained `age_band` because *"a cache
+2. **Persona/age-band caching.** `cache_key()` gained `age_band` because *"a cache
    hit never reaches the gate"* — an explicit acknowledgement that bypassing
    `safety_out` is a live bug class. I did not test whether any *other* path
    reaches a user without passing `safety_out` (the streaming interceptor is the
    obvious candidate). Untested, not cleared.
 
-4. **`aurora`/`nova` unrestricted by age band.** `app/graph/access.py`'s own
+3. **`aurora`/`nova` unrestricted by age band.** `app/graph/access.py`'s own
    docstring flags this as a known open question and reasons that the permissive
    rows are unreachable because a guardian token carries `adult`. I did not attempt
    to mint a token that reaches them.
@@ -509,7 +565,7 @@ Sequenced by risk and dependency. Effort is one engineer.
 
 ## Approximate spend
 
-**~$0.02.** One unintended ingest of 706 chunks through
+**~$0.10.** One unintended ingest of 706 chunks through
 `text-embedding-3-large` (~140k tokens ≈ $0.018) when auto-ingest fired during
 the Phase 1 failure matrix — the subprocess inherited `OPENAI_API_KEY` from
 `backend/.env`. No chat completions were made; no ElevenLabs calls were made.
