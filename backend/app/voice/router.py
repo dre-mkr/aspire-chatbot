@@ -271,6 +271,117 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
     )
 
 
+@router.post("/speak-stream")
+async def speak_stream(request: Request, body: SpeakRequest) -> Response:
+    """Text to audio, first byte before the last is synthesised (P14-C).
+
+    `/speak` joins the whole MP3 before returning, so first audio lands at
+    (full synthesis + full download). This passes each vendor chunk through the
+    moment it exists: first audio lands at the vendor's own first byte, and the
+    tail of a long answer is still being written while its opening plays.
+
+    Same validation, same profile resolution, same rate limit and same cache as
+    `/speak` -- a hit streams from memory in one chunk, and a clean miss is
+    recorded whole so the NEXT asker hits. A mid-stream vendor failure ends the
+    body early; the client's player stops at the last full frame, the text on
+    screen is a different request entirely, and nothing here can touch it.
+    """
+    with timed_turn(
+        endpoint="/voice/speak-stream",
+        persona=body.persona.value,
+        lang=body.language.value,
+    ):
+        settings = get_voice_settings()
+
+        if body.format.lower() != "mp3":
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported format {body.format!r}. Use 'mp3'."
+            )
+
+        spoken = speakable(body.text, body.language, max_chars=settings.max_speakable_chars)
+        if not spoken:
+            raise HTTPException(
+                status_code=400, detail="Nothing to say once the text was cleaned."
+            )
+
+        profile = resolve_profile(body.persona, body.language)
+        model_id = (
+            settings.tts_model_quality
+            if has_many_numbers(body.text)
+            else profile.model_id
+        )
+
+        headers = {
+            "Cache-Control": "private, max-age=86400",
+            # nginx buffers proxied responses by default, which would turn this
+            # back into exactly the wait it exists to remove.
+            "X-Accel-Buffering": "no",
+        }
+
+        key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
+        cache = get_cache()
+        if (cached := await cache.aget(key)) is not None:
+            annotate_timings(cache_hit=True)
+            return Response(
+                content=cached,
+                media_type="audio/mpeg",
+                headers={**headers, "X-Voice-Cache": "hit"},
+            )
+
+        decision = get_limiter().check_speech(_session_key(request, body.thread_id))
+        if not decision.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many voice requests. Please wait a moment.",
+                headers={"Retry-After": str(decision.retry_after_seconds)},
+            )
+
+        # The first chunk is awaited HERE, before the response object exists,
+        # because a StreamingResponse has already committed a 200 by the time
+        # its generator runs -- a vendor that fails immediately must surface as
+        # the same 503 the buffered path gives, not as an empty 200.
+        stream = get_client().synthesise_stream(
+            spoken, profile.voice_id, model_id, profile.settings
+        )
+        try:
+            first = await anext(stream)
+        except VoiceUnavailable:
+            raise HTTPException(status_code=503, detail=_FALLBACK) from None
+        except StopAsyncIteration:
+            raise HTTPException(status_code=503, detail=_FALLBACK) from None
+
+        async def body_and_cache():
+            # Teed as it flows: the reader hears chunks now, the cache gets the
+            # whole file after -- but only when the stream ended cleanly, since
+            # caching a truncated MP3 would replay the truncation forever.
+            collected = [first]
+            clean = False
+            try:
+                yield first
+                async for chunk in stream:
+                    collected.append(chunk)
+                    yield chunk
+                clean = True
+            finally:
+                if clean:
+                    audio = b"".join(collected)
+                    await cache.aput(key, audio)
+                    logger.info(
+                        "speak-stream ok persona=%s language=%s chars=%d model=%s bytes=%d",
+                        body.persona.value,
+                        body.language.value,
+                        len(spoken),
+                        model_id,
+                        len(audio),
+                    )
+
+        return StreamingResponse(
+            body_and_cache(),
+            media_type="audio/mpeg",
+            headers={**headers, "X-Voice-Cache": "miss"},
+        )
+
+
 @router.post("/realtime-token")
 async def realtime_token() -> Response:
     """Stretch goal, disabled by default.

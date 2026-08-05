@@ -179,6 +179,140 @@ export async function speak(
 	return URL.createObjectURL(await response.blob());
 }
 
+/**
+ * Synthesise an answer and start it playing before it has finished being made.
+ *
+ * `speak` above waits out the whole file twice — the server joins every chunk
+ * before responding, then the client downloads the lot before `play()`. This
+ * hits the streaming endpoint and, where the browser supports MediaSource for
+ * MP3, feeds audio into playback as the bytes arrive: first sound at the
+ * vendor's first chunk rather than after its last.
+ *
+ * Falls back to the blob path on browsers without MSE for `audio/mpeg`
+ * (notably Safari): those still gain the server-side half — the download
+ * overlaps synthesis instead of following it.
+ *
+ * Failure discipline mid-stream: the reader's TEXT is a different request and
+ * is never touched by anything here. A stream that dies after some bytes ends
+ * the audio at the last complete frame; the player fires `onended` and the UI
+ * returns to Play, which is exactly the recovery the reader wants.
+ */
+export async function speakStream(
+	text: string,
+	language: VoiceLanguage,
+	threadId: string | null,
+	signal?: AbortSignal,
+): Promise<string> {
+	// The timeout must cover WAITING for audio, never the audio itself: a long
+	// answer streams for longer than any sensible timeout, and aborting the
+	// fetch mid-body would cut playback off. The server holds its response
+	// until the first vendor chunk exists, so "headers arrived" means "audio is
+	// flowing" — the manual timer below is cleared at that moment.
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 20_000);
+	if (signal) {
+		if (signal.aborted) controller.abort();
+		else
+			signal.addEventListener("abort", () => controller.abort(), {
+				once: true,
+			});
+	}
+
+	let response: Response;
+	try {
+		response = await fetch(`${API_URL}/api/voice/speak-stream`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				text,
+				persona: DEFAULT_PERSONA,
+				language,
+				thread_id: threadId,
+			}),
+			signal: controller.signal,
+		});
+	} catch {
+		clearTimeout(timer);
+		if (signal?.aborted) throw new VoiceError("aborted");
+		throw new VoiceError("dropped");
+	}
+	clearTimeout(timer);
+
+	if (response.status === 429) throw new VoiceError("limited");
+	if (!response.ok) throw new VoiceError("offline");
+
+	const body = response.body;
+	const canStream =
+		typeof MediaSource !== "undefined" &&
+		MediaSource.isTypeSupported("audio/mpeg") &&
+		body !== null;
+	if (!canStream || body === null) {
+		return URL.createObjectURL(await response.blob());
+	}
+
+	const source = new MediaSource();
+	const url = URL.createObjectURL(source);
+	const reader = body.getReader();
+
+	source.addEventListener(
+		"sourceopen",
+		() => {
+			const buffer = source.sourceBuffers.length
+				? source.sourceBuffers[0]
+				: source.addSourceBuffer("audio/mpeg");
+
+			const appended = () =>
+				new Promise<void>((resolve, reject) => {
+					buffer.addEventListener("updateend", () => resolve(), { once: true });
+					buffer.addEventListener("error", () => reject(new Error("append")), {
+						once: true,
+					});
+				});
+
+			const finish = () => {
+				// Ending a source that is already closed (stopPlayback revoked
+				// the URL) throws; that is teardown, not a failure.
+				try {
+					if (source.readyState === "open") source.endOfStream();
+				} catch {
+					/* torn down mid-append */
+				}
+			};
+
+			void (async () => {
+				try {
+					for (;;) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						if (source.readyState !== "open") return;
+						const wait = appended();
+						buffer.appendBuffer(value);
+						await wait;
+					}
+				} catch {
+					// A dropped stream or an abort: whatever audio arrived is
+					// playable, and the ended event returns the UI to Play.
+				} finally {
+					finish();
+				}
+			})();
+		},
+		{ once: true },
+	);
+
+	// Stop pulling bytes the moment the caller aborts — without this the fetch
+	// keeps billing and downloading into a player nobody is listening to.
+	signal?.addEventListener(
+		"abort",
+		() => void reader.cancel().catch(() => {}),
+		{
+			once: true,
+		},
+	);
+
+	return url;
+}
+
 /** The first container the browser will actually record in. */
 export function pickRecorderMimeType(): string | undefined {
 	if (typeof MediaRecorder === "undefined") return undefined;
