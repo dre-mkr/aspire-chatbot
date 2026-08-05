@@ -473,25 +473,90 @@ Recorded so a later pass does not re-litigate, and so the verdict is not read as
 
 ---
 
+---
+
+## Fix status — as of 2026-08-05, after approval
+
+All 13 findings addressed. Product code was untouched until you approved; every
+fix below is on `bug-hunt/2026-08-05` in five commits.
+
+| ID | Status | Verified by |
+|---|---|---|
+| S1-006 | **fixed** | `uvx ruff check app/ --select F,E9` is a CI step, ahead of pytest, and green |
+| S1-003 | **fixed** | `/ready` 500 → **200** `{"ready":true,...}`; 4 tests in `test_ops_endpoints.py`, 2 of which fail against the old code |
+| S1-004 | **fixed** | `/debug/timings` 500 → **404**, now indistinguishable from `/debug/nope`; leak closed |
+| S1-005 | **fixed** | `owns_application()` mirrors `owns_thread`. Original exploit script: **200 → 404**. 6 tests |
+| S1-002 | **fixed** | Empty and 8-byte secrets both **refuse at boot** with actionable messages; 2 parametrized tests |
+| S1-001 | **fixed** | Fresh clone + new README + the 3 stated values → **"lifespan completed — service is UP"** |
+| S2-001 | **fixed** | `VOICE_REALTIME_ENABLED=true` → `True` (was `False`); the undocumented `REALTIME_ENABLED` no longer works silently |
+| S2-002 | **fixed** | All 5 stale claims corrected, each noting what the file used to say |
+| S2-003 | **fixed** | **119 code settings, 119 documented, 0 undocumented, 0 dead** |
+| S2-004 | **fixed** | Loopback skips TLS; private IP, internal hostname and the Neon host all still require it |
+| S2-005 | **fixed** | Unauthenticated `/v2/chat/stream` 200 → **401** carrying the same `{code,message}`; client parses it so the reader's message survives |
+| S2-006 | **partial — deliberately** | See below |
+| S3-001 | **fixed** | `ruff --fix`; falls out of S1-006 |
+
+### S2-006 is partial on purpose
+
+`--hybrid` now scores the path a request actually performs (hybrid retrieve +
+the local cross-encoder rerank), and both modes are labelled in the output so
+neither can be misread. **The CI gate still runs dense-only**, and that is a
+considered decision rather than an unfinished one:
+
+| path | hit rate (60 cases) |
+|---|---|
+| dense-only (what the gate measures) | 0.95 |
+| hybrid + rerank at k=4 (what a request does) | 0.8167 |
+
+The hybrid path is **not worse** — the service answers the cross-lingual cases
+correctly end to end, proven in `evidence/S2-006-...`. The golden set names ONE
+expected row per question and those ids are calibrated to the dense retriever;
+the hybrid path surfaces a different, often equally-correct row, and a
+one-right-answer metric cannot tell those apart.
+
+Flipping the gate therefore needs the golden set re-baselined to accept a *set*
+of acceptable rows per question. That is a judgement about the corpus, not a
+code change, and not mine to make unilaterally. Shipping a gate on a number I
+could not defend would have been worse than the finding.
+
+### Regressions caused and repaired
+
+Three tests in `tests/graph/test_stream.py` asserted the old 200-with-error
+contract and were updated to the 401. A fourth test (`test_semantic_cache`)
+failed once under a **reused** `ASPIRE_CACHE_NAMESPACE` and passes in isolation
+and under a fresh prefix — that is a pre-existing test-isolation weakness, the
+same family as P11-001, and is recorded in Suspicions rather than papered over.
+
+Final state: **2,583 fast tests pass**, 47 slow deselected, `ruff F,E9` clean,
+`tsc --noEmit` clean, `biome check` clean.
+
+---
+
 ## Suspicions — unconfirmed
 
 Things that smell wrong and that I could **not** reproduce or measure. No claim is
 made about any of these.
 
-1. **`_record_document` trusts a client-supplied `storage_key`.**
+1. **`test_semantic_cache` is not isolated from a reused cache namespace.**
+   It failed once during this session under an `ASPIRE_CACHE_NAMESPACE` reused
+   across several runs, and passed in isolation and under a fresh prefix. Same
+   family as P11-001. I did not construct a deterministic repro, so it is here
+   rather than in the findings table.
+
+2. **`_record_document` trusts a client-supplied `storage_key`.**
    `app/agents/register/graph.py:679` uses `payload.get("storage_key")` when
    present, falling back to a derived key. The DB row's `application_id` is
    server-side (correct), so I could not construct an exploit — a victim's key
    ends in a UUID the attacker cannot guess. Combined with S1-005 this deserves a
    second look by someone who knows the upload client.
 
-2. **Persona/age-band caching.** `cache_key()` gained `age_band` because *"a cache
+3. **Persona/age-band caching.** `cache_key()` gained `age_band` because *"a cache
    hit never reaches the gate"* — an explicit acknowledgement that bypassing
    `safety_out` is a live bug class. I did not test whether any *other* path
    reaches a user without passing `safety_out` (the streaming interceptor is the
    obvious candidate). Untested, not cleared.
 
-3. **`aurora`/`nova` unrestricted by age band.** `app/graph/access.py`'s own
+4. **`aurora`/`nova` unrestricted by age band.** `app/graph/access.py`'s own
    docstring flags this as a known open question and reasons that the permissive
    rows are unreachable because a guardian token carries `adult`. I did not attempt
    to mint a token that reaches them.

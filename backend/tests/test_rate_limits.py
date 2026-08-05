@@ -123,12 +123,21 @@ def test_chat_is_metered_without_requiring_a_session(client):
     limit = get_settings().chat_messages_per_window
     body = {"message": "What is ASPIRE?"}
 
-    # Fill the window. Each of these is answered with an `unauthenticated`
-    # error event -- there is no token -- which is fine: it only has to prove
-    # the request got past the limiter and was counted.
+    # Fill the window. Each of these is refused as `unauthenticated` -- there is
+    # no token -- which is fine: it only has to prove the request got past the
+    # limiter and was counted.
+    #
+    # That refusal is a 401 rather than a 200 carrying an error event, and the
+    # change is deliberate: authentication is settled before the response
+    # starts, so it can be a status code (S2-005). The property THIS test exists
+    # for is unaffected and is asserted below -- `_meter` runs ahead of both, so
+    # the 429 still arrives as a real status and not as a frame inside a 200.
     for _ in range(limit):
-        assert client.post("/v2/chat/stream", json=body).status_code == 200
+        assert client.post("/v2/chat/stream", json=body).status_code == 401
 
     refused = client.post("/v2/chat/stream", json=body)
     assert refused.status_code == 429
+    # And the 429 outranks the 401: the limiter is consulted first, so a
+    # throttled caller is told they are throttled rather than told to sign in.
+    assert refused.status_code != 401
     assert "Retry-After" in refused.headers
