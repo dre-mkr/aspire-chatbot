@@ -236,9 +236,14 @@ class PgVectorRetriever(BaseRetriever):
             statement = statement.where(distance <= self.max_cosine_distance)
         return statement.order_by(distance).limit(self.k)
 
-    async def _search(self, query: str) -> list[LangchainDocument]:
-        vector = await self.embeddings.aembed_query(query)
+    async def asearch_by_vector(self, vector: list[float]) -> list[LangchainDocument]:
+        """The database half of a search, for callers that already embedded.
 
+        The server path embeds through the Valkey cache (P14-D) and shares the
+        vector with the semantic response cache, so it arrives here with one in
+        hand. The plain `_search` below stays the whole operation for everything
+        else -- the evals, the CLI -- whose behaviour must not change.
+        """
         async with session() as db:
             if db is None:
                 # Loud rather than empty. An empty result set is indistinguishable
@@ -256,6 +261,10 @@ class PgVectorRetriever(BaseRetriever):
             LangchainDocument(page_content=content, metadata=dict(metadata or {}))
             for content, metadata in rows
         ]
+
+    async def _search(self, query: str) -> list[LangchainDocument]:
+        vector = await self.embeddings.aembed_query(query)
+        return await self.asearch_by_vector(vector)
 
     async def _aget_relevant_documents(
         self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun, **kwargs: Any
@@ -377,3 +386,48 @@ def get_retriever() -> BaseRetriever:
     calls this directly rather than reaching it through the agent's tool list.
     """
     return build_retriever()
+
+
+async def embed_query_cached(text: str) -> list[float]:
+    """This query's embedding: from Valkey when it has been asked before (P14-D).
+
+    On a hit `t_embed` is recorded at what the read cost -- fractions of a
+    millisecond -- rather than left absent, so the stage table says "embedding
+    was free this turn" instead of "embedding did not happen".
+
+    The write-back is fire-and-forget inside `put_embedding`, which never raises.
+    """
+    from app import cache as response_cache
+
+    model = get_settings().embeddings_model
+    start = time.perf_counter()
+    cached = await response_cache.get_embedding(text, model)
+    if cached is not None:
+        record_stage(T_EMBED, (time.perf_counter() - start) * 1000.0)
+        annotate(embed_cache_hit=True)
+        return cached
+
+    # TimedEmbeddings records T_EMBED around the real call.
+    vector = await get_embeddings().aembed_query(text)
+    await response_cache.put_embedding(text, model, vector)
+    return vector
+
+
+async def retrieve_with_vector(vector: list[float], *, started_at: float) -> list[LangchainDocument]:
+    """The vector search, timed to mean what `TimedRetriever` has always meant.
+
+    `t_retrieve_total` has covered embedding AND query since P13-001, because the
+    retriever embedded internally and there was no seam between them. The server
+    path now embeds separately (shared with the semantic cache), so the caller
+    passes the moment the whole operation began and the figure keeps its meaning:
+    subtracting `t_embed` still yields the query on its own.
+    """
+    inner = getattr(get_retriever(), "inner", None)
+    if not isinstance(inner, PgVectorRetriever):  # pragma: no cover - config error
+        raise RuntimeError("The configured retriever cannot search by vector.")
+    try:
+        documents = await inner.asearch_by_vector(vector)
+    finally:
+        record_stage(T_RETRIEVE_TOTAL, (time.perf_counter() - started_at) * 1000.0)
+    annotate(retrieved_chunk_count=len(documents))
+    return documents

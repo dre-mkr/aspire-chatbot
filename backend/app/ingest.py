@@ -275,6 +275,22 @@ async def ingest(settings: Settings | None = None) -> int:
         csv_path.name,
         len(rows),
     )
+
+    # A reloaded knowledge base must never be served from cache (P14-B). The
+    # corpus fingerprint inside every cache key already guarantees that -- the
+    # old keys simply stop matching -- so this flush is reclamation, not the
+    # safety mechanism. Best effort by design: an unreachable Valkey must not
+    # fail an ingest that already committed, and the fingerprint carries the
+    # correctness either way.
+    try:
+        from app.cache import flush_answers
+
+        flushed = await flush_answers()
+        logger.info("Flushed %d cached entries after the corpus reload.", flushed)
+    except Exception:
+        logger.warning("Cache flush after ingest failed; the corpus fingerprint "
+                       "still retires stale answers.", exc_info=True)
+
     return len(rows)
 
 

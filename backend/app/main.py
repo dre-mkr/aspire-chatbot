@@ -10,6 +10,7 @@ import time
 import uuid
 import uuid as uuid_module
 from contextlib import asynccontextmanager
+from functools import lru_cache
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -47,7 +48,7 @@ from app.memory import build_prompt, count_tokens, log_prompt_cost
 from app.eligibility import eligibility_enabled, eligibility_router
 from app.games import games_enabled, games_router
 from app.ingest import count_corpus, ingest_if_empty
-from app.rag import context_from, get_retriever
+from app.rag import context_from, embed_query_cached, get_retriever, retrieve_with_vector
 from app.streaming import agui_stream
 from app.timing import (
     RING as TIMING_RING,
@@ -61,6 +62,7 @@ from app.timing import (
     T_CONCURRENT_WAIT,
     T_RETRIEVE_KICKOFF,
     T_RETRIEVE_WAIT,
+    T_SEMANTIC_LOOKUP,
     T_SESSION_WAIT,
     annotate as annotate_timings,
     begin as begin_timings,
@@ -171,6 +173,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Closed only when one was ever built: touching the cache here would
+    # construct a client just to close it.
+    if _probe_client.cache_info().currsize:
+        await _probe_client().aclose()
     await dispose_database()
 
 
@@ -297,6 +303,16 @@ def _provider_probe() -> tuple[str, dict[str, str]] | None:
     return None
 
 
+@lru_cache(maxsize=1)
+def _probe_client() -> httpx.AsyncClient:
+    """The readiness probe's HTTP client, made once and closed at shutdown.
+
+    `lru_cache` rather than a module global so tests can `cache_clear()` it,
+    and so it is only ever constructed on a process that actually probes.
+    """
+    return httpx.AsyncClient(timeout=5.0)
+
+
 async def _provider_ready() -> bool | None:
     """Whether the model provider answers. `None` when it cannot be checked.
 
@@ -317,8 +333,10 @@ async def _provider_ready() -> bool | None:
         return _provider_reachable
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(url, headers=headers)
+        # One process-wide client (P14-D): a fresh AsyncClient per probe paid a
+        # new TCP + TLS handshake every time, and readiness probes are the one
+        # traffic that arrives like clockwork forever.
+        response = await _probe_client().get(url, headers=headers)
         # 401 and 403 are answers: the provider is up and the key is wrong,
         # which is a configuration failure and still "not ready".
         _provider_reachable = response.status_code < 400
@@ -509,21 +527,90 @@ def _extract_reply(messages: list[BaseMessage]) -> str:
     return message_text(messages[-1].content).strip()
 
 
-def start_retrieval(question: str) -> asyncio.Task[list[Document]]:
-    """Begin searching the corpus now, without waiting for it.
+def start_query_pipeline(
+    question: str,
+) -> tuple[asyncio.Task[list[float]], asyncio.Task[list[Document]]]:
+    """Begin embedding the question and searching the corpus, without waiting.
 
-    Kicked off before the database work rather than after, because it does not
-    depend on any of it: the query is the question, which we already have. It then
-    runs concurrently with the identity lookup, the history read and the
-    conversation upsert -- roughly 850 ms of Neon round trips -- so most of
-    retrieval's own ~1 s costs nothing on the critical path.
+    Kicked off before the database work rather than after, because neither
+    depends on any of it: the query is the question, which we already have. Both
+    then run concurrently with the identity lookup, the history read and the
+    conversation upsert -- roughly 850 ms of Neon round trips -- so most of their
+    ~1 s costs nothing on the critical path.
 
-    Failures are deliberately NOT swallowed here. They surface where the task is
-    awaited, in `_prepare_messages`, because a turn with no corpus is a turn that
-    cannot be grounded and must not be answered from the model's own knowledge.
+    Two tasks rather than one (P14-B/D) because the embedding now has THREE
+    readers: the vector search, the semantic response cache, and -- after the
+    answer -- the semantic index write. Embedding inside the retriever meant the
+    vector died with the search; here it is computed once, through the Valkey
+    embedding cache, and shared.
+
+    `started` is captured before either task so `t_retrieve_total` keeps the
+    meaning it has had since P13-001: embedding plus query, end to end.
+
+    Failures are deliberately NOT swallowed. They surface where the search task
+    is awaited, in `_prepare_messages`, because a turn with no corpus is a turn
+    that cannot be grounded and must not be answered from the model's own
+    knowledge. (The semantic probe swallows its own copy of the failure: a
+    broken embedding must fail the TURN once, not twice.)
     """
     with timed_stage(T_RETRIEVE_KICKOFF):
-        return asyncio.create_task(get_retriever().ainvoke(question))
+        started = time.perf_counter()
+        embedding = asyncio.create_task(embed_query_cached(question))
+
+        async def _search() -> list[Document]:
+            vector = await embedding
+            return await retrieve_with_vector(vector, started_at=started)
+
+        retrieval = asyncio.create_task(_search())
+    return embedding, retrieval
+
+
+def start_semantic_probe(
+    request: ChatRequest, embedding: asyncio.Task[list[float]]
+) -> asyncio.Task | None:
+    """Look for a close-enough paraphrase in the semantic cache, concurrently.
+
+    Returns None -- no task at all -- for the turns layer 2 must never serve:
+    anything mid-thread (a question asked mid-conversation depends on everything
+    said before it, exactly the rule layer 1 enforces) and any deployment with
+    the layer disabled.
+
+    The probe waits on the same embedding the search consumes, so by the time
+    anybody consults it -- after the prompt is prepared -- it resolved long ago
+    and the await is free. It never raises: a semantic layer that cannot answer
+    is a semantic layer that missed.
+    """
+    if request.thread_id or not response_cache.semantic_enabled():
+        return None
+
+    async def _probe() -> dict[str, Any] | None:
+        try:
+            vector = await embedding
+        except Exception:
+            return None
+        try:
+            with timed_stage(T_SEMANTIC_LOOKUP):
+                return await response_cache.semantic_lookup(
+                    vector,
+                    language=request.language,
+                    persona=request.persona,
+                    account_status=request.account_status,
+                )
+        except Exception:
+            logger.warning("Semantic probe failed; treating as a miss.", exc_info=True)
+            return None
+
+    return asyncio.create_task(_probe())
+
+
+def _response_from_payload(hit: dict[str, Any]) -> ChatResponse:
+    """A layer-2 payload as the same shape layer 1 returns."""
+    return ChatResponse(
+        reply=hit["reply"],
+        thread_id=str(uuid.uuid4()),
+        sources=[Source(**source) for source in hit.get("sources", [])],
+        follow_ups=hit.get("follow_ups", []),
+    )
 
 
 #: The documents this turn retrieved, so `_extract_sources` can report them.
@@ -762,6 +849,7 @@ async def _cache_the_answer(
     sources: list[Source],
     follow_ups: list[str],
     quiet_turn: bool,
+    query_vector: list[float] | None = None,
 ) -> None:
     """Store the answer and release the single-flight lease.
 
@@ -801,6 +889,19 @@ async def _cache_the_answer(
             persona=request.persona,
             account_status=request.account_status,
         )
+        # The same guards, deliberately: layer 2 may only ever index what layer 1
+        # was allowed to store. A card turn or a mid-thread turn never reaches
+        # either. The vector is the one this turn computed for retrieval; when a
+        # caller has none to offer, the answer is still cached and simply is not
+        # semantically findable.
+        if query_vector is not None:
+            await response_cache.semantic_register(
+                request.message,
+                query_vector,
+                language=request.language,
+                persona=request.persona,
+                account_status=request.account_status,
+            )
     # Released whether or not anything was cached. A card turn is not cacheable,
     # but callers waiting on the lease must still be let go rather than sitting
     # out the full wait for an answer that is never coming. The lease also expires
@@ -814,6 +915,8 @@ async def _replay_cached(
     thread_id: str,
     owner_id: uuid_module.UUID | None,
     cached: ChatResponse,
+    *,
+    already_opened: bool = False,
 ) -> AsyncIterator[dict]:
     """Serve a cache hit as a streamed turn, then record it.
 
@@ -871,7 +974,13 @@ async def _replay_cached(
     await response_cache.record_turn(False)
 
     try:
-        await _open_conversation(request, thread_id, owner_id)
+        # `already_opened` is the layer-2 path (P14-B): it is consulted after
+        # `_prepare_messages`, whose hook has already upserted the conversation
+        # and written the question. Opening again here would record the question
+        # twice -- the exact duplicate P13-004 removed from the model's prompt,
+        # reintroduced into the transcript.
+        if not already_opened:
+            await _open_conversation(request, thread_id, owner_id)
         await _persist_turn(
             request,
             thread_id,
@@ -1132,13 +1241,14 @@ async def chat(
     with timed_turn(
         endpoint="/chat", persona=request.persona, lang=request.language
     ):
-        retrieval = start_retrieval(request.message)
+        embedding, retrieval = start_query_pipeline(request.message)
         # In flight rather than awaited, for the reasons set out in
         # `/chat/stream`. This endpoint has no TTFT to improve, but the two paths
         # share `_prepare_messages` and having them arrange the same three awaits
         # differently is how the streaming version quietly becomes a second
         # product.
         identity = asyncio.create_task(_resolve_owner(principal))
+        semantic = start_semantic_probe(request, embedding)
 
         cached = await _cached_reply(request)
         if cached is not None:
@@ -1149,9 +1259,13 @@ async def chat(
             # but cancelling a task mid-query leaves the connection to unwind
             # through the cancellation rather than through the pool.
             retrieval.cancel()
+            embedding.cancel()
+            if semantic is not None:
+                semantic.cancel()
+            annotate_timings(cache_hit=True, cache_layer="exact")
+            annotate_timings(output_token_count=count_tokens(cached.reply))
             with timed_stage(T_SESSION_WAIT):
                 await identity
-            annotate_timings(cache_hit=True, output_token_count=count_tokens(cached.reply))
             return cached
 
         # History and the owner lookup together, then record the question
@@ -1168,6 +1282,44 @@ async def chat(
         )
         who = await identity
 
+        # Layer 2, same position and same reasoning as `/chat/stream`: after the
+        # prompt so a miss costs nothing, before the model so a hit skips it.
+        # Unlike layer 1 on this endpoint -- whose no-persistence gap P13-006
+        # documents -- this path HAS opened the conversation and written the
+        # question, so the answer must be persisted or the hit would strand a
+        # question with no reply behind it.
+        if semantic is not None:
+            hit = await semantic
+            if hit is not None:
+                annotate_timings(
+                    cache_hit=True,
+                    cache_layer="semantic",
+                    output_token_count=count_tokens(hit["reply"]),
+                )
+                await response_cache.release_lease(
+                    response_cache.cache_key(
+                        request.message,
+                        language=request.language,
+                        persona=request.persona,
+                        account_status=request.account_status,
+                    )
+                )
+                response = _response_from_payload(hit)
+                try:
+                    await _persist_turn(
+                        request,
+                        thread_id,
+                        reply=response.reply,
+                        sources=list(response.sources),
+                        follow_ups=response.follow_ups,
+                        owner_id=who,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Persisting a semantic hit failed for thread %s", thread_id
+                    )
+                return response
+
         return await _serve_chat(request, thread_id, who, prepared)
 
 
@@ -1183,7 +1335,7 @@ async def _serve_chat(
     about measurement. Nothing below moved relative to anything else below.
     """
     try:
-        result = await get_agent(request.simple_mode).ainvoke(
+        result = await get_agent(request.simple_mode, request.persona).ainvoke(
             {"messages": prepared},
             # `configurable` is how per-request context reaches the tools. The
             # agent itself is process-wide and cached, so a tool cannot close
@@ -1372,8 +1524,14 @@ async def chat_stream(
         # before the cache was even consulted. Nothing above needs the answer: it
         # is needed by the conversation write and by persistence, both of which
         # are further down the turn than the work it now runs beside.
-        retrieval = start_retrieval(request.message)
+        #
+        # The semantic probe (P14-B) joins the same instant: it needs only the
+        # embedding, which resolves midway through the concurrent block, so by
+        # the time it is consulted -- after the prompt is prepared, below -- the
+        # answer is already in hand and a MISS has cost the reader nothing.
+        embedding, retrieval = start_query_pipeline(request.message)
         lookup = asyncio.create_task(_cached_reply(request))
+        semantic = start_semantic_probe(request, embedding)
         identity = asyncio.create_task(_resolve_owner(principal))
 
     async def run() -> AsyncIterator[dict]:
@@ -1398,6 +1556,10 @@ async def chat_stream(
             cached = await lookup
         if cached is not None:
             retrieval.cancel()
+            embedding.cancel()
+            if semantic is not None:
+                semantic.cancel()
+            annotate_timings(cache_layer="exact")
             # A hit still has to know who to file the conversation under, and the
             # lookup has been running since before the cache was consulted -- so
             # this is the same cost it was when it came first, not a new one.
@@ -1430,6 +1592,41 @@ async def chat_stream(
         # still needs it.
         who = await identity
 
+        # Layer 2, consulted at the last moment before the model is committed to
+        # (P14-B). The probe has been running since the request arrived and its
+        # embedding resolved before retrieval did, so this await is free -- which
+        # is the entire design: a semantic MISS may not cost the misses anything,
+        # because misses are the common case. Deliberately NOT checked before
+        # `_prepare_messages`: that would gate the history read and the
+        # conversation write on the embedding, adding its latency to every miss.
+        #
+        # The price of checking late is a little wasted work on a HIT -- the
+        # search ran, the conversation write ran -- and the write is not waste at
+        # all: the turn is real and belongs in the history either way.
+        if semantic is not None:
+            hit = await semantic
+            if hit is not None:
+                annotate_timings(cache_layer="semantic")
+                # The single-flight lease taken on the layer-1 miss would
+                # otherwise hold concurrent identical askers for the full wait.
+                await response_cache.release_lease(
+                    response_cache.cache_key(
+                        request.message,
+                        language=request.language,
+                        persona=request.persona,
+                        account_status=request.account_status,
+                    )
+                )
+                async for event in _replay_cached(
+                    request,
+                    thread_id,
+                    who,
+                    _response_from_payload(hit),
+                    already_opened=True,
+                ):
+                    yield event
+                return
+
         collected: list[BaseMessage] = []
         #: The answer as it was actually sent, for persistence and the done
         #: payload. `_extract_reply` reads the LAST element, which on this path
@@ -1438,7 +1635,7 @@ async def chat_stream(
         streamed: list[str] = []
         last_message_id: str | None = None
         try:
-            async for chunk, _meta in get_agent(request.simple_mode).astream(
+            async for chunk, _meta in get_agent(request.simple_mode, request.persona).astream(
                 {"messages": prepared},
                 config={
                     "configurable": {
@@ -1512,6 +1709,29 @@ async def chat_stream(
         # a timing line and the number in a prompt-cost line mean the same thing.
         annotate_timings(output_token_count=count_tokens(reply) if reply else 0)
 
+        # What the PROVIDER says the prompt cost, and how much of it was served
+        # from its prefix cache (P14-A). The local `input_token_count` is our own
+        # tiktoken estimate; this is the billed truth, and `cache_read` is the
+        # deliverable's "cache hit rate on the stable prefix". Best effort: a
+        # provider that reports no usage in its stream simply leaves these absent.
+        for message in reversed(collected):
+            usage = getattr(message, "usage_metadata", None)
+            if usage and usage.get("input_tokens"):
+                details = usage.get("input_token_details") or {}
+                # The detail key is tier-prefixed on the Responses API --
+                # `priority_cache_read`, not the documented `cache_read` --
+                # so match on the suffix rather than pinning either spelling.
+                cached = sum(
+                    value
+                    for key, value in details.items()
+                    if key.endswith("cache_read") and isinstance(value, int)
+                )
+                annotate_timings(
+                    provider_input_tokens=usage["input_tokens"],
+                    provider_cached_input_tokens=cached,
+                )
+                break
+
         # The prose is complete here, and nothing below this line is prose.
         yield {"text_end": True}
 
@@ -1574,6 +1794,16 @@ async def chat_stream(
             sources=sources,
             follow_ups=follow_ups,
             quiet_turn=quiet_turn,
+            # Resolved long ago -- retrieval consumed it before the model ran.
+            # Guarded anyway: registering the answer is worth nothing if reading
+            # the vector out could raise a stale embedding failure at the reader.
+            query_vector=(
+                embedding.result()
+                if embedding.done()
+                and not embedding.cancelled()
+                and embedding.exception() is None
+                else None
+            ),
         )
 
         yield {"follow_ups": follow_ups}
