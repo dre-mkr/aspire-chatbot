@@ -6,6 +6,8 @@
  * is parsed into blocks once on arrival rather than re-parsed on every tick.
  */
 
+import type { Directive } from "../stream/types";
+
 export type AnswerBlock =
 	| { kind: "paragraph"; text: string }
 	| { kind: "list"; items: Array<string>; ordered: boolean };
@@ -13,6 +15,19 @@ export type AnswerBlock =
 export interface Answer {
 	blocks: Array<AnswerBlock>;
 	followUps: Array<string>;
+	/**
+	 * What the turn asked the client to render alongside the prose.
+	 *
+	 * Widgets, upload cards, review cards, progress, escalation. Carried on the
+	 * answer rather than beside it because the answer is what travels through
+	 * the reveal: the typewriter holds one of these for the length of a turn and
+	 * settles it into the transcript, and a directive list on a second object
+	 * would have to be threaded through every one of those steps by hand.
+	 *
+	 * Optional, and absent on everything that parses text into blocks -- a
+	 * restored transcript, an export, a test. Only a live turn has directives.
+	 */
+	directives?: Array<Directive>;
 }
 
 /** `- item`, `* item`, or `1. item`. */

@@ -49,6 +49,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -129,6 +130,38 @@ def load_cases() -> list[dict[str, Any]]:
     return selected
 
 
+def graph_session(
+    base_url: str,
+    *,
+    thread_id: str | None = None,
+    token: str | None = None,
+    timeout: float = 20.0,
+) -> tuple[str, str]:
+    """Mint a graph session token. Returns `(token, session_id)`.
+
+    A turn is two calls now: `/v2/session` derives the claims -- persona, age
+    band, account status -- from the account record, or issues the narrowest
+    identity in the matrix when there is no account. `/v2/chat/stream` then
+    carries that token.
+
+    The probe pays the mint once per turn, which is honest: so does a cold
+    client. It is a local HMAC plus one row read, not a model call, and it is
+    outside the TTFT window measured below.
+    """
+    body = {"session_id": thread_id or str(uuid.uuid4())}
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/v2/session",
+        data=json.dumps(body).encode(),
+        headers={
+            "Content-Type": "application/json",
+            **({"Authorization": f"Bearer {token}"} if token else {}),
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        minted = json.loads(response.read())
+    return minted["token"], minted["session_id"]
+
+
 def ask(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
     """One turn. Returns the client's own view of it.
 
@@ -138,21 +171,21 @@ def ask(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
     about before anybody optimises a stage on the strength of a server number
     alone.
     """
-    payload = json.dumps(
-        {
-            "message": case["q"],
-            "persona": case["persona"],
-            "language": case["lang"],
-            # No thread_id: every probe turn is an opening turn, which is the
-            # turn a first-time reader actually waits through.
-            "thread_id": None,
-        }
-    ).encode()
+    # A fresh session per case, so every probe turn is an opening turn -- the
+    # turn a first-time reader actually waits through. The persona is NOT sent:
+    # `/v2/session` derives it from the account record, and a probe cannot ask
+    # for one it has no account for.
+    token, _ = graph_session(base_url, timeout=timeout)
 
+    payload = json.dumps({"message": case["q"]}).encode()
     request = urllib.request.Request(
-        f"{base_url.rstrip('/')}/chat/stream",
+        f"{base_url.rstrip('/')}/v2/chat/stream",
         data=payload,
-        headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {token}",
+        },
     )
 
     started = time.perf_counter()
@@ -160,21 +193,26 @@ def ask(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
     characters = 0
     error: str | None = None
 
+    # The v2 wire, not AG-UI: `event:` names the kind and `data:` is the body.
+    # A frame is two lines, so the event name has to be remembered across them.
+    kind = ""
     with urllib.request.urlopen(request, timeout=timeout) as response:
         for raw in response:
             line = raw.decode("utf-8", "replace").strip()
+            if line.startswith("event:"):
+                kind = line[6:].strip()
+                continue
             if not line.startswith("data:"):
                 continue
             try:
                 event = json.loads(line[5:].strip())
             except json.JSONDecodeError:
                 continue
-            kind = event.get("type")
-            if kind == "TEXT_MESSAGE_CONTENT":
+            if kind == "token":
                 if first_token_at is None:
                     first_token_at = time.perf_counter()
-                characters += len(event.get("delta", ""))
-            elif kind == "RUN_ERROR":
+                characters += len(event.get("t", ""))
+            elif kind == "error":
                 error = event.get("message", "unknown")
 
     finished = time.perf_counter()

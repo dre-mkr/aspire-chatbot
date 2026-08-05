@@ -49,14 +49,26 @@ def anonymous(client: TestClient, device_id: str | None = None) -> dict:
 
 
 def make_conversation(client: TestClient, token: str, message: str) -> str:
-    """One real turn, so there is something worth stealing."""
+    """One real turn, so there is something worth stealing.
+
+    Two steps now: `/chat` is gone, so a turn is a graph session token minted
+    from the account token followed by a stream. `turn.open_conversation`
+    records the question and the owner before the graph runs, so the row exists
+    whether or not the stream produces an answer.
+    """
     thread_id = str(uuid.uuid4())
-    response = client.post(
-        "/chat",
-        json={"message": message, "thread_id": thread_id},
+    minted = client.post(
+        "/v2/session",
+        json={"session_id": thread_id},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert response.status_code in (200, 502), response.text
+    assert minted.status_code == 200, minted.text
+    response = client.post(
+        "/v2/chat/stream",
+        json={"message": message},
+        headers={"Authorization": f"Bearer {minted.json()['token']}"},
+    )
+    assert response.status_code == 200, response.text
     return thread_id
 
 
@@ -199,13 +211,23 @@ def test_a_valid_token_reads_only_its_own_conversations(client: TestClient):
 
 
 def test_chat_works_with_no_identity_at_all(client: TestClient):
-    """Part 1: sign-up is never required, and neither is a session.
+    """Part 1: sign-up is never required, and neither is an account.
 
-    A turn with no Authorization header must still be answered. The conversation
-    is simply stored unowned and appears in nobody's list.
+    A graph session still has to be minted -- the token is what carries the age
+    band, and there is no turn without one -- but minting it requires no
+    account. `/v2/session` with no Authorization header issues the narrowest
+    identity in the matrix, and the conversation is stored unowned.
     """
-    response = client.post(
-        "/chat", json={"message": "What is an index fund?", "thread_id": str(uuid.uuid4())}
+    minted = client.post("/v2/session", json={"session_id": str(uuid.uuid4())})
+    assert minted.status_code == 200, minted.text
+    assert minted.json()["age_band"] == "5-8", (
+        "an unauthenticated caller must get the narrowest band, not the widest"
     )
-    assert response.status_code in (200, 502)
+
+    response = client.post(
+        "/v2/chat/stream",
+        json={"message": "What is an index fund?"},
+        headers={"Authorization": f"Bearer {minted.json()['token']}"},
+    )
+    assert response.status_code == 200
     assert response.status_code != 401

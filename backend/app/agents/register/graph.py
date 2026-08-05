@@ -1,0 +1,710 @@
+"""The slot loop. The schema decides; the model phrases and extracts.
+
+    resume_or_start → next_missing_slot → ask → extract → validate
+                            ↑                                 │
+                            │                    ok ──────────┴──── invalid
+                            │                     │                   │
+                            │              persist_slot     reask_with_reason
+                            └──────────────────────┴───────────────────┘
+
+    no slots remain → review_card → attest → submit → confirm
+
+## Guardian completes before child, and the order is not the model's to change
+
+`schema.next_missing` walks a tuple. There is no branch in it that reorders the
+form because the conversation happened to cover something early, and there is no
+prompt instruction the model could follow to skip a field. A parent who
+volunteers the child's name during the guardian section has that recorded and is
+still asked for their own address next.
+
+## PII never reaches `messages` or `summary`
+
+Two mechanisms, and both are needed. `store.save_slot` writes sensitive values
+to `application_pii` encrypted rather than to the transcript; and this graph
+appends `[collected: date_of_birth]` to the conversation instead of the value.
+`test_register.py` dumps the rolling summary after a completed application and
+asserts it contains no DOB, no national ID and no address.
+
+## This agent is unreachable for a child
+
+Not by a check here -- by the access matrix. `stella` and `orion` under 16 never
+receive `register_agent`, so the classifier is never shown it and cannot route
+to it. Repeating the check inside the agent would be a second place for the rule
+to live and differ.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from langchain_core.messages import AIMessage
+from langgraph.graph import END, START, StateGraph
+
+from app.agents.register import store
+from app.agents.register.schema import (
+    CHILD_SLOTS,
+    GUARDIAN_SLOTS,
+    Slot,
+    display_value,
+    next_missing,
+    slot_for,
+)
+from app.graph.state import AspireState
+
+logger = logging.getLogger(__name__)
+
+#: The consent text version currently on screen. Bumped when the wording
+#: changes, and stored with every attestation -- see `store.attest_and_submit`.
+CONSENT_VERSION = "2026-08-v1"
+
+CONSENT_TEXT: dict[str, str] = {
+    "en": (
+        "I confirm the details above are correct and I am the parent or legal "
+        "guardian of the child named."
+    ),
+    "es": (
+        "Confirmo que los datos anteriores son correctos y que soy el padre, la "
+        "madre o el tutor legal del menor indicado."
+    ),
+    "fr": (
+        "Je confirme que les informations ci-dessus sont exactes et que je suis "
+        "le parent ou le tuteur légal de l'enfant nommé."
+    ),
+}
+
+
+def _locale(state: AspireState) -> str:
+    return str(state.get("locale") or "en")
+
+
+def _draft(state: AspireState) -> store.Draft:
+    """The draft this turn is working on, from state or fresh.
+
+    Held in `AspireState.registration` as a plain dict so it survives
+    checkpointing as JSON, and rehydrated into a `Draft` here. A dataclass in
+    state would serialise fine and come back as a dict on the next turn, which
+    is the kind of asymmetry that produces an AttributeError three turns later.
+    """
+    raw = state.get("registration")
+    if isinstance(raw, dict) and raw.get("application_id"):
+        return store.Draft(
+            application_id=raw["application_id"],
+            resume_token=raw.get("resume_token", ""),
+            values=dict(raw.get("values") or {}),
+            child_index=int(raw.get("child_index") or 0),
+            children_complete=int(raw.get("children_complete") or 0),
+            status=raw.get("status", "draft"),
+            pending_corrections=list(raw.get("pending_corrections") or []),
+        )
+    return store.new_draft(state.get("session_id"))
+
+
+def _persist_state(draft: store.Draft) -> dict[str, Any]:
+    return {
+        "application_id": draft.application_id,
+        "resume_token": draft.resume_token,
+        "values": draft.values,
+        "child_index": draft.child_index,
+        "children_complete": draft.children_complete,
+        "status": draft.status,
+        "pending_corrections": draft.pending_corrections,
+        # The slot currently being asked for. Read by `extract` on the next
+        # turn, because a turn does not otherwise know which question it is
+        # answering.
+        "awaiting": draft.values.get("__awaiting"),
+    }
+
+
+# ── resume_or_start ──────────────────────────────────────────────────────────
+
+
+def make_resume_or_start(loader=None):
+    """Reopen a draft, enter correction mode, or begin a new application."""
+
+    async def resume_or_start(state: AspireState) -> dict[str, Any]:
+        raw = state.get("registration")
+        if isinstance(raw, dict) and raw.get("application_id"):
+            return {"registration": raw}
+
+        token = (state.get("safety_flags") or {}).get("resume_token")
+        draft = None
+        if token:
+            draft = await (loader or store.load_draft)(str(token))
+
+        if draft is None:
+            draft = store.new_draft(state.get("session_id"))
+            await store.open_application(
+                draft,
+                session_id=state.get("session_id"),
+                owner=state.get("user_id"),
+            )
+            logger.info("started application %s", draft.application_id)
+        elif draft.in_correction_mode:
+            # F2's loop. ONLY the flagged slots are walked, and then it returns
+            # straight to review -- the parent does not refill the form.
+            logger.info(
+                "application %s reopened for corrections: %s",
+                draft.application_id,
+                draft.pending_corrections,
+            )
+
+        return {"registration": _persist_state(draft)}
+
+    return resume_or_start
+
+
+# ── next_missing_slot / ask ──────────────────────────────────────────────────
+
+
+def pick_slot(draft: store.Draft) -> Slot | None:
+    """Which question comes next.
+
+    In correction mode the walk is the flagged list and nothing else -- that is
+    the whole point of F2, and it is why this branches here rather than
+    filtering inside `next_missing`.
+    """
+    if draft.in_correction_mode:
+        for path in draft.pending_corrections:
+            base = path
+            if path.startswith("child.") and path.split(".")[1].isdigit():
+                parts = path.split(".")
+                base = f"child.{parts[-1]}"
+            slot = slot_for(base)
+            if slot is not None and draft.values.get(path) in (None, ""):
+                return slot
+        return None
+
+    return next_missing(draft.values, child_index=draft.child_index)
+
+
+def make_ask():
+    """Ask for the next slot, with its options as quick replies."""
+
+    def ask(state: AspireState) -> dict[str, Any]:
+        draft = _draft(state)
+        slot = pick_slot(draft)
+        locale = _locale(state)
+
+        if slot is None:
+            draft.values.pop("__awaiting", None)
+            return {"registration": {**_persist_state(draft), "phase": "review"}}
+
+        draft.values["__awaiting"] = slot.path
+        prompt = slot.prompt.get(locale) or slot.prompt["en"]
+
+        return {
+            "messages": [AIMessage(content=prompt)],
+            "quick_replies": _options_for(slot, locale),
+            "registration": _persist_state(draft),
+        }
+
+    return ask
+
+
+def make_collect(recorder=None):
+    """A document slot: pause the graph, take an id, store it, move on.
+
+    `interrupt()` suspends mid-node. The checkpoint holds everything, the client
+    renders `UploadCard`, and `Command(resume=...)` continues from the same line
+    with the document id.
+
+    The question and its answer stay in ONE stack frame, which is the reason for
+    an interrupt rather than a state flag and a second turn: a loop that emitted
+    "please upload" and ended the turn would have to re-derive which slot the
+    upload belonged to, from state the parent may have changed by typing
+    something else in between.
+
+    An upload that never arrives leaves the graph PAUSED rather than advanced,
+    which is the correct state -- the slot is not filled.
+    """
+
+    async def collect(state: AspireState) -> dict[str, Any]:
+        from langgraph.types import interrupt
+
+        from app.agents.register.nodes.upload import (
+            _assert_no_bytes,
+            document_ref,
+            interrupt_payload,
+        )
+
+        draft = _draft(state)
+        locale = _locale(state)
+        slot = pick_slot(draft)
+        if slot is None or not slot.document:
+            return {"registration": _persist_state(draft)}
+
+        draft.values["__awaiting"] = slot.path
+        label = _document_label(draft, slot)
+
+        # Everything above runs AGAIN on resume -- `interrupt` replays the node
+        # from the top -- so nothing above it may have a side effect that must
+        # not happen twice. Nothing does: three reads and a dict write.
+        raw = interrupt(interrupt_payload(slot, locale, label=label))
+        payload = _assert_no_bytes(raw if isinstance(raw, dict) else {})
+
+        if payload.get("skipped") and slot.optional:
+            await store.save_slot(draft, slot.path, None)
+            draft.values.pop("__awaiting", None)
+            return {"registration": {**_persist_state(draft), "phase": "next"}}
+
+        ref = document_ref(payload)
+        if ref is None:
+            # Resumed with nothing usable. The slot stays unfilled and the loop
+            # asks again: an upload that did not happen must not advance a form.
+            logger.info("document slot %s resumed with no id", slot.path)
+            return {"registration": {**_persist_state(draft), "phase": "reask"}}
+
+        await store.save_slot(draft, slot.path, ref)
+        if recorder is not None:
+            try:
+                await recorder(draft, slot.path, payload)
+            except Exception:
+                # The document is in storage and the slot is filled. Losing the
+                # row is a reconciliation problem, not a reason to make a parent
+                # photograph a birth certificate twice.
+                logger.exception(
+                    "Could not record document %s for %s", ref["document_id"], slot.path
+                )
+
+        draft.values.pop("__awaiting", None)
+        if draft.in_correction_mode:
+            key = draft.key_for(slot.path)
+            draft.pending_corrections = [
+                pending for pending in draft.pending_corrections if pending != key
+            ]
+
+        logger.info(
+            "[collected: %s] document %s",
+            slot.path.rsplit(".", 1)[-1],
+            ref["document_id"],
+        )
+        return {
+            "registration": {
+                **_persist_state(draft),
+                "phase": "next",
+                # Read by `doc_check`, which runs next and is advisory only.
+                "__last_document": {**ref, "slot": slot.path, **payload},
+            }
+        }
+
+    return collect
+
+
+def _document_label(draft: store.Draft, slot: Slot) -> str:
+    """"Rachel's birth certificate", not "child.birth_certificate".
+
+    A parent photographing documents for a second child in one sitting needs to
+    know which child this one is for, and the name is already collected by the
+    time any document slot is reached.
+    """
+    if not slot.path.startswith("child."):
+        return slot.label
+    name = draft.values.get(f"child.{draft.child_index}.full_name")
+    if not isinstance(name, str) or not name.strip():
+        return slot.label
+    first = name.split()[0]
+    possessive = f"{first}'" if first.endswith("s") else f"{first}'s"
+    return f"{possessive} {slot.label[0].lower()}{slot.label[1:]}"
+
+
+def _options_for(slot: Slot, locale: str) -> list[str]:
+    """Tap targets when the answer is one of a closed set.
+
+    Capped at four, because a parish list of fourteen is a scrolling menu rather
+    than a tap target. The full list is still accepted as typed text -- the
+    chips are a shortcut, not the only route.
+    """
+    if not slot.options:
+        return _skip_chip(slot, locale)
+    return [option.title() for option in slot.options[:4]]
+
+
+def _skip_chip(slot: Slot, locale: str) -> list[str]:
+    if not slot.optional:
+        return []
+    return {
+        "en": ["Skip"],
+        "es": ["Saltar"],
+        "fr": ["Passer"],
+    }.get(locale, ["Skip"])
+
+
+# ── extract / validate / persist ─────────────────────────────────────────────
+
+
+def make_extract():
+    """Parse the answer with the SLOT's parser. No model call.
+
+    The model's job was to phrase the question. Turning "the fourteenth of March
+    twenty-fifteen" into a date is a parsing problem with a right answer, and a
+    model doing it produces 14/03/2015 most of the time and 03/14/2015 the rest
+    -- which is a different child's birthday and nothing downstream would
+    notice.
+    """
+
+    async def extract(state: AspireState) -> dict[str, Any]:
+        draft = _draft(state)
+        path = draft.values.get("__awaiting")
+        slot = slot_for(str(path)) if path else None
+        if slot is None:
+            return {"registration": _persist_state(draft)}
+
+        from app.graph.nodes.safety_in import latest_user_text
+
+        answer = latest_user_text(state).strip()
+        locale = _locale(state)
+
+        if slot.optional and answer.lower() in ("skip", "saltar", "passer", ""):
+            draft.set(slot.path, None)
+            draft.values.pop("__awaiting", None)
+            return {"registration": {**_persist_state(draft), "phase": "next"}}
+
+        value, problem = slot.parse(answer)
+        if problem is not None:
+            return {
+                "messages": [
+                    AIMessage(content=slot.reask.get(locale) or slot.reask["en"])
+                ],
+                "quick_replies": _options_for(slot, locale),
+                "registration": {**_persist_state(draft), "phase": "reask"},
+            }
+
+        await store.save_slot(draft, slot.path, value)
+        draft.values.pop("__awaiting", None)
+        if draft.in_correction_mode:
+            key = draft.key_for(slot.path)
+            draft.pending_corrections = [
+                pending for pending in draft.pending_corrections if pending != key
+            ]
+
+        # The transcript gets a MARKER, never the value. `[collected: ...]` is
+        # what the model needs to know the field is done, and is the only thing
+        # it needs.
+        note = (
+            f"[collected: {slot.path.rsplit('.', 1)[-1]}]"
+            if slot.sensitive
+            else f"[collected: {slot.path.rsplit('.', 1)[-1]} = {display_value(slot, value)}]"
+        )
+        logger.info("application %s %s", draft.application_id, note)
+
+        return {"registration": {**_persist_state(draft), "phase": "next"}}
+
+    return extract
+
+
+# ── review / attest / submit ────────────────────────────────────────────────
+
+
+def review_sections(draft: store.Draft) -> list[dict[str, Any]]:
+    """The whole application, grouped, with sensitive values MASKED.
+
+    Masked rather than omitted: a parent checking their own ID number needs to
+    recognise it, and `••••5678` does that without putting the number into a
+    transcript that is persisted and read back.
+    """
+    guardian_fields = []
+    for slot in GUARDIAN_SLOTS:
+        if slot.document:
+            continue
+        guardian_fields.append(
+            (slot.path, slot.label, display_value(slot, draft.values.get(slot.path)))
+        )
+
+    sections = [
+        {
+            "title": "About you",
+            "fields": guardian_fields,
+            "documents": [
+                str(draft.values.get(slot.path, {}).get("document_id", ""))
+                for slot in GUARDIAN_SLOTS
+                if slot.document and isinstance(draft.values.get(slot.path), dict)
+            ],
+        }
+    ]
+
+    for index in range(draft.children_complete + 1):
+        fields = []
+        for slot in CHILD_SLOTS:
+            if slot.document:
+                continue
+            key = f"child.{index}.{slot.path[len('child.'):]}"
+            fields.append((key, slot.label, display_value(slot, draft.values.get(key))))
+        if not any(value for _key, _label, value in fields):
+            continue
+        sections.append(
+            {
+                "title": f"Child {index + 1}",
+                "fields": fields,
+                "documents": [
+                    str(draft.values.get(key, {}).get("document_id", ""))
+                    for slot in CHILD_SLOTS
+                    if slot.document
+                    for key in [f"child.{index}.{slot.path[len('child.'):]}"]
+                    if isinstance(draft.values.get(key), dict)
+                ],
+            }
+        )
+    return sections
+
+
+def make_review():
+    """Render the whole application as an editable card."""
+
+    def review(state: AspireState) -> dict[str, Any]:
+        from app.schemas.directives import ReviewCardDirective, ReviewSection
+
+        draft = _draft(state)
+        locale = _locale(state)
+
+        directive = ReviewCardDirective(
+            sections=[ReviewSection(**section) for section in review_sections(draft)]
+        )
+
+        return {
+            "messages": [
+                AIMessage(
+                    content={
+                        "en": "Here is everything. Check it over, change anything that is wrong, then confirm.",
+                        "es": "Aquí está todo. Revísalo, cambia lo que esté mal y luego confirma.",
+                        "fr": "Voici le tout. Vérifie, corrige ce qui ne va pas, puis confirme.",
+                    }.get(locale, "Here is everything. Check it over, then confirm.")
+                )
+            ],
+            "ui_directives": [directive],
+            "registration": {**_persist_state(draft), "phase": "review"},
+        }
+
+    return review
+
+
+def make_submit():
+    """Attest and submit. Refuses without explicit consent.
+
+    The attestation arrives as a flag the review card sets, and it carries the
+    consent VERSION that was on screen. Submitting without it is refused here as
+    well as by the schema's check constraint -- one of those is the control and
+    the other is the guarantee.
+    """
+
+    async def submit(state: AspireState) -> dict[str, Any]:
+        draft = _draft(state)
+        locale = _locale(state)
+        flags = state.get("safety_flags") or {}
+        attested = bool(flags.get("attested"))
+
+        if not attested:
+            return {
+                "messages": [
+                    AIMessage(
+                        content={
+                            "en": "I need you to tick the confirmation before I can send it.",
+                            "es": "Necesito que marques la confirmación antes de enviarlo.",
+                            "fr": "J'ai besoin que tu coches la confirmation avant l'envoi.",
+                        }.get(locale, "Please confirm before I send it.")
+                    )
+                ],
+                "registration": {**_persist_state(draft), "phase": "review"},
+            }
+
+        await store.attest_and_submit(
+            draft,
+            consent_version=str(flags.get("consent_version") or CONSENT_VERSION),
+            ip=flags.get("ip"),
+        )
+
+        return {
+            "messages": [
+                AIMessage(
+                    content={
+                        "en": (
+                            "Sent. ASPIRE has it now, and you will hear back within "
+                            "five working days. Your reference is "
+                            f"{draft.application_id[:8].upper()}."
+                        ),
+                        "es": (
+                            "Enviado. ASPIRE ya lo tiene y recibirás noticias en "
+                            "cinco días hábiles. Tu referencia es "
+                            f"{draft.application_id[:8].upper()}."
+                        ),
+                        "fr": (
+                            "Envoyé. ASPIRE l'a reçu et tu auras une réponse sous "
+                            "cinq jours ouvrables. Ta référence est "
+                            f"{draft.application_id[:8].upper()}."
+                        ),
+                    }.get(locale, "Sent.")
+                )
+            ],
+            "registration": {**_persist_state(draft), "phase": "done"},
+        }
+
+    return submit
+
+
+# ── routing ──────────────────────────────────────────────────────────────────
+
+
+def _entry(state: AspireState) -> str:
+    raw = state.get("registration")
+    phase = (raw or {}).get("phase") if isinstance(raw, dict) else None
+    awaiting = (raw or {}).get("awaiting") if isinstance(raw, dict) else None
+
+    if phase == "review":
+        return "submit" if (state.get("safety_flags") or {}).get("attested") else "review"
+    if awaiting:
+        return "extract"
+    return "resume_or_start"
+
+
+def _after_extract(state: AspireState) -> str:
+    raw = state.get("registration") or {}
+    phase = raw.get("phase")
+    if phase == "reask":
+        # The re-ask has already been said. The turn ends and the parent
+        # answers again -- there is no loop here that could ask twice in one
+        # turn.
+        return END
+    # `route`, not `ask`. The next slot may be a document, which never reaches
+    # `ask` -- there is no question to type an answer to, so it goes straight to
+    # the node that pauses on `interrupt()`. Returning `ask` here jumped over
+    # that decision and raised `KeyError: 'ask'` from the edge resolver, because
+    # `ask` is not one of this edge's declared destinations.
+    return "route"
+
+
+def _after_ask(state: AspireState) -> str:
+    raw = state.get("registration") or {}
+    return "review" if raw.get("phase") == "review" else END
+
+
+def _needs_document(state: AspireState) -> str:
+    """Whether the next slot is a document, decided before anything is asked.
+
+    A document slot never reaches `ask`: there is no question to type an answer
+    to, so it goes straight to the node that pauses.
+    """
+    draft = _draft(state)
+    slot = pick_slot(draft)
+    if slot is None:
+        return "review"
+    return "collect" if slot.document else "ask"
+
+
+def _after_collect(state: AspireState) -> str:
+    raw = state.get("registration") or {}
+    if raw.get("phase") == "reask":
+        return END
+    return "doc_check" if raw.get("__last_document") else "resume_or_start"
+
+
+def _after_doc_check(state: AspireState) -> str:
+    """A retake request ends the turn; anything else continues the walk.
+
+    `doc_check` never rejects, so "continue" is the only other outcome -- a
+    flagged document is accepted and the flag goes to the admin queue.
+    """
+    raw = state.get("registration") or {}
+    document = raw.get("__last_document") or {}
+    return END if document.get("retakes_requested") else "resume_or_start"
+
+
+def build_register_graph(
+    *, loader=None, recorder=None, doc_check=None, checkpointer=None
+):
+    graph = StateGraph(AspireState)
+
+    graph.add_node("resume_or_start", make_resume_or_start(loader))
+    graph.add_node("route", _passthrough)
+    graph.add_node("ask", make_ask())
+    graph.add_node("collect", make_collect(recorder))
+    graph.add_node("doc_check", doc_check or _no_doc_check)
+    graph.add_node("extract", make_extract())
+    graph.add_node("review", make_review())
+    graph.add_node("submit", make_submit())
+
+    graph.add_conditional_edges(
+        START, _entry, ["resume_or_start", "extract", "review", "submit"]
+    )
+    graph.add_edge("resume_or_start", "route")
+    # `route` exists so the document/typed split is a conditional edge with a
+    # name in the graph diagram. Deciding it inside `ask` would hide the fact
+    # that a document slot takes a completely different path.
+    graph.add_conditional_edges("route", _needs_document, ["ask", "collect", "review"])
+    graph.add_conditional_edges("ask", _after_ask, ["review", END])
+    graph.add_conditional_edges(
+        "collect", _after_collect, ["doc_check", "resume_or_start", END]
+    )
+    graph.add_conditional_edges("doc_check", _after_doc_check, ["resume_or_start", END])
+    graph.add_conditional_edges("extract", _after_extract, ["route", END])
+    graph.add_edge("review", END)
+    graph.add_edge("submit", END)
+
+    # A checkpointer is REQUIRED for `interrupt()` to resume -- without one the
+    # paused state has nowhere to live, and `Command(resume=...)` restarts the
+    # turn from the beginning. Compiling without one is still legal and still
+    # useful (the typed-slot path needs no interrupt), which is why this is a
+    # parameter rather than an assertion.
+    return graph.compile(checkpointer=checkpointer)
+
+
+async def _passthrough(state: AspireState) -> dict[str, Any]:
+    """A named junction. The routing lives in the edge, not in a node."""
+    return {}
+
+
+async def _no_doc_check(state: AspireState) -> dict[str, Any]:
+    """No vision model configured. Every document passes silently.
+
+    A supported configuration rather than a test-only one: it is exactly the
+    behaviour before `doc_check` existed, which is what makes turning the node
+    on a safe change.
+    """
+    return {}
+
+
+async def _record_document(draft: store.Draft, slot: str, payload: dict[str, Any]) -> None:
+    """Insert the `documents_uploaded` row once the client confirms the PUT."""
+    from app.storage.presign import document_record, storage_key_for
+
+    await store.record_documents(
+        draft,
+        [
+            document_record(
+                document_id=str(payload["document_id"]),
+                application_id=draft.application_id,
+                slot=draft.key_for(slot),
+                storage_key=str(
+                    payload.get("storage_key")
+                    or storage_key_for(
+                        draft.application_id, slot, str(payload["document_id"])
+                    )
+                ),
+                mime=str(payload.get("mime") or ""),
+                size_bytes=int(payload.get("size_bytes") or 0),
+                uploaded_by=None,
+            )
+        ],
+    )
+
+
+def build_production_register():
+    from app.agents.register.nodes.doc_check import make_doc_check, vision_invoke
+
+    return build_register_graph(
+        recorder=_record_document,
+        doc_check=make_doc_check(vision_invoke()),
+    )
+
+
+def register() -> None:
+    """Register for both registration agent names.
+
+    `register_agent_step1` is the anonymous variant: the same graph, and the
+    access matrix is what stops it reaching the slots that need an account. It
+    is not a different flow -- a signed-out parent who signs in mid-application
+    should continue, not start again.
+    """
+    from app.graph.main_graph import register_agent
+
+    for name in ("register_agent", "register_agent_step1"):
+        register_agent(name, build_production_register)

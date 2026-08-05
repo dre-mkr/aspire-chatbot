@@ -1,0 +1,40 @@
+[
+  {
+    "question": "why does the bank give me money for saving",
+    "widget": {
+      "kind": "growth_stack",
+      "v": 1,
+      "concept_id": "interest",
+      "title": "Watch it grow",
+      "caption": "Tap Next year and see what happens.",
+      "a11y_text": "Two stacks of coins side by side. The left stack is the money you put in. The right stack is the money the bank added on top, and it grows a little faster each year.",
+      "principal_cents": 0,
+      "contribution_cents": 50000,
+      "rate": 0.05,
+      "periods": 5,
+      "period_label": "year",
+      "saved_label": "What you saved",
+      "earned_label": "What the bank added",
+      "reveal_line": "You did not work for that extra money. The bank added it because you left yours alone."
+    }
+  },
+  {
+    "question": "what happens if i leave my money in the bank for a long time",
+    "widget": {
+      "kind": "growth_stack",
+      "v": 1,
+      "concept_id": "interest",
+      "title": "Five years of waiting",
+      "caption": "EC$5 a week, every week.",
+      "a11y_text": "Two stacks of coins. One is what you saved each week. The other is what the bank added for leaving it there.",
+      "principal_cents": 0,
+      "contribution_cents": 26000,
+      "rate": 0.04,
+      "periods": 5,
+      "period_label": "year",
+      "saved_label": "You put in",
+      "earned_label": "The bank added",
+      "reveal_line": "The longer you wait, the more the second pile grows."
+    }
+  }
+]

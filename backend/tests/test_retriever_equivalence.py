@@ -49,6 +49,34 @@ Marked `slow`: it embeds 30 questions against the live provider.
 baseline is built inside the test, against the store still on disk at
 `data/chroma`. Every comparison here skips when that directory is gone, so
 deleting it retires the comparison cleanly instead of breaking CI.
+
+## The baseline is frozen; the corpus is not (P15-006)
+
+`data/chroma` is a snapshot taken at the migration. It is gitignored, and nothing
+in this codebase can rebuild it -- `app/rag.py` dropped Chroma deliberately. The
+knowledge base has since grown, so the two stores no longer hold the same corpus:
+
+    chroma  332 rows        neon  706 rows
+    only in neon    374     (all FIN-*, added after the snapshot)
+    only in chroma    0     -- the move dropped nothing
+
+Comparing top-k across stores with different contents measures the CORPUS
+difference, not the backends. It did exactly that: pgvector returned FIN-304 for
+"How is the ASPIRE financial education delivered?" at cosine distance 0.209 --
+a better hit than anything Chroma held -- and the comparison read that as a
+regression 5.1e-02 outside `NOISE_BAND`. A new row winning is the corpus working.
+
+So the comparison is restricted to the ids the baseline actually holds. That
+restores the controlled experiment the file was always describing -- same
+documents, same query vector, two backends -- and on that footing the original
+claim still stands: rank 1 agrees on all 30 questions and no top-5 difference
+falls outside `NOISE_BAND`.
+
+The restricted ranking is computed in numpy rather than by `PgVectorRetriever`,
+which cannot filter by id. That is not a weaker check: it is only sound because
+`test_pgvector_ranking_is_exact` proves pgvector reproduces this exact numpy
+ranking over the whole corpus, element for element. The transitivity is the
+point, and it is asserted above rather than assumed here.
 """
 
 from __future__ import annotations
@@ -130,6 +158,17 @@ def chroma_store():
 
 
 @pytest.fixture(scope="module")
+def baseline_ids(chroma_store) -> set[str]:
+    """The knowledge-base ids the frozen Chroma snapshot actually holds.
+
+    Read through the public `get()` rather than the sqlite file, so this does not
+    depend on Chroma's internal schema to say which corpus it was built from.
+    """
+    metadatas = chroma_store.get(include=["metadatas"])["metadatas"]
+    return {str(m["id"]) for m in metadatas if m and m.get("id")}
+
+
+@pytest.fixture(scope="module")
 def neon_corpus() -> tuple[list[str], np.ndarray]:
     """Every stored vector, normalised, for exact rankings computed here."""
 
@@ -162,16 +201,27 @@ def _key(document) -> str:
     return str(document.metadata.get("id") or document.page_content[:120])
 
 
-def _exact(neon_corpus, vector: list[float], k: int) -> list[str]:
+def _restrict(neon_corpus, among: set[str] | None):
+    """The corpus narrowed to `among`, preserving order. None means all of it."""
     ids, matrix = neon_corpus
+    if among is None:
+        return ids, matrix
+    keep = [i for i, kb_id in enumerate(ids) if kb_id in among]
+    return [ids[i] for i in keep], matrix[keep]
+
+
+def _exact(neon_corpus, vector: list[float], k: int, among: set[str] | None = None) -> list[str]:
+    ids, matrix = _restrict(neon_corpus, among)
     query = np.array(vector, dtype=np.float64)
     query /= np.linalg.norm(query)
     distances = 1.0 - (matrix @ query)
     return [ids[i] for i in np.argsort(distances)[:k]]
 
 
-def _distances(neon_corpus, vector: list[float]) -> dict[str, float]:
-    ids, matrix = neon_corpus
+def _distances(
+    neon_corpus, vector: list[float], among: set[str] | None = None
+) -> dict[str, float]:
+    ids, matrix = _restrict(neon_corpus, among)
     query = np.array(vector, dtype=np.float64)
     query /= np.linalg.norm(query)
     return dict(zip(ids, 1.0 - (matrix @ query), strict=True))
@@ -296,21 +346,36 @@ def test_the_floor_is_what_excludes_them_not_an_empty_corpus():
 
 
 @requires_chroma
-def test_both_backends_hold_the_same_number_of_chunks(chroma_store):
-    """A count mismatch means ingestion dropped or duplicated rows."""
-    from app.ingest import count_corpus
+def test_the_move_to_postgres_dropped_nothing(baseline_ids, neon_corpus):
+    """Every chunk the baseline holds is still in Postgres.
 
-    assert chroma_store._collection.count() == asyncio.run(count_corpus())
+    This replaces an equal-count assertion, which stopped meaning what it said
+    once the knowledge base grew: 332 != 706 reported a dropped row when what had
+    happened was 374 rows being ADDED. Containment is the property the migration
+    actually promises, and unlike a count it survives the corpus growing -- an
+    ingest that lost a row still fails here, loudly and by name.
+    """
+    ids, _ = neon_corpus
+    missing = sorted(baseline_ids - set(ids))
+    assert not missing, (
+        f"{len(missing)} chunk(s) in the Chroma baseline are absent from Postgres: "
+        f"{missing[:10]}"
+    )
 
 
 @requires_chroma
-def test_rank_one_matches_chroma_for_every_probe_question(chroma_store, probe_vectors):
-    """The best chunk is never a coin flip: it has a clear margin on all 30."""
+def test_rank_one_matches_chroma_for_every_probe_question(
+    chroma_store, probe_vectors, neon_corpus, baseline_ids
+):
+    """The best chunk is never a coin flip: it has a clear margin on all 30.
+
+    Ranked over the baseline's own 332 ids on both sides -- see the module
+    docstring. Unrestricted, this compares which CORPUS holds the better row.
+    """
     divergences = []
     for question, vector in probe_vectors:
         expected = [_key(d) for d in chroma_store.similarity_search_by_vector(vector, k=5)]
-        retriever = PgVectorRetriever(embeddings=_Fixed(vector), k=5, max_cosine_distance=None)
-        actual = [_key(d) for d in retriever.invoke(question)]
+        actual = _exact(neon_corpus, vector, 5, among=baseline_ids)
         if expected[:1] != actual[:1]:
             divergences.append((question, expected, actual))
 
@@ -321,23 +386,25 @@ def test_rank_one_matches_chroma_for_every_probe_question(chroma_store, probe_ve
 
 @requires_chroma
 def test_any_top_5_difference_is_confined_to_near_ties(
-    chroma_store, probe_vectors, neon_corpus
+    chroma_store, probe_vectors, neon_corpus, baseline_ids
 ):
     """Sets may differ, but only among chunks too close to order reliably.
 
     This is the assertion that would catch a real regression. A chunk dropped
     because of a normalisation error, a wrong cast, or a mangled vector would sit
     far from the boundary, and `NOISE_BAND` would not cover it.
+
+    Both sides rank the same 332 documents, so a difference here can only come
+    from the vectors themselves -- which is the one thing this test is about.
     """
     offenders = []
     for question, vector in probe_vectors:
         expected = [_key(d) for d in chroma_store.similarity_search_by_vector(vector, k=5)]
-        retriever = PgVectorRetriever(embeddings=_Fixed(vector), k=5, max_cosine_distance=None)
-        actual = [_key(d) for d in retriever.invoke(question)]
+        actual = _exact(neon_corpus, vector, 5, among=baseline_ids)
         if expected == actual:
             continue
 
-        distances = _distances(neon_corpus, vector)
+        distances = _distances(neon_corpus, vector, among=baseline_ids)
         # The boundary is the worst distance either side was willing to include.
         boundary = max(distances[key] for key in actual)
         for key in set(expected) ^ set(actual):

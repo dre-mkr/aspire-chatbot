@@ -34,6 +34,8 @@ import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
+import type { DirectiveContext } from "./DirectiveRegistry";
+import { DirectiveView } from "./DirectiveRegistry";
 import { PlayingStars } from "./Voice";
 
 /**
@@ -125,6 +127,15 @@ interface TranscriptProps {
 	game: ActiveGame | null;
 	eligibility: ActiveEligibility | null;
 	/**
+	 * What a directive needs in order to be interactive.
+	 *
+	 * Passed down rather than built here, because every callback in it acts on
+	 * the CONVERSATION -- sending a widget interaction back as a turn, resuming
+	 * an interrupted registration with a document id -- and the transcript does
+	 * not own the conversation. `use-conversation` does.
+	 */
+	directiveContext: DirectiveContext;
+	/**
 	 * Below this id, a message is being read back rather than arriving.
 	 *
 	 * Entry animations belong to messages that were just sent. Restoring a
@@ -179,6 +190,7 @@ export function Transcript({
 	playback,
 	game,
 	eligibility,
+	directiveContext,
 	animateAfterId,
 	scrollRef,
 }: TranscriptProps) {
@@ -206,6 +218,11 @@ export function Transcript({
 					blocks: streaming.blocks,
 					followUps: streaming.followUps,
 					sources: streaming.sources,
+					// Deliberately absent mid-reveal. Directives are emitted from the
+					// settled state, after the last token, so there are none to draw
+					// while the prose is still arriving -- and a control that appeared
+					// under a half-written answer would be tappable before the answer
+					// it belongs to had finished making its point.
 				},
 			]
 		: messages;
@@ -432,6 +449,7 @@ export function Transcript({
 			<Answer
 				key={message.id}
 				message={message}
+				directiveContext={directiveContext}
 				onRegenerate={onRegenerate}
 				playback={playback}
 				arriving={arriving}
@@ -526,6 +544,7 @@ export function Transcript({
  */
 function Answer({
 	message,
+	directiveContext,
 	onRegenerate,
 	playback,
 	discards,
@@ -533,6 +552,7 @@ function Answer({
 	revealing,
 }: {
 	message: Extract<ChatMessage, { role: "assistant" }>;
+	directiveContext: DirectiveContext;
 	onRegenerate: (messageId: number) => void;
 	playback: Playback;
 	discards: number;
@@ -552,6 +572,31 @@ function Answer({
 					// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
 					<Block key={index} block={block} revealing={revealing} />
 				))}
+				{/*
+				 * Between the prose and the tail, which is where the turn put them:
+				 * a widget answers the question the paragraph above just asked, and
+				 * the sources and the action row belong under the whole thing.
+				 *
+				 * Not rendered while revealing -- see the note on the streaming
+				 * placeholder above. An unknown directive type renders nothing at
+				 * all rather than throwing, which is what makes a backend that
+				 * deploys before this one a non-event.
+				 */}
+				{!revealing && message.directives?.length
+					? message.directives.map((directive, index) => (
+							<DirectiveView
+								// Positional. A turn's directive list is fixed once the
+								// turn settles, and several types carry no id of their
+								// own -- keying by content would remount a widget every
+								// time its parent re-rendered, losing whatever the child
+								// had typed into it.
+								// biome-ignore lint/suspicious/noArrayIndexKey: fixed-length, append-only
+								key={index}
+								directive={directive}
+								context={directiveContext}
+							/>
+						))
+					: null}
 				{/* Laid out from the first frame of the reveal and revealed when the
 				    answer settles, rather than mounting at completion. The evidence
 				    chip and the action row are 95px between them, and the thread is

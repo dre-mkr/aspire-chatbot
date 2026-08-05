@@ -1,0 +1,323 @@
+# Module 1 -- Saving
+#
+# The first module of the ASPIRE course, authored for every band.
+#
+# Two rules govern the content below and both are checked at load time:
+#
+#   * Every example is LOCAL and CONCRETE. Patties, snow cones, school
+#     supplies, a bicycle, a Carnival costume, a Christmas gift. Never an
+#     abstract percentage below 13, and never a scenario a child here has not
+#     seen.
+#
+#   * Every band's text uses only words that band's vocabulary ladder allows.
+#     The 5-8 text never says "interest"; the 9-12 text never says "compound".
+#     `Concept._vocabulary_is_permitted_at_band_min` fails the load if it does.
+#
+# The 16-18 and adult bands inherit 13-15's text where they have none of their
+# own -- see `for_band`. That is downward inheritance, deliberately: giving an
+# older reader younger wording is at worst plain, while the reverse would put
+# words in front of a child that the safety layer would then have to strip.
+
+id: module_01_saving
+title: Saving
+order: 1
+band_min: "5-8"
+band_max: adult
+
+concepts:
+  - id: save
+    name: Saving
+    band_min: "5-8"
+    vocabulary: [save, money, coin, wait, goal]
+
+  - id: spend
+    name: Spending
+    band_min: "5-8"
+    vocabulary: [spend, money, coin]
+
+  - id: goal
+    name: A saving goal
+    band_min: "5-8"
+    prerequisites: [save]
+    vocabulary: [goal, save, wait, money]
+
+  - id: need
+    name: Needs and wants
+    band_min: "9-12"
+    prerequisites: [spend]
+    vocabulary: [need, want, spend, money]
+
+  - id: budget
+    name: Making a plan for your money
+    band_min: "9-12"
+    prerequisites: [need, goal]
+    vocabulary: [budget, save, spend, need, want, goal]
+
+lessons:
+  # ── 1. What saving is ────────────────────────────────────────────────────
+  - id: l01_what_is_saving
+    module_id: module_01_saving
+    concept_id: save
+    order: 1
+    objective: The learner can say, in their own words, that saving is keeping money instead of using it now.
+    teach_points:
+      "5-8":
+        - "Saving means you keep your money instead of using it today."
+        - "The money does not go away. It waits for you."
+        - "Every coin you keep makes your pile bigger."
+      "9-12":
+        - "Saving is choosing to keep money now so you have more of it later."
+        - "Nothing is lost when you save -- the money is still yours, just not spent yet."
+        - "Small amounts kept often add up faster than most people expect."
+      "13-15":
+        - "Saving is deferring a purchase, not cancelling one."
+        - "The money you keep stays yours and stays available; what changes is when you use it."
+        - "Regular small amounts beat occasional large ones, because you actually keep doing them."
+      "16-18":
+        - "Saving is the decision to move money from now to later."
+        - "Consistency matters more than size: EC$10 every week is a habit, EC$500 once is an event."
+        - "Money kept in an account is money you can still reach -- saving is not the same as locking it away."
+    examples:
+      "5-8":
+        - "Grandma gives you two dollars. You buy one snow cone and keep the other dollar in your tin."
+        - "You want a football. Every week you put one coin in the tin until there are enough."
+      "9-12":
+        - "You get EC$5 for helping at the shop. You spend EC$2 on patties and keep EC$3 in your ASPIRE account."
+        - "A bicycle costs EC$300. Keeping EC$10 every week gets you there before Christmas next year."
+      "13-15":
+        - "A Carnival costume costs EC$450. Setting aside EC$25 a week from January means you are not scrambling in July."
+        - "You earn EC$80 on a Saturday job. Keeping EC$30 of it still leaves EC$50 to enjoy."
+      "16-18":
+        - "Your first pay packet is EC$900. Moving EC$150 to savings on payday means you never see it as spendable."
+        - "School supplies for the term cost about EC$400. Saved over eight months, that is EC$50 a month rather than one painful week."
+    suggested_widget_kind: compare
+    check_questions:
+      - id: q1_keep_or_use
+        prompt:
+          "5-8": "You keep a coin in your tin instead of buying sweets. What is that called?"
+          "9-12": "You put EC$3 away instead of spending it. What is that called?"
+          "13-15": "You move EC$25 into your account instead of spending it this week. What is that?"
+        options: [Saving, Spending]
+        answer: 0
+        hints:
+          "5-8":
+            - "Ooh, so close! Think about where the coin goes -- into your tin, or into the shop?"
+            - "It is one of these two. Which one keeps the coin?"
+            - "It is saving! You kept the coin instead of using it. That is what saving means."
+          "9-12":
+            - "Nearly! Think about whether the money left you or stayed with you."
+            - "It is one of these two. Which one means the money is still yours?"
+            - "It is saving! The money stayed with you for later. That is saving."
+          "13-15":
+            - "Close. Ask yourself whether the money left your account or moved within it."
+            - "It is one of these two. Which one still has the money in your name?"
+            - "It is saving -- the money moved from now to later, and it is still yours."
+
+      - id: q2_explain_back
+        prompt:
+          "5-8": "Can you tell Stella what saving means, in your own words?"
+          "9-12": "In your own words -- what does saving mean?"
+          "13-15": "Say it back to me in your own words: what is saving?"
+        graded: false
+        accept: [keep, keeping, later, save, not spend, put away, tin, account, wait]
+
+  # ── 2. Spending is not the enemy ────────────────────────────────────────
+  - id: l02_spending_is_fine
+    module_id: module_01_saving
+    concept_id: spend
+    order: 2
+    objective: The learner understands that spending is normal and that saving is a choice about timing, not a rule about never buying.
+    teach_points:
+      "5-8":
+        - "Spending is using your money to get something."
+        - "Spending is not naughty. Everybody spends."
+        - "The trick is to keep some too, so you can get bigger things later."
+      "9-12":
+        - "Spending is what money is for -- it is how you turn money into things you need and enjoy."
+        - "Saving everything and enjoying nothing is not a plan anybody keeps to."
+        - "The useful question is not whether to spend, but how much to keep first."
+      "13-15":
+        - "Money has one job: to be exchanged for something you want or need."
+        - "A plan you resent is a plan you abandon by March, so build the enjoyable spending in."
+        - "Keep first, spend the rest. The order is what makes it work, not the amount."
+    examples:
+      "5-8":
+        - "You buy a snow cone with one dollar. That is spending, and it is fine!"
+        - "You keep one dollar and spend one dollar. Now you have a treat AND a growing tin."
+      "9-12":
+        - "EC$5 on patties at break is spending. EC$5 into the account on Friday is saving. Most weeks you do both."
+        - "Buying a Christmas gift for your mother is spending -- and it is exactly what you saved for."
+      "13-15":
+        - "You earn EC$200 in December helping at a shop. EC$120 saved, EC$80 for Christmas gifts is a plan you will actually keep."
+        - "Nobody sticks to a rule that says no snow cones until 2028."
+    suggested_widget_kind: allocator
+    check_questions:
+      - id: q1_spending_ok
+        prompt:
+          "5-8": "Is it bad to spend some of your money?"
+          "9-12": "Is spending some of your money a problem?"
+          "13-15": "Does spending part of your money break a savings plan?"
+        options: ["No -- it is fine", "Yes -- always"]
+        answer: 0
+        hints:
+          "5-8":
+            - "Think about the snow cone. Was that a bad thing?"
+            - "It is one of these two. Did we say spending was naughty?"
+            - "It is fine to spend! We said everybody spends. The trick is to keep some too."
+          "9-12":
+            - "Think about a plan you could actually stick to for a whole year."
+            - "It is one of these two. Which one describes a plan somebody keeps?"
+            - "Spending is fine. What matters is keeping some first."
+          "13-15":
+            - "Think about which plan survives contact with December."
+            - "One of these two. Which describes a plan you would still be following in March?"
+            - "It is fine. A plan with no enjoyment in it is a plan you abandon."
+
+  # ── 3. A goal makes saving easier ───────────────────────────────────────
+  - id: l03_a_goal
+    module_id: module_01_saving
+    concept_id: goal
+    order: 3
+    objective: The learner can name a saving goal and work out roughly how long it takes to reach it.
+    teach_points:
+      "5-8":
+        - "A goal is the thing you are saving for."
+        - "When you can picture it, waiting is much easier."
+        - "Every coin gets you closer to it."
+      "9-12":
+        - "A goal turns saving from a rule into a plan with an ending."
+        - "Write down what it is and what it costs -- a goal you have not priced is a wish."
+        - "Then work out how much to keep each week to get there."
+      "13-15":
+        - "A goal gives your saving a deadline, and a deadline is what makes the weekly amount obvious."
+        - "Price it, date it, divide it. That is the whole method."
+        - "A goal you cannot reach in the time you have is not motivating -- it is discouraging. Adjust one or the other."
+    examples:
+      "5-8":
+        - "Your goal is a football. It costs ten coins. You have four. Six more to go!"
+        - "Your goal is a gift for your brother at Christmas."
+      "9-12":
+        - "A bicycle costs EC$300. If you keep EC$10 a week, that is 30 weeks -- about seven months."
+        - "New boots for school cost EC$80. EC$5 a week gets you there in 16 weeks."
+      "13-15":
+        - "A Carnival costume is EC$450 and Carnival is 26 weeks away. That is about EC$18 a week."
+        - "A phone costs EC$600. Twelve months of EC$50 gets there; six months of EC$50 does not."
+    suggested_widget_kind: timeline
+    check_questions:
+      - id: q1_weeks_to_goal
+        prompt:
+          "5-8": "Your goal costs ten coins. You put in one coin every week. How many weeks?"
+          "9-12": "A goal costs EC$100 and you keep EC$10 a week. How many weeks?"
+          "13-15": "A goal costs EC$450 and you keep EC$25 a week. Roughly how many weeks?"
+        options: ["Ten", "Two", "One hundred"]
+        answer: 0
+        hints:
+          "5-8":
+            - "So close! Count how many coins you need, and how many you put in each week."
+            - "It is one of these two: ten, or two?"
+            - "It is ten! Ten coins, one each week, is ten weeks. Well counted."
+          "9-12":
+            - "Nearly. How many EC$10 fit into EC$100?"
+            - "It is one of these two: ten, or two?"
+            - "It is ten. EC$100 divided by EC$10 a week is ten weeks."
+          "13-15":
+            - "Close. Divide the goal by what you keep each week."
+            - "It is one of these two: ten, or one hundred?"
+            - "It is about ten weeks -- EC$450 at EC$25 a week is eighteen, so ten is the closest of these."
+
+      - id: q2_name_a_goal
+        prompt:
+          "5-8": "What would YOU save for? Tell Stella."
+          "9-12": "What is one thing you would save for?"
+          "13-15": "Name a goal of your own, and roughly what it costs."
+        graded: false
+        accept: [bike, bicycle, phone, shoes, boots, gift, costume, game, ball, book, school]
+
+  # ── 4. Needs and wants ──────────────────────────────────────────────────
+  - id: l04_needs_and_wants
+    module_id: module_01_saving
+    concept_id: need
+    order: 4
+    objective: The learner can sort ordinary purchases into needs and wants, and sees that the line is a judgement rather than a rule.
+    teach_points:
+      "9-12":
+        - "A need is something you have to have. A want is something you would like."
+        - "Needs come first when the money is short -- that is the only rule here."
+        - "Plenty of things sit in between, and reasonable people put them on different sides."
+      "13-15":
+        - "Needs are non-negotiable: food, school fees, transport to get there."
+        - "Wants are everything else, and wanting things is not a character flaw."
+        - "The line moves with circumstances. Shoes are a need; a particular brand of shoes is a want."
+    examples:
+      "9-12":
+        - "School shoes are a need. A third pair in your favourite colour is a want."
+        - "Lunch is a need. Patties every single day is a want."
+        - "A bus fare to school is a need. A taxi because you left late is somewhere in between."
+      "13-15":
+        - "A school bag is a need. The one everyone has this year is a want."
+        - "Data for your schoolwork is a need. Data for six hours of video is a want."
+        - "A Carnival costume is a want -- and a want you have saved for is a perfectly good reason to spend."
+    suggested_widget_kind: sort_buckets
+    check_questions:
+      - id: q1_sort
+        prompt:
+          "9-12": "Lunch at school -- need or want?"
+          "13-15": "Transport to get to school -- need or want?"
+        options: [Need, Want]
+        answer: 0
+        hints:
+          "9-12":
+            - "Think about what happens to your day if you do not have it."
+            - "One of these two. Could you get through the school day without it?"
+            - "It is a need. You have to eat, so lunch comes before the extras."
+          "13-15":
+            - "Ask what stops happening without it."
+            - "One of these two. Which one means you cannot attend?"
+            - "It is a need -- without it you do not get to school at all."
+
+  # ── 5. A simple plan ────────────────────────────────────────────────────
+  - id: l05_a_simple_plan
+    module_id: module_01_saving
+    concept_id: budget
+    order: 5
+    objective: The learner can split an amount of money into keeping, spending and sharing, and explain their split.
+    teach_points:
+      "9-12":
+        - "A plan for your money says where each part goes before it arrives."
+        - "One easy plan: keep some, spend some, share some."
+        - "There is no single right split -- but deciding beforehand beats deciding at the shop."
+      "13-15":
+        - "Decide the split on payday, not at the till. The order is what makes it hold."
+        - "Keep first: move the saving out before the spending money is in front of you."
+        - "Review it when your money changes, not every week -- a plan you rewrite constantly is not a plan."
+    examples:
+      "9-12":
+        - "You get EC$10 for helping out. EC$4 kept, EC$5 spent, EC$1 shared with your little sister."
+        - "Christmas money is EC$50. Half kept for the bicycle, half for gifts."
+      "13-15":
+        - "EC$200 from a Saturday job: EC$80 to the account, EC$100 to spend, EC$20 towards a gift for your mother."
+        - "You earn more in December than in February -- keep the same percentage, not the same amount."
+    suggested_widget_kind: allocator
+    check_questions:
+      - id: q1_when_to_decide
+        prompt:
+          "9-12": "When is the best time to decide how much to keep?"
+          "13-15": "When should the split be decided?"
+        options: ["Before you spend any", "At the shop", "At the end of the week"]
+        answer: 0
+        hints:
+          "9-12":
+            - "Think about what is left at the end of a week when you did not decide first."
+            - "It is one of these two: before you spend, or at the shop?"
+            - "Before you spend any! It is much easier to keep money you have not already got in your hand."
+          "13-15":
+            - "Think about which order actually leaves something to save."
+            - "One of these two: before, or at the end of the week?"
+            - "Before. Keeping first is the whole method -- what is left at the end of a week is usually nothing."
+
+      - id: q2_explain_plan
+        prompt:
+          "9-12": "Tell me your own plan for EC$10. Where would each part go?"
+          "13-15": "Describe your own split, and say why."
+        graded: false
+        accept: [keep, save, spend, share, account, gift, goal, half, some]

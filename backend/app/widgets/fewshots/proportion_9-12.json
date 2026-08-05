@@ -1,0 +1,18 @@
+[
+  {
+    "question": "how much of my money should i keep",
+    "widget": {
+      "kind": "proportion",
+      "v": 1,
+      "concept_id": "budget",
+      "title": "Three out of ten",
+      "caption": "If you get EC$10, keeping EC$3 is a good start.",
+      "a11y_text": "Ten coins. Three of them are highlighted as the ones you keep; the other seven are yours to spend.",
+      "total": 10,
+      "highlighted": 3,
+      "icon": "coin",
+      "highlighted_label": "coins you keep",
+      "remainder_label": "coins you spend"
+    }
+  }
+]

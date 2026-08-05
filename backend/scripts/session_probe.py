@@ -84,25 +84,51 @@ def mint_session(base_url: str) -> str:
     return token
 
 
+def graph_session(
+    base_url: str, *, thread_id: str, token: str, timeout: float = 20.0
+) -> str:
+    """Exchange an ACCOUNT token for a GRAPH session token.
+
+    Two different credentials. `token` proves who the caller is; what comes back
+    carries the persona, age band and account status the graph routes on, all
+    derived server-side from the account record. This probe exists to measure an
+    authenticated continuing turn, so it has to make the same two calls a real
+    authenticated client makes.
+    """
+    request = urllib.request.Request(
+        f"{base_url}/v2/session",
+        data=json.dumps({"session_id": thread_id}).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read())["token"]
+
+
 def ask(
     base_url: str, question: str, *, thread_id: str | None, token: str, timeout: float
 ) -> dict[str, Any]:
-    """One streamed turn, timed from the client as well as the server."""
-    payload = json.dumps(
-        {
-            "message": question,
-            "persona": "orion",
-            "language": "en",
-            "thread_id": thread_id,
-        }
-    ).encode()
+    """One streamed turn, timed from the client as well as the server.
+
+    `thread_id` IS the graph session id -- one identifier for the conversation,
+    the checkpointer thread and the games session -- so a continuing turn is a
+    session minted for the same id, not a `thread_id` field in the body.
+    """
+    thread_id = thread_id or str(uuid.uuid4())
+    session_token = graph_session(
+        base_url, thread_id=thread_id, token=token, timeout=timeout
+    )
+
+    payload = json.dumps({"message": question}).encode()
     request = urllib.request.Request(
-        f"{base_url}/chat/stream",
+        f"{base_url}/v2/chat/stream",
         data=payload,
         headers={
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {session_token}",
         },
     )
 
@@ -111,25 +137,32 @@ def ask(
     returned_thread: str | None = None
     error: str | None = None
 
+    # The v2 wire: `event:` names the kind, `data:` carries the body, and the
+    # two are separate lines -- so the name has to be remembered across them.
+    kind = ""
     with urllib.request.urlopen(request, timeout=timeout) as response:
         for raw in response:
             line = raw.decode("utf-8", "replace").strip()
+            if line.startswith("event:"):
+                kind = line[6:].strip()
+                continue
             if not line.startswith("data:"):
                 continue
             try:
                 event = json.loads(line[5:].strip())
             except json.JSONDecodeError:
                 continue
-            kind = event.get("type")
-            if kind == "TEXT_MESSAGE_CONTENT" and first_token_at is None:
+            if kind == "token" and first_token_at is None:
                 first_token_at = time.perf_counter()
-            elif kind == "RUN_STARTED":
-                returned_thread = event.get("threadId")
-            elif kind == "RUN_ERROR":
+            elif kind == "done":
+                returned_thread = (event.get("usage") or {}).get("thread_id")
+            elif kind == "error":
                 error = event.get("message", "unknown")
 
     return {
-        "thread_id": returned_thread,
+        # The turn echoes the id it ran on. Falls back to the one we minted for,
+        # which is the same value -- a `done` without it is an older server.
+        "thread_id": returned_thread or thread_id,
         "client_ttft_ms": None
         if first_token_at is None
         else round((first_token_at - started) * 1000.0, 3),

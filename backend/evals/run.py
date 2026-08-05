@@ -264,12 +264,39 @@ async def judge_refusals(rows: list[dict]) -> list[dict]:
 
 
 async def score_answers(cases: list[dict]) -> list[dict]:
-    """Run the real agent and score grounding / refusal / latency."""
-    from app.agent import get_agent
-    from app.db.repository import ConversationContext
-    from app.memory import build_prompt
-    from app.rag import context_from, get_retriever
+    """Run the real answering path and score grounding / refusal / latency.
 
+    ## What "the real answering path" is now
+
+    The QA subgraph -- `rewrite_query -> hybrid_retrieve -> rerank -> generate ->
+    ground_check` -- invoked directly, with no checkpointer and no database
+    writes. That is a change of substance and not of plumbing: the old harness
+    called `get_agent()`, which no longer exists, and did its own dense-only
+    retrieval and prompt assembly to feed it.
+
+    Two consequences worth stating before reading any number out of this file
+    against the P8 baselines:
+
+      * `retrieved` now comes from the FUSED result (dense + BM25, reciprocal
+        rank fusion, then a cross-encoder), not from a dense top-k. Hit rate is
+        measured against a better retriever, so it should be higher, and a
+        comparison against the old figure is a comparison across two systems.
+      * an answer can now be REFUSED by `ground_check` rather than by the model
+        deciding to refuse. That is the intended behaviour -- an answer that
+        cites nothing in the corpus is escalated instead of guessed -- and it
+        shows up here as `refused`.
+
+    The band is `adult` and the persona `aurora` for every case, because
+    `golden.yaml` predates age bands and its expected answers are written for a
+    reader with no vocabulary ceiling. Scoring child bands is
+    `evals/harness.py`'s job and it has its own cases for it.
+    """
+    from langchain_core.messages import HumanMessage
+
+    from app.agents.qa.graph import build_production_qa
+    from app.graph.state import initial_state
+
+    graph = build_production_qa()
     rows = kb_rows()
     out = []
     for case in cases:
@@ -278,29 +305,23 @@ async def score_answers(cases: list[dict]) -> list[dict]:
         reply = ""
         error = None
         try:
-            # Retrieval is not a tool any more (P13-005), so the harness has to do
-            # what the request path does: search first, put the corpus in the
-            # prompt, then call the agent once. Invoking with the bare question
-            # would hand the model no context at all and score every case as a
-            # refusal -- measuring the harness rather than the assistant.
-            documents = await get_retriever().ainvoke(case["q"])
-            retrieved += [
-                d.metadata.get("id") for d in documents if hasattr(d, "metadata")
-            ]
-            prepared = build_prompt(
-                case["q"], ConversationContext(), knowledge=context_from(documents)
+            state = initial_state(
+                session_id=f"eval-{case['id']}-{int(time.time())}",
+                user_id="eval",
+                device_id="eval",
+                persona="aurora",
+                age_band="adult",
+                account_status="prospect",
+                locale=case["lang"],
             )
+            state["active_agent"] = "qa_agent"
+            state["messages"] = [HumanMessage(content=case["q"])]
 
-            result = await get_agent().ainvoke(
-                {"messages": prepared.messages},
-                config={
-                    "configurable": {
-                        "thread_id": f"eval-{case['id']}-{int(time.time())}",
-                        "persona": case.get("persona"),
-                        "language": case["lang"],
-                    }
-                },
-            )
+            result = await graph.ainvoke(state)
+
+            retrieved += [
+                chunk.kb_id for chunk in (result.get("retrieved") or [])
+            ]
             msgs = result.get("messages", [])
             content = msgs[-1].content if msgs else ""
             reply = (

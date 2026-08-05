@@ -108,30 +108,27 @@ def test_two_callers_do_not_share_a_window(client, monkeypatch):
     assert client.post("/api/title", json=body, headers=fresh).status_code == 200
 
 
-def test_chat_is_metered_without_requiring_a_session(client, monkeypatch):
+def test_chat_is_metered_without_requiring_a_session(client):
     """Anonymous questioning stays supported, and stays counted.
 
     Asking a question has never required identifying yourself and must not start
-    to. The limit therefore falls back to the caller's address -- which is why it
-    is sized for a school rather than for one child.
+    to. With no graph session token the limit falls back to the caller's address
+    -- which is why it is sized for a school rather than for one child.
+
+    The refusal has to be a REAL 429 and not an `error` event inside a 200
+    stream: `_meter` runs in the route handler, before `StreamingResponse` is
+    constructed, precisely because a status line that has already gone out
+    cannot be taken back. That is what this asserts.
     """
-    calls = {"n": 0}
-
-    class _Agent:
-        async def ainvoke(self, *args, **kwargs):
-            calls["n"] += 1
-            raise AssertionError("the agent must not run once the window is full")
-
     limit = get_settings().chat_messages_per_window
     body = {"message": "What is ASPIRE?"}
 
-    # Fill the window without spending anything: the agent raising is fine here,
-    # it only has to prove the request got past the limiter.
+    # Fill the window. Each of these is answered with an `unauthenticated`
+    # error event -- there is no token -- which is fine: it only has to prove
+    # the request got past the limiter and was counted.
     for _ in range(limit):
-        client.post("/chat", json=body)
+        assert client.post("/v2/chat/stream", json=body).status_code == 200
 
-    monkeypatch.setattr(main, "get_agent", lambda *a, **k: _Agent())
-    refused = client.post("/chat", json=body)
-
+    refused = client.post("/v2/chat/stream", json=body)
     assert refused.status_code == 429
-    assert calls["n"] == 0, "a refused turn must never reach the model"
+    assert "Retry-After" in refused.headers

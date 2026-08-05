@@ -1,0 +1,36 @@
+[
+  {
+    "question": "where does my money go",
+    "widget": {
+      "kind": "flow_diagram",
+      "v": 1,
+      "concept_id": "save",
+      "title": "Where it goes",
+      "a11y_text": "Money comes to you, then some goes into the tin and some goes to the shop.",
+      "steps": [
+        {
+          "id": "get",
+          "label": "You get money",
+          "detail": "Grandma, or helping out",
+          "colour": "neutral"
+        },
+        {
+          "id": "keep",
+          "label": "Some in the tin",
+          "detail": "It waits for you",
+          "colour": "accent"
+        },
+        {
+          "id": "spend",
+          "label": "Some to the shop",
+          "detail": "A snow cone today",
+          "colour": "neutral"
+        }
+      ],
+      "edge_labels": [
+        "then",
+        "and"
+      ]
+    }
+  }
+]

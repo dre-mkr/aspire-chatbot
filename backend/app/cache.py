@@ -3,12 +3,16 @@
 Valkey implements the Redis 7.2 command set, so redis-py and arq are unchanged
 from their Redis usage — there is no Valkey-specific client and none is wanted.
 
-This is a NORMALIZED EXACT-MATCH cache, not a semantic one. Semantic caching
-needs the valkey-search module for the FT.* commands, which is a deployment
-dependency, and the traffic here does not justify it: the knowledge base is 332
-rows of programme FAQ and the repeat questions are near-identical strings, which
+Layer 1 is a NORMALIZED EXACT-MATCH cache. Semantic caching over the valkey-search
+module's FT.* commands was never needed: the knowledge base is 706 rows of
+programme FAQ and the repeat questions are near-identical strings, which
 normalisation already collapses. Anything genuinely needing similarity should
 ask pgvector, which is right there and exact about what it is doing.
+
+A layer 2 that collapses PHRASINGS rather than spellings does exist further down,
+built on pgvector's embeddings rather than on valkey-search. It ships disabled on
+a measurement -- see `semantic_shelf_key` and `config.semantic_cache_enabled` --
+and has no caller. Both facts are deliberate and both are written down there.
 """
 
 from __future__ import annotations
@@ -99,6 +103,7 @@ def cache_key(
     language: str,
     persona: str | None,
     account_status: str | None,
+    age_band: str | None = None,
 ) -> str:
     """The key for one answer.
 
@@ -109,6 +114,19 @@ def cache_key(
     assistant is allowed to say, so an answer cached for one must never reach
     another.
 
+    ## Age band, and why persona is not a substitute for it
+
+    Added when the graph became the only chat path. `safety_out` caps an answer
+    by BAND -- 35 words at 5-8, 70 at 9-12, 180 at 16-18 -- and one persona
+    spans three of them: `orion` is the mascot for 9-12, 13-15 and 16-18 alike.
+    Keyed on persona alone, a 180-word answer written for a sixteen-year-old
+    would be served verbatim to a nine-year-old whose gate would have cut it to
+    70, and the gate cannot help because a cache hit never reaches it.
+
+    Defaulted to None rather than made required so that a caller with no band --
+    there are none on the request path, but the eval harness and the tests
+    construct keys directly -- keeps the shape it had.
+
     Hashed, so a long question cannot produce an unbounded key and no user text
     leaks into logs or `KEYS` output.
     """
@@ -118,6 +136,7 @@ def cache_key(
             "lang": (language or "en").lower(),
             "persona": persona or "",
             "status": account_status or "",
+            "band": age_band or "",
             # See `corpus_fingerprint`: an edited knowledge base must not keep
             # serving answers built from the old one.
             "kb": corpus_fingerprint(),
@@ -139,7 +158,7 @@ def cache_key(
     #
     # Changing the key retires every existing entry, which costs one cold turn per
     # distinct question and is the cheapest possible consequence.
-    return f"{namespace()}answer:v1:{digest}"
+    return f"{namespace()}answer:v2:{digest}"
 
 
 def valkey_url() -> str | None:
@@ -214,6 +233,7 @@ async def get_answer(
     language: str,
     persona: str | None,
     account_status: str | None,
+    age_band: str | None = None,
 ) -> dict[str, Any] | None:
     """A previously cached answer, or None.
 
@@ -225,7 +245,11 @@ async def get_answer(
         return None
 
     key = cache_key(
-        query, language=language, persona=persona, account_status=account_status
+        query,
+        language=language,
+        persona=persona,
+        account_status=account_status,
+        age_band=age_band,
     )
     try:
         raw = await get_client().get(key)
@@ -249,13 +273,18 @@ async def put_answer(
     language: str,
     persona: str | None,
     account_status: str | None,
+    age_band: str | None = None,
 ) -> None:
     """Cache one answer. Never raises, for the same reason as `get_answer`."""
     if not cache_enabled():
         return
 
     key = cache_key(
-        query, language=language, persona=persona, account_status=account_status
+        query,
+        language=language,
+        persona=persona,
+        account_status=account_status,
+        age_band=age_band,
     )
     try:
         await get_client().set(
@@ -583,18 +612,52 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
-def semantic_shelf_key(*, language: str, persona: str | None, account_status: str | None) -> str:
+#: LAYER 2 IS OFF AND HAS NO CALLER. Both facts are deliberate, and the second
+#: follows from the first rather than the other way round.
+#:
+#: OFF: `semantic_cache_enabled` defaults to False on a measurement, not a hunch
+#: -- `scripts/semantic_margin.py` found the two populations this gate must
+#: separate OVERLAP. "Is ASPIRE for children aged 5 to 18?" ~ "...aged 5 to 12?"
+#: sits at 0.9645 cosine while every genuine paraphrase measured below the 0.95
+#: threshold. See `config.py`, where that decision is written down in full.
+#:
+#: NO CALLER: `/chat` and `/chat/stream` were the call sites and are gone. The
+#: graph path consults layer 1 only, and re-wiring layer 2 would cost a query
+#: embedding (~400 ms) BEFORE routing -- paid on every turn including the card
+#: turns and refusals that never retrieve. That is a real cost to enable a layer
+#: measured as unsafe to turn on, so it was not spent.
+#:
+#: What is NOT deferred any more (P15-009): the age band is in the key. It was
+#: left out on the reasoning that fixing a path with no callers is untestable
+#: churn -- which was wrong, since `tests/test_semantic_cache.py` exercises this
+#: machinery directly with the flag forced on. Layer 1 needs the band because
+#: one persona spans three bands with different word caps -- `orion` is 9-12,
+#: 13-15 AND 16-18 -- so a 180-word answer written for a sixteen-year-old would
+#: otherwise be served to a nine-year-old whose gate would have cut it to 70,
+#: and a cache hit never reaches `safety_out`. Layer 2 had exactly that hole.
+#: It no longer does, so whoever gives this a caller inherits a safe key rather
+#: than a note asking them to fix one.
+def semantic_shelf_key(
+    *,
+    language: str,
+    persona: str | None,
+    account_status: str | None,
+    age_band: str | None = None,
+) -> str:
     material = json.dumps(
         {
             "lang": (language or "en").lower(),
             "persona": persona or "",
             "status": account_status or "",
+            "band": age_band or "",
             "kb": corpus_fingerprint(),
         },
         sort_keys=True,
     )
     digest = hashlib.sha256(material.encode()).hexdigest()[:32]
-    return f"{namespace()}semindex:v1:{digest}"
+    # v2 with the band, mirroring the `answer:` bump. Retires every shelf built
+    # under the bandless key rather than leaving them reachable.
+    return f"{namespace()}semindex:v2:{digest}"
 
 
 def semantic_enabled() -> bool:
@@ -607,18 +670,26 @@ async def semantic_lookup(
     language: str,
     persona: str | None,
     account_status: str | None,
+    age_band: str | None = None,
 ) -> dict[str, Any] | None:
     """The cached answer of the nearest same-audience question, if close enough.
 
     Returns the layer-1 payload dict, or None. Never raises: every failure path
     is a miss, exactly as layer 1 behaves.
+
+    `age_band` is part of the audience, for the reason spelled out above
+    `semantic_shelf_key`: a hit here bypasses `safety_out`'s word cap just as a
+    layer-1 hit does, so the band has to be in the key rather than in the gate.
     """
     if not semantic_enabled():
         return None
 
     probe = _shelf_vector(vector)
     shelf = semantic_shelf_key(
-        language=language, persona=persona, account_status=account_status
+        language=language,
+        persona=persona,
+        account_status=account_status,
+        age_band=age_band,
     )
     try:
         entries = await get_client().lrange(shelf, 0, -1)
@@ -672,11 +743,17 @@ async def semantic_register(
     language: str,
     persona: str | None,
     account_status: str | None,
+    age_band: str | None = None,
 ) -> None:
     """Add this turn's query to the shelf its future paraphrases will search.
 
     Runs after the answer has been cached and after the reply has gone out, so
     it is never on anybody's critical path. Never raises.
+
+    The band goes to BOTH the shelf key and the layer-1 `cache_key` this entry
+    points at. Getting only the shelf right would leave the pointer aimed at a
+    key nothing wrote, which reads as a permanent miss -- quiet, but it would
+    make the whole layer dead on arrival the day it was switched on.
     """
     if not semantic_enabled():
         return
@@ -685,12 +762,19 @@ async def semantic_register(
         {
             "v": _pack_vector(_shelf_vector(vector)),
             "k": cache_key(
-                query, language=language, persona=persona, account_status=account_status
+                query,
+                language=language,
+                persona=persona,
+                account_status=account_status,
+                age_band=age_band,
             ),
         }
     )
     shelf = semantic_shelf_key(
-        language=language, persona=persona, account_status=account_status
+        language=language,
+        persona=persona,
+        account_status=account_status,
+        age_band=age_band,
     )
     try:
         pipe = get_client().pipeline()
@@ -715,6 +799,28 @@ async def semantic_register(
 # so the guarantee holds even for a hypothetical future key that forgets the
 # fingerprint.
 
+#: Every key version this cache has ever written, live and retired.
+#:
+#: RETIRED VERSIONS ARE LISTED ON PURPOSE. A version bump retires entries by
+#: making them unreachable, which is correct for safety and useless for space --
+#: they sit there holding memory until their TTL runs out. Flush is the thing
+#: that reclaims them, so it has to know the old names.
+#:
+#: This list is also the bug this constant exists to prevent. `answer:` went
+#: `v1` -> `v2` when the age band entered the key (P15-009) and this sweep was
+#: not updated with it, so `flush_answers` matched nothing for every answer it
+#: was supposed to delete -- a reload reported "0 flushed" and left the whole
+#: cache in place. It had been verified working at 71 keys -> 0 before the bump.
+#: Silent, because deleting nothing looks exactly like a cache that was empty.
+_FLUSH_PREFIXES = (
+    "answer:v2:",
+    "answer:v1:",  # retired by P15-009
+    "semindex:v2:",
+    "semindex:v1:",  # retired alongside it
+    "embed:v1:",
+)
+
+
 async def flush_answers() -> int:
     """Delete every cached answer, semantic shelf and embedding. Returns count."""
     client = get_client()
@@ -722,7 +828,7 @@ async def flush_answers() -> int:
         return 0
     deleted = 0
     try:
-        for prefix in ("answer:v1:", "semindex:v1:", "embed:v1:"):
+        for prefix in _FLUSH_PREFIXES:
             async for key in client.scan_iter(match=f"{namespace()}{prefix}*", count=200):
                 await client.delete(key)
                 deleted += 1

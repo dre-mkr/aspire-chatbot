@@ -50,11 +50,25 @@ def new_email() -> str:
 
 
 def converse(client: TestClient, token: str, message: str) -> str:
+    """One real turn, so there is a conversation to claim.
+
+    Two steps now rather than one. `/chat` is gone; a turn is a graph session
+    token minted from the account token, then a stream. Whether the stream
+    produces an answer is beside the point here -- `turn.open_conversation`
+    records the question and the owner before the graph runs, which is the row
+    these tests are about.
+    """
     thread_id = str(uuid.uuid4())
-    r = client.post(
-        "/chat", json={"message": message, "thread_id": thread_id}, headers=auth(token)
+    minted = client.post(
+        "/v2/session", json={"session_id": thread_id}, headers=auth(token)
     )
-    assert r.status_code in (200, 502), r.text
+    assert minted.status_code == 200, minted.text
+    r = client.post(
+        "/v2/chat/stream",
+        json={"message": message},
+        headers=auth(minted.json()["token"]),
+    )
+    assert r.status_code == 200, r.text
     return thread_id
 
 

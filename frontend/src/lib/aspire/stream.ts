@@ -1,224 +1,234 @@
 /**
- * The chat transport, over server-sent events.
+ * The chat transport. One turn, streamed, through the graph.
  *
- * `@tanstack/ai-client` is used for exactly one thing: its SSE connection
- * adapter, which opens the request and hands back an async iterable of parsed
- * AG-UI chunks. Its `ChatClient` is deliberately not used — that owns message
- * state, and message state belongs to `use-conversation`. Two things believing
- * they own the transcript is a worse problem than the one the library solves.
+ * ## What changed, and what deliberately did not
  *
- * ## Shape
+ * The wire is now `POST /v2/chat/stream` and the events are ASPIRE's own
+ * (`token`, `directive`, `done`, `error`) rather than AG-UI's. What is
+ * unchanged is this function's shape: it still resolves to the same
+ * `AskResult`, so the typewriter, the cards, the sources and the chips cannot
+ * tell which backend produced it. `use-conversation.ts` did not have to change
+ * to switch transports, which is the whole point of keeping this seam.
  *
- * This resolves to the same `AskResult` that `askAspire` returns, so everything
- * downstream — the typewriter, the cards, the sources, the follow-ups — cannot
- * tell which transport produced it. That is the point of this step: the wire
- * changes and nothing else does.
+ * `@tanstack/ai-client` is gone with AG-UI. It was used for one thing — an SSE
+ * connection adapter — and `lib/stream/client.ts` reads the body itself, with a
+ * frame splitter that is tested directly under `node --test`.
  *
- * `onDelta` is the live drain: every token is handed to the typewriter as it
- * arrives, and the typewriter decides what is safe to show — see `settled.ts`.
- * The pacing is unchanged, so a reply now starts being read while its ending is
- * still being written.
+ * ## Where the v1 concepts went
+ *
+ *   `sources`      ← the `citations` directive
+ *   `followUps`    ← the `quick_replies` directive. NOT a second model call any
+ *                    more: the agents emit chips from what they actually did,
+ *                    so a turn no longer pays for two questions to put under
+ *                    itself. They arrive with the turn rather than seconds
+ *                    after it, which is why there is no late `follow_ups`
+ *                    event to wait for.
+ *   `startedGame`  ← the `game` directive
+ *   `startedEligibility` ← the `eligibility` directive
+ *   `directives`   ← everything else, in ordinal order, for the transcript to
+ *                    render inline. New, and additive: a caller that ignores it
+ *                    behaves exactly as it did.
+ *
+ * Both card directives are REMOVED from `directives` once mapped. That is what
+ * stops a game being mounted twice — once by the transcript's card row and once
+ * by the directive renderer — which is a failure that would only show up as two
+ * server-side game sessions racing over one thread.
  *
  * ## Falling back
  *
- * Only when the stream never opened: a 404 from an older deployment, a proxy
- * that will not do `text/event-stream`, a network refusal. Then `/chat` answers
- * the turn and the reader sees nothing unusual.
- *
- * A stream that opened and then broke is NOT retried, and that is deliberate.
- * The service records the question before it answers, so retrying would ask the
- * model a second time and append a second copy of the turn. A mid-stream
- * failure is a failed turn, reported exactly as a failed `/chat` is.
+ * There is nothing to fall back to. `/chat` and `/chat/stream` are gone, and a
+ * second path that answered the same question differently is how a streaming
+ * transport quietly becomes a second product. A stream that never opened and a
+ * stream that broke are both failed turns, reported as such — the service
+ * records the question before it answers, so retrying would ask the model twice
+ * and append a second copy of the turn.
  */
-import { fetchServerSentEvents } from "@tanstack/ai-client";
+
+import { streamTurn } from "../stream/client";
+import { forget, graphSession } from "../stream/session";
+import type {
+	CitationsDirective,
+	Directive,
+	EligibilityDirective,
+	GameDirective,
+	QuickRepliesDirective,
+	WidgetInteraction,
+} from "../stream/types";
 import {
 	type AskInput,
 	type AskResult,
 	AspireError,
-	askAspire,
 	type Source,
 	type StartedEligibility,
 	type StartedGame,
 } from "./api";
-import { authHeaders } from "./session";
 
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+/** Directive types the transcript renders through its own card row, not inline. */
+const CARD_TYPES = new Set(["game", "eligibility"]);
 
-/** Matches `askAspire`. A model call is slow; a stalled socket is not an answer. */
-const TIMEOUT_MS = 45000;
-
-/** What the service sends once the turn is decided. Mirrors `ChatResponse`. */
-interface TurnPayload {
-	reply: string;
-	thread_id: string;
-	sources?: Array<Source>;
-	follow_ups?: Array<string>;
-	game_started?: {
-		game_type?: string;
-		display_name?: string;
-		kind?: string;
-		total?: number;
-	} | null;
-	eligibility_started?: { check?: string; language?: string } | null;
+/** A new conversation needs an id before the first request, not after it. */
+function newThreadId(): string {
+	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+		return crypto.randomUUID();
+	}
+	// Older Safari on a school tablet. Not a security value — it names a
+	// conversation — so `Math.random` is adequate and `crypto` is preferred
+	// only because it is there.
+	return `t-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
 
-function toResult(payload: TurnPayload, language: string): AskResult {
-	const game = payload.game_started;
-	const check = payload.eligibility_started;
-	return {
-		reply: payload.reply,
-		threadId: payload.thread_id,
-		sources: payload.sources ?? [],
-		followUps: payload.follow_ups ?? [],
-		startedGame: game
-			? ({
-					gameType: game.game_type ?? "",
-					displayName: game.display_name ?? "",
-					kind: game.kind ?? "",
-					total: game.total ?? 0,
-				} satisfies StartedGame)
-			: null,
-		startedEligibility: check
-			? ({
-					check: check.check ?? "aspire_eligibility",
-					language: check.language ?? language,
-				} satisfies StartedEligibility)
-			: null,
-	};
-}
-
-/** One turn, streamed. Resolves with the whole answer, as `askAspire` does. */
+/** One turn, streamed. Resolves with the whole answer. */
 export async function streamAspire(
 	input: AskInput & {
 		onDelta?: (delta: string) => void;
 		onTextEnd?: () => void;
 		onTurn?: (result: AskResult) => void;
+		/**
+		 * A widget interaction instead of a typed message.
+		 *
+		 * Same transport, same result shape, a different endpoint: what a child
+		 * did with a widget is a turn the agent has to answer referencing their
+		 * actual numbers, not an event to be counted. The interaction rides on
+		 * `safety_flags` server-side rather than in `messages`, so it never
+		 * enters the transcript the model reads back.
+		 */
+		interaction?: WidgetInteraction;
 	},
 ): Promise<AskResult> {
 	const {
 		message,
 		threadId,
-		simpleMode,
 		persona,
 		language = "en",
+		interaction,
 		onDelta,
 		onTextEnd,
 		onTurn,
 		signal,
 	} = input;
 
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+	const thread = threadId ?? newThreadId();
 
-	// The caller's signal feeds the same controller, so Stop, navigation and
-	// unmount end the stream and the model call behind it (P0-002).
-	const onExternalAbort = () => controller.abort();
-	if (signal) {
-		if (signal.aborted) controller.abort();
-		else signal.addEventListener("abort", onExternalAbort, { once: true });
-	}
-
-	/** Whether anything at all came back, which decides if falling back is safe. */
-	let opened = false;
-	let payload: TurnPayload | null = null;
-	let failure: string | null = null;
-
+	let session: Awaited<ReturnType<typeof graphSession>>;
 	try {
-		const connection = fetchServerSentEvents(`${API_URL}/chat/stream`, {
-			headers: { "Content-Type": "application/json", ...authHeaders() },
-			body: {
-				message,
-				thread_id: threadId,
-				simple_mode: simpleMode,
-				persona,
-				language,
-			},
-			signal: controller.signal,
-		});
-
-		for await (const chunk of connection.connect(
-			[],
-			undefined,
-			controller.signal,
-		)) {
-			opened = true;
-			const event = chunk as {
-				type?: string;
-				delta?: string;
-				name?: string;
-				value?: unknown;
-				message?: string;
-			};
-
-			if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) {
-				onDelta?.(event.delta);
-				continue;
-			}
-			// The prose is final, but the turn is not: sources, follow-ups and
-			// persistence still have to land. Worth its own signal, because the
-			// two used to arrive together and the reveal therefore had to treat
-			// the last word it was holding as possibly-still-growing for as long
-			// as that bookkeeping took — two to four seconds, at the end of every
-			// answer.
-			if (event.type === "TEXT_MESSAGE_END") {
-				onTextEnd?.();
-				continue;
-			}
-			// The turn, as soon as the service knows it. Handed over immediately
-			// rather than waited for, because the chips that used to travel with
-			// it cost a second model call and everything else here — the sources,
-			// the action row, the card — has been ready since the last token.
-			if (event.type === "CUSTOM" && event.name === "aspire.turn") {
-				payload = event.value as TurnPayload;
-				onTurn?.(toResult(payload, language));
-				continue;
-			}
-			// The chips, once they exist. Folded into the payload so the resolved
-			// result is still the whole turn, exactly as it was when the service
-			// sent it in one piece.
-			if (event.type === "CUSTOM" && event.name === "aspire.follow_ups") {
-				const late = event.value as { follow_ups?: Array<string> };
-				if (payload) payload.follow_ups = late.follow_ups ?? [];
-				continue;
-			}
-			if (event.type === "RUN_ERROR") {
-				failure = event.message ?? "The assistant is temporarily unavailable.";
-				break;
-			}
-		}
-	} catch (error) {
-		if (!opened) {
-			// Never got off the ground. `/chat` is still there and still correct.
-			clearTimeout(timer);
-			return askAspire(input);
-		}
+		session = await graphSession(thread, { locale: language, persona });
+	} catch {
 		throw new AspireError(
-			error instanceof Error && error.name === "AbortError"
-				? "That took too long. Please try again."
-				: "The connection to the assistant was lost. Please try again.",
-			true,
-		);
-	} finally {
-		clearTimeout(timer);
-		signal?.removeEventListener("abort", onExternalAbort);
-	}
-
-	if (failure) throw new AspireError(failure, true);
-
-	if (!payload) {
-		// The stream ended without the service saying what the turn was. Falling
-		// back would ask the model twice; this is a failed turn.
-		if (!opened) return askAspire(input);
-		throw new AspireError(
-			"The assistant did not finish its reply. Please try again.",
+			"The assistant could not be reached. Please try again.",
 			true,
 		);
 	}
 
-	// The payload is authoritative, not the accumulated text. On a card turn the
-	// service sends an empty reply on purpose, and the deltas — if any escaped —
-	// must not override that.
-	return toResult(payload, language);
+	const sources: Array<Source> = [];
+	const followUps: Array<string> = [];
+	const directives: Array<Directive> = [];
+	let startedGame: StartedGame | null = null;
+	let startedEligibility: StartedEligibility | null = null;
+	/** The prose is final once anything that is not a token arrives. */
+	let proseClosed = false;
+
+	const closeProse = () => {
+		if (proseClosed) return;
+		proseClosed = true;
+		onTextEnd?.();
+	};
+
+	const result = await streamTurn({
+		message,
+		token: session.token,
+		signal,
+		...(interaction
+			? {
+					path: "/v2/widget/interaction",
+					body: interaction as unknown as Record<string, unknown>,
+				}
+			: {}),
+		onToken: (text) => onDelta?.(text),
+		onDirective: (directive) => {
+			// Directives close the prose in this protocol: the server emits them
+			// from the settled state, after the last token. Worth signalling
+			// separately from `done`, because `done` is also behind the turn's
+			// persistence and the reveal should not hold its last word for that.
+			closeProse();
+
+			// Cast per branch rather than relying on narrowing. `Directive` is an
+			// OPEN union -- it ends in `UnknownDirective { t: string }` so a
+			// backend that ships a new type before this build knows about it is a
+			// normal deploy rather than a crash -- and an open union widens `t` to
+			// `string`, which defeats discrimination. The cast is safe because the
+			// server's union is closed and discriminated on the same field.
+			switch (directive.t) {
+				case "citations":
+					for (const ref of (directive as CitationsDirective).refs) {
+						sources.push({
+							content: ref.title || ref.kb_id,
+							metadata: { kb_id: ref.kb_id, title: ref.title },
+						});
+					}
+					return;
+
+				case "quick_replies":
+					for (const option of (directive as QuickRepliesDirective).options) {
+						followUps.push(option.value);
+					}
+					return;
+
+				case "game": {
+					const game = (directive as GameDirective).game;
+					startedGame = {
+						gameType: game,
+						displayName: game.replace(/_/g, " "),
+						// The transcript picks its component from this. The graph
+						// names the game, not the item, so `true_false` is the one
+						// that renders a statement and everything else renders a
+						// scramble — same rule the v1 payload carried.
+						kind: game === "true_false" ? "statement" : "scramble",
+						total: 0,
+					};
+					return;
+				}
+
+				case "eligibility": {
+					const check = directive as EligibilityDirective;
+					startedEligibility = {
+						check: check.check,
+						language: check.language,
+					};
+					return;
+				}
+
+				default:
+					directives.push(directive);
+			}
+		},
+		onDone: () => closeProse(),
+		onError: () => closeProse(),
+	});
+
+	if (result.error) {
+		if (result.error.code === "unauthenticated") {
+			// The token expired mid-conversation. Dropped so the next turn mints
+			// a fresh one rather than failing identically forever.
+			forget(thread);
+		}
+		throw new AspireError(result.error.message, true);
+	}
+
+	const answer: AskResult = {
+		// A card turn produces no prose at all — the server never asks a model
+		// to write any — so an empty reply here is correct and not a fault.
+		reply: startedGame || startedEligibility ? "" : result.text,
+		threadId: thread,
+		sources,
+		followUps,
+		startedGame,
+		startedEligibility,
+		directives: directives.filter((d) => !CARD_TYPES.has(d.t)),
+	};
+
+	// Handed over before this function resolves, matching the old contract:
+	// the caller settles the turn on this rather than on the promise, so the
+	// sources and the action row appear with the last word.
+	onTurn?.(answer);
+	return answer;
 }

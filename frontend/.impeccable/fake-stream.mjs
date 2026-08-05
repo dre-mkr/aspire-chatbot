@@ -164,7 +164,19 @@ export function sseEvents(chunks, done, { messageId = "m1", runId = "r1", thread
 		}
 		events.push({ type: "TEXT_MESSAGE_END", messageId });
 	}
-	events.push({ type: "CUSTOM", name: "aspire.turn", value: done });
+	// The turn, then the chips, in that order and as two events -- which is what
+	// the service does, because the chips cost a second model call and the rest
+	// of the turn has been known since the last token.
+	events.push({
+		type: "CUSTOM",
+		name: "aspire.turn",
+		value: { ...done, follow_ups: [] },
+	});
+	events.push({
+		type: "CUSTOM",
+		name: "aspire.follow_ups",
+		value: { follow_ups: done.follow_ups ?? [] },
+	});
 	events.push({ type: "RUN_FINISHED", threadId, runId });
 	return events;
 }
@@ -234,14 +246,14 @@ export function startSseServer({ port = 8000 } = {}) {
 		/** Milliseconds between chunks. Real gaps, or the test proves nothing. */
 		gap: 25,
 		/**
-		 * Milliseconds between the message closing and the turn's payload.
+		 * Milliseconds between the turn's payload and its follow-up chips.
 		 *
-		 * The real service takes two to five seconds here: follow-ups are a
-		 * second model call and the transcript has to be persisted, and both
-		 * happen after the last token. A stub that sends `TEXT_MESSAGE_END` and
-		 * the payload back to back cannot tell whether a client is finishing on
-		 * the first or waiting for the second — which is exactly the distinction
-		 * the reveal now depends on.
+		 * The real service takes two to five seconds here: the chips are a second
+		 * model call, and the transcript is persisted alongside it. A stub that
+		 * sends `aspire.turn` and `aspire.follow_ups` back to back cannot tell
+		 * whether a client settles on the first or waits for the second — which
+		 * is exactly the distinction that made a finished answer sit on screen
+		 * with no sources and no action row.
 		 */
 		tailGap: 0,
 		done: {
@@ -314,7 +326,7 @@ export function startSseServer({ port = 8000 } = {}) {
 			if (event.type === "TEXT_MESSAGE_CONTENT" && state.gap) {
 				await new Promise((r) => setTimeout(r, state.gap));
 			}
-			if (event.type === "TEXT_MESSAGE_END" && state.tailGap) {
+			if (event.name === "aspire.turn" && state.tailGap) {
 				await new Promise((r) => setTimeout(r, state.tailGap));
 			}
 		}

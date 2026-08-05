@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Directive, WidgetInteraction } from "../stream/types";
 import { type AskResult, AspireError, type Source } from "./api";
 import { claimConversations, renameConversation } from "./conversations";
 import {
@@ -38,6 +39,14 @@ export type ChatMessage =
 			blocks: Array<AnswerBlock>;
 			followUps: Array<string>;
 			sources: Array<Source>;
+			/**
+			 * Rendered under the prose by `DirectiveView`, in the order the turn
+			 * emitted them. Absent on a restored turn: directives are live -- a
+			 * widget's interaction feeds back into the graph, an upload card
+			 * resumes an interrupted registration -- and replaying one out of a
+			 * stored transcript would offer a control wired to nothing.
+			 */
+			directives?: Array<Directive>;
 	  }
 	/**
 	 * A turn that started a game. The card is its entire content.
@@ -335,6 +344,7 @@ function completed(
 		blocks: answer.blocks,
 		followUps: answer.followUps,
 		sources,
+		directives: answer.directives,
 	};
 }
 
@@ -780,6 +790,9 @@ export function useConversation({
 			blocks: [...state.built],
 			sources: state.sources,
 			followUps: state.answer.followUps,
+			// No directives. They are emitted from the settled state, after the
+			// last token, and a control drawn under a half-written answer would be
+			// tappable before the answer it belongs to had finished its point.
 		});
 	}, [finishStream]);
 
@@ -835,7 +848,12 @@ export function useConversation({
 	 * real time, and the thinking orb covers exactly that.
 	 */
 	const ask = useCallback(
-		async (question: string, simpleMode: boolean, token: number) => {
+		async (
+			question: string,
+			simpleMode: boolean,
+			token: number,
+			interaction?: WidgetInteraction,
+		) => {
 			const controller = new AbortController();
 			inFlight.current?.abort(); // a previous turn should never outlive this one
 			inFlight.current = controller;
@@ -1024,6 +1042,7 @@ export function useConversation({
 				const finalAnswer: Answer = {
 					blocks: parseAnswer(result.reply),
 					followUps: result.followUps,
+					directives: result.directives,
 				};
 
 				const live = cursor.current;
@@ -1075,6 +1094,10 @@ export function useConversation({
 			try {
 				const result: AskResult = await streamAspire({
 					message: question,
+					// Present only on a widget turn. It rides on `safety_flags`
+					// server-side rather than in `messages`, so the model never
+					// reads `widget_interaction {...}` back as dialogue.
+					interaction,
 					onDelta,
 					onTextEnd,
 					onTurn: settleTurn,
@@ -1474,6 +1497,29 @@ export function useConversation({
 		[dropStream, abortInFlight],
 	);
 
+	/**
+	 * A widget interaction, sent as a turn.
+	 *
+	 * No user bubble: the child moved a slider, they did not say anything, and a
+	 * transcript that reported "widget_interaction {...}" as something they said
+	 * would be both wrong and unreadable. The agent's reply lands as an ordinary
+	 * assistant turn referencing their actual numbers.
+	 *
+	 * Dropped silently while a turn is in flight. An interaction that settles
+	 * during someone else's answer is a comment on the wrong thing, and the
+	 * emitter's own debounce already coalesces the frames it came from.
+	 */
+	const sendInteraction = useCallback(
+		(interaction: WidgetInteraction) => {
+			if (isThinkingRef.current || cursor.current) return;
+			if (!threadRef.current) return;
+			const token = ++turnToken.current;
+			setIsThinking(true);
+			void ask("", false, token, interaction);
+		},
+		[ask],
+	);
+
 	const reset = useCallback(() => {
 		abortInFlight();
 		dropStream();
@@ -1503,6 +1549,7 @@ export function useConversation({
 		threadId,
 		animateAfterId,
 		send,
+		sendInteraction,
 		regenerate,
 		stop,
 		openPast,

@@ -222,6 +222,106 @@ class Settings(BaseSettings):
     embedding_cache_enabled: bool = True
     embedding_cache_ttl_seconds: int = Field(default=30 * 86_400, ge=3600, le=90 * 86_400)
 
+    # --- LangGraph platform (Tracks A-G) ----------------------------------
+    # The checkpointer keeps its own psycopg pool, separate from SQLAlchemy's
+    # asyncpg one -- see app/graph/checkpointer.py for why the two cannot be
+    # shared. Small on purpose: one graph turn holds one connection briefly, and
+    # a large pool on a pooled Neon endpoint just consumes pgbouncer client
+    # slots that the request path has better uses for.
+    checkpointer_pool_size: int = Field(default=4, ge=1, le=20)
+    checkpointer_connect_timeout: float = Field(default=30.0, ge=1.0, le=120.0)
+
+    # `GRAPH_ENABLED` used to live here. It is gone rather than defaulted to
+    # true: it guarded whether /v2 was mounted at all, and now that /v2 is the
+    # only chat path, a flag that can unmount it is not a safety control but an
+    # outage one environment file away.
+    #
+    # The eval gate it was meant to enforce is `make eval`, which fails CI on a
+    # threshold -- a check that runs, rather than a switch somebody remembers.
+
+    # The classifier and the widget planner. Haiku-class, deliberately: routing
+    # between six names and picking one of nine primitives are both
+    # short-context classification jobs, and spending a frontier model on them
+    # would put a second expensive call in front of every turn.
+    #
+    # Configured separately from `chat_model` so the two can move independently
+    # -- swapping the answer model must not silently re-tune the router.
+    classifier_model: str = "anthropic:claude-haiku-4-5-20251001"
+    classifier_temperature: float = 0.0
+    #: Below this a differing classification does NOT displace a sticky agent.
+    #: Mid-registration and mid-lesson conversations must survive an ambiguous
+    #: turn; see `nodes/classify.py`.
+    classifier_stickiness_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+
+    # Retrieval for the QA subgraph. Hybrid because the corpus is 338 rows: at
+    # that size a dense-only search misses exact-term queries ("ASP-042", "EC$",
+    # a school name) that BM25 finds trivially.
+    qa_retrieve_k: int = Field(default=12, ge=1, le=50)
+    qa_rerank_k: int = Field(default=4, ge=1, le=20)
+    #: RRF's smoothing constant. 60 is the value from the original paper and
+    #: there is no reason to differ without measurement.
+    qa_rrf_k: int = Field(default=60, ge=1, le=200)
+    #: The QA relevance floor, as a COSINE similarity from the dense retriever.
+    #:
+    #: 0.55, and set from a measurement rather than a hunch. On the 706-row
+    #: corpus with bge-small, `evals/harness.py` measured the two populations
+    #: this would have to separate as OVERLAPPING: in-KB questions run
+    #: 0.614-0.873 and out-of-KB questions run 0.443-0.757, so the best possible
+    #: threshold still misclassifies 11 of 50. There is no value that is both
+    #: useful and safe.
+    #:
+    #: So this is NOT the discriminator. It is a floor against the absurd --
+    #: below it, nothing in the corpus is even the same subject -- and it sits
+    #: under the lowest real question (0.614) so it starves nothing. What
+    #: actually decides groundedness is ATTRIBUTION: an answer must cite a
+    #: retrieved row, and every figure in it must appear in one. See
+    #: `agents/qa/nodes.ground_check`.
+    qa_relevance_floor: float = Field(default=0.55, ge=0.0, le=1.0)
+
+    #: The lexical fallback floor, as a fraction of the question's own content
+    #: words appearing in what was retrieved.
+    #:
+    #: Only consulted when the dense retriever returned nothing -- a BM25-only
+    #: turn. Rank fusion cannot answer "is anything here about this?", because
+    #: every chunk a retriever returns ranks highly; word coverage can.
+    qa_coverage_floor: float = Field(default=0.25, ge=0.0, le=1.0)
+
+    # Widgets.
+    widgets_enabled: bool = True
+    #: A candidate widget is not regenerated for this long, even on a miss. The
+    #: review queue is a human queue and it does not run daily.
+    widget_candidate_ttl_days: int = Field(default=30, ge=1, le=365)
+    #: Hard ceiling on a buffered sentinel before it is discarded. A model that
+    #: opens a widget block and never closes it must not be able to hold the
+    #: whole reply hostage.
+    widget_buffer_limit_bytes: int = Field(default=4096, ge=512, le=65536)
+
+    # Object storage for registration documents. Bytes go browser-to-bucket via
+    # a presigned URL and never through FastAPI; see app/storage/presign.py.
+    s3_endpoint_url: str | None = None
+    s3_bucket: str = "aspire-documents"
+    s3_region: str = "us-east-1"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    #: How long an upload or download URL stays valid. Minutes, not hours: a
+    #: leaked URL is a document, and the window is the whole mitigation.
+    s3_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+
+    # The vision model that looks at an uploaded document. ADVISORY ONLY -- it
+    # never rejects an application and never blocks a submission (see
+    # `agents/register/nodes/doc_check.py`).
+    #
+    # Empty means no automated opinion at all, which is a fully supported state:
+    # every document goes to the human queue exactly as it did before the node
+    # existed. That is what makes turning this on a safe change rather than a
+    # leap of faith.
+    doc_check_model: str = ""
+
+    # Encryption key for `application_pii`, base64-encoded 32 bytes (Fernet).
+    # Unset means registration refuses to persist a slot rather than writing a
+    # national ID in plaintext.
+    pii_encryption_key: str | None = None
+
     # --- Conversation memory ---------------------------------------------
     # ON by default, since the worker that backs it is now actually deployed.
     #
@@ -233,26 +333,28 @@ class Settings(BaseSettings):
     # length, and the saver grows without bound in a process that is pinned to a
     # single worker.
     #
-    # With it on, history comes from Postgres instead: a window of recent turns
-    # plus a running summary of everything older, compressed by the arq worker
-    # off the request path. Cost becomes linear and the process stops
-    # accumulating conversations it will never serve again.
+    # With it on, the thread is compressed instead: the checkpoint keeps recent
+    # messages verbatim and folds everything older into a running summary. Cost
+    # becomes linear and the process stops accumulating conversations it will
+    # never serve again.
     #
-    # This was off for a good reason until now -- the summarisation job had no
-    # worker to run in, so turns falling out of the window were never folded into
-    # a summary and would simply have been forgotten. deploy/aspire-worker.service
-    # fixes that, which is what makes this flip safe.
+    # WHERE THAT WORK HAPPENS MOVED. It used to be the arq summary job, writing
+    # `conversations.summary` for `load_context` to read back. The graph reads
+    # `state["summary"]` out of its own checkpoint, so `turn.summarise_thread`
+    # writes it there instead -- after the stream has closed, where the reader
+    # never waits for it. The job was deleted; see `app/jobs.py`.
     #
-    # Gated on a database at the point of use (see `agent.build_agent`), so a
+    # Gated on a database at the point of use (`turn.summarisation_wanted`), so a
     # deployment without Postgres keeps the old behaviour rather than losing its
-    # memory. Flip it back and today's behaviour returns exactly, because the
-    # full transcript is persisted either way.
+    # memory: with no checkpointer there is no thread to compress.
     memory_window_enabled: bool = True
     # How many recent messages the model sees verbatim. The single number that
     # decides the per-turn prompt cost, which is why it is configurable.
+    #
+    # The GRAPH's threshold is `main_graph.SUMMARY_AFTER_MESSAGES`, not this.
+    # This one now feeds `build_prompt`, which the token-measurement script uses.
     memory_window_turns: int = Field(default=6, ge=1, le=50)
-    # Summarise once this many messages have fallen outside the window. Runs in
-    # arq, off the request path, always.
+    # Summarise once this many messages have fallen outside the window.
     memory_summary_after_turns: int = Field(default=2, ge=1, le=50)
     # Used only for accounting. o200k_base is the GPT-4o/5 family's encoding.
     token_encoding: str = "o200k_base"

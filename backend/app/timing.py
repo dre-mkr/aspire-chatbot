@@ -257,7 +257,7 @@ STAGE_NOTES: dict[str, str] = {
     T_PROMPT_BUILD: "local: assemble messages, count tokens (tiktoken)",
     D_MODEL_CALL: "derived: the one answering call, less every pre-model stage",
     T_EMBED: "concurrent: OpenAI embedding round trip (off the critical path)",
-    T_RETRIEVE: "concurrent: Neon cosine scan over 332 rows (off the critical path)",
+    T_RETRIEVE: "concurrent: Neon cosine scan over 706 rows (off the critical path)",
     D_BUFFER_HOLD: "derived: TurnBuffer holding text before releasing it",
     T_AGENT_FIRST_TOOL: "cumulative from request received",
     T_AGENT_FIRST_DELTA: "cumulative from request received",

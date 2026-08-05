@@ -1,0 +1,28 @@
+[
+  {
+    "question": "what is saving",
+    "widget": {
+      "kind": "compare",
+      "v": 1,
+      "concept_id": "save",
+      "title": "Two tins",
+      "prompt": "Which tin has more at the end of the month?",
+      "a11y_text": "Two tins. In the first, a coin is kept every week and there are four at the end of the month. In the second, every coin is spent the same day, so it is empty.",
+      "panels": [
+        {
+          "label": "Keep a coin",
+          "summary": "One coin in the tin each week",
+          "detail": "Four coins at the end of the month!",
+          "colour": "accent"
+        },
+        {
+          "label": "Spend it all",
+          "summary": "Every coin goes the same day",
+          "detail": "The tin is empty. Nothing left for the big thing.",
+          "colour": "neutral"
+        }
+      ],
+      "highlight": 0
+    }
+  }
+]

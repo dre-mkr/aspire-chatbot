@@ -1,0 +1,100 @@
+{"id": "w001", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "what is saving", "ideal": "compare", "note": ""}
+{"id": "w002", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "why do I have to wait", "ideal": "compare", "note": ""}
+{"id": "w003", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "what do these words mean", "ideal": "reveal_cards", "note": ""}
+{"id": "w004", "age_band": "5-8", "locale": "en", "concept_id": "spend", "question": "where does my money go", "ideal": "flow_diagram", "note": ""}
+{"id": "w005", "age_band": "5-8", "locale": "en", "concept_id": "goal", "question": "how long till I get my football", "ideal": "timeline", "note": ""}
+{"id": "w006", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "ok", "ideal": null, "note": "an acknowledgement"}
+{"id": "w007", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "yes", "ideal": null, "note": "a tapped chip"}
+{"id": "w008", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "say that again", "ideal": null, "note": "repeat the words, not the visual"}
+{"id": "w009", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "why", "ideal": null, "note": "too little to build a visual from"}
+{"id": "w010", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "can we play a game", "ideal": null, "note": "a different activity"}
+{"id": "w011", "age_band": "5-8", "locale": "es", "concept_id": "save", "question": "que es ahorrar", "ideal": "compare", "note": ""}
+{"id": "w012", "age_band": "5-8", "locale": "es", "concept_id": "goal", "question": "cuanto falta para mi pelota", "ideal": "timeline", "note": ""}
+{"id": "w013", "age_band": "5-8", "locale": "es", "concept_id": "save", "question": "vale", "ideal": null, "note": "an acknowledgement"}
+{"id": "w014", "age_band": "5-8", "locale": "fr", "concept_id": "save", "question": "c'est quoi economiser", "ideal": "compare", "note": ""}
+{"id": "w015", "age_band": "5-8", "locale": "fr", "concept_id": "spend", "question": "ou va mon argent", "ideal": "flow_diagram", "note": ""}
+{"id": "w016", "age_band": "5-8", "locale": "fr", "concept_id": "save", "question": "d'accord", "ideal": null, "note": "an acknowledgement"}
+{"id": "w017", "age_band": "5-8", "locale": "en", "concept_id": "interest", "question": "why does the bank give me money", "ideal": null, "note": "not on the 5-8 ladder"}
+{"id": "w018", "age_band": "5-8", "locale": "en", "concept_id": "compound_interest", "question": "what is compound interest", "ideal": null, "note": "redirect to saving"}
+{"id": "w019", "age_band": "5-8", "locale": "en", "concept_id": "save", "question": "I have four coins", "ideal": null, "note": "a statement, not a question"}
+{"id": "w020", "age_band": "5-8", "locale": "en", "concept_id": "goal", "question": "what should I save for", "ideal": "reveal_cards", "note": ""}
+{"id": "w021", "age_band": "9-12", "locale": "en", "concept_id": "interest", "question": "why does the bank give me money for saving", "ideal": "growth_stack", "note": ""}
+{"id": "w022", "age_band": "9-12", "locale": "en", "concept_id": "interest", "question": "what happens if I leave it there for years", "ideal": "growth_stack", "note": ""}
+{"id": "w023", "age_band": "9-12", "locale": "en", "concept_id": "budget", "question": "how should I split my allowance", "ideal": "allocator", "note": ""}
+{"id": "w024", "age_band": "9-12", "locale": "en", "concept_id": "budget", "question": "how much should I keep", "ideal": "proportion", "note": ""}
+{"id": "w025", "age_band": "9-12", "locale": "en", "concept_id": "need", "question": "what is a need and what is a want", "ideal": "sort_buckets", "note": ""}
+{"id": "w026", "age_band": "9-12", "locale": "en", "concept_id": "goal", "question": "how long until I can buy the bicycle", "ideal": "timeline", "note": ""}
+{"id": "w027", "age_band": "9-12", "locale": "en", "concept_id": "save", "question": "is it better to save or spend", "ideal": "compare", "note": ""}
+{"id": "w028", "age_band": "9-12", "locale": "en", "concept_id": "save", "question": "where does money go when I save it", "ideal": "flow_diagram", "note": ""}
+{"id": "w029", "age_band": "9-12", "locale": "en", "concept_id": "save", "question": "so it is free money?", "ideal": null, "note": "a follow-up to a widget"}
+{"id": "w030", "age_band": "9-12", "locale": "en", "concept_id": "interest", "question": "ok cool", "ideal": null, "note": "an acknowledgement"}
+{"id": "w031", "age_band": "9-12", "locale": "en", "concept_id": "budget", "question": "thanks", "ideal": null, "note": "an acknowledgement"}
+{"id": "w032", "age_band": "9-12", "locale": "en", "concept_id": "save", "question": "what did you say", "ideal": null, "note": "a repeat request"}
+{"id": "w033", "age_band": "9-12", "locale": "en", "concept_id": "goal", "question": "I want a bike", "ideal": null, "note": "a statement, not a question"}
+{"id": "w034", "age_band": "9-12", "locale": "en", "concept_id": "save", "question": "next", "ideal": null, "note": "a navigation chip"}
+{"id": "w035", "age_band": "9-12", "locale": "en", "concept_id": "budget", "question": "I don't know", "ideal": null, "note": "asking for a hint"}
+{"id": "w036", "age_band": "9-12", "locale": "en", "concept_id": "compound_interest", "question": "how does compound interest work", "ideal": "growth_stack", "note": ""}
+{"id": "w037", "age_band": "9-12", "locale": "es", "concept_id": "interest", "question": "por que el banco me da dinero", "ideal": "growth_stack", "note": ""}
+{"id": "w038", "age_band": "9-12", "locale": "es", "concept_id": "budget", "question": "como reparto mi dinero", "ideal": "allocator", "note": ""}
+{"id": "w039", "age_band": "9-12", "locale": "es", "concept_id": "need", "question": "que es necesidad y que es deseo", "ideal": "sort_buckets", "note": ""}
+{"id": "w040", "age_band": "9-12", "locale": "es", "concept_id": "save", "question": "gracias", "ideal": null, "note": "an acknowledgement"}
+{"id": "w041", "age_band": "9-12", "locale": "es", "concept_id": "goal", "question": "cuanto tiempo para la bicicleta", "ideal": "timeline", "note": ""}
+{"id": "w042", "age_band": "9-12", "locale": "fr", "concept_id": "interest", "question": "pourquoi la banque me donne de l'argent", "ideal": "growth_stack", "note": ""}
+{"id": "w043", "age_band": "9-12", "locale": "fr", "concept_id": "budget", "question": "comment partager mon argent", "ideal": "allocator", "note": ""}
+{"id": "w044", "age_band": "9-12", "locale": "fr", "concept_id": "save", "question": "merci", "ideal": null, "note": "an acknowledgement"}
+{"id": "w045", "age_band": "9-12", "locale": "fr", "concept_id": "need", "question": "besoin ou envie", "ideal": "sort_buckets", "note": ""}
+{"id": "w046", "age_band": "9-12", "locale": "fr", "concept_id": "goal", "question": "combien de temps pour le velo", "ideal": "timeline", "note": ""}
+{"id": "w047", "age_band": "9-12", "locale": "en", "concept_id": "save", "question": "what does saving mean again", "ideal": "reveal_cards", "note": ""}
+{"id": "w048", "age_band": "9-12", "locale": "en", "concept_id": "budget", "question": "is 3 out of 10 a lot", "ideal": "proportion", "note": ""}
+{"id": "w049", "age_band": "9-12", "locale": "en", "concept_id": "spend", "question": "is spending bad", "ideal": "compare", "note": ""}
+{"id": "w050", "age_band": "9-12", "locale": "en", "concept_id": "interest", "question": "yes", "ideal": null, "note": "a tapped chip"}
+{"id": "w051", "age_band": "13-15", "locale": "en", "concept_id": "goal", "question": "how much do I need to save each week for carnival", "ideal": "simulator", "note": ""}
+{"id": "w052", "age_band": "13-15", "locale": "en", "concept_id": "compound_interest", "question": "how does compound interest actually work", "ideal": "simulator", "note": ""}
+{"id": "w053", "age_band": "13-15", "locale": "en", "concept_id": "inflation", "question": "why is everything more expensive than last year", "ideal": "compare", "note": ""}
+{"id": "w054", "age_band": "13-15", "locale": "en", "concept_id": "budget", "question": "how should I split a saturday job", "ideal": "allocator", "note": ""}
+{"id": "w055", "age_band": "13-15", "locale": "en", "concept_id": "risk", "question": "what is risk", "ideal": "compare", "note": ""}
+{"id": "w056", "age_band": "13-15", "locale": "en", "concept_id": "credit", "question": "what is the difference between credit and debit", "ideal": "compare", "note": ""}
+{"id": "w057", "age_band": "13-15", "locale": "en", "concept_id": "goal", "question": "how long to save 450 dollars", "ideal": "simulator", "note": ""}
+{"id": "w058", "age_band": "13-15", "locale": "en", "concept_id": "save", "question": "got it", "ideal": null, "note": "an acknowledgement"}
+{"id": "w059", "age_band": "13-15", "locale": "en", "concept_id": "compound_interest", "question": "so the interest earns interest?", "ideal": null, "note": "a follow-up"}
+{"id": "w060", "age_band": "13-15", "locale": "en", "concept_id": "budget", "question": "makes sense", "ideal": null, "note": "an acknowledgement"}
+{"id": "w061", "age_band": "13-15", "locale": "en", "concept_id": "inflation", "question": "ok", "ideal": null, "note": "an acknowledgement"}
+{"id": "w062", "age_band": "13-15", "locale": "en", "concept_id": "save", "question": "can you say that simpler", "ideal": null, "note": "rephrase, not re-illustrate"}
+{"id": "w063", "age_band": "13-15", "locale": "en", "concept_id": "risk", "question": "no", "ideal": null, "note": "a tapped chip"}
+{"id": "w064", "age_band": "13-15", "locale": "en", "concept_id": "goal", "question": "I already know this", "ideal": null, "note": "not a question"}
+{"id": "w065", "age_band": "13-15", "locale": "es", "concept_id": "compound_interest", "question": "como funciona el interes compuesto", "ideal": "simulator", "note": ""}
+{"id": "w066", "age_band": "13-15", "locale": "es", "concept_id": "goal", "question": "cuanto ahorro por semana para carnaval", "ideal": "simulator", "note": ""}
+{"id": "w067", "age_band": "13-15", "locale": "es", "concept_id": "inflation", "question": "por que todo cuesta mas", "ideal": "compare", "note": ""}
+{"id": "w068", "age_band": "13-15", "locale": "es", "concept_id": "budget", "question": "vale gracias", "ideal": null, "note": "an acknowledgement"}
+{"id": "w069", "age_band": "13-15", "locale": "fr", "concept_id": "compound_interest", "question": "comment marche l'interet compose", "ideal": "simulator", "note": ""}
+{"id": "w070", "age_band": "13-15", "locale": "fr", "concept_id": "goal", "question": "combien par semaine pour le carnaval", "ideal": "simulator", "note": ""}
+{"id": "w071", "age_band": "13-15", "locale": "fr", "concept_id": "risk", "question": "c'est quoi le risque", "ideal": "compare", "note": ""}
+{"id": "w072", "age_band": "13-15", "locale": "fr", "concept_id": "save", "question": "d'accord merci", "ideal": null, "note": "an acknowledgement"}
+{"id": "w073", "age_band": "13-15", "locale": "en", "concept_id": "need", "question": "sort these into needs and wants", "ideal": "sort_buckets", "note": ""}
+{"id": "w074", "age_band": "13-15", "locale": "en", "concept_id": "budget", "question": "what fraction should I keep", "ideal": "proportion", "note": ""}
+{"id": "w075", "age_band": "13-15", "locale": "en", "concept_id": "save", "question": "when does the money arrive", "ideal": "timeline", "note": ""}
+{"id": "w076", "age_band": "16-18", "locale": "en", "concept_id": "compound_interest", "question": "how does compound interest actually work", "ideal": "simulator", "note": ""}
+{"id": "w077", "age_band": "16-18", "locale": "en", "concept_id": "compound_interest", "question": "what if I start ten years earlier", "ideal": "simulator", "note": ""}
+{"id": "w078", "age_band": "16-18", "locale": "en", "concept_id": "inflation", "question": "how much will my savings be worth in 20 years", "ideal": "simulator", "note": ""}
+{"id": "w079", "age_band": "16-18", "locale": "en", "concept_id": "budget", "question": "how do I budget a first pay packet", "ideal": "allocator", "note": ""}
+{"id": "w080", "age_band": "16-18", "locale": "en", "concept_id": "credit", "question": "what does a loan actually cost me", "ideal": "simulator", "note": ""}
+{"id": "w081", "age_band": "16-18", "locale": "en", "concept_id": "risk", "question": "what is the trade-off with risk", "ideal": "compare", "note": ""}
+{"id": "w082", "age_band": "16-18", "locale": "en", "concept_id": "goal", "question": "when will I have enough for a deposit", "ideal": "timeline", "note": ""}
+{"id": "w083", "age_band": "16-18", "locale": "en", "concept_id": "compound_interest", "question": "right, got it", "ideal": null, "note": "an acknowledgement"}
+{"id": "w084", "age_band": "16-18", "locale": "en", "concept_id": "budget", "question": "thanks that helps", "ideal": null, "note": "an acknowledgement"}
+{"id": "w085", "age_band": "16-18", "locale": "en", "concept_id": "credit", "question": "so it is basically free money?", "ideal": null, "note": "a follow-up"}
+{"id": "w086", "age_band": "16-18", "locale": "en", "concept_id": "inflation", "question": "ok", "ideal": null, "note": "an acknowledgement"}
+{"id": "w087", "age_band": "16-18", "locale": "en", "concept_id": "risk", "question": "hmm", "ideal": null, "note": "not a question"}
+{"id": "w088", "age_band": "16-18", "locale": "en", "concept_id": "save", "question": "what did the last one say", "ideal": null, "note": "a repeat request"}
+{"id": "w089", "age_band": "16-18", "locale": "es", "concept_id": "compound_interest", "question": "como crece el dinero con el tiempo", "ideal": "simulator", "note": ""}
+{"id": "w090", "age_band": "16-18", "locale": "es", "concept_id": "budget", "question": "como reparto mi primer sueldo", "ideal": "allocator", "note": ""}
+{"id": "w091", "age_band": "16-18", "locale": "es", "concept_id": "credit", "question": "cuanto cuesta un prestamo", "ideal": "simulator", "note": ""}
+{"id": "w092", "age_band": "16-18", "locale": "es", "concept_id": "save", "question": "entendido", "ideal": null, "note": "an acknowledgement"}
+{"id": "w093", "age_band": "16-18", "locale": "fr", "concept_id": "compound_interest", "question": "comment mon argent grandit avec le temps", "ideal": "simulator", "note": ""}
+{"id": "w094", "age_band": "16-18", "locale": "fr", "concept_id": "budget", "question": "comment repartir mon premier salaire", "ideal": "allocator", "note": ""}
+{"id": "w095", "age_band": "16-18", "locale": "fr", "concept_id": "credit", "question": "combien coute un pret", "ideal": "simulator", "note": ""}
+{"id": "w096", "age_band": "16-18", "locale": "fr", "concept_id": "save", "question": "compris merci", "ideal": null, "note": "an acknowledgement"}
+{"id": "w097", "age_band": "16-18", "locale": "en", "concept_id": "need", "question": "which of these are needs", "ideal": "sort_buckets", "note": ""}
+{"id": "w098", "age_band": "16-18", "locale": "en", "concept_id": "spend", "question": "where does my salary go", "ideal": "flow_diagram", "note": ""}
+{"id": "w099", "age_band": "16-18", "locale": "en", "concept_id": "budget", "question": "what share should go to savings", "ideal": "proportion", "note": ""}
+{"id": "w100", "age_band": "16-18", "locale": "en", "concept_id": "save", "question": "what do these terms mean", "ideal": "reveal_cards", "note": ""}

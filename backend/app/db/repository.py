@@ -253,61 +253,15 @@ async def load_context(
     )
 
 
-async def turns_awaiting_summary(
-    db: AsyncSession, conversation_id: str, *, window_turns: int
-) -> list[Message]:
-    """Messages that have fallen out of the window and are not yet summarised.
-
-    The gap between `summarized_through_seq` and the start of the window. A
-    conversation that has not outgrown its window yet returns nothing and the
-    job does nothing.
-    """
-    conversation = await db.get(Conversation, conversation_id)
-    if conversation is None:
-        return []
-
-    highest = (
-        await db.scalar(
-            select(func.coalesce(func.max(Message.seq), 0)).where(
-                Message.conversation_id == conversation_id
-            )
-        )
-    ) or 0
-
-    window_starts_at = highest - window_turns
-    if window_starts_at <= conversation.summarized_through_seq:
-        return []
-
-    return list(
-        (
-            await db.scalars(
-                select(Message)
-                .where(
-                    Message.conversation_id == conversation_id,
-                    Message.seq > conversation.summarized_through_seq,
-                    Message.seq <= window_starts_at,
-                )
-                .order_by(Message.seq)
-            )
-        ).all()
-    )
-
-
-async def save_summary(
-    db: AsyncSession, conversation_id: str, *, summary: str, through_seq: int
-) -> None:
-    """Record the compressed older context and how far it reaches.
-
-    Never moves `summarized_through_seq` backwards. The job is fire-and-forget
-    and two runs for one thread can overlap; an older result landing last must
-    not un-summarise turns a newer one already folded in.
-    """
-    conversation = await db.get(Conversation, conversation_id)
-    if conversation is None or through_seq <= conversation.summarized_through_seq:
-        return
-
-    conversation.summary = summary
-    conversation.summarized_through_seq = through_seq
+# `turns_awaiting_summary` and `save_summary` stood here. They were the read and
+# the write of the arq summary job, which is gone (see `app/jobs.py`): the
+# rolling summary lives in the checkpoint now, written by
+# `turn.summarise_thread`, and `conversations.summary` has neither a writer nor a
+# reader. Measured before removing them -- 0 of 2,774 conversations carried a
+# summary, because the job's last caller went with `POST /chat`.
+#
+# The `summary` and `summarized_through_seq` COLUMNS are deliberately left in
+# place. They hold no data, and every migration on this branch is additive.
 
 
 async def set_title(db: AsyncSession, conversation_id: str, title: str) -> None:

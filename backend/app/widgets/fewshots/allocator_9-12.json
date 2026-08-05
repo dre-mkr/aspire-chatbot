@@ -1,0 +1,38 @@
+[
+  {
+    "question": "how should i split my allowance",
+    "widget": {
+      "kind": "allocator",
+      "v": 1,
+      "concept_id": "budget",
+      "title": "Your EC$10",
+      "prompt": "There is no single right answer. Move them and see how it feels.",
+      "a11y_text": "Ten dollars split three ways: keep, spend and share. You choose the split, and nothing here is graded.",
+      "total_cents": 1000,
+      "no_wrong_answer": true,
+      "buckets": [
+        {
+          "id": "keep",
+          "label": "Keep",
+          "hint": "Into your account",
+          "colour": "accent",
+          "default_share": 40
+        },
+        {
+          "id": "spend",
+          "label": "Spend",
+          "hint": "Patties, a snow cone",
+          "colour": "neutral",
+          "default_share": 50
+        },
+        {
+          "id": "share",
+          "label": "Share",
+          "hint": "A gift for someone",
+          "colour": "positive",
+          "default_share": 10
+        }
+      ]
+    }
+  }
+]

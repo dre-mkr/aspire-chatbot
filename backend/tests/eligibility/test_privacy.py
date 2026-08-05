@@ -128,9 +128,11 @@ def test_the_history_line_carries_no_answer_and_no_verdict():
     The anonymised outcome row exists precisely so the two never sit together,
     so the verdict must not be here either.
     """
-    from app.main import _eligibility_history_line
+    # Moved to `app/turn.py` with the rest of the persistence when `/chat`
+    # went. The line itself is unchanged, and so is what it must not say.
+    from app.turn import eligibility_history_line
 
-    line = _eligibility_history_line().lower()
+    line = eligibility_history_line().lower()
     for token in ANSWER_TOKENS:
         assert token not in line
     for verdict in Verdict:
