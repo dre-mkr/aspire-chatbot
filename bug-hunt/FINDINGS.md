@@ -244,8 +244,8 @@ read path was proven.
 
 **Expected:** The backend gate matches the frontend's, which runs `biome check`
 (lint + format + import order) and is green.
-**Actual:** The backend gate is `pytest` only, split fast/slow. 517 tests pass
-with two `NameError`s live in `app/main.py`.
+**Actual:** The backend gate is `pytest` only, split fast/slow. **2,628 tests
+pass** with two `NameError`s live in `app/main.py`.
 
 ```
 $ uvx ruff check app/ --select F,E9 --output-format concise

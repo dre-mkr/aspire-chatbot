@@ -160,6 +160,21 @@ async def lifespan(app: FastAPI):
 
         await seed_curriculum()
 
+    # Refuse to start without a usable signing key.
+    #
+    # `config.py` has always said the failure mode of forgetting SESSION_SECRET
+    # "must be a refusal at boot rather than forged sessions in production", and
+    # `auth._secret()` does refuse -- but it was only ever called on the first
+    # request that needed a token. So the service booted clean, /health returned
+    # 200, it entered the load-balancer rotation, and every visitor got a 500 on
+    # session creation. Unusable and indistinguishable from healthy.
+    #
+    # Nothing can be forged either way; this is a liveness fix, not a security
+    # one. Calling the same function here makes the promise true.
+    from app.auth import _secret
+
+    _secret()
+
     # Build the answer model eagerly so a bad model string or a missing key
     # surfaces at boot rather than in the middle of a child's first question.
     # Cheap: `init_chat_model` validates configuration and opens no connection.

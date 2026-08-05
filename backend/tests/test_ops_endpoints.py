@@ -87,3 +87,38 @@ def test_debug_timings_serves_when_switched_on(client, monkeypatch):
     # Shape only. The ring is per-process and per-restart, so its contents are
     # not something a test may assume anything about.
     assert isinstance(response.json(), dict)
+
+
+# ── boot-time refusal on a bad signing key ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "secret, expect",
+    [
+        ("", "is not set"),
+        ("tooshort", "bytes; it must be at least"),
+    ],
+    ids=["absent", "too-short"],
+)
+async def test_a_bad_signing_key_refuses_at_boot(monkeypatch, secret, expect):
+    """`config.py` promises "a refusal at boot", and it has to be true.
+
+    `_secret()` always refused -- but only on the first request that needed a
+    token. So the service booted clean, /health returned 200, it entered the
+    load-balancer rotation, and every visitor got a 500 on session creation:
+    completely unusable and indistinguishable from healthy.
+
+    Empty is not hypothetical. It is the value `.env.example` ships.
+    """
+    from app.config import get_settings
+    from app.main import app, lifespan
+
+    monkeypatch.setenv("SESSION_SECRET", secret)
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match=expect):
+            async with lifespan(app):
+                pass
+    finally:
+        get_settings.cache_clear()

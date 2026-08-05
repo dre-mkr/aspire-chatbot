@@ -36,4 +36,8 @@ NO Python linter in CI (frontend gates on `biome check`; backend gates on
 pytest only, and no test imports these two lines).
 
 # Both defects are single-token typos that `ruff check --select F` reports in
-# under a second. The 517-test suite passes with them present.
+# under a second. All 2,628 tests pass with them present.
+#
+# CORRECTION (2026-08-05): an earlier draft of this file and of FINDINGS.md said
+# "517 tests". That figure was carried over from a previous session's repo state
+# and was wrong. Measured on this branch: 2,628 collected, 2,581 fast, 47 slow.
