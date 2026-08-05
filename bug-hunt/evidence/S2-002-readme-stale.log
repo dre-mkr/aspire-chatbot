@@ -1,0 +1,40 @@
+# S2-002 — backend/README.md documents an architecture that no longer exists
+# Five concrete instances, each verified against the code at e5c4466.
+
+1. README:1-3  "answers questions about ASPIRE using agentic RAG over a CSV
+   knowledge base"
+   CODE: the corpus lives in Postgres since P13-002. app/main.py:_require_corpus
+   refuses to boot without it:
+     "The knowledge base lives in Postgres and the database is not available"
+
+2. README "Minimum config": "Only one value is truly required in .env:
+   OPENAI_API_KEY". "Everything else has a working default."
+   CODE: DATABASE_URL is required (above) and SESSION_SECRET has no usable
+   default (app/config.py:session_secret = ""). .env.example ships
+   SESSION_SECRET= empty and a placeholder DATABASE_URL.
+   PROVEN: see S1-001-cold-start.log — boot dies before either is reported.
+
+3. README: zero mentions of alembic / "upgrade head" / Postgres / pgvector.
+   $ grep -c 'alembic' backend/README.md   -> 0
+   CODE: 15 migrations in backend/alembic/versions/. Nothing runs them for you.
+
+4. README "Swapping models": "Delete `data/chroma` and re-ingest after any such
+   change -- otherwise startup sees a non-empty store, skips ingest, and
+   retrieval fails on a dimension mismatch."
+   CODE: Chroma is gone. The real remediation is a migration to change the
+   column width, which is what the actual guard says:
+     app/ingest.py:229  "documents.embedding is 3072-dim. Write a migration to
+                         change the column width, then re-ingest."
+   Deleting data/chroma accomplishes nothing.
+
+5. README "Notes and Phase 1 limits": "Memory is in-process. `InMemorySaver`
+   means conversations are lost on restart and aren't shared across workers."
+   CODE: app/graph/checkpointer.py:285 uses LangGraph's AsyncPostgresSaver
+   against the same database. Conversations survive restart.
+
+# Related dead weight (not doc, but same root cause):
+$ grep -rn "chroma" backend/app/config.py
+app/config.py:130:    chroma_dir: Path = BASE_DIR / "data" / "chroma"
+app/config.py:131:    chroma_collection: str = "aspire_knowledge_base"
+$ grep -n chroma backend/pyproject.toml
+23:    "langchain-chroma==1.1.0",        <-- still a pinned dependency

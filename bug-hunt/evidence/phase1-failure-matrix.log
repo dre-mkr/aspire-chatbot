@@ -1,0 +1,78 @@
+════════════════════════════════════════════════════════════════
+CASE: DB unreachable
+────────────────────────────────────────────────────────────────
+    sock = await self._connect_sock(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+        exceptions, addrinfo, laddr_infos)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\fraim\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 1045, in _connect_sock
+    await self.sock_connect(sock, address)
+  File "C:\Users\fraim\AppData\Local\Programs\Python\Python313\Lib\asyncio\selector_events.py", line 647, in sock_connect
+    return await fut
+           ^^^^^^^^^
+  File "C:\Users\fraim\AppData\Local\Programs\Python\Python313\Lib\asyncio\selector_events.py", line 687, in _sock_connect_cb
+    raise OSError(err, f'Connect call failed {address}')
+ConnectionRefusedError: [Errno 10061] Connect call failed ('127.0.0.1', 55999)
+>>> VERDICT: REFUSED  ConnectionRefusedError
+>>> MESSAGE: [Errno 10061] Connect call failed ('127.0.0.1', 55999)
+
+════════════════════════════════════════════════════════════════
+CASE: Valkey down
+────────────────────────────────────────────────────────────────
+Traceback (most recent call last):
+  File "C:\Users\fraim\projects\aspire-new\backend\app\cache.py", line 507, in ping
+    await client.ping()
+  File "C:\Users\fraim\projects\aspire-new\backend\.venv\Lib\site-packages\redis\asyncio\client.py", line 641, in execute_command
+    conn = self.connection or await pool.get_connection()
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\fraim\projects\aspire-new\backend\.venv\Lib\site-packages\redis\asyncio\connection.py", line 1100, in get_connection
+    await self.ensure_connection(connection)
+  File "C:\Users\fraim\projects\aspire-new\backend\.venv\Lib\site-packages\redis\asyncio\connection.py", line 1133, in ensure_connection
+    await connection.connect()
+  File "C:\Users\fraim\projects\aspire-new\backend\.venv\Lib\site-packages\redis\asyncio\connection.py", line 296, in connect
+    raise TimeoutError("Timeout connecting to server")
+redis.exceptions.TimeoutError: Timeout connecting to server
+>>> VERDICT: BOOTED  (now check whether it can actually answer)
+
+════════════════════════════════════════════════════════════════
+CASE: Empty knowledge base
+────────────────────────────────────────────────────────────────
+WARNING app.db.engine: DATABASE_URL does not look like Neon's pooled endpoint (no '-pooler' in the host). The direct endpoint holds one backend per connection and will exhaust under concurrent requests -- use the pooled host.
+INFO app.db.engine: Database connection warmed.
+INFO app.db.engine: Database schema present; conversations will be persisted.
+INFO app.ingest: Corpus already holds 706 chunks; skipping ingest.
+INFO app.main: Corpus holds 706 chunks in Postgres.
+INFO app.curriculum.schema: Curriculum loaded: 1 module(s), 5 lesson(s), 5 concept(s).
+INFO app.curriculum.seed: Curriculum seeded: 5 concepts.
+INFO app.main: Voice layer enabled.
+INFO app.main: Valkey reachable; response cache and job queue enabled.
+>>> VERDICT: BOOTED  (now check whether it can actually answer)
+
+════════════════════════════════════════════════════════════════
+CASE: Invalid LLM API key
+────────────────────────────────────────────────────────────────
+WARNING app.db.engine: DATABASE_URL does not look like Neon's pooled endpoint (no '-pooler' in the host). The direct endpoint holds one backend per connection and will exhaust under concurrent requests -- use the pooled host.
+INFO app.db.engine: Database connection warmed.
+INFO app.db.engine: Database schema present; conversations will be persisted.
+INFO app.ingest: Corpus already holds 706 chunks; skipping ingest.
+INFO app.main: Corpus holds 706 chunks in Postgres.
+INFO app.curriculum.schema: Curriculum loaded: 1 module(s), 5 lesson(s), 5 concept(s).
+INFO app.curriculum.seed: Curriculum seeded: 5 concepts.
+INFO app.main: Voice layer enabled.
+INFO app.main: Valkey reachable; response cache and job queue enabled.
+>>> VERDICT: BOOTED  (now check whether it can actually answer)
+
+════════════════════════════════════════════════════════════════
+CASE: Empty SESSION_SECRET (as .env.example ships it)
+────────────────────────────────────────────────────────────────
+WARNING app.db.engine: DATABASE_URL does not look like Neon's pooled endpoint (no '-pooler' in the host). The direct endpoint holds one backend per connection and will exhaust under concurrent requests -- use the pooled host.
+INFO app.db.engine: Database connection warmed.
+INFO app.db.engine: Database schema present; conversations will be persisted.
+INFO app.ingest: Corpus already holds 706 chunks; skipping ingest.
+INFO app.main: Corpus holds 706 chunks in Postgres.
+INFO app.curriculum.schema: Curriculum loaded: 1 module(s), 5 lesson(s), 5 concept(s).
+INFO app.curriculum.seed: Curriculum seeded: 5 concepts.
+INFO app.main: Voice layer enabled.
+INFO app.main: Valkey reachable; response cache and job queue enabled.
+>>> VERDICT: BOOTED  (now check whether it can actually answer)
+

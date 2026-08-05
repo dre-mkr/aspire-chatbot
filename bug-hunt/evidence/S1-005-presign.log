@@ -1,0 +1,10 @@
+C:\Users\fraim\projects\aspire-new\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+[1] POST /v2/session               -> 200
+    got a session token (anonymous, unauthenticated)
+[2] POST /v2/documents/presign     -> 200
+    document_id: d0b51b14986d405ab387eaa7cdc0ef35
+    signed key : ications/11111111-1111-1111-1111-111111111111/national_id/d0b51b14986d405ab387eaa7cdc0ef35
+
+    >>> CONFIRMED: the signed URL is scoped to an application id
+    >>> the caller supplied and does not own. No check was made.

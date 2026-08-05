@@ -1,0 +1,43 @@
+# S1-001 — cold start by the README is impossible; fails with a raw stack trace
+# Fresh clone of e5c4466 into a temp dir. No knowledge from prior sessions used.
+
+$ ls <clone>/README.md
+ls: cannot access 'README.md': No such file or directory     <-- no root README at all
+
+# backend/README.md, "Minimum config":
+#   "Only one value is truly required in .env:  OPENAI_API_KEY=sk-..."
+#   "Everything else has a working default"
+
+$ grep -c 'alembic\|upgrade head\|DATABASE_URL\|SESSION_SECRET\|Postgres\|pgvector\|VALKEY' backend/README.md
+alembic:        0
+upgrade head:   0
+DATABASE_URL:   0
+SESSION_SECRET: 0
+Postgres:       0
+pgvector:       0
+VALKEY:         0
+
+# Followed literally:
+$ cd backend && cp .env.example .env
+$ # set ONLY OPENAI_API_KEY, as instructed
+$ grep -E '^(DATABASE_URL|SESSION_SECRET)=' .env
+DATABASE_URL=postgresql://user:password@ep-example-123456-pooler.us-east-2.aws.neon.tech/aspire
+SESSION_SECRET=
+
+$ python -c "async with lifespan(app): ..."
+...
+  File ".../asyncpg/connect_utils.py", line 1102, in __connect_addr
+    await connected
+asyncpg.exceptions.InvalidPasswordError: password authentication failed for user 'user'
+
+>>> RESULT: boot FAILED with InvalidPasswordError
+>>> MESSAGE: password authentication failed for user 'user'
+
+# Two defects, not one:
+#  1. The README's "only one value is required" is false. The corpus moved into
+#     Postgres (P13-002) and `_require_corpus` raises without it; SESSION_SECRET
+#     is empty in .env.example and has no usable default.
+#  2. The failure surfaces as a raw asyncpg traceback naming the driver's
+#     internals. Compare `_require_corpus`, which DOES have a written, actionable
+#     message ("Set DATABASE_URL and run alembic upgrade head") -- it is never
+#     reached, because `warm()` dies first.

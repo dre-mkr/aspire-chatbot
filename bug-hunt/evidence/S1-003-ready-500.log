@@ -1,0 +1,27 @@
+# S1-003 — /ready returns HTTP 500 unconditionally, in every deployment
+# Scratch DB: postgresql://bughunt:***@127.0.0.1:55433/aspire_bughunt (NOT Neon)
+
+$ grep -n "^import" backend/app/main.py
+15:import logging
+16:import sys
+(no `import time`)
+
+$ grep -n "time\." backend/app/main.py
+362:    now = time.monotonic()          <-- inside _provider_ready(), called by /ready
+
+# Behaviour with a fully healthy configuration (DB up, cache up, valid secret):
+/ready  -> HTTP 500
+body    -> Internal Server Error
+/health -> HTTP 200 (for contrast)
+
+# Underlying exception, seen with TestClient's re-raise:
+READY -> RAISED NameError: name 'time' is not defined
+
+# Why nobody noticed:
+$ grep -rn "/ready" deploy/ .github/ frontend/src
+(no references)
+$ grep -rn "/ready" backend/tests/
+(no test covers /ready)
+
+# The endpoint exists precisely so a load balancer can distinguish "process is
+# up" from "able to answer a question". It is 100% broken and 0% exercised.
