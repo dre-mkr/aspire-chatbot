@@ -157,7 +157,34 @@ def make_resume_or_start(loader=None):
 # ── next_missing_slot / ask ──────────────────────────────────────────────────
 
 
-def pick_slot(draft: store.Draft) -> Slot | None:
+#: What an anonymous caller is told when the walk runs out of slots it may ask.
+#:
+#: Not an error and not a refusal to help -- the application so far is kept, and
+#: signing in resumes it (`resume_or_start`). It is the point past which the
+#: remaining questions are a national ID and a date of birth, which is a
+#: grown-up's job to answer.
+_HANDOFF: dict[str, str] = {
+    "en": (
+        "That is everything I can take without a grown-up. The next questions "
+        "ask for things like an ID number, so a parent or guardian needs to "
+        "sign in and finish with you. Nothing you have told me is lost."
+    ),
+    "es": (
+        "Eso es todo lo que puedo aceptar sin una persona adulta. Las siguientes "
+        "preguntas piden cosas como un numero de identificacion, asi que un padre, "
+        "una madre o un tutor debe iniciar sesion y terminar contigo. No se ha "
+        "perdido nada de lo que me has contado."
+    ),
+    "fr": (
+        "C'est tout ce que je peux prendre sans une grande personne. Les questions "
+        "suivantes demandent des choses comme un numero d'identite, alors un parent "
+        "ou un tuteur doit se connecter et terminer avec toi. Rien de ce que tu m'as "
+        "dit n'est perdu."
+    ),
+}
+
+
+def pick_slot(draft: store.Draft, *, allow_sensitive: bool = True) -> Slot | None:
     """Which question comes next.
 
     In correction mode the walk is the flagged list and nothing else -- that is
@@ -175,19 +202,36 @@ def pick_slot(draft: store.Draft) -> Slot | None:
                 return slot
         return None
 
-    return next_missing(draft.values, child_index=draft.child_index)
+    return next_missing(
+        draft.values, child_index=draft.child_index, allow_sensitive=allow_sensitive
+    )
 
 
-def make_ask():
-    """Ask for the next slot, with its options as quick replies."""
+def make_ask(*, allow_sensitive: bool = True):
+    """Ask for the next slot, with its options as quick replies.
+
+    `allow_sensitive=False` builds the anonymous variant. Two things change and
+    the second is the one that matters: the walk skips PII slots, AND running
+    out of slots stops instead of advancing to `review`. Advancing would submit
+    an application whose identifying fields were never collected, which is worse
+    than the bug being fixed -- so the anonymous walk ends in a handoff and the
+    draft stays open for a guardian to resume.
+    """
 
     def ask(state: AspireState) -> dict[str, Any]:
         draft = _draft(state)
-        slot = pick_slot(draft)
+        slot = pick_slot(draft, allow_sensitive=allow_sensitive)
         locale = _locale(state)
 
         if slot is None:
             draft.values.pop("__awaiting", None)
+            if not allow_sensitive:
+                return {
+                    "messages": [
+                        AIMessage(content=_HANDOFF.get(locale) or _HANDOFF["en"])
+                    ],
+                    "registration": _persist_state(draft),
+                }
             return {"registration": {**_persist_state(draft), "phase": "review"}}
 
         draft.values["__awaiting"] = slot.path
@@ -609,13 +653,18 @@ def _after_doc_check(state: AspireState) -> str:
 
 
 def build_register_graph(
-    *, loader=None, recorder=None, doc_check=None, checkpointer=None
+    *,
+    loader=None,
+    recorder=None,
+    doc_check=None,
+    checkpointer=None,
+    allow_sensitive: bool = True,
 ):
     graph = StateGraph(AspireState)
 
     graph.add_node("resume_or_start", make_resume_or_start(loader))
     graph.add_node("route", _passthrough)
-    graph.add_node("ask", make_ask())
+    graph.add_node("ask", make_ask(allow_sensitive=allow_sensitive))
     graph.add_node("collect", make_collect(recorder))
     graph.add_node("doc_check", doc_check or _no_doc_check)
     graph.add_node("extract", make_extract())
@@ -687,24 +736,37 @@ async def _record_document(draft: store.Draft, slot: str, payload: dict[str, Any
     )
 
 
-def build_production_register():
+def build_production_register(*, allow_sensitive: bool = True):
     from app.agents.register.nodes.doc_check import make_doc_check, vision_invoke
 
     return build_register_graph(
         recorder=_record_document,
         doc_check=make_doc_check(vision_invoke()),
+        allow_sensitive=allow_sensitive,
     )
 
 
 def register() -> None:
-    """Register for both registration agent names.
+    """Register both registration agent names, as two DIFFERENT graphs.
 
-    `register_agent_step1` is the anonymous variant: the same graph, and the
-    access matrix is what stops it reaching the slots that need an account. It
-    is not a different flow -- a signed-out parent who signs in mid-application
-    should continue, not start again.
+    `register_agent_step1` is the anonymous variant. It is the same flow -- a
+    signed-out parent who signs in mid-application continues rather than
+    starting again -- but it may not ask for PII, and the difference has to be
+    built in here because there is nowhere else it can live.
+
+    It used to be built here as literally the same graph, both names bound to a
+    factory that took no arguments and so could not tell which name it was
+    serving. The docstring claimed "the access matrix is what stops it reaching
+    the slots that need an account"; the access matrix returns agent NAMES, has
+    no vocabulary for slots, and is never consulted again after routing. The
+    result was that an unauthenticated caller -- band `5-8` by default -- was
+    asked for their full name and then their national ID number.
     """
+    from functools import partial
+
     from app.graph.main_graph import register_agent
 
-    for name in ("register_agent", "register_agent_step1"):
-        register_agent(name, build_production_register)
+    register_agent("register_agent", partial(build_production_register, allow_sensitive=True))
+    register_agent(
+        "register_agent_step1", partial(build_production_register, allow_sensitive=False)
+    )

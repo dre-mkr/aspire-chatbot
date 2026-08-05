@@ -607,7 +607,12 @@ def sensitive_paths() -> frozenset[str]:
     return frozenset(slot.path for slot in SLOTS if slot.sensitive)
 
 
-def next_missing(filled: dict[str, Any], *, child_index: int = 0) -> Slot | None:
+def next_missing(
+    filled: dict[str, Any],
+    *,
+    child_index: int = 0,
+    allow_sensitive: bool = True,
+) -> Slot | None:
     """The next slot to ask for, in order. None when the section is complete.
 
     Guardian slots are keyed by their own path; child slots are keyed
@@ -615,12 +620,33 @@ def next_missing(filled: dict[str, Any], *, child_index: int = 0) -> Slot | None
     ordering is the tuple's order and nothing else -- there is no branch here
     that could reorder the form based on what the conversation happened to
     cover, which is exactly the freedom the model does not get.
+
+    `allow_sensitive=False` is the anonymous walk, and it is a safety control
+    rather than a convenience. `access.py` grants an unauthenticated caller
+    `register_agent_step1` on the stated grounds that it collects "nothing that
+    would be PII about a minor" -- and an unauthenticated caller is band `5-8`,
+    because that is the conservative default `account.claims_for` returns when
+    there is no account to read. Nothing enforced that. The two agent names were
+    registered to the same zero-argument factory, so `step1` WAS `register_agent`,
+    and a child typing "I want to join ASPIRE" was asked for their full name and
+    then, repeatedly, for their national ID number.
+
+    Skipping `sensitive` slots is what makes the guarantee true, and it reuses
+    the flag that already decides encryption and transcript redaction rather
+    than introducing a second, driftable list of what counts as PII. What
+    survives the filter is the shape of an application -- relationship, parish,
+    whether the child already has an account -- which is exactly what can be
+    collected before anyone has proven who they are.
     """
     for slot in GUARDIAN_SLOTS:
+        if allow_sensitive is False and slot.sensitive:
+            continue
         if not slot.optional and filled.get(slot.path) in (None, ""):
             return slot
 
     for slot in CHILD_SLOTS:
+        if allow_sensitive is False and slot.sensitive:
+            continue
         key = child_key(slot.path, child_index)
         if not slot.optional and filled.get(key) in (None, ""):
             return slot
