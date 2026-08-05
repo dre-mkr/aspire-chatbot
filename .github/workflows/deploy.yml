@@ -73,6 +73,19 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: uv sync --frozen
+      # The backend had no linter at all, and that is how two NameErrors reached
+      # production code in `app/main.py`: `/ready` and `/debug/timings` both
+      # raised on every call, `ruff` reports them in under a second, and the
+      # 517-test suite passed with them live because no test imports those lines.
+      #
+      # `F` is pyflakes -- undefined names, unused imports, f-string mistakes.
+      # `E9` is syntax and IO errors. Deliberately NOT the full default rule set:
+      # this is a correctness gate, not a style gate, and a style gate bolted onto
+      # 128 existing files would be noise that teaches people to skip the step.
+      # Widen it later on purpose, not by accident.
+      - name: Backend lint (correctness only)
+        working-directory: backend
+        run: uvx ruff check app/ --select F,E9
       # Split fast from slow (P0-010). The whole suite is ~20 minutes, almost
       # all of it in bcrypt rounds and model/embedding fixtures, and a gate
       # nobody wants to wait for is a gate people learn to skip.

@@ -39,7 +39,6 @@ from app.games.models import (
     Language,
     Persona,
     Prompt,
-    Reveal,
     SkipResult,
     SubmitResult,
     Summary,

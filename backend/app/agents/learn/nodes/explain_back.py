@@ -37,7 +37,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.curriculum.schema import CheckQuestion, for_band
+from app.curriculum.schema import for_band
 
 logger = logging.getLogger(__name__)
 

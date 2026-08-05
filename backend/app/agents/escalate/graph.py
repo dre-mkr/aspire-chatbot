@@ -42,7 +42,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.state import MINOR_BANDS, AspireState
 from app.safety import pii
-from app.schemas.directives import EscalatedDirective, directive_payload
+from app.schemas.directives import EscalatedDirective
 
 logger = logging.getLogger(__name__)
 
