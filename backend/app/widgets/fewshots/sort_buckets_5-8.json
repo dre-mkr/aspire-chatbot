@@ -1,0 +1,51 @@
+[
+  {
+    "question": "what can I do with my money",
+    "widget": {
+      "kind": "sort_buckets",
+      "v": 1,
+      "concept_id": "save",
+      "title": "Where does it go?",
+      "prompt": "Tap the thing, then tap where it goes.",
+      "a11y_text": "Four things to sort. A snow cone and a comic go in the spend tin, because you use them today. A coin for your football and a coin for a gift go in the save tin, because they wait for you.",
+      "items": [
+        {
+          "id": "cone",
+          "label": "A snow cone",
+          "belongs_to": "spend"
+        },
+        {
+          "id": "comic",
+          "label": "A comic",
+          "belongs_to": "spend"
+        },
+        {
+          "id": "ball",
+          "label": "Coin for a football",
+          "belongs_to": "save"
+        },
+        {
+          "id": "gift",
+          "label": "Coin for a gift",
+          "belongs_to": "save"
+        }
+      ],
+      "buckets": [
+        {
+          "id": "save",
+          "label": "Save",
+          "hint": "It waits for you",
+          "colour": "accent",
+          "default_share": 0
+        },
+        {
+          "id": "spend",
+          "label": "Spend",
+          "hint": "You use it today",
+          "colour": "neutral",
+          "default_share": 0
+        }
+      ]
+    }
+  }
+]

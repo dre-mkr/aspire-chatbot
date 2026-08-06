@@ -125,223 +125,121 @@ def test_the_window_is_on_by_default():
 
 
 def test_the_window_requires_a_database():
-    """The flag alone must not switch it on.
+    """The flag alone must not switch summarisation on.
 
-    `load_context` reads history from Postgres. With the flag on and no database
-    the agent would be handed a bare question every turn -- the conversation
-    would lose its memory entirely rather than merely windowing it. So the
-    decision is `flag AND database`, and a deployment without Postgres keeps the
-    checkpointer it has always had.
+    This used to read `agent.build_agent`'s source, because that was where the
+    `flag AND database` decision lived. `build_agent` is gone; the rule moved to
+    `turn.summarisation_wanted`, which is the one place that now acts on it --
+    with the flag on and no Postgres there is no checkpoint for a thread to live
+    in, so there is nothing to summarise FROM and the work would be a model call
+    against an empty state.
     """
     import inspect
 
-    from app import agent
+    from app import turn
 
-    source = inspect.getsource(agent.build_agent)
+    source = inspect.getsource(turn.summarisation_wanted)
     assert "memory_window_enabled and database_enabled()" in source
 
 
-# --- the opening turn does not read history (P13-003) --------------------
+# --- what replaced the window read (P13-003, P13-007) ----------------------
+#
+# Five tests stood here. Each asserted a property of `main._prepare_messages`:
+# that an opening turn skipped the ~680 ms `load_context` round trip, that a
+# continuing turn still made it, and that it overlapped with the owner lookup
+# rather than queueing behind it.
+#
+# None of them can be repointed, because the thing they optimised is gone. The
+# graph does not assemble a prompt from a Postgres window -- `AsyncPostgresSaver`
+# holds the thread and langgraph loads it, so there is no request-path history
+# read left to skip, to overlap, or to make twice. The 680 ms is not saved; it
+# is not spent.
+#
+# `build_prompt` and `load_context` survive, unused by the request path, and the
+# tests above still exercise them. What they are FOR has narrowed twice, and the
+# note here has to keep up or it becomes the reason nobody removes them:
+#
+#   * not the summary worker -- that job is deleted (`app/jobs.py`). The rolling
+#     summary lives in the checkpoint and `turn.summarise_thread` writes it.
+#   * not the transcript export -- that is client-side, in `lib/aspire/export.ts`.
+#
+# What is left is `scripts/measure_prompt_tokens.py`, which is the tooling behind
+# the prompt-cost numbers in `docs/latency-baseline.md`, plus the window
+# arithmetic they encode, which is the reasoning the graph's own
+# `SUMMARY_AFTER_MESSAGES` inherited. `load_context` itself has no caller at all.
+#
+# What IS still asserted, and where:
+#
+#   the question is recorded before it is answered
+#       -> tests/test_p1_regressions.py::test_open_conversation_records_the_question
+#   the write is in flight before the graph runs
+#       -> tests/test_p1_regressions.py::test_the_stream_starts_the_conversation_write_before_the_graph
+#   PII never reaches the summary
+#       -> tests/safety/ and the two below
 
 
 @pytest.mark.anyio
-async def test_an_opening_turn_does_not_read_history(monkeypatch):
-    """`request.thread_id is None` means there is nothing to read, so nothing is.
+async def test_a_short_thread_is_not_summarised(monkeypatch):
+    """Compression is a model call, and a twelve-message thread does not need it."""
+    from app import turn as turn_service
 
-    The read being skipped is a ~680 ms round trip to Neon, paid ahead of the
-    model by every first-time reader, for a window that is empty by
-    construction: the thread id was minted by this same request.
-    """
-    from app import main
-    from app.schemas import ChatRequest
+    class _Graph:
+        # Present because `summarise_thread` refuses to read state back from a
+        # graph compiled without one -- a supported configuration, and how every
+        # subgraph test and the eval harness run.
+        checkpointer = object()
 
-    def explode(*args, **kwargs):  # pragma: no cover - the point is it is unreached
-        raise AssertionError("load_context was called on an opening turn")
+        async def aget_state(self, config):
+            return type("S", (), {"values": {"messages": [_Turn(role="user", content="hi")] * 3}})()
 
-    monkeypatch.setattr(main, "load_context", explode)
+        async def aupdate_state(self, config, values):  # pragma: no cover
+            raise AssertionError("a short thread must not be summarised")
 
-    messages = await main._prepare_messages(
-        ChatRequest(message="What is ASPIRE Day?"), "freshly-minted-id"
-    )
-    assert [m.content for m in messages] == ["What is ASPIRE Day?"]
+    monkeypatch.setattr(turn_service, "summarisation_wanted", lambda: True)
+    assert await turn_service.summarise_thread(_Graph(), {}) is False
 
 
 @pytest.mark.anyio
-async def test_an_opening_turn_sends_the_question_exactly_once(monkeypatch):
-    """The duplicate this removed, pinned so it cannot come back.
+async def test_the_summariser_never_sees_unredacted_text(monkeypatch):
+    """Redaction runs BEFORE the model, not on its output.
 
-    `_open_conversation` writes the question to Postgres before this runs, so a
-    window read would return it and `build_prompt` would then append it again --
-    sending the model the same sentence twice. Measured: input_token_count on an
-    opening turn roughly halved once the read was skipped.
+    A date of birth that reaches a summary is a date of birth in every future
+    prompt on that thread, forever. Summarising first and redacting the result
+    would mean the value had already been sent -- the exact thing being
+    prevented, arrived at one step too late.
     """
-    from app import main
-    from app.schemas import ChatRequest
+    from langchain_core.messages import HumanMessage
 
+    from app import turn as turn_service
+
+    seen: list[str] = []
+
+    async def _fake_summarise(turns, previous):
+        seen.extend(content for _role, content in turns)
+        return "a summary"
+
+    written: dict = {}
+
+    class _Graph:
+        checkpointer = object()
+
+        async def aget_state(self, config):
+            messages = [
+                HumanMessage(content="my date of birth is 2014-03-02")
+            ] + [HumanMessage(content=f"turn {i}") for i in range(20)]
+            return type("S", (), {"values": {"messages": messages, "summary": ""}})()
+
+        async def aupdate_state(self, config, values):
+            written.update(values)
+
+    monkeypatch.setattr(turn_service, "summarisation_wanted", lambda: True)
     monkeypatch.setattr(
-        main, "load_context", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+        "app.agent.summarise_conversation", _fake_summarise, raising=True
     )
 
-    messages = await main._prepare_messages(
-        ChatRequest(message="How do I apply?"), "freshly-minted-id"
-    )
-    assert sum(1 for m in messages if m.content == "How do I apply?") == 1
-
-
-@pytest.mark.anyio
-async def test_a_continuing_turn_still_reads_history(monkeypatch):
-    """The saving must not extend to turns that actually have a past.
-
-    Without this, "skip the read" quietly becomes "never read", and the
-    assistant forgets every conversation while the latency table looks better
-    than ever.
-    """
-    from app import main
-    from app.schemas import ChatRequest
-
-    calls: list[str] = []
-
-    async def fake_load_context(db, conversation_id, *, window_turns):
-        calls.append(conversation_id)
-        return ConversationContext(recent=[_Turn(role="user", content="earlier question")])
-
-    monkeypatch.setattr(main, "load_context", fake_load_context)
-
-    messages = await main._prepare_messages(
-        ChatRequest(message="and after that?", thread_id="existing-thread"),
-        "existing-thread",
-    )
-    assert calls == ["existing-thread"]
-    assert [m.content for m in messages] == ["earlier question", "and after that?"]
-
-
-# --- the owner lookup and the window read overlap (P13-007) --------------
-
-
-#: Long enough that the difference between one and two of them is unmistakable,
-#: short enough that the test stays cheap.
-_LEG = 0.15
-
-
-@pytest.mark.anyio
-async def test_the_owner_lookup_and_the_window_read_overlap(monkeypatch):
-    """Two independent Neon round trips, awaited as one.
-
-    They used to run in sequence -- `owner_id_for`, then `load_context` -- so an
-    authenticated caller on a continuing turn paid both end to end before the
-    model was called. Nothing links them: the lookup needs only the session token
-    and the read needs only the thread id.
-
-    Measured on the clock rather than asserted structurally, because "these two
-    overlap" is a claim about time and only a clock can settle it. The structural
-    half is the test below; this one would pass on any arrangement that genuinely
-    overlaps and fail on any that does not, which is the property worth pinning.
-
-    Verified to FAIL on the sequential arrangement this replaced: 2 x `_LEG`
-    against the 1 x it now takes.
-    """
-    import asyncio
-    import time
-
-    from app import main
-    from app.schemas import ChatRequest
-
-    async def slow_history(request, thread_id):
-        await asyncio.sleep(_LEG)
-        return ConversationContext(recent=[_Turn(role="user", content="earlier")])
-
-    async def slow_identity():
-        await asyncio.sleep(_LEG)
-        return "owner-id"
-
-    monkeypatch.setattr(main, "_load_history", slow_history)
-
-    # Warm tiktoken first: `_assemble_prompt` counts tokens, and the encoding is
-    # fetched and cached on first use. Paying that inside the timed block would
-    # be measuring the encoder, not the overlap.
-    await main._prepare_messages(
-        ChatRequest(message="warm the encoder", thread_id="t"), "t"
-    )
-
-    started = time.perf_counter()
-    messages = await main._prepare_messages(
-        ChatRequest(message="and after that?", thread_id="existing-thread"),
-        "existing-thread",
-        identity=slow_identity(),
-    )
-    elapsed = time.perf_counter() - started
-
-    assert elapsed < _LEG * 1.8, (
-        f"the two reads took {elapsed:.3f}s; one leg is {_LEG:.3f}s and two are "
-        f"{_LEG * 2:.3f}s, so they are running in sequence rather than together"
-    )
-    # The overlap must not have cost the history it was overlapping with.
-    assert [m.content for m in messages] == ["earlier", "and after that?"]
-
-
-@pytest.mark.anyio
-async def test_the_owner_id_reaches_the_conversation_write(monkeypatch):
-    """The gather must hand the resolved id on, not drop it.
-
-    `after_history` opens the conversation, and it is the owner id that decides
-    whose history list the chat appears in. Resolving it concurrently is only
-    safe if the value still arrives -- a gather that returned the id and then
-    wrote the row as anonymous would look fast and lose the conversation.
-    """
-    import asyncio
-
-    from app import main
-    from app.schemas import ChatRequest
-
-    async def identity():
-        return "owner-42"
-
-    seen: list = []
-
-    async def slow_history(request, thread_id):
-        await asyncio.sleep(0)
-        return ConversationContext()
-
-    monkeypatch.setattr(main, "_load_history", slow_history)
-
-    await main._prepare_messages(
-        ChatRequest(message="anything", thread_id="t-1"),
-        "t-1",
-        identity=identity(),
-        after_history=lambda owner: seen.append(owner),
-    )
-
-    assert seen == ["owner-42"], (
-        "the conversation write was handed %r instead of the resolved owner id" % seen
-    )
-
-
-def test_the_two_reads_are_gathered_not_sequential():
-    """Structural guard, so the overlap cannot be undone by an innocent edit.
-
-    The timing test above is the real assertion. This one names the mechanism, so
-    that a refactor which splits the gather back into two awaits fails with a
-    message saying what it broke rather than as an unexplained slowdown nobody
-    measures again.
-    """
-    import inspect
-
-    from app import main
-
-    source = inspect.getsource(main._prepare_messages)
-
-    assert "asyncio.gather(" in source, (
-        "`_prepare_messages` no longer gathers anything: the owner lookup and the "
-        "window read are two sequential Neon round trips again, and an "
-        "authenticated caller pays both before the model is called"
-    )
-
-    gather = source.index("asyncio.gather(")
-    assert gather < source.index("_resolved("), (
-        "the owner lookup is resolved outside the gather, so it no longer overlaps "
-        "the window read"
-    )
-    assert gather < source.index("_load_history("), (
-        "the window read is outside the gather, so it no longer overlaps the owner "
-        "lookup"
+    assert await turn_service.summarise_thread(_Graph(), {}) is True
+    assert written["summary"] == "a summary"
+    assert seen, "the summariser was never called"
+    assert not any("2014-03-02" in line for line in seen), (
+        "a date of birth reached the summariser unredacted"
     )

@@ -1,13 +1,41 @@
 """Background work, on arq.
 
-One job so far: regenerating a conversation's running summary. It lives here
-rather than in the request because compressing older turns costs a model call,
-and paying for it while the user waits would move the latency rather than
-remove it.
-
-Run the worker alongside the API:
+One nightly cron job: the retention sweep. Run the worker alongside the API:
 
     arq app.jobs.WorkerSettings
+
+## The summary job was removed here, and why (P15)
+
+This module used to carry `summarise_conversation_job` and `enqueue_summary`,
+which folded a conversation's older turns into `conversations.summary`. Both are
+gone, along with the `save_summary` / `turns_awaiting_summary` repository
+helpers that only they used.
+
+The rolling summary moved into the CHECKPOINT when the graph became the only
+chat path. `conversations.summary` was read by `load_context`, which fed
+`build_prompt`, which fed the v1 agent; the graph reads `state["summary"]`
+instead, and `turn.summarise_thread` writes it there with `aupdate_state` after
+the stream has closed. There is no longer anything on either end of the Postgres
+column.
+
+It was not merely unread -- it was unwritten. Measured on the dev database
+before removing it: 2,774 conversations, 0 with a summary and 0 with
+`summarized_through_seq > 0`, for two reasons stacked:
+
+  * `enqueue_summary` lost its last caller with `POST /chat`, so nothing has
+    queued the job since;
+  * before that, a backlog of 1,555 `summary:*` jobs sat in Valkey and was never
+    consumed. Starting a worker during verification drained all of them as
+    `expired` -- queued while `/chat` existed, never claimed, aged out in place.
+
+The column was empty for the whole life of the feature: first because nothing
+ran the queue, then because nothing filled it.
+
+Deleting it rather than leaving it wired to nothing, because a registered job
+that is never enqueued is indistinguishable from a broken one: the worker starts
+clean, reports itself healthy, and processes nothing forever. The column itself
+is left in place -- it holds no data, and this branch's migrations are additive
+only.
 """
 
 from __future__ import annotations
@@ -17,65 +45,12 @@ import logging
 from arq import cron
 from arq.connections import RedisSettings
 
-from app.agent import summarise_conversation
 from app.cache import valkey_url
 from app.config import get_settings
-from app.db import Conversation, database_enabled, session
-from app.db.repository import save_summary, turns_awaiting_summary
 
 from app.retention import retention_job
 
 logger = logging.getLogger(__name__)
-
-SUMMARISE_TASK = "summarise_conversation_job"
-
-
-async def summarise_conversation_job(ctx: dict, conversation_id: str) -> str | None:
-    """Fold everything that has fallen out of the window into the summary.
-
-    Idempotent on purpose. The trigger fires on a message count, retries happen,
-    and two workers can pick up the same conversation; `save_summary` refuses to
-    move `summarized_through_seq` backwards, so the worst case is wasted work
-    rather than lost context.
-    """
-    settings = get_settings()
-    if not database_enabled():
-        return None
-
-    async with session() as db:
-        if db is None:
-            return None
-
-        pending = await turns_awaiting_summary(
-            db, conversation_id, window_turns=settings.memory_window_turns
-        )
-        if len(pending) < settings.memory_summary_after_turns:
-            return None
-
-        conversation = await db.get(Conversation, conversation_id)
-        previous = conversation.summary if conversation else None
-        through = pending[-1].seq
-        turns = [(message.role, message.content) for message in pending]
-
-    # The model call happens outside the session: a summary can take seconds,
-    # and holding a pooled Neon connection open across it would waste the pool.
-    summary = await summarise_conversation(turns, previous)
-    if not summary:
-        return None
-
-    async with session() as db:
-        if db is None:
-            return None
-        await save_summary(db, conversation_id, summary=summary, through_seq=through)
-
-    logger.info(
-        "summarised conversation=%s through_seq=%d turns=%d chars=%d",
-        conversation_id,
-        through,
-        len(turns),
-        len(summary),
-    )
-    return summary
 
 
 def _redis_settings() -> RedisSettings:
@@ -91,7 +66,10 @@ def _redis_settings() -> RedisSettings:
 class WorkerSettings:
     """Entry point for `arq app.jobs.WorkerSettings`."""
 
-    functions = [summarise_conversation_job]
+    # Empty, and correctly so: this worker is cron-only now. Nothing in the
+    # product enqueues an on-demand job -- see the module docstring for what
+    # used to be here. arq requires the attribute to exist.
+    functions = []
     # Nightly, at 03:15, off the request path. A read-time sweep would put a
     # delete in front of somebody waiting for an answer, and would only ever
     # tidy up the identities that came back — which is the set that does not
@@ -99,9 +77,6 @@ class WorkerSettings:
     cron_jobs = [
         cron(retention_job, hour=3, minute=15, run_at_startup=False),
     ]
-    # Summarisation is best effort and the next turn triggers it again, so a
-    # long retry chain would only pile up duplicate model calls for a
-    # conversation nobody is waiting on.
     max_tries = 2
     job_timeout = 120
 
@@ -113,36 +88,7 @@ class WorkerSettings:
 # nor this class.
 #
 # Assigned after the class body rather than inside it so that importing this
-# module without VALKEY_URL set -- which `app.main` does, for `enqueue_summary`
-# -- cannot raise. Without Valkey there is no worker to configure anyway.
+# module without VALKEY_URL set cannot raise. Without Valkey there is no worker
+# to configure anyway.
 if get_settings().valkey_url:
     WorkerSettings.redis_settings = _redis_settings()
-
-
-async def enqueue_summary(conversation_id: str) -> bool:
-    """Ask for a summary refresh. Never blocks and never raises.
-
-    A queue that is unreachable must not fail the answer the user is reading:
-    the conversation keeps its previous summary and the next turn tries again.
-    """
-    if not get_settings().valkey_url:
-        return False
-
-    try:
-        from arq import create_pool
-
-        pool = await create_pool(_redis_settings())
-        try:
-            # Keyed by conversation, so a burst of turns coalesces into one job
-            # rather than queueing a model call per message.
-            await pool.enqueue_job(
-                SUMMARISE_TASK,
-                conversation_id,
-                _job_id=f"summary:{conversation_id}",
-            )
-        finally:
-            await pool.aclose()
-        return True
-    except Exception:
-        logger.warning("Could not enqueue the summary job.", exc_info=True)
-        return False

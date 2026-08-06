@@ -144,6 +144,7 @@ export function AspireChat() {
 		threadId,
 		animateAfterId,
 		send,
+		sendInteraction,
 		regenerate,
 		stop,
 		openPast,
@@ -602,6 +603,49 @@ export function AspireChat() {
 		[send, simpleMode, stopPlayback],
 	);
 
+	/**
+	 * What a directive needs in order to be interactive.
+	 *
+	 * Built here rather than in the transcript because every callback acts on the
+	 * CONVERSATION -- sending a widget interaction back as a turn, resuming an
+	 * interrupted registration with a document id -- and the transcript does not
+	 * own the conversation.
+	 *
+	 * `onUpload`, `onEditSlot` and `onSubmit` all send an ordinary message. That
+	 * is not a shortcut: the registration subgraph is a slot walk driven by what
+	 * the parent says, and the graph resumes an upload from the document id in
+	 * that message. A second, structured resume channel would be a second way to
+	 * advance a form, and forms with two ways to advance are how a slot gets
+	 * filled twice.
+	 */
+	const directiveContext = useMemo(
+		() => ({
+			threadId: threadId ?? undefined,
+			send: ask,
+			onWidgetInteraction: sendInteraction,
+			onGameResult: (result: { score: number; max_score: number }) =>
+				// Spoken as the child would say it, because the agent's reply has to
+				// reference the real numbers -- "well done" after 2 out of 8 is the
+				// same nothing as no reply at all.
+				ask(`I scored ${result.score} out of ${result.max_score}.`),
+			onUpload: (slot: string, documentId: string) =>
+				ask(`I uploaded ${slot}: ${documentId}`),
+			onEditSlot: (slot: string) => ask(`I need to change ${slot}.`),
+			onSubmit: () => ask("Submit my application."),
+			onSpeak: (text: string) => voice.play(ELIGIBILITY_SPEECH_ID, text),
+			speakAvailable: voice.available,
+			locale: voice.language,
+		}),
+		[
+			threadId,
+			ask,
+			sendInteraction,
+			voice.play,
+			voice.available,
+			voice.language,
+		],
+	);
+
 	// Carries the id of the answer being retried, so it replaces that one
 	// rather than whatever happens to be last in the transcript.
 	const handleRegenerate = useCallback(
@@ -1005,6 +1049,7 @@ export function AspireChat() {
 											pausedId: voice.pausedId,
 											play: voice.play,
 										}}
+										directiveContext={directiveContext}
 										game={
 											game && threadId
 												? {

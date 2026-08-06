@@ -1,0 +1,43 @@
+# S1-004 — /debug/timings 500s when disabled, and thereby confirms it exists
+# (the exact outcome its own docstring says it must avoid)
+
+$ uvx ruff check app/ --select F,E9 --output-format concise
+app\agents\escalate\graph.py:45:56: F401 `app.schemas.directives.directive_payload` imported but unused
+app\agents\learn\nodes\explain_back.py:40:35: F401 `app.curriculum.schema.CheckQuestion` imported but unused
+app\agents\qa\graph.py:37:29: F401 `langgraph.graph.END` imported but unused
+app\games\engine.py:42:5: F401 `app.games.models.Reveal` imported but unused
+app\main.py:296:15: F821 Undefined name `HTTPException`      <-- this finding
+app\main.py:362:11: F821 Undefined name `time`               <-- S1-003
+app\prompts.py:51:24: F541 f-string without any placeholders
+Found 7 errors.
+
+# app/main.py:282-296
+#   """...Gated on `TIMINGS_ENDPOINT_ENABLED`, and 404 rather than 403 when it
+#      is off: a disabled debug route should not confirm that it exists."""
+#   if not timings_endpoint_enabled():
+#       raise HTTPException(status_code=404, detail="Not Found")   <-- NameError
+
+# Measured with default config (TIMINGS_ENDPOINT_ENABLED unset => disabled),
+# scratch DB, healthy cache:
+/debug/timings      -> 500
+/debug/nonexistent  -> 404
+EXISTENCE LEAK: YES - the two are distinguishable
+
+# An unauthenticated prober learns /debug/timings exists on this service from
+# the status code alone. That is precisely what the deliberate 404-not-403
+# choice was made to prevent; the bug inverts the property the design was
+# careful about.
+
+# Why neither NameError was caught:
+$ grep -rn "debug/timings" backend/tests/     -> (none)
+$ grep -rn "/ready"        backend/tests/     -> (none)
+$ grep -nE "run:.*(ruff|mypy|pyright)" .github/workflows/deploy.yml
+NO Python linter in CI (frontend gates on `biome check`; backend gates on
+pytest only, and no test imports these two lines).
+
+# Both defects are single-token typos that `ruff check --select F` reports in
+# under a second. All 2,628 tests pass with them present.
+#
+# CORRECTION (2026-08-05): an earlier draft of this file and of FINDINGS.md said
+# "517 tests". That figure was carried over from a previous session's repo state
+# and was wrong. Measured on this branch: 2,628 collected, 2,581 fast, 47 slow.

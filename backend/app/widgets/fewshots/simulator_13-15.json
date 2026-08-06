@@ -1,0 +1,39 @@
+[
+  {
+    "question": "how much do i need to save each week for carnival",
+    "widget": {
+      "kind": "simulator",
+      "v": 1,
+      "concept_id": "goal",
+      "title": "Try it",
+      "caption": "Move the sliders and watch the weeks change.",
+      "a11y_text": "Two sliders. One sets how much you keep each week, the other sets your goal. The number below shows how many weeks it takes to get there.",
+      "controls": [
+        {
+          "id": "per_period",
+          "label": "Each week",
+          "kind": "slider",
+          "unit": "xcd_cents",
+          "min": 100,
+          "max": 10000,
+          "default": 2500,
+          "step": 100
+        },
+        {
+          "id": "goal",
+          "label": "Your goal",
+          "kind": "slider",
+          "unit": "xcd_cents",
+          "min": 5000,
+          "max": 100000,
+          "default": 45000,
+          "step": 500
+        }
+      ],
+      "formula": "savings_goal_time",
+      "output_label": "Weeks to get there",
+      "output_unit": "count",
+      "visual": "number_only"
+    }
+  }
+]

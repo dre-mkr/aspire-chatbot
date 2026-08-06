@@ -138,6 +138,43 @@ async def chat_rate_limit(
     return principal
 
 
+def graph_rate_limit(request: Request, session_id: str, user_id: str | None) -> None:
+    """Meter a graph turn. Raises 429, or returns.
+
+    Not a FastAPI dependency, because the identity it counts against is inside
+    the graph session token and that is decoded in the route body rather than
+    injected. Same limiter, same bucket and same window as the rest of the chat
+    surface -- deliberately the same bucket, so a caller cannot double their
+    budget by having two kinds of token.
+
+    Counted against the signed user id when there is one, then the session id,
+    then the address. The session id is the middle rung and it matters: an
+    anonymous reader has a signed session but no account, and metering them by
+    address would put a whole school on one counter.
+    """
+    settings = get_settings()
+    if user_id:
+        caller = f"u:{user_id}"
+    elif session_id:
+        caller = f"s:{session_id}"
+    else:
+        caller = f"ip:{hash_ip(client_ip(request))[:32]}"
+
+    decision = get_limiter().check(
+        "chat",
+        caller,
+        limit=settings.chat_messages_per_window,
+        window=settings.chat_rate_window_seconds,
+    )
+    if decision.allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail="You're asking questions faster than I can answer. Wait a moment, then try again.",
+        headers={"Retry-After": str(decision.retry_after_seconds)},
+    )
+
+
 async def title_rate_limit(
     request: Request, principal: Principal | None = Depends(chat_principal)
 ) -> Principal:

@@ -27,18 +27,22 @@ from app import main
 from app.main import app
 
 
-# ── P0-004 — _open_conversation is a no-op ──────────────────────────────────
+# ── P0-004 — the question is recorded before it is answered ─────────────────
 
 
 def test_open_conversation_records_the_question(monkeypatch):
     """A first turn whose answer fails must still leave a conversation behind.
 
-    That is what `_open_conversation`'s own docstring promises, and it is what
-    the client depends on: `use-conversation.ts:768-793` commits the chat to the
-    URL and the rail synchronously, before sending, and `openPast` (l.1086)
-    shows a "this question never got an answer" retry when it reopens a
-    conversation whose last stored turn is the question. With nothing written,
-    there is no conversation to reopen — a committed chat with no route out.
+    That is what `turn.open_conversation`'s own docstring promises, and it is
+    what the client depends on: `use-conversation.ts` commits the chat to the
+    URL and the rail synchronously, before sending, and `openPast` shows a
+    "this question never got an answer" retry when it reopens a conversation
+    whose last stored turn is the question. With nothing written, there is no
+    conversation to reopen -- a committed chat with no route out.
+
+    Repointed from `main._open_conversation`, which is gone with `/chat`. The
+    function moved to `app/turn.py`; the guarantee did not move with it by
+    accident, so it is asserted here rather than assumed.
     """
     calls: list[str] = []
 
@@ -55,18 +59,44 @@ def test_open_conversation_records_the_question(monkeypatch):
     async def _fake_append(db, thread_id, *, role, content, extra=None):
         calls.append(f"append_turn:{role}")
 
-    monkeypatch.setattr(main, "database_enabled", lambda: True)
-    monkeypatch.setattr(main, "session", _fake_session)
-    monkeypatch.setattr(main, "ensure_conversation", _fake_ensure)
-    monkeypatch.setattr(main, "append_turn", _fake_append)
+    from app import turn as turn_service
 
-    request = main.ChatRequest(message="Am I eligible for ASPIRE?")
-    asyncio.run(main._open_conversation(request, "thread-1", None))
+    monkeypatch.setattr(turn_service, "database_enabled", lambda: True)
+    monkeypatch.setattr(turn_service, "session", _fake_session)
+    monkeypatch.setattr(turn_service, "ensure_conversation", _fake_ensure)
+    monkeypatch.setattr(turn_service, "append_turn", _fake_append)
+
+    record = turn_service.TurnRecord(
+        thread_id="thread-1", question="Am I eligible for ASPIRE?", reply=""
+    )
+    asyncio.run(turn_service.open_conversation(record))
 
     assert calls == ["ensure_conversation", "append_turn:user"], (
-        "P0-004: `_open_conversation` (main.py:437-467) opens a session, tests "
-        "`if db is None`, and returns without writing anything. Its `request` "
-        "and `owner_id` parameters are unused. Today `calls` is empty."
+        "P0-004: the conversation row and the question must both be written "
+        "BEFORE the graph runs, so a failed answer still leaves something to "
+        "reopen."
+    )
+
+
+def test_the_stream_starts_the_conversation_write_before_the_graph(monkeypatch):
+    """And it starts it before the graph, not after.
+
+    `_events` creates the write as a task rather than awaiting it -- awaiting
+    would put a Neon round trip in front of the first token -- so the ordering
+    that matters is where the task is CREATED. A task created after
+    `graph.astream` would not survive the graph raising, which is the exact case
+    the guarantee is for.
+    """
+    from app.api import stream
+
+    # Matched on the code rather than on the names: the docstring draws the same
+    # ordering as a diagram, and a substring search would find that instead and
+    # pass regardless of what the function does.
+    source = inspect.getsource(stream._events)
+    started = source.index("asyncio.create_task(turn_service.open_conversation")
+    graph_runs = source.index("async for chunk in graph.astream")
+    assert started < graph_runs, (
+        "the conversation write must be in flight before the graph runs"
     )
 
 
@@ -105,7 +135,28 @@ def test_title_endpoint_requires_a_session(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("route", ["/chat", "/chat/stream", "/api/title"])
+def _llm_handlers():
+    """The handlers of every endpoint that spends a model call.
+
+    Imported rather than read off `app.routes`. This FastAPI version wraps an
+    included router in an opaque `_IncludedRouter` and flattens it at request
+    time, so `app.routes` lists four handlers and eight anonymous wrappers --
+    and the routes that matter here all live on routers now that `/chat` is
+    gone. A path lookup would silently find nothing and pass.
+    """
+    from app.api.stream import chat_stream_v2, widget_interaction
+    from app.main import title
+
+    return {
+        "/v2/chat/stream": chat_stream_v2,
+        "/v2/widget/interaction": widget_interaction,
+        "/api/title": title,
+    }
+
+
+@pytest.mark.parametrize(
+    "route", ["/v2/chat/stream", "/v2/widget/interaction", "/api/title"]
+)
 def test_llm_routes_are_rate_limited(route):
     """Every endpoint that spends a model call must be metered per caller.
 
@@ -115,14 +166,29 @@ def test_llm_routes_are_rate_limited(route):
     programme's budget as fast as the network allows. The pack rates a missing
     limit on message send S1.
     """
-    routes = {r.path: r for r in app.routes if hasattr(r, "path")}
-    endpoint = routes[route].endpoint
-    source = inspect.getsource(endpoint)
+    source = inspect.getsource(_llm_handlers()[route])
 
-    assert "limit" in source.lower(), (
+    assert "limit" in source.lower() or "_meter" in source, (
         f"P1-001: {route} has no rate limiting of any kind. Its handler never "
         "consults a limiter, and no limiting middleware is installed "
-        "(main.py:126 adds only CORSMiddleware)."
+        "(main.py adds only CORSMiddleware)."
+    )
+
+
+def test_the_stream_meters_before_the_response_opens():
+    """A 429 has to be a 429, not an error event inside a 200.
+
+    `StreamingResponse` sends its status line before the body generator runs, so
+    a limiter that raised inside `_events` would produce a truncated 200 that
+    the client cannot tell apart from a short answer. `_meter` is called in the
+    route handler, above the `return StreamingResponse(...)`, and this asserts
+    that ordering rather than trusting it.
+    """
+    from app.api.stream import chat_stream_v2
+
+    source = inspect.getsource(chat_stream_v2)
+    assert source.index("_meter(") < source.index("StreamingResponse("), (
+        "the rate limit must be enforced before the response is opened"
     )
 
 

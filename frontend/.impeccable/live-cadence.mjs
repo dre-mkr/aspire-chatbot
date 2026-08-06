@@ -40,7 +40,7 @@ await p.setViewport({ width: 1280, height: 900 });
  * and everything after that is the client's to answer for.
  */
 await p.evaluateOnNewDocument(() => {
-	window.__wire = { firstDelta: null, lastDelta: null, textEnd: null, done: null };
+	window.__wire = { firstDelta: null, lastDelta: null, textEnd: null, turn: null, chips: null };
 	const real = window.fetch;
 	window.fetch = async (input, init) => {
 		const url = typeof input === "string" ? input : (input?.url ?? "");
@@ -74,7 +74,11 @@ await p.evaluateOnNewDocument(() => {
 					} else if (event.type === "TEXT_MESSAGE_END") {
 						window.__wire.textEnd = now;
 					} else if (event.type === "CUSTOM") {
-						window.__wire.done = now;
+						// Two of these now: the turn, and the chips that cost a
+						// second model call. Timed apart, because the gap between
+						// them is the thing worth watching.
+						if (event.name === "aspire.follow_ups") window.__wire.chips = now;
+						else window.__wire.turn ??= now;
 					}
 				}
 			}
@@ -113,6 +117,13 @@ await p.waitForFunction(() => !document.querySelector(".composer__send--stop"), 
 	timeout: 120000,
 	polling: 50,
 });
+// The composer frees the moment the turn settles, which is now well before the
+// chips exist. Waiting only for that recorded a run with no chips in it and
+// turned the assertion about them into a vacuous pass. A turn may genuinely
+// have none, so this tolerates the timeout rather than failing on it.
+await p
+	.waitForFunction(() => window.__wire.chips !== null, { timeout: 20000, polling: 50 })
+	.catch(() => {});
 await new Promise((r) => setTimeout(r, 900));
 
 const samples = await p.evaluate(() => {
@@ -167,15 +178,17 @@ console.log(`     last frame added ${jump} characters`);
 // What changed, if anything, once the turn's payload arrived. This is the
 // number the recording was made about: everything the reveal had stranded used
 // to land here, in one frame, seconds after the answer looked finished.
-const lastBefore = [...withText].reverse().find((s) => s.t <= wire.done);
-const settleJump = last.text.length - (lastBefore?.text.length ?? 0);
+// The reveal must not be gated on the chips. It used to be: the turn payload
+// carried them, so nothing settled until they existed.
+const revealBeatChips = wire.chips === null || last.t < wire.chips;
 
 console.log("\n     where the waiting went:");
 console.log(`       ${String(Math.round(wire.firstDelta - asked)).padStart(6)}ms  the service, before its first token`);
 console.log(`       ${String(Math.round(first.t - wire.firstDelta)).padStart(6)}ms  the client, before its first word`);
 console.log(`       ${String(Math.round(wire.lastDelta - wire.firstDelta)).padStart(6)}ms  the service, writing`);
 console.log(`       ${String(Math.round(wire.textEnd - wire.lastDelta)).padStart(6)}ms  until the text was declared final`);
-console.log(`       ${String(Math.round(wire.done - wire.textEnd)).padStart(6)}ms  follow-ups and persistence, after that`);
+console.log(`       ${String(Math.round(wire.turn - wire.textEnd)).padStart(6)}ms  until the turn was announced`);
+console.log(`       ${String(Math.round((wire.chips ?? wire.turn) - wire.turn)).padStart(6)}ms  the chips, after that`);
 console.log(`       ${String(Math.round(last.t - wire.textEnd)).padStart(6)}ms  the reveal, after the text was final\n`);
 
 say(`no gap mid-answer reaches ${STALL_MS}ms`, worst < STALL_MS, `${Math.round(worst)}ms`);
@@ -194,9 +207,11 @@ say(
 	`${Math.round(last.t - wire.textEnd)}ms`,
 );
 say(
-	"the turn settling adds nothing to the screen",
-	settleJump === 0,
-	`${settleJump} characters after the payload`,
+	"the reveal finishes without waiting for the chips",
+	revealBeatChips,
+	wire.chips === null
+		? "no chips on this turn"
+		: `${Math.round(wire.chips - last.t)}ms of slack`,
 );
 say("nothing already on screen is rewritten", rewrite === null, rewrite ?? "");
 say("the answer does not land in one frame at the end", jump < 60, `${jump} characters`);

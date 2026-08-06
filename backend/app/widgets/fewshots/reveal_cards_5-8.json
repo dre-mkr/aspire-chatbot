@@ -1,0 +1,27 @@
+[
+  {
+    "question": "what do these words mean",
+    "widget": {
+      "kind": "reveal_cards",
+      "v": 1,
+      "concept_id": "save",
+      "title": "Turn them over",
+      "prompt": "Tap a card to see what it means.",
+      "a11y_text": "Three cards. Saving means keeping your money for later. Spending means using it now. A goal is the thing you are saving for.",
+      "cards": [
+        {
+          "front": "Saving",
+          "back": "Keeping your money for later."
+        },
+        {
+          "front": "Spending",
+          "back": "Using your money now to get something."
+        },
+        {
+          "front": "Goal",
+          "back": "The thing you are saving for."
+        }
+      ]
+    }
+  }
+]

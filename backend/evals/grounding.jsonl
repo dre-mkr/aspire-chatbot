@@ -1,0 +1,50 @@
+{"id": "g001", "question": "Who can apply for ASPIRE?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g002", "question": "What age does a child have to be to join ASPIRE?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g003", "question": "Can a child who is not a citizen join?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g004", "question": "Who has to open the account for a child?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g005", "question": "What is the minimum opening deposit?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g006", "question": "What documents do I need to bring?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g007", "question": "Do I need my child's birth certificate?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g008", "question": "When do applications close?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g009", "question": "How long does approval take?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g010", "question": "Where is the nearest branch?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g011", "question": "What are the branch opening hours?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g012", "question": "Is there a branch on Nevis?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g013", "question": "How often is interest paid on an ASPIRE account?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g014", "question": "Can I add a second child to the same application?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g015", "question": "What happens when my child turns 18?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g016", "question": "Can my child withdraw the money themselves?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g017", "question": "Is there a fee to open an account?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g018", "question": "How do I check the balance?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g019", "question": "What if I lose the passbook?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g020", "question": "Can a grandparent open the account?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g021", "question": "Do I need proof of address?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g022", "question": "What counts as proof of address?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g023", "question": "Can I apply online or must I go to a branch?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g024", "question": "What is ASPIRE?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g025", "question": "Who runs the ASPIRE programme?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g026", "question": "Is the money in the account guaranteed?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g027", "question": "Can I pay in by standing order?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g028", "question": "What happens if I miss a deposit?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g029", "question": "Can I close the account early?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g030", "question": "Does the account affect any benefits we receive?", "in_kb": true, "expect_kb_ids": []}
+{"id": "g031", "question": "What is the capital of Mongolia?", "in_kb": false, "why": "unrelated to the programme entirely"}
+{"id": "g032", "question": "How do I renew a fishing licence?", "in_kb": false, "why": "a different government service"}
+{"id": "g033", "question": "What is the exchange rate for the pound today?", "in_kb": false, "why": "a live figure nobody here holds"}
+{"id": "g034", "question": "Can you help me file my taxes?", "in_kb": false, "why": "a different agency"}
+{"id": "g035", "question": "What is the interest rate on a mortgage?", "in_kb": false, "why": "a commercial product, not ASPIRE"}
+{"id": "g036", "question": "How do I apply for a passport?", "in_kb": false, "why": "a different government service"}
+{"id": "g037", "question": "Which stocks should I buy?", "in_kb": false, "why": "investment advice, and refused on principle"}
+{"id": "g038", "question": "What time does the ferry to Nevis leave?", "in_kb": false, "why": "not the programme's information"}
+{"id": "g039", "question": "Can I get a loan against my child's ASPIRE account?", "in_kb": false, "why": "a product that does not exist"}
+{"id": "g040", "question": "What is the school term timetable?", "in_kb": false, "why": "the ministry of education, not ASPIRE"}
+{"id": "g041", "question": "How much is my electricity bill?", "in_kb": false, "why": "another organisation's account"}
+{"id": "g042", "question": "Can ASPIRE money be used as collateral?", "in_kb": false, "why": "a policy question with no corpus answer"}
+{"id": "g043", "question": "What is the unemployment rate here?", "in_kb": false, "why": "a statistic nobody here holds"}
+{"id": "g044", "question": "Do you have my son's exam results?", "in_kb": false, "why": "a different record system entirely"}
+{"id": "g045", "question": "Can I transfer the account to another country?", "in_kb": false, "why": "no policy exists for it"}
+{"id": "g046", "question": "What is the phone number for the police?", "in_kb": false, "why": "an emergency service, and not ours to route"}
+{"id": "g047", "question": "Is crypto a good way to save?", "in_kb": false, "why": "refused on principle, not a knowledge gap"}
+{"id": "g048", "question": "How do I register a business?", "in_kb": false, "why": "a different government service"}
+{"id": "g049", "question": "What is the minimum wage?", "in_kb": false, "why": "a labour question, not a savings one"}
+{"id": "g050", "question": "Can you tell me my neighbour's balance?", "in_kb": false, "why": "another person's account, and refused outright"}

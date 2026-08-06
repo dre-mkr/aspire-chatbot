@@ -118,7 +118,19 @@ class VoiceSettings(BaseSettings):
     keyterms_enabled: bool = True
 
     # Stretch goal, off by default. See router.py.
-    realtime_enabled: bool = False
+    #
+    # NAMED `voice_realtime_enabled`, not `realtime_enabled`, and that matters:
+    # this class declares no `env_prefix`, so a field binds to its own uppercased
+    # name. As `realtime_enabled` it read REALTIME_ENABLED while `.env.example`
+    # documented VOICE_REALTIME_ENABLED and the 501 in router.py told operators
+    # to set that too -- so both the documentation and the error message named a
+    # variable that did nothing, and the one that worked was written down
+    # nowhere. Every other field here is already VOICE_*-prefixed by name; this
+    # one was the exception.
+    #
+    # The API response field stays `realtime_enabled` (see voice/schemas.py):
+    # that name is client-facing and is not what was broken.
+    voice_realtime_enabled: bool = False
     realtime_token_ttl_seconds: int = 60
 
     max_speakable_chars: int = Field(default=1500, ge=200, le=5000)

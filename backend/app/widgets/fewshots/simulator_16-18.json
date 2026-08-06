@@ -1,0 +1,59 @@
+[
+  {
+    "question": "how does compound interest actually work",
+    "widget": {
+      "kind": "simulator",
+      "v": 1,
+      "concept_id": "compound_interest",
+      "title": "Compound interest",
+      "caption": "Four things you can change. Watch the line bend.",
+      "a11y_text": "Four sliders control the starting amount, the monthly contribution, the rate and the number of years. A line chart shows the balance rising, curving upward as the interest itself starts earning.",
+      "controls": [
+        {
+          "id": "principal",
+          "label": "Starting amount",
+          "kind": "slider",
+          "unit": "xcd_cents",
+          "min": 0,
+          "max": 500000,
+          "default": 50000,
+          "step": 1000
+        },
+        {
+          "id": "contribution",
+          "label": "Each month",
+          "kind": "slider",
+          "unit": "xcd_cents",
+          "min": 0,
+          "max": 100000,
+          "default": 15000,
+          "step": 1000
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "slider",
+          "unit": "rate",
+          "min": 0.0,
+          "max": 0.12,
+          "default": 0.05,
+          "step": 0.005
+        },
+        {
+          "id": "years",
+          "label": "Years",
+          "kind": "slider",
+          "unit": "years",
+          "min": 1,
+          "max": 40,
+          "default": 10,
+          "step": 1
+        }
+      ],
+      "formula": "compound_interest",
+      "output_label": "What you would have",
+      "output_unit": "xcd_cents",
+      "visual": "line"
+    }
+  }
+]

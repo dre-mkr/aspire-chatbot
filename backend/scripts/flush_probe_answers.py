@@ -9,7 +9,16 @@ a first-time question actually experiences.
 
 import asyncio
 
-from app.cache import get_client, namespace
+from app.cache import _FLUSH_PREFIXES, get_client, namespace
+
+#: Answers and shelves, every version -- but never the embedding cache, which is
+#: the whole point of this script as opposed to `flush_answers()`.
+#:
+#: Derived from the canonical list rather than spelled out again. Both copies had
+#: gone stale at `answer:v1:` after the age band bumped the key to v2, and here
+#: that is worse than a missed reclaim: a warm-MISS probe that silently deletes
+#: nothing measures warm HITS and reports them under the other name.
+_PREFIXES = tuple(p for p in _FLUSH_PREFIXES if not p.startswith("embed:"))
 
 
 async def main() -> None:
@@ -18,7 +27,7 @@ async def main() -> None:
         print("no Valkey configured")
         return
     deleted = 0
-    for prefix in ("answer:v1:", "semindex:v1:"):
+    for prefix in _PREFIXES:
         async for key in client.scan_iter(match=f"{namespace()}{prefix}*", count=200):
             await client.delete(key)
             deleted += 1

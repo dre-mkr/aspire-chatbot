@@ -1,0 +1,53 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "frontend",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": [
+				"run",
+				"dev",
+				"--prefix",
+				"frontend"
+			],
+			"port": 3000,
+			"env": {
+				"VITE_ASPIRE_API_URL": "http://localhost:8010"
+			}
+		},
+		{
+			"name": "backend",
+			"runtimeExecutable": ".venv/Scripts/python.exe",
+			"runtimeArgs": [
+				"-m",
+				"app.serve",
+				"--host",
+				"127.0.0.1",
+				"--port",
+				"8010"
+			],
+			"cwd": "backend",
+			"autoPort": false,
+			"port": 8010
+		},
+		{
+			"name": "backend-timings",
+			"runtimeExecutable": ".venv/Scripts/python.exe",
+			"runtimeArgs": [
+				"-m",
+				"app.serve",
+				"--host",
+				"127.0.0.1",
+				"--port",
+				"8001"
+			],
+			"cwd": "backend",
+			"env": {
+				"TIMINGS_ENDPOINT_ENABLED": "1",
+				"CHAT_MESSAGES_PER_WINDOW": "200"
+			},
+			"autoPort": false,
+			"port": 8001
+		}
+	]
+}

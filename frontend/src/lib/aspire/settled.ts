@@ -46,7 +46,11 @@
  * neighbours — a real table, a fenced code block, a setext heading — that guard
  * fails and this file has to become more conservative before anything ships.
  */
-import { type AnswerBlock, parseAnswer } from "./knowledge";
+// Explicit `.ts`, like every other import in the modules `node --test` reaches.
+// Node's ESM resolver does not guess an extension, so an extensionless
+// specifier here fails to resolve the moment anything under test imports this
+// file -- which `lib/stream/parser.ts` now does.
+import { type AnswerBlock, parseAnswer } from "./knowledge.ts";
 
 /**
  * A trailing line that has not yet said what it is.

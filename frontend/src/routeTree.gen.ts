@@ -10,15 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ResetRouteImport } from './routes/reset'
 import { Route as SigninRouteImport } from './routes/signin'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as ShellIndexRouteImport } from './routes/_shell/index'
+import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
+import { Route as AdminWidgetsRouteImport } from './routes/admin/widgets'
 import { Route as ShellChatChatIdRouteImport } from './routes/_shell/chat.$chatId'
+import { Route as AdminApplicationsIdRouteImport } from './routes/admin/applications.$id'
 
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetRoute = ResetRouteImport.update({
@@ -46,57 +55,108 @@ const ShellIndexRoute = ShellIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ShellRoute,
 } as any)
+const AdminApplicationsRoute = AdminApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminWidgetsRoute = AdminWidgetsRouteImport.update({
+  id: '/widgets',
+  path: '/widgets',
+  getParentRoute: () => AdminRoute,
+} as any)
 const ShellChatChatIdRoute = ShellChatChatIdRouteImport.update({
   id: '/chat/$chatId',
   path: '/chat/$chatId',
   getParentRoute: () => ShellRoute,
 } as any)
+const AdminApplicationsIdRoute = AdminApplicationsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminApplicationsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ShellIndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/reset': typeof ResetRoute
   '/signin': typeof SigninRoute
   '/signup': typeof SignupRoute
   '/verify': typeof VerifyRoute
+  '/admin/applications': typeof AdminApplicationsRouteWithChildren
+  '/admin/widgets': typeof AdminWidgetsRoute
   '/chat/$chatId': typeof ShellChatChatIdRoute
+  '/admin/applications/$id': typeof AdminApplicationsIdRoute
 }
 export interface FileRoutesByTo {
+  '/admin': typeof AdminRouteWithChildren
   '/reset': typeof ResetRoute
   '/signin': typeof SigninRoute
   '/signup': typeof SignupRoute
   '/verify': typeof VerifyRoute
+  '/admin/applications': typeof AdminApplicationsRouteWithChildren
+  '/admin/widgets': typeof AdminWidgetsRoute
   '/': typeof ShellIndexRoute
   '/chat/$chatId': typeof ShellChatChatIdRoute
+  '/admin/applications/$id': typeof AdminApplicationsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_shell': typeof ShellRouteWithChildren
+  '/admin': typeof AdminRouteWithChildren
   '/reset': typeof ResetRoute
   '/signin': typeof SigninRoute
   '/signup': typeof SignupRoute
   '/verify': typeof VerifyRoute
+  '/admin/applications': typeof AdminApplicationsRouteWithChildren
+  '/admin/widgets': typeof AdminWidgetsRoute
   '/_shell/': typeof ShellIndexRoute
   '/_shell/chat/$chatId': typeof ShellChatChatIdRoute
+  '/admin/applications/$id': typeof AdminApplicationsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/reset' | '/signin' | '/signup' | '/verify' | '/chat/$chatId'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/reset' | '/signin' | '/signup' | '/verify' | '/' | '/chat/$chatId'
-  id:
-    | '__root__'
-    | '/_shell'
+    | '/'
+    | '/admin'
     | '/reset'
     | '/signin'
     | '/signup'
     | '/verify'
+    | '/admin/applications'
+    | '/admin/widgets'
+    | '/chat/$chatId'
+    | '/admin/applications/$id'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/admin'
+    | '/reset'
+    | '/signin'
+    | '/signup'
+    | '/verify'
+    | '/admin/applications'
+    | '/admin/widgets'
+    | '/'
+    | '/chat/$chatId'
+    | '/admin/applications/$id'
+  id:
+    | '__root__'
+    | '/_shell'
+    | '/admin'
+    | '/reset'
+    | '/signin'
+    | '/signup'
+    | '/verify'
+    | '/admin/applications'
+    | '/admin/widgets'
     | '/_shell/'
     | '/_shell/chat/$chatId'
+    | '/admin/applications/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   ShellRoute: typeof ShellRouteWithChildren
+  AdminRoute: typeof AdminRouteWithChildren
   ResetRoute: typeof ResetRoute
   SigninRoute: typeof SigninRoute
   SignupRoute: typeof SignupRoute
@@ -110,6 +170,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset': {
@@ -147,12 +214,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellIndexRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/admin/applications': {
+      id: '/admin/applications'
+      path: '/applications'
+      fullPath: '/admin/applications'
+      preLoaderRoute: typeof AdminApplicationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/widgets': {
+      id: '/admin/widgets'
+      path: '/widgets'
+      fullPath: '/admin/widgets'
+      preLoaderRoute: typeof AdminWidgetsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/_shell/chat/$chatId': {
       id: '/_shell/chat/$chatId'
       path: '/chat/$chatId'
       fullPath: '/chat/$chatId'
       preLoaderRoute: typeof ShellChatChatIdRouteImport
       parentRoute: typeof ShellRoute
+    }
+    '/admin/applications/$id': {
+      id: '/admin/applications/$id'
+      path: '/$id'
+      fullPath: '/admin/applications/$id'
+      preLoaderRoute: typeof AdminApplicationsIdRouteImport
+      parentRoute: typeof AdminApplicationsRoute
     }
   }
 }
@@ -169,8 +257,32 @@ const ShellRouteChildren: ShellRouteChildren = {
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
+interface AdminApplicationsRouteChildren {
+  AdminApplicationsIdRoute: typeof AdminApplicationsIdRoute
+}
+
+const AdminApplicationsRouteChildren: AdminApplicationsRouteChildren = {
+  AdminApplicationsIdRoute: AdminApplicationsIdRoute,
+}
+
+const AdminApplicationsRouteWithChildren =
+  AdminApplicationsRoute._addFileChildren(AdminApplicationsRouteChildren)
+
+interface AdminRouteChildren {
+  AdminApplicationsRoute: typeof AdminApplicationsRouteWithChildren
+  AdminWidgetsRoute: typeof AdminWidgetsRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminApplicationsRoute: AdminApplicationsRouteWithChildren,
+  AdminWidgetsRoute: AdminWidgetsRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   ShellRoute: ShellRouteWithChildren,
+  AdminRoute: AdminRouteWithChildren,
   ResetRoute: ResetRoute,
   SigninRoute: SigninRoute,
   SignupRoute: SignupRoute,

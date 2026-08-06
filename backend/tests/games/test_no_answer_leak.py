@@ -194,19 +194,23 @@ def test_chat_response_schema_cannot_carry_an_answer():
     assert set(StartedEligibilityCheck.model_fields) == {"check", "language"}
 
 
-def test_game_tool_output_cannot_reach_the_sources_field():
-    """`_extract_sources` only collects retriever Documents.
+def test_a_game_directive_has_no_field_a_puzzle_could_travel_in():
+    """The property `_extract_sources` used to be asked to guarantee.
 
-    Game tools return plain dicts with no artifact, so they cannot appear in the
-    API's `sources` even by accident.
+    That test built a `ToolMessage` carrying `{"word": "MONEY"}` in its
+    `artifact` and asserted `/chat`'s source extractor ignored it -- a check
+    that the leak path was not TAKEN.
+
+    There is no such path now. `/chat` is gone, sources come from
+    `ground_check`'s citation set (kb ids and titles, nothing else), and a game
+    is launched by a `GameDirective` whose schema is closed with
+    `extra="forbid"`. The guarantee moved from "the extractor filters it out"
+    to "there is no field it could be in", which is the stronger form.
     """
-    from langchain_core.messages import ToolMessage
+    from app.schemas.directives import GameDirective
 
-    from app.main import _extract_sources
+    assert set(GameDirective.model_fields) == {"t", "game", "concept", "difficulty"}
 
-    leaked = ToolMessage(
-        content=json.dumps({"word": "MONEY"}),
-        tool_call_id="call-1",
-        artifact=[{"word": "MONEY"}],
-    )
-    assert _extract_sources([leaked]) == []
+    with pytest.raises(Exception):
+        # `extra="forbid"`, so a puzzle cannot be smuggled in as a stray field.
+        GameDirective(game="scramble", concept="saving", word="MONEY")

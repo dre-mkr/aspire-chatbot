@@ -24,58 +24,59 @@ const config = defineConfig(({ command }) => {
 	}
 
 	return {
-	resolve: { tsconfigPaths: true },
-	// Vite 8 no longer gives the `ssr` environment a runnable dev environment by
-	// default, and TanStack Start needs one: its dev middleware runs the server
-	// entry in-process. Without this `vite dev` starts cleanly, logs nothing, and
-	// answers every route with a bare 404 — the plugin quietly declines to install
-	// its SSR handler when the environment is not runnable. `vite build` is
-	// unaffected, which is why the production bundle was fine throughout and only
-	// development was broken.
-	environments: {
-		ssr: {
-			dev: {
-				createEnvironment: (name, config) => createRunnableDevEnvironment(name, config),
+		resolve: { tsconfigPaths: true },
+		// Vite 8 no longer gives the `ssr` environment a runnable dev environment by
+		// default, and TanStack Start needs one: its dev middleware runs the server
+		// entry in-process. Without this `vite dev` starts cleanly, logs nothing, and
+		// answers every route with a bare 404 — the plugin quietly declines to install
+		// its SSR handler when the environment is not runnable. `vite build` is
+		// unaffected, which is why the production bundle was fine throughout and only
+		// development was broken.
+		environments: {
+			ssr: {
+				dev: {
+					createEnvironment: (name, config) =>
+						createRunnableDevEnvironment(name, config),
+				},
 			},
 		},
-	},
-	// @tanstack/react-store reaches into use-sync-external-store with a named
-	// import, but that shim is CJS. If the optimizer prebundles react-store and
-	// leaves the shim raw, the browser gets `module.exports = require(...)` and
-	// the named import throws at parse time — which kills hydration for the whole
-	// app, not just the store. Prebundle the shim so it arrives as real ESM.
-	//
-	// @tanstack/react-router-ssr-query is reached only from src/router.tsx, which
-	// the scanner does not walk — Start supplies the client entry virtually — so
-	// the optimizer discovers it one pass late, after react-query has already been
-	// bundled. A late discovery is not folded into the existing chunk: rolldown
-	// inlines its own copy of react-query into the ssr-query bundle. That gives
-	// two QueryClientContext objects, and since the provider comes from
-	// ssr-query's copy while every useQueryClient call comes from the app's, every
-	// consumer throws "No QueryClient set". Naming it here puts it in the first
-	// pass, where it shares the one react-query chunk.
-	optimizeDeps: {
-		include: [
-			"use-sync-external-store/shim/with-selector",
-			"@tanstack/react-query",
-			"@tanstack/react-router-ssr-query",
-		],
-	},
-	plugins: [
-		devtools(),
-		tailwindcss(),
-		// Asked for explicitly so that failing to install it is loud.
+		// @tanstack/react-store reaches into use-sync-external-store with a named
+		// import, but that shim is CJS. If the optimizer prebundles react-store and
+		// leaves the shim raw, the browser gets `module.exports = require(...)` and
+		// the named import throws at parse time — which kills hydration for the whole
+		// app, not just the store. Prebundle the shim so it arrives as real ESM.
 		//
-		// Left to itself, Start decides whether to install its SSR middleware and
-		// silently declines if the environment does not suit it — which is how a
-		// dev server that starts cleanly, logs nothing and answers every route
-		// with a bare 404 came about. Demanded rather than inferred, the same
-		// situation raises "the SSR environment is not a RunnableDevEnvironment",
-		// which says what is wrong and where to fix it.
-		tanstackStart({ vite: { installDevServerMiddleware: true } }),
-		viteReact(),
-		babel({ presets: [reactCompilerPreset()] }),
-	],
+		// @tanstack/react-router-ssr-query is reached only from src/router.tsx, which
+		// the scanner does not walk — Start supplies the client entry virtually — so
+		// the optimizer discovers it one pass late, after react-query has already been
+		// bundled. A late discovery is not folded into the existing chunk: rolldown
+		// inlines its own copy of react-query into the ssr-query bundle. That gives
+		// two QueryClientContext objects, and since the provider comes from
+		// ssr-query's copy while every useQueryClient call comes from the app's, every
+		// consumer throws "No QueryClient set". Naming it here puts it in the first
+		// pass, where it shares the one react-query chunk.
+		optimizeDeps: {
+			include: [
+				"use-sync-external-store/shim/with-selector",
+				"@tanstack/react-query",
+				"@tanstack/react-router-ssr-query",
+			],
+		},
+		plugins: [
+			devtools(),
+			tailwindcss(),
+			// Asked for explicitly so that failing to install it is loud.
+			//
+			// Left to itself, Start decides whether to install its SSR middleware and
+			// silently declines if the environment does not suit it — which is how a
+			// dev server that starts cleanly, logs nothing and answers every route
+			// with a bare 404 came about. Demanded rather than inferred, the same
+			// situation raises "the SSR environment is not a RunnableDevEnvironment",
+			// which says what is wrong and where to fix it.
+			tanstackStart({ vite: { installDevServerMiddleware: true } }),
+			viteReact(),
+			babel({ presets: [reactCompilerPreset()] }),
+		],
 	};
 });
 

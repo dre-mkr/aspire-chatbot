@@ -198,7 +198,16 @@ export async function fetchGameState(
 
 export async function startGame(
 	threadId: string,
-	options: { persona?: GamePersona | null; language?: string } = {},
+	options: {
+		persona?: GamePersona | null;
+		language?: string;
+		/**
+		 * The engine's own identifier — `word_scramble`, not `scramble`. The
+		 * directive's names are mapped at the call site so the two spellings
+		 * meet in exactly one place.
+		 */
+		game_type?: string;
+	} = {},
 ): Promise<GameState | null> {
 	const body = await call<{ active: boolean; game: GameState | null }>(
 		"/api/games/start",
@@ -208,6 +217,7 @@ export async function startGame(
 				thread_id: threadId,
 				persona: options.persona ?? null,
 				language: options.language ?? "en",
+				...(options.game_type ? { game_type: options.game_type } : {}),
 			}),
 		},
 	);

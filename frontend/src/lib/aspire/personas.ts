@@ -35,18 +35,37 @@ export interface Persona {
  *
  * That order is the choosing order: this is picked by a person locating
  * themselves, and age is what they locate themselves by first.
+ *
+ * ## The age ranges are the access matrix's, not marketing's (P15-017)
+ *
+ * These read "Ages 5–12" and "Ages 13–18" because that is what
+ * `backend/app/graph/access.py` actually grants: Stella covers every band,
+ * Orion is granted at 13-15 and 16-18 only. They used to say "5–9" and "10–18",
+ * which described a product that does not exist — `allowed_agents("orion",
+ * "9-12", …)` returns `[]`, a hard 403.
+ *
+ * That mismatch already cost the 9-12 band the whole product once: the backend's
+ * default-persona table had been built from this copy rather than from the
+ * matrix, so every ten-to-twelve-year-old was issued an Orion token the matrix
+ * denies and `guard` halted the turn. The table was resolved towards the matrix,
+ * because the matrix is the security control and this is a line in a menu.
+ *
+ * So this line follows the matrix, and the two must be changed together. An
+ * eleven-year-old choosing Orion here is refused server-side by `_narrowing`
+ * and left on Stella — no longer a lockout, but still a menu offering something
+ * it cannot deliver.
  */
 export const PERSONAS: ReadonlyArray<Persona> = [
 	{
 		id: "stella",
 		name: "Stella",
-		audience: "Ages 5–9",
+		audience: "Ages 5–12",
 		blurb: "Short answers, simple words, and a slower reading voice.",
 	},
 	{
 		id: "orion",
 		name: "Orion",
-		audience: "Ages 10–18",
+		audience: "Ages 13–18",
 		blurb: "Fuller explanations, and the games that go with them.",
 	},
 	{

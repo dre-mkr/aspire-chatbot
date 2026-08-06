@@ -9,6 +9,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -61,6 +62,35 @@ def _strip_libpq_only_params(url: str) -> str:
     return f"{base}?{'&'.join(keep)}" if keep else base
 
 
+#: Hosts where TLS is not required, because the socket never leaves the machine.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
+
+
+def _ssl_mode(url: str) -> dict[str, str]:
+    """`ssl: require` everywhere except a loopback address.
+
+    This was an unconditional `"ssl": "require"`, which is right for Neon and
+    wrong for everything else: a stock local Postgres, a CI service container and
+    an offline developer all answer `rejected SSL upgrade` and there is no
+    setting that turns it off. Combined with a README that never mentions a
+    database at all, the practical requirement to run this project was a cloud
+    account.
+
+    Loopback only, deliberately. Anything with a real hostname keeps TLS whether
+    or not it looks like Neon, so this cannot quietly downgrade a remote
+    connection -- the failure mode worth protecting against is far worse than the
+    inconvenience it removes.
+    """
+    host = urlsplit(url).hostname or ""
+    if host.lower() in _LOOPBACK_HOSTS:
+        logger.info(
+            "Connecting to %s without TLS: the socket does not leave this machine.",
+            host,
+        )
+        return {}
+    return {"ssl": "require"}
+
+
 @lru_cache(maxsize=1)
 def get_engine() -> AsyncEngine | None:
     """The process-wide engine, or None when no database is configured.
@@ -98,7 +128,7 @@ def get_engine() -> AsyncEngine | None:
             # pgbouncer in transaction mode cannot hold prepared statements
             # across checkouts, which is asyncpg's default behaviour.
             "statement_cache_size": 0,
-            "ssl": "require",
+            **_ssl_mode(url),
         },
     )
 

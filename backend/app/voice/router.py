@@ -88,7 +88,7 @@ def voice_config() -> VoiceConfigResponse:
             max_speech_per_window=settings.max_speech_per_window,
             rate_window_seconds=settings.rate_window_seconds,
         ),
-        realtime_enabled=settings.realtime_enabled,
+        realtime_enabled=settings.voice_realtime_enabled,
     )
 
 
@@ -390,7 +390,7 @@ async def realtime_token() -> Response:
     scribe_v2_realtime socket without ever seeing the API key. Returns 501 until
     the batch path has proven itself and the flag is turned on.
     """
-    if not get_voice_settings().realtime_enabled:
+    if not get_voice_settings().voice_realtime_enabled:
         raise HTTPException(
             status_code=501,
             detail="Realtime voice is not enabled. Set VOICE_REALTIME_ENABLED=true.",

@@ -1,0 +1,28 @@
+[
+  {
+    "question": "is it better to save or spend",
+    "widget": {
+      "kind": "compare",
+      "v": 1,
+      "concept_id": "save",
+      "title": "Two weeks, two choices",
+      "prompt": "Guess which one ends with the bicycle.",
+      "a11y_text": "Two plans for the same EC$10 a week. Keeping EC$3 a week reaches a bicycle in under a year. Spending all of it reaches nothing, and every week is enjoyable.",
+      "panels": [
+        {
+          "label": "Keep EC$3",
+          "summary": "Spend EC$7, keep EC$3",
+          "detail": "EC$156 by Christmas. Halfway to the bicycle.",
+          "colour": "accent"
+        },
+        {
+          "label": "Spend it all",
+          "summary": "EC$10 gone each week",
+          "detail": "Fifty-two good weeks and the bicycle is still in the shop. Both are real choices.",
+          "colour": "neutral"
+        }
+      ],
+      "highlight": 0
+    }
+  }
+]

@@ -219,8 +219,10 @@ class PgVectorRetriever(BaseRetriever):
     silently return nothing for two of the three supported languages.
 
     There is no vector index and that is intentional -- see migration 0009. At
-    332 rows a sequential scan is exact and costs single-digit milliseconds,
+    706 rows a sequential scan is exact and costs single-digit milliseconds,
     while an HNSW index over `halfvec(3072)` would be approximate twice over.
+    (The number was 332 when this was written; the reasoning is unchanged at
+    twice that, and the scan is still the right call well beyond it.)
     """
 
     embeddings: Embeddings
@@ -235,6 +237,48 @@ class PgVectorRetriever(BaseRetriever):
         if self.max_cosine_distance is not None:
             statement = statement.where(distance <= self.max_cosine_distance)
         return statement.order_by(distance).limit(self.k)
+
+    def _scored_statement(self, vector: list[float]):
+        """`_statement`, plus the distance itself as a third column.
+
+        Separate rather than always selecting the distance, so the existing
+        query -- which every current caller uses -- is byte-for-byte unchanged.
+        """
+        distance = Document.embedding.cosine_distance(vector)
+        statement = select(Document.content, Document.metadata_, distance.label("distance"))
+        if self.max_cosine_distance is not None:
+            statement = statement.where(distance <= self.max_cosine_distance)
+        return statement.order_by(distance).limit(self.k)
+
+    async def asearch_with_scores(
+        self, vector: list[float]
+    ) -> list[tuple[LangchainDocument, float]]:
+        """Chunks with their cosine RELEVANCE, 1.0 being identical.
+
+        Added for the QA subgraph's grounding check, which needs a calibrated
+        similarity rather than a rank. Nothing else calls it, and
+        `asearch_by_vector` is unchanged -- so the existing `/chat` path
+        produces exactly the query and the results it always did.
+
+        pgvector's `cosine_distance` runs 0..2. Relevance is `1 - distance`,
+        clamped at zero: a negative similarity means "points the other way",
+        which for a grounding floor is the same as "not relevant".
+        """
+        async with session() as db:
+            if db is None:
+                raise RuntimeError(
+                    "No database configured, so there is no corpus to search. "
+                    "Postgres is the source of truth for the knowledge base."
+                )
+            rows = (await db.execute(self._scored_statement(vector))).all()
+
+        return [
+            (
+                LangchainDocument(page_content=content, metadata=dict(metadata or {})),
+                max(0.0, 1.0 - float(distance)),
+            )
+            for content, metadata, distance in rows
+        ]
 
     async def asearch_by_vector(self, vector: list[float]) -> list[LangchainDocument]:
         """The database half of a search, for callers that already embedded.

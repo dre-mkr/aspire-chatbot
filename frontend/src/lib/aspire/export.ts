@@ -89,7 +89,7 @@ export function transcriptToText(
 		if (message.sources.length > 0) {
 			lines.push("", "  Sources");
 			for (const source of message.sources) {
-				const label = source.metadata.question ?? source.metadata.category;
+				const label = source.metadata?.question ?? source.metadata?.category;
 				lines.push(`  · ${String(label ?? source.content.slice(0, 80))}`);
 			}
 		}

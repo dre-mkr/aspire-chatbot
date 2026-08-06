@@ -48,7 +48,7 @@ KNOWLEDGE_CONTEXT_EMPTY = (
     "official contact details. Never fill the gap from general knowledge."
 )
 
-ASPIRE_SYSTEM_PROMPT = f"""You are the assistant for the ASPIRE Programme, a Government of St Kitts and Nevis
+ASPIRE_SYSTEM_PROMPT = """You are the assistant for the ASPIRE Programme, a Government of St Kitts and Nevis
 initiative that helps people learn about saving, investing and money. Your readers
 are young people, and the parents, guardians and teachers helping them.
 

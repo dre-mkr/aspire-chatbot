@@ -1,0 +1,55 @@
+# SUSPICION #1 REFUTED — the no-vector-index decision still holds at 706 rows
+#
+# FINDINGS.md listed this as an unconfirmed suspicion: migration 0009 argues for
+# omitting the HNSW index and cites "332 rows", but the corpus is now 706. That
+# is now measured rather than suspected, and the decision is sound.
+#
+# Scratch DB, 706 rows, 3072 dims, probe = an existing row's own embedding
+# (identical scan cost to a real query embedding, and free).
+
+--- EXPLAIN ANALYZE ---
+  Limit  (cost=136.32..136.33 rows=5 width=24) (actual time=4.618..4.620 rows=5 loops=1)
+    Buffers: shared hit=3408
+    ->  Sort  (cost=136.32..138.08 rows=706 width=24) (actual time=4.615..4.617 rows=5 loops=1)
+          Sort Key: ((embedding <=> '<3072-float probe>'::vector))
+          Sort Method: top-N heapsort  Memory: 25kB
+          Buffers: shared hit=3408
+          ->  Seq Scan on documents  (cost=0.00..124.59 rows=706 width=24)
+                                     (actual time=0.044..4.456 rows=706 loops=1)
+                Filter: ((language)::text = 'en'::text)
+                Buffers: shared hit=3408
+  Planning Time: 0.118 ms
+  Execution Time: 4.647 ms
+
+--- 15 consecutive runs, round-trip ms ---
+  p50 6.89   p95 9.41   min 5.87   max 9.41
+
+# Verdict: sequential scan, 706 rows, 4.6ms in-database and <10ms round trip.
+# Migration 0009 predicted "single-digit milliseconds" and that is what it does
+# at more than double the row count its argument was written for. p95/p50 = 1.37x,
+# well inside the brief's 3x flag.
+#
+# The decision should be revisited if the corpus reaches roughly 10k rows, not now.
+
+# --- Corpus integrity, same session ---
+  total rows             706
+  distinct kb_id         706
+  null embedding         0
+  empty content          0
+  blank kb_id            0
+  dup content groups     0
+  dup kb_id groups       0
+  wrong dims             0
+  languages              en
+
+# Source of truth agrees exactly:
+  CSV data rows        706
+  CSV distinct ids     706
+  CSV blank answers    0
+  CSV duplicate ids    0
+  DB documents rows    706      MATCH
+
+# NOTE for Phase 5 retrieval testing: `languages` is `en` ONLY. The corpus has no
+# Spanish or French content, so every ES/FR question must cross-lingually match an
+# English chunk. That is a known, documented design (migration 0002 says so), but
+# it makes the cross-lingual retrieval test the one that actually matters here.

@@ -1,12 +1,19 @@
-# ASPIRE Backend — Phase 1
+# ASPIRE Backend
 
-A small FastAPI service that answers questions about ASPIRE using **agentic RAG**
-over a CSV knowledge base.
+A FastAPI service that answers questions about ASPIRE, built on **LangGraph**.
 
-The agent owns the knowledge base as a *tool* rather than running a fixed
-retrieve-then-answer chain. It decides whether to search, can search more than
-once if the first results are weak, and answers greetings without retrieving at
-all. Built on LangChain v1 `create_agent`, which runs on LangGraph.
+Every turn runs through one graph — hydrate, guard, safety_in, a router confined
+to the agents an access matrix has granted, the agent itself, safety_out, persist
+— exposed as server-sent events at `POST /v2/chat/stream`. That endpoint is the
+whole chat surface; the older `/chat` and `/chat/stream` are gone rather than
+deprecated.
+
+Retrieval is hybrid (vector + lexical, RRF-fused, then reranked) over a corpus
+that lives in **Postgres with pgvector**. The CSV in `data/` is the source of
+truth that `python -m app.ingest` loads from; it is not what the service reads at
+request time.
+
+**So this service does not start without a database.** See Setup.
 
 ## Requirements
 
@@ -69,14 +76,53 @@ Both paths use exact pinned versions and both target the Python in
 
 ### Minimum config
 
-Only one value is truly required in `.env`:
+Three values are required. The service refuses to start without any of them, and
+says which one is missing.
 
 ```
 OPENAI_API_KEY=sk-...
+DATABASE_URL=postgresql://user:pass@host/db     # Postgres 16+ with pgvector
+SESSION_SECRET=...                              # >= 32 bytes; see below
 ```
 
+`SESSION_SECRET` signs session tokens. There is no default on purpose — a
+signing key with a fallback is a key an attacker also has — and a key shorter
+than 32 bytes is refused for the same reason a missing one is. Generate one:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+`DATABASE_URL` is required because the knowledge base lives in Postgres. TLS is
+required for every host except loopback, so a local container works without
+certificates and a remote host cannot be downgraded by accident.
+
 Everything else has a working default — the chat model defaults to
-`openai:gpt-5.6-luna`. See `.env.example` for the full set.
+`openai:gpt-5.6-luna`. See `.env.example`, which lists every setting the code
+reads.
+
+### Then create the schema and load the corpus
+
+Neither happens by itself, and the service will not serve without them:
+
+```bash
+alembic upgrade head       # 15 migrations; creates pgvector + every table
+python -m app.ingest       # loads data/knowledge_base.csv into `documents`
+```
+
+Auto-ingest runs at startup when `documents` is empty, so in practice the
+explicit ingest is only needed after editing the CSV. `alembic upgrade head` is
+never automatic.
+
+A local Postgres for development:
+
+```bash
+docker run -d --name aspire-pg -e POSTGRES_PASSWORD=aspire   -e POSTGRES_USER=aspire -e POSTGRES_DB=aspire -p 5432:5432   pgvector/pgvector:pg16
+# DATABASE_URL=postgresql://aspire:aspire@127.0.0.1:5432/aspire
+```
+
+Valkey (`VALKEY_URL`) is optional. Without it the response cache, the embedding
+cache and the rate limiters are simply off; the service starts and answers.
 
 ## The knowledge base
 
@@ -439,10 +485,22 @@ EMBEDDINGS_PROVIDER=fastembed
 EMBEDDINGS_MODEL=BAAI/bge-small-en-v1.5
 ```
 
-**Changing the embeddings provider or model changes the vector dimensions, which
-makes an existing store unreadable. Delete `data/chroma` and re-ingest after any
-such change** — otherwise startup sees a non-empty store, skips ingest, and
-retrieval fails on a dimension mismatch.
+**Changing the embeddings provider or model changes the vector dimensions, and
+the `documents.embedding` column has a fixed width.** `text-embedding-3-large` is
+3072; `BAAI/bge-small-en-v1.5` is 384. Switching is therefore NOT one config
+line — it needs a migration that recreates the column at the new width, then a
+full re-ingest, because the vectors themselves are different numbers.
+
+`app/ingest.py` refuses rather than letting this fail per-row on INSERT:
+
+```
+EMBEDDINGS_MODEL='BAAI/bge-small-en-v1.5' produces 384-dim vectors but
+documents.embedding is 3072-dim. Write a migration to change the column width,
+then re-ingest.
+```
+
+(Earlier revisions of this file said to delete `data/chroma`. Chroma was removed
+when the corpus moved into Postgres; deleting that directory does nothing.)
 
 `fastembed` stays installed so the local path keeps working. If you're sure you
 won't use it, `uv remove fastembed` slims the dependency tree considerably (it
@@ -450,9 +508,10 @@ pulls in onnxruntime).
 
 ## Notes and Phase 1 limits
 
-- **Memory is in-process.** `InMemorySaver` means conversations are lost on
-  restart and aren't shared across workers. Swap in a persistent LangGraph
-  checkpointer when that matters.
+- **Memory is in Postgres.** `app/graph/checkpointer.py` uses LangGraph's
+  `AsyncPostgresSaver` against the same database, so conversations survive a
+  restart and are shared across workers. (This note previously described
+  `InMemorySaver`, which is no longer what runs.)
 - **CORS is wide open** (`allow_origins=["*"]`) for local dev. Narrow it via
   `CORS_ALLOW_ORIGINS` before deploying.
 - Errors are logged server-side with tracebacks; clients get a generic message.

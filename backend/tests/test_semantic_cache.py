@@ -76,6 +76,30 @@ class TestKeys:
         assert base != semantic_shelf_key(language="en", persona="stella", account_status=None)
         assert base != semantic_shelf_key(language="en", persona=None, account_status="holder")
 
+    def test_shelf_key_isolates_the_age_band(self):
+        """P15-009, layer 2. `orion` is the persona for 9-12, 13-15 AND 16-18,
+        whose word caps are 70, 180 and 180 -- so persona cannot stand in for
+        band, and a hit here never reaches `safety_out` to be cut down."""
+        nine = semantic_shelf_key(
+            language="en", persona="orion", account_status="holder", age_band="9-12"
+        )
+        sixteen = semantic_shelf_key(
+            language="en", persona="orion", account_status="holder", age_band="16-18"
+        )
+        assert nine != sixteen
+
+    def test_the_shelf_entry_points_at_a_key_of_the_same_band(self):
+        """The pointer and the shelf must agree, or the layer is dead on arrival.
+
+        A band in the shelf key but not in the `cache_key` it stores would aim
+        every entry at a key layer 1 never wrote -- a permanent, silent miss.
+        """
+        assert cache.cache_key(
+            "q", language="en", persona="orion", account_status="holder", age_band="9-12"
+        ) != cache.cache_key(
+            "q", language="en", persona="orion", account_status="holder", age_band="16-18"
+        )
+
 
 def _valkey_answers() -> bool:
     """Probe with a THROWAWAY client on a throwaway loop.
@@ -171,6 +195,60 @@ async def test_the_shelf_never_crosses_a_language(monkeypatch):
     assert (
         await cache.semantic_lookup(vector, language="es", persona=None, account_status=None)
     ) is None
+
+
+@needs_valkey
+@pytest.mark.anyio
+async def test_the_shelf_never_crosses_an_age_band(monkeypatch):
+    """P15-009 on layer 2, end to end rather than as a key comparison.
+
+    A 180-word answer written for a sixteen-year-old, reachable by paraphrase
+    from a nine-year-old's session, is the exact failure the band closes -- and
+    `safety_out` cannot catch it, because a cache hit never reaches the gate.
+    Registered at 16-18, looked up at 9-12 with an all-but-identical vector.
+    """
+    _force_on(monkeypatch)
+
+    query = f"cross-band {uuid.uuid4().hex[:6]}"
+    vector = _unit([1.0, 0.4])
+    for band in ("16-18", "9-12"):
+        await cache.put_answer(
+            query,
+            {"reply": f"written for {band}"},
+            language="en",
+            persona="orion",
+            account_status="holder",
+            age_band=band,
+        )
+    await cache.semantic_register(
+        query,
+        vector,
+        language="en",
+        persona="orion",
+        account_status="holder",
+        age_band="16-18",
+    )
+
+    near = _unit([1.0, 0.401])  # cosine ~1.0; only the band separates them
+    assert (
+        await cache.semantic_lookup(
+            near,
+            language="en",
+            persona="orion",
+            account_status="holder",
+            age_band="9-12",
+        )
+    ) is None
+
+    same = await cache.semantic_lookup(
+        near,
+        language="en",
+        persona="orion",
+        account_status="holder",
+        age_band="16-18",
+    )
+    assert same is not None, "the same band must still hit, or this proves nothing"
+    assert same["reply"] == "written for 16-18"
 
 
 @needs_valkey

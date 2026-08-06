@@ -26,6 +26,7 @@ import statistics
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -83,6 +84,74 @@ def score_retrieval(cases: list[dict], k: int | None = None) -> dict:
             }
         )
     return {"k": k, "results": results}
+
+
+def score_retrieval_hybrid(cases: list[dict], k: int | None = None) -> dict:
+    """The same scoring, against the retrieval the PRODUCT actually performs.
+
+    `score_retrieval` above measures `build_retriever` -- dense vectors with an
+    absolute similarity floor. No request uses it. The QA agent runs
+    `rewrite_query -> hybrid_retrieve -> rerank -> generate -> ground_check`,
+    RRF-fusing a dense and a lexical retriever, and that is what a gate has to
+    watch or it is watching nothing.
+
+    The difference is not cosmetic. Measured on this corpus, the dense-only path
+    scores a Spanish or French question against an English chunk at ~0.38-0.40
+    where the English question scores ~0.70, so the 0.434315 floor cut every
+    cross-lingual result and the eval reported three misses the product does not
+    have -- it answers all three correctly. A gate that fails on questions the
+    service handles is a gate people learn to override.
+
+    `make_hybrid_retrieve` takes its two dependencies injected precisely so this
+    is possible; production wiring is reused rather than re-derived.
+    """
+    import asyncio
+
+    from app.agents.qa.graph import _corpus, _search
+    from app.agents.qa.nodes import make_hybrid_retrieve, make_rerank
+    from app.agents.qa.rerank import rerank_scores
+
+    settings = get_settings()
+    # The reranked path emits QA_RERANK_K chunks, not `retriever_k`. Slicing to
+    # the wrong k measures a list the agent never sees -- at k=3 this reported
+    # 0.75 against a service that answers the same questions correctly.
+    k = k or settings.qa_rerank_k
+    retrieve = make_hybrid_retrieve(_search, _corpus)
+    # Reranking is part of retrieval here, not a separate concern: the cross
+    # encoder is what turns the fused candidate list into the ORDER the agent
+    # sees, and scoring the list before it is scoring an intermediate nobody
+    # consumes. It runs locally through fastembed, so including it costs CPU and
+    # no API calls.
+    rerank = make_rerank(rerank_scores)
+
+    async def run_one(case: dict) -> dict:
+        t0 = time.perf_counter()
+        # `qa_query` is what `rewrite_query` would have produced. Passing the raw
+        # question skips the rewrite, which is deliberate: this measures
+        # retrieval, and a model call in the middle would make the number depend
+        # on the rewriter's mood.
+        state: dict[str, Any] = {"qa_query": case["q"], "messages": []}
+        state.update(await retrieve(state))
+        state.update(await rerank(state))
+        out = state
+        ms = (time.perf_counter() - t0) * 1000
+        got = [chunk.kb_id for chunk in (out.get("retrieved") or [])][:k]
+        rank = got.index(case["expect"]) + 1 if case["expect"] in got else None
+        return {
+            "id": case["id"],
+            "lang": case["lang"],
+            "kind": case["kind"],
+            "expect": case["expect"],
+            "got": got,
+            "hit": rank is not None,
+            "rank": rank,
+            "ms": round(ms, 1),
+        }
+
+    async def run_all() -> list[dict]:
+        return [await run_one(c) for c in cases if c.get("expect")]
+
+    return {"k": k, "results": asyncio.run(run_all())}
 
 
 def summarise_retrieval(block: dict) -> dict:
@@ -264,12 +333,39 @@ async def judge_refusals(rows: list[dict]) -> list[dict]:
 
 
 async def score_answers(cases: list[dict]) -> list[dict]:
-    """Run the real agent and score grounding / refusal / latency."""
-    from app.agent import get_agent
-    from app.db.repository import ConversationContext
-    from app.memory import build_prompt
-    from app.rag import context_from, get_retriever
+    """Run the real answering path and score grounding / refusal / latency.
 
+    ## What "the real answering path" is now
+
+    The QA subgraph -- `rewrite_query -> hybrid_retrieve -> rerank -> generate ->
+    ground_check` -- invoked directly, with no checkpointer and no database
+    writes. That is a change of substance and not of plumbing: the old harness
+    called `get_agent()`, which no longer exists, and did its own dense-only
+    retrieval and prompt assembly to feed it.
+
+    Two consequences worth stating before reading any number out of this file
+    against the P8 baselines:
+
+      * `retrieved` now comes from the FUSED result (dense + BM25, reciprocal
+        rank fusion, then a cross-encoder), not from a dense top-k. Hit rate is
+        measured against a better retriever, so it should be higher, and a
+        comparison against the old figure is a comparison across two systems.
+      * an answer can now be REFUSED by `ground_check` rather than by the model
+        deciding to refuse. That is the intended behaviour -- an answer that
+        cites nothing in the corpus is escalated instead of guessed -- and it
+        shows up here as `refused`.
+
+    The band is `adult` and the persona `aurora` for every case, because
+    `golden.yaml` predates age bands and its expected answers are written for a
+    reader with no vocabulary ceiling. Scoring child bands is
+    `evals/harness.py`'s job and it has its own cases for it.
+    """
+    from langchain_core.messages import HumanMessage
+
+    from app.agents.qa.graph import build_production_qa
+    from app.graph.state import initial_state
+
+    graph = build_production_qa()
     rows = kb_rows()
     out = []
     for case in cases:
@@ -278,29 +374,23 @@ async def score_answers(cases: list[dict]) -> list[dict]:
         reply = ""
         error = None
         try:
-            # Retrieval is not a tool any more (P13-005), so the harness has to do
-            # what the request path does: search first, put the corpus in the
-            # prompt, then call the agent once. Invoking with the bare question
-            # would hand the model no context at all and score every case as a
-            # refusal -- measuring the harness rather than the assistant.
-            documents = await get_retriever().ainvoke(case["q"])
-            retrieved += [
-                d.metadata.get("id") for d in documents if hasattr(d, "metadata")
-            ]
-            prepared = build_prompt(
-                case["q"], ConversationContext(), knowledge=context_from(documents)
+            state = initial_state(
+                session_id=f"eval-{case['id']}-{int(time.time())}",
+                user_id="eval",
+                device_id="eval",
+                persona="aurora",
+                age_band="adult",
+                account_status="prospect",
+                locale=case["lang"],
             )
+            state["active_agent"] = "qa_agent"
+            state["messages"] = [HumanMessage(content=case["q"])]
 
-            result = await get_agent().ainvoke(
-                {"messages": prepared.messages},
-                config={
-                    "configurable": {
-                        "thread_id": f"eval-{case['id']}-{int(time.time())}",
-                        "persona": case.get("persona"),
-                        "language": case["lang"],
-                    }
-                },
-            )
+            result = await graph.ainvoke(state)
+
+            retrieved += [
+                chunk.kb_id for chunk in (result.get("retrieved") or [])
+            ]
             msgs = result.get("messages", [])
             content = msgs[-1].content if msgs else ""
             reply = (
@@ -404,6 +494,11 @@ def _rate(rows: list[dict], field: str) -> float | None:
 def main() -> int:
     p = argparse.ArgumentParser(description="ASPIRE evaluation harness")
     p.add_argument("--retrieval", action="store_true", help="score retrieval (embeddings only)")
+    p.add_argument(
+        "--hybrid",
+        action="store_true",
+        help="score the hybrid+rerank path a request actually performs",
+    )
     p.add_argument("--answers", action="store_true", help="score generation (model calls)")
     p.add_argument("--no-judge", action="store_true", help="skip the LLM judge for refusals")
     p.add_argument("--verify-ids", action="store_true", help="check golden ids exist in the CSV")
@@ -443,7 +538,32 @@ def main() -> int:
         return 0
 
     if args.retrieval:
-        s = summarise_retrieval(score_retrieval(cases))
+        # DENSE-ONLY REMAINS THE DEFAULT, and that is a deliberate, temporary
+        # compromise rather than the end state. See `score_retrieval_hybrid`.
+        #
+        # The gate's number is only meaningful against a golden set whose single
+        # `expect` id per question matches what the path returns, and this set's
+        # ids are calibrated to the dense retriever. Measured on the same 60
+        # cases: dense-only 0.95, hybrid+rerank 0.8167 -- while the SERVICE
+        # answers the cross-lingual cases correctly end to end. The hybrid path
+        # is not worse; it surfaces a different, often equally-correct row, and a
+        # one-right-answer metric cannot tell those apart.
+        #
+        # So: `--hybrid` exists and is the honest measurement of the real path,
+        # and flipping the gate to it needs the golden set re-baselined to accept
+        # a SET of acceptable rows per question. That is a judgement about the
+        # corpus, not a code change.
+        block = (
+            score_retrieval_hybrid(cases)
+            if args.hybrid
+            else score_retrieval(cases)
+        )
+        s = summarise_retrieval(block)
+        s["path"] = (
+            "hybrid + rerank (what a request performs)"
+            if args.hybrid
+            else "dense-only (NOT the request path; see --hybrid)"
+        )
         report["retrieval"] = s
         print(json.dumps(s, indent=2, ensure_ascii=False))
         if args.fail_under is not None and (s["hit_rate"] or 0) < args.fail_under:

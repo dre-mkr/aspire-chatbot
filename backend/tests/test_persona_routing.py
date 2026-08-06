@@ -37,7 +37,7 @@ class TestModelRouting:
         assert resolve_model_for(None) == settings.chat_model
 
     def test_the_auxiliary_calls_cannot_be_routed(self, monkeypatch):
-        """Follow-ups, titles and summaries always use the default model.
+        """Titles and summaries always use the default model.
 
         `build_chat_model()` with no explicit model is what those calls do; a
         persona mapping must never reach them, because a title written by a
@@ -52,7 +52,7 @@ class TestModelRouting:
         monkeypatch.setattr(
             settings, "chat_model_by_persona", {"stella": "openai:gpt-5.6-terra"}
         )
-        for factory in (agent._follow_up_model, agent._title_model, agent._summary_model):
+        for factory in (agent._title_model, agent._summary_model):
             source = inspect.getsource(factory)
             assert "resolve_model_for" not in source
 
@@ -82,19 +82,10 @@ class TestMaxTokens:
         assert resolve_max_tokens_for("stella") is None
 
 
-class TestAgentSharing:
-    def test_personas_on_one_model_share_one_agent(self, monkeypatch):
-        from app import agent
-
-        settings = get_settings()
-        monkeypatch.setattr(settings, "chat_model_by_persona", {})
-        monkeypatch.setattr(settings, "max_tokens_by_persona", {})
-        agent._agent_for.cache_clear()
-        try:
-            first = agent.get_agent(False, "stella")
-            second = agent.get_agent(False, "aurora")
-            third = agent.get_agent(False, None)
-            assert first is second is third
-            assert agent._agent_for.cache_info().currsize == 1
-        finally:
-            agent._agent_for.cache_clear()
+# `TestAgentSharing` stood here. It asserted that four personas mapped to one
+# model shared one cached `create_agent` instance -- a property of `get_agent`,
+# which is gone with `/chat`. The graph is compiled per request (see
+# `build_main_graph`'s docstring for why: `hydrate` closes over the token, so a
+# process-wide graph would have to carry a bearer token in `configurable`), and
+# the two `resolve_*_for` lookups above are the whole of what persona routing
+# still decides.

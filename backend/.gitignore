@@ -16,6 +16,11 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# Coverage data, rewritten by every `pytest --cov` run
+.coverage
+.coverage.*
+htmlcov/
+
 # Local model cache (fastembed downloads ONNX weights here)
 .fastembed_cache/
 local_cache/

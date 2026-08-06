@@ -1,0 +1,41 @@
+[
+  {
+    "question": "how long until i can buy the bicycle",
+    "widget": {
+      "kind": "timeline",
+      "v": 1,
+      "concept_id": "goal",
+      "title": "Thirty weeks",
+      "caption": "EC$10 a week towards a EC$300 bicycle.",
+      "a11y_text": "A line from today to the bicycle. At week ten you have a third of it. At week twenty, two thirds. At week thirty you have all of it.",
+      "start_label": "Today",
+      "end_label": "The bicycle",
+      "points": [
+        {
+          "label": "Week 1",
+          "caption": "EC$10 in",
+          "at": 0,
+          "colour": "neutral"
+        },
+        {
+          "label": "Week 10",
+          "caption": "EC$100",
+          "at": 33,
+          "colour": "neutral"
+        },
+        {
+          "label": "Week 20",
+          "caption": "EC$200",
+          "at": 66,
+          "colour": "neutral"
+        },
+        {
+          "label": "Week 30",
+          "caption": "EC$300 and it is yours",
+          "at": 100,
+          "colour": "accent"
+        }
+      ]
+    }
+  }
+]

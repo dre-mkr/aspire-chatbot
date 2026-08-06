@@ -179,52 +179,38 @@ def test_the_chat_response_has_no_field_an_answer_could_travel_in():
     assert set(StartedEligibilityCheck.model_fields) == {"check", "language"}
 
 
-def test_a_started_check_is_read_from_the_tool_result_not_the_prose():
-    from langchain_core.messages import HumanMessage, ToolMessage
+def test_a_started_check_is_recognised_before_a_model_is_called():
+    """The three tests that stood here read `main._started_eligibility`.
 
-    from app.main import _started_eligibility
+    That function walked a finished agent result for a `start_eligibility_check`
+    ToolMessage: the model decided the turn was a card, and `/chat` found out
+    afterwards by inspecting what it had called.
 
-    messages = [
-        HumanMessage(content="can I join?"),
-        ToolMessage(
-            content='{"ok": true, "started": true, "check": "aspire_eligibility"}',
-            name="start_eligibility_check",
-            tool_call_id="1",
-        ),
-    ]
-    assert _started_eligibility(messages) == {"check": "aspire_eligibility"}
+    The decision is no longer a model's to make. `graph/nodes/intents.py` matches
+    the question deterministically BEFORE anything is embedded, and
+    `graph/nodes/cards.py` opens the check and returns a directive with no
+    `AIMessage` at all -- so there is no prose alongside the card to have to
+    suppress, and nothing to read a tool result out of.
 
+    The three properties they asserted are still asserted, in the place that now
+    owns each:
 
-def test_a_declined_start_is_not_a_card_turn():
-    """No card means the turn is an ordinary answer and must keep its text."""
-    from langchain_core.messages import HumanMessage, ToolMessage
+      "can I join?" opens the card
+          -> tests/agents/test_intent_cards.py::test_the_eligibility_card_is_the_whole_turn
+      a declined start is an ordinary answer
+          -> ::test_a_check_already_open_is_left_alone
+      an earlier turn's check does not keep reporting itself
+          -> structural now: the directive is built fresh per turn from the
+             matcher, so there is no history for a stale one to be found in.
+    """
+    from app.graph.nodes.intents import wants_eligibility
 
-    from app.main import _started_eligibility
-
-    messages = [
-        HumanMessage(content="can I join?"),
-        ToolMessage(
-            content='{"ok": false, "reason": "already_running"}',
-            name="start_eligibility_check",
-            tool_call_id="1",
-        ),
-    ]
-    assert _started_eligibility(messages) is None
+    assert wants_eligibility("can I join?")
+    assert not wants_eligibility("what is compound interest?")
 
 
-def test_a_check_started_in_an_earlier_turn_does_not_keep_reporting_itself():
-    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+def test_the_card_directive_has_no_field_an_answer_could_travel_in():
+    """The closed-model property, on the type that replaced `StartedEligibilityCheck`."""
+    from app.schemas.directives import EligibilityDirective
 
-    from app.main import _started_eligibility
-
-    messages = [
-        HumanMessage(content="can I join?"),
-        ToolMessage(
-            content='{"ok": true, "started": true, "check": "aspire_eligibility"}',
-            name="start_eligibility_check",
-            tool_call_id="1",
-        ),
-        HumanMessage(content="what is compound interest?"),
-        AIMessage(content="Interest on your interest."),
-    ]
-    assert _started_eligibility(messages) is None
+    assert set(EligibilityDirective.model_fields) == {"t", "check", "language"}

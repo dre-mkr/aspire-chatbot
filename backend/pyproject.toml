@@ -24,6 +24,31 @@ dependencies = [
     "langchain-openai==1.4.1",
     "langchain-text-splitters==1.1.1",
     "langgraph==1.2.10",
+    # PINNED, and the pin is load-bearing rather than housekeeping.
+    #
+    # `langgraph-checkpoint-postgres` accepts `>=3.0.1`, and a resolver taking
+    # it at its word installs 3.0.1 -- which langgraph 1.2.10 cannot import
+    # (`cannot import name '_DeltaSnapshot'`). That was the first failure of
+    # this whole piece of work, and it presents as the graph package being
+    # broken rather than as a resolution problem. Leaving it transitive means
+    # the next clean `uv sync` can reintroduce it.
+    "langgraph-checkpoint==4.1.1",
+    # The graph's checkpointer. It is written against psycopg 3 and there is no
+    # asyncpg backend for it, so this deployment runs two drivers against one
+    # database -- see app/graph/checkpointer.py for why that is the cheap option.
+    "langgraph-checkpoint-postgres==3.1.1",
+    "psycopg[binary,pool]==3.3.4",
+    # Staff passwords in the admin realm (`app/api/admin/staff.py`). Declared
+    # rather than relied on transitively: it is the hash behind the credential
+    # that opens a queue of children's identity documents, and a dependency that
+    # arrives by accident can leave the same way.
+    "bcrypt==5.0.0",
+    # BM25 for the QA subgraph's hybrid retrieval. At 338 rows a dense-only
+    # search misses exact-term queries, so both halves are required.
+    "rank-bm25==0.2.2",
+    # Encrypts `application_pii`. A registration flow that cannot encrypt is a
+    # registration flow that refuses to persist, not one that writes plaintext.
+    "cryptography>=44,<47",
     "num2words==0.5.14",
     "pydantic-settings==2.14.2",
     "python-dotenv==1.2.1",
@@ -36,12 +61,24 @@ dependencies = [
 dev = [
     "httpx==0.28.1",
     "pytest==9.0.1",
+    "pytest-asyncio==1.4.0",
+    # The access matrix ships with a 100%-branch-coverage requirement, which
+    # needs a coverage plugin to state and to check.
+    "pytest-cov==7.1.0",
 ]
 
 [tool.pytest.ini_options]
 # Put the project root on sys.path so `from app...` resolves without installing.
 pythonpath = ["."]
 testpaths = ["tests"]
+# STRICT, deliberately. `auto` would retro-fit an event loop to every existing
+# test in this suite, none of which asked for one; the graph tests mark
+# themselves and nothing else changes.
+asyncio_mode = "strict"
+# Pinned so pytest-asyncio does not warn about an unset default on every run.
+# Function scope means one loop per test, which is what the connection-pool
+# note in tests/conftest.py already assumes.
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     # P0-010: the whole suite is ~14-20 minutes, and almost all of it is in a
     # handful of modules -- bcrypt rounds on the auth paths, real sleeps in the

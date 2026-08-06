@@ -1,0 +1,27 @@
+[
+  {
+    "question": "so it is free money?",
+    "widget": null,
+    "why": "A follow-up to a widget that already ran. Two sentences answer it; another widget would restate what they just watched."
+  },
+  {
+    "question": "ok",
+    "widget": null,
+    "why": "An acknowledgement, not a question."
+  },
+  {
+    "question": "what did you say",
+    "widget": null,
+    "why": "A repeat request. Repeat the words, not the visual."
+  },
+  {
+    "question": "can we play a game instead",
+    "widget": null,
+    "why": "A request for a different activity entirely."
+  },
+  {
+    "question": "why",
+    "widget": null,
+    "why": "Too little to build a visual from. Answer, then offer one if it still helps."
+  }
+]
