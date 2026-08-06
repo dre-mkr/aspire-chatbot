@@ -249,8 +249,8 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
 def resolve_classifier_model() -> str:
     """Which model actually runs the router here.
 
-    `CLASSIFIER_MODEL` names a Haiku-class model, and the default names one from
-    Anthropic. A deployment configured only for OpenAI would then have a router
+    `CLASSIFIER_MODEL` names a small model, and the default names one from
+    OpenAI. A deployment configured only for Anthropic would then have a router
     it cannot call -- and the failure would arrive as an authentication error on
     the first turn, which reads as "the assistant is down".
 
@@ -284,7 +284,7 @@ def resolve_classifier_model() -> str:
 
 
 def build_classifier_model():
-    """The Haiku-class model this node uses.
+    """The small model this node uses.
 
     Separate from `agent.build_chat_model` and configured by its own setting, so
     that swapping the answer model cannot silently re-tune the router. Built

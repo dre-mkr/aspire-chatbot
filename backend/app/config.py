@@ -230,6 +230,18 @@ class Settings(BaseSettings):
     # slots that the request path has better uses for.
     checkpointer_pool_size: int = Field(default=4, ge=1, le=20)
     checkpointer_connect_timeout: float = Field(default=30.0, ge=1.0, le=120.0)
+    #: How long a pooled connection may live before the pool replaces it. Well
+    #: under Neon's idle window on purpose -- a serverless endpoint hangs up on
+    #: quiet connections, and the pool cannot be told about a hangup it did not
+    #: perform. See `get_checkpointer`, which also verifies on checkout; this
+    #: setting is what keeps that verification from being the common path.
+    #:
+    #: This is the psycopg spelling of what `db/engine.py` already does for the
+    #: request path with `pool_recycle=280` and `pool_pre_ping=True`. The two
+    #: pools face the same endpoint and needed the same defence; only the request
+    #: path had it, which is why a turn could fail on reading its own thread back
+    #: while every query around it succeeded.
+    checkpointer_max_lifetime: float = Field(default=180.0, ge=30.0, le=3600.0)
 
     # `GRAPH_ENABLED` used to live here. It is gone rather than defaulted to
     # true: it guarded whether /v2 was mounted at all, and now that /v2 is the
@@ -239,14 +251,26 @@ class Settings(BaseSettings):
     # The eval gate it was meant to enforce is `make eval`, which fails CI on a
     # threshold -- a check that runs, rather than a switch somebody remembers.
 
-    # The classifier and the widget planner. Haiku-class, deliberately: routing
-    # between six names and picking one of nine primitives are both
+    # The classifier and the widget planner. Small and old, deliberately:
+    # routing between six names and picking one of nine primitives are both
     # short-context classification jobs, and spending a frontier model on them
     # would put a second expensive call in front of every turn.
     #
+    # gpt-4o rather than a GPT-5-family model for one concrete reason:
+    # `classifier_temperature` below is 0.0 and routing wants it. The GPT-5
+    # family accepts only its own default temperature, so `build_classifier_model`
+    # has to omit the parameter for those models -- and a router that cannot be
+    # pinned to 0 is a router that can send the same message two ways.
+    #
+    # gpt-4o rather than gpt-4o-mini only because access to OpenAI models is
+    # granted per project and the mini variants are not on this one; a project
+    # that has them should prefer mini here. An unavailable model does not fail
+    # loudly -- `classify` catches the 403 and falls back -- so check
+    # `client.models.list()` before naming one.
+    #
     # Configured separately from `chat_model` so the two can move independently
     # -- swapping the answer model must not silently re-tune the router.
-    classifier_model: str = "anthropic:claude-haiku-4-5-20251001"
+    classifier_model: str = "openai:gpt-4o"
     classifier_temperature: float = 0.0
     #: Below this a differing classification does NOT displace a sticky agent.
     #: Mid-registration and mid-lesson conversations must survive an ambiguous

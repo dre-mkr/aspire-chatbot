@@ -5,8 +5,8 @@
     "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING"
   ],
   "failedRequests": [
-    "PATCH http://localhost:8000/api/conversations/a8219d4c-cee2-480c-b834-3daf67a35855 net::ERR_ABORTED",
     "POST http://localhost:8000/v2/chat/stream net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+    "PATCH http://localhost:8000/api/conversations/c94efc88-eed6-4305-903c-cc280a1e3c1d net::ERR_ABORTED",
     "POST http://localhost:8000/v2/chat/stream net::ERR_INCOMPLETE_CHUNKED_ENCODING"
   ]
 }

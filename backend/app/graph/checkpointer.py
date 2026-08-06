@@ -35,6 +35,17 @@ required, and two of them are required *by pgbouncer* rather than by the saver:
 
   * **row_factory=dict_row** -- the saver indexes rows by column name.
 
+## The far end hangs up, and the pool is the last to know
+
+Neon suspends a quiet compute and closes its connections. A connection pool
+has no way to hear about that -- it did not perform the close -- so a dead
+socket sits in the queue marked healthy until something tries to use it. The
+first statement of a turn is the saver reading the thread back, so the whole
+turn dies before a node runs. `get_checkpointer` sets both halves of the fix:
+`check` (verify on checkout, so a stale connection costs a round trip instead
+of a turn) and `max_lifetime` (retire connections early, so `check` rarely has
+anything to catch). Neither is a psycopg default.
+
 ## One Windows-only trap, documented because it costs an hour to find
 
 psycopg's async mode cannot run on asyncio's `ProactorEventLoop`, which is the
@@ -297,6 +308,31 @@ async def get_checkpointer() -> Any | None:
         # constructor connect: the constructor's implicit open is deprecated in
         # psycopg-pool 3.2 and emits a warning on every process start.
         open=False,
+        # Verify the connection before handing it out. Without this the pool's
+        # idea of "open" is only ever its own bookkeeping, and the other end of
+        # this socket is a serverless endpoint that suspends a quiet compute and
+        # hangs up. Nothing tells the pool, so a dead connection stays in the
+        # queue looking healthy, gets checked out, and raises
+        #
+        #   psycopg.OperationalError: consuming input failed:
+        #   SSL connection has been closed unexpectedly
+        #
+        # on the first statement of the next turn -- which is
+        # `AsyncPostgresSaver.aget_tuple`, before any node has run, so the whole
+        # turn fails and the reader is told the assistant is unavailable. The
+        # cost is one round trip per checkout; a failed check is not an error,
+        # the pool discards that connection and opens a fresh one.
+        check=AsyncConnectionPool.check_connection,
+        # `check` alone makes the failure survivable; this is what makes it rare.
+        #
+        # `max_idle` cannot do it. It only closes connections ABOVE `min_size`
+        # (`_shrink_pool`: `if self._nconns > self._min_size`), so the one
+        # baseline connection -- exactly the one a low-traffic process reuses
+        # every turn -- is never recycled by it and idles until the far end
+        # hangs up. `max_lifetime` applies to every connection including that
+        # one, so it is the knob that actually retires a stale socket before a
+        # turn finds it.
+        max_lifetime=settings.checkpointer_max_lifetime,
         kwargs={
             "autocommit": True,
             "prepare_threshold": None,
