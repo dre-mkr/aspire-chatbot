@@ -175,6 +175,29 @@ async def lifespan(app: FastAPI):
 
         await seed_curriculum()
 
+    # The teaching concepts into memory, so the tutor can resolve a topic.
+    #
+    # This is the line that decides whether asking "what is compound interest?"
+    # teaches compound interest or teaches lesson one of the authored course.
+    # `learn/graph._entry` gates the tutor on `len(get_store())`, because a
+    # deployment that has never run `seed_concepts.py` should keep working exactly
+    # as it did before there was a tutor. An unloaded store is indistinguishable
+    # from an unseeded one, so without this call the gate is closed forever, the
+    # tutor declines every turn, and placement silently answers a question about
+    # compounding with the first unmastered lesson in course order.
+    #
+    # That is precisely how it shipped. `ConceptStore.reload`'s own docstring said
+    # it "is called at startup"; nothing called it. The fix was wired end to end
+    # and inert, and every test passed because the tests populate the store
+    # directly via `load()` and never exercise the startup path.
+    #
+    # Non-fatal, like the seed above. `reload` logs and keeps whatever it had, so
+    # a database blip costs topic resolution for that boot and not the service.
+    if database_enabled():
+        from app.learning.concepts import get_store
+
+        await get_store().reload()
+
     # Refuse to start without a usable signing key.
     #
     # `config.py` has always said the failure mode of forgetting SESSION_SECRET

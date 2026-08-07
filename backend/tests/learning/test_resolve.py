@@ -361,3 +361,79 @@ class TestDegradation:
         ranked = holder.rank([1.0, 0.0, 0.0], band="5-8", top=2)
         assert ranked[0][0].slug == "good"
         assert ranked[0][1] == pytest.approx(1.0)
+
+
+class TestTheStoreIsActuallyLoaded:
+    """The tutor is gated on a populated store, so something must populate it.
+
+    This class exists because the topic tutor shipped complete, tested end to
+    end, and entirely inert. `learn/graph._entry` will only route to it when
+    `len(get_store())` is non-zero -- a deliberate gate, so a deployment that has
+    never run `seed_concepts.py` keeps behaving exactly as it did before there
+    was a tutor.
+
+    Nothing called `ConceptStore.reload()`. Its own docstring said it "is called
+    at startup"; there were no callers anywhere in `app/`. So the gate was shut
+    on every boot, placement answered "what is compound interest?" with the first
+    unmastered lesson in course order, and the reported defect was still live
+    with the whole fix sitting behind it.
+
+    Every unit test missed it for the same reason: they call `store.load(...)`
+    directly, which is right for testing resolution and useless for testing that
+    resolution is ever reachable. The gap is not in the logic, it is in the
+    wiring, so the assertion has to be about the wiring.
+    """
+
+    def test_startup_populates_the_concept_store(self):
+        """`app.main`'s lifespan must call `reload()` on the concept store.
+
+        A source-level assertion, deliberately. The behavioural version would run
+        the real lifespan, which warms a database, requires a corpus, builds a
+        chat model and resolves a voice mapping -- none of which this is about,
+        and all of which would make the test skip in exactly the environments
+        where the wiring matters.
+
+        What is checked is narrow and sufficient: the module that boots the
+        service mentions the store and reloads it. If someone removes the call,
+        this fails and names why.
+        """
+        import inspect
+
+        import app.main as main_module
+
+        source = inspect.getsource(main_module)
+        assert "get_store" in source and ".reload()" in source, (
+            "app/main.py must load the concept store at startup. Without it "
+            "`len(get_store())` is 0 forever, learn/graph._entry never routes to "
+            "the tutor, and a topic question is answered with whatever lesson is "
+            "next in course order."
+        )
+
+    def test_the_gate_opens_only_once_the_store_has_concepts(self):
+        """The gate itself: empty store declines, populated store claims.
+
+        Pins both directions. The first is the production behaviour that hid the
+        bug; the second is the fix. If someone later removes the gate, the first
+        assertion fails and says why it was there.
+        """
+        from langchain_core.messages import HumanMessage
+
+        from app.agents.learn.graph import _entry
+        from app.learning.concepts import get_store
+
+        state = {
+            "messages": [HumanMessage(content="what is compound interest?")],
+            "learning": {},
+            "safety_flags": {},
+        }
+
+        store = get_store()
+        saved = list(store._by_id.values())
+        try:
+            store.load([])
+            assert _entry(state) == "resume_or_place"
+
+            store.load([concept("compound_interest", vector=[1.0, 0.0, 0.0])])
+            assert _entry(state) == "tutor"
+        finally:
+            store.load(saved)
