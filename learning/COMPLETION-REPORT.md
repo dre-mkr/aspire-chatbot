@@ -175,6 +175,7 @@ same way a code change is. `--live` re-runs the same assertions against real mod
 | Baseline, before any change (47 min) | 3047 | **2** — both environmental, pre-existing |
 | Mid-work full suite (26 min) | 3110 | 9 failed + 4 errors |
 | **Full suite, final (24 min)** | **3142** | **6 failed + 4 errors, every one environmental** |
+| Same, with those ten deselected (20 min) | **3139** | **0** |
 | `tests/learning/` alone | **250** | 0 |
 | `tests/voice tests/safety tests/register tests/games tests/eligibility` | **652** | 0 |
 | Frontend `parser.test.ts` (directive ordering) | **13** | 0 |
