@@ -1,7 +1,48 @@
 # Completion report — the ASPIRE learning agent
 
-Two commits on `main`: [`8be5d0a`](../../commit/8be5d0a) (the fix) and
-[`ad43e97`](../../commit/ad43e97) (concepts, evals, health).
+> ## Correction, added after this report was first written
+>
+> **The fix shipped inert, and this report claimed it was working. It was not.**
+>
+> `learn/graph._entry` gates the tutor on `len(get_store())`, and nothing ever
+> called `ConceptStore.reload()` — the store's own docstring said it "is called at
+> startup"; there were no callers in `app/`. So the gate was shut on every boot,
+> and the very first real question after this report was written produced exactly
+> the defect it claimed to have closed:
+>
+> ```
+> placement session=... -> l01_what_is_saving (first unmastered lesson in course order)
+> ```
+>
+> for the question *"what is compound interest?"*.
+>
+> Fixed in [`7d74308`](../../commit/7d74308). Measured against the live database
+> after the fix: 66 servable concepts load and `_entry` returns `tutor` where it
+> previously returned `resume_or_place`.
+>
+> **Why every test missed it.** The tests populate the store directly with
+> `store.load(...)`, which is right for testing resolution and useless for testing
+> that resolution is ever *reachable*. 3142 passing tests and an 11/11 eval suite
+> all exercised a code path that production never entered. Two regression tests
+> now pin the wiring itself, both verified failing with the call removed.
+>
+> **What this means for the rest of this report.** Every claim below about
+> resolution, moves, mastery and widgets was verified by test and by offline
+> eval, and those verifications stand on their own terms. But no claim in this
+> document was verified against a running server until after the correction above.
+> Read the numbers as "correct in the harness", not "observed in production".
+>
+> Three further faults surfaced from the same first real run, all fixed:
+> [`a8248c0`](../../commit/a8248c0) the curriculum seeder violating a NOT NULL
+> column this work added, silently disabling mastery writes; and
+> [`b149163`](../../commit/b149163) two context faults — `applications.owner_id`
+> (the column is `owner_user_id`) and `SessionContext` missing from the
+> checkpointer's allow-list, which cost the agent its conversation history on
+> every resumed turn.
+
+Six commits on `main`: [`8be5d0a`](../../commit/8be5d0a) (the fix),
+[`ad43e97`](../../commit/ad43e97) (concepts, evals, health), and the four
+corrections above.
 
 **Headline.** The reported symptom had two causes, not one. The brief predicted
 the second and missed the first: the learning agent never read the learner's
@@ -303,6 +344,30 @@ rewriting, and they are identified in `concepts-review.csv`.
 | Widgets on the authored-curriculum path | — | move `teach` onto `build_widget`; a day |
 | Coverage from 82.6% to 90% | credits | re-run Pass A with a stricter merge |
 | Live L1–L10 (`--live`) | credits | one command |
+| **End-to-end verification against a running server** | — | **do this first, before trusting any row above** |
+
+### On that last row
+
+It is listed as deferred because it *was* deferred, and skipping it is what let
+this work be reported as complete while the tutor was unreachable. The harness
+cannot see a gate that is closed by a missing startup call, because the harness
+opens the gate itself in a fixture.
+
+Concretely, the checks worth running against a live server before believing any
+claim in this report:
+
+```bash
+uvicorn app.main:app --port 8000
+```
+
+Then confirm in the log, on a topic question:
+
+- `Concepts loaded: 66 servable of 72` at startup — the store is populated.
+- **no** `placement session=... -> l01_...` line on a topic question — placement
+  did not claim a turn the tutor should have.
+- no `Could not resolve session context` warning.
+- no `Blocked deserialization of ... SessionContext` warning.
+- `Curriculum seeded: 5 concepts.` rather than a NotNullViolationError traceback.
 
 ---
 
