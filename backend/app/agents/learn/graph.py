@@ -1,7 +1,7 @@
 """The lesson machine.
 
-    resume_or_place → teach → check → branch
-                       ↑                │
+    resume_or_place → plan_widget → teach → check → branch
+                       ↑                              │
                        │   got_it / partial / lost
                        │      │        │       │
                        │    game   hint_ladder reteach
@@ -13,6 +13,22 @@
 Every path in that diagram ends at `mastery_update`, and that is the property
 worth stating: there is no way to answer a check question -- rightly, wrongly,
 with hints, by playing a game -- that does not record what happened.
+
+## Two nodes think; the rest of the machine does not
+
+`teach` and `reteach` live in `teach.py` and are the only nodes here that call
+a model. They write the words, ground them in the knowledge base, and decide
+whether an interactive widget would help. Everything defined in THIS file is
+deterministic, and the split is meant to be checkable by looking: placement,
+grading, the hint ladder's rung count and the mastery write are arithmetic and
+table lookups, and they stay that way.
+
+The reason is not caution about models generally. It is that `grade_answer`
+deciding "wrong" the same way every time is what makes a hint ladder a ladder,
+and a lesson chosen by a scheduler rather than by a conversation is what makes
+spaced repetition happen at all. What a model is genuinely better at is the one
+thing a fixed string cannot do: say the same idea a different way to a child
+who has already heard it once.
 
 ## Open-ended chat is not the mode
 
@@ -43,6 +59,7 @@ ceiling; a lesson that finishes in six minutes ends in six.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -51,13 +68,12 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.learn.nodes.explain_back import make_explain_back
 from app.agents.learn.nodes.hint_ladder import make_hint_ladder
 from app.agents.learn.state import (
+    band_of,
     MAX_ATTEMPTS,
     MAX_DIGRESSIONS,
     merge,
     new_session,
-    remember_widget,
     started_at,
-    touched,
 )
 from app.curriculum.schema import CheckQuestion, Lesson, for_band, load_all
 from app.graph.state import AspireState
@@ -69,7 +85,7 @@ logger = logging.getLogger(__name__)
 
 
 def _band(state: AspireState) -> str:
-    return str(state.get("age_band") or "9-12")
+    return band_of(state)
 
 
 def _lesson(curriculum, learning: dict) -> Lesson | None:
@@ -136,6 +152,20 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
                 phase="teaching",
                 attempts=0,
                 hint_rung=0,
+                # The only signal the teaching turn gets that CROSSES sessions.
+                #
+                # `recent_openings` lives in the checkpoint, so it is per
+                # conversation, and the case it therefore misses is the common
+                # one: a learner comes back tomorrow, starts a new chat, and
+                # spaced repetition brings the same concept round again with an
+                # empty history behind it. The mastery row is the thing that
+                # persists per learner, and `resume_or_place` has already paid
+                # for it -- so whether they have met this idea before is free
+                # here and unavailable anywhere else in the machine.
+                concept_seen_before=any(
+                    row.concept_id == placement.lesson.concept_id and row.last_seen
+                    for row in rows
+                ),
                 review_concepts=scheduler.due_concepts(
                     rows, exclude={placement.lesson.concept_id}
                 ),
@@ -145,6 +175,19 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
     return resume_or_place
 
 
+#: Learning agents whose turns are watched rather than taken, and therefore
+#: score nobody.
+#:
+#: `learning_sample` because a signed-out visitor has no account for a row to
+#: reference. `learning_preview` because the person at the keyboard is not the
+#: learner: a guardian looking in at their child's curriculum was writing
+#: `save`, `spend` and `goal` into their OWN mastery row, which then drove
+#: spaced repetition for them -- the scheduler would bring a nine-year-old's
+#: lesson back to an adult on a fortnightly interval, and their progress
+#: figures counted concepts they had watched rather than learned.
+NON_SCORING_AGENTS: frozenset[str] = frozenset({"learning_preview", "learning_sample"})
+
+
 def _learner(state: AspireState) -> str | None:
     """The learner this session writes mastery against, or None for nobody.
 
@@ -152,6 +195,13 @@ def _learner(state: AspireState) -> str | None:
     refusal. `mastery.learner_id` is a UUID referencing an account; a
     `learning_sample` visitor has none, so there is no row for their progress to
     live in and nothing for it to mean when they come back.
+
+    None for a guardian preview too, and for a different reason: there IS an
+    account, and it is not the learner's. `access.py` describes the preview as
+    letting a parent see what their child is being taught, and until this was
+    fixed it did so by teaching the parent and grading them. The lesson itself
+    is unchanged -- real teaching, real widgets, real check questions -- and
+    nothing it produces is recorded against anybody.
 
     This used to fall back to the session id, reasoning that a sample session
     should "score normally for its own length". It does -- the hint ladder and
@@ -163,6 +213,8 @@ def _learner(state: AspireState) -> str | None:
     `MasteryStore.record` accepts None and returns the applied row without
     writing, so every caller's arithmetic is unchanged.
     """
+    if state.get("active_agent") in NON_SCORING_AGENTS:
+        return None
     user_id = state.get("user_id")
     return str(user_id) if user_id else None
 
@@ -170,42 +222,14 @@ def _learner(state: AspireState) -> str | None:
 # ── teach ────────────────────────────────────────────────────────────────────
 
 
-def make_teach(curriculum=None):
-    """Say the teach points for this band, then hand over to the check."""
-
-    def teach(state: AspireState) -> dict[str, Any]:
-        book = curriculum or load_all()
-        learning = state.get("learning") or {}
-        lesson = _lesson(book, learning)
-        if lesson is None:  # pragma: no cover - routing guards this
-            return {}
-
-        band = _band(state)
-        points = lesson.teach_for(band)
-        examples = lesson.examples_for(band)
-
-        # One example, not all of them. A lesson that lists four examples of the
-        # same idea is a lesson that has stopped teaching and started padding --
-        # and the length cap would truncate it anyway, at whichever sentence it
-        # happened to reach.
-        body = " ".join(points[:2])
-        if examples:
-            body = f"{body} {examples[0]}"
-
-        return {
-            "messages": [AIMessage(content=body.strip())],
-            "quick_replies": _chips(band, ["Got it", "Say that again"]),
-            "learning": merge(
-                learning,
-                phase="checking",
-                concepts_touched=touched(learning, lesson.concept_id),
-                last_widget_kinds=remember_widget(
-                    learning, lesson.suggested_widget_kind
-                ),
-            ),
-        }
-
-    return teach
+# `plan_widget`, `teach` and `reteach` live in `teach.py`. They are the only
+# nodes in this machine that call a model, and keeping them together is what
+# makes that easy to check -- every node defined in THIS file is deterministic.
+from app.agents.learn.teach import (  # noqa: E402
+    make_plan_widget,
+    make_reteach,
+    make_teach,
+)
 
 
 # ── check ────────────────────────────────────────────────────────────────────
@@ -243,6 +267,52 @@ def make_check(curriculum=None):
 # ── the branch after an answer ───────────────────────────────────────────────
 
 
+#: A learner asking for a different lesson, rather than answering this one.
+#:
+#: Deliberately narrow, and the narrowness is the point: a false positive
+#: abandons a lesson somebody was halfway through, which is worse than the
+#: digression it replaces. Every alternative here names the change explicitly --
+#: "something else", "another topic", "different lesson". Anything vaguer is
+#: left to the graders and the digression handler.
+#:
+#: Bare "next" is deliberately ABSENT even though it reads like a match. It is
+#: an authored chip on the wrap-up and the reteach turns, where it means
+#: "continue", and `_LESSON_REPLY` in `safety_in` already treats it as an
+#: on-topic reply. Capturing it here would turn a tap meaning "carry on" into an
+#: abandoned lesson.
+#: "something else" must be ATTACHED to a teaching verb, never bare.
+#:
+#: Bare, it matches "i want to buy something else with my money" -- a lesson
+#: answer about spending, and one of the better ones a child could give. That
+#: turn would have discarded the lesson they were halfway through, which is the
+#: exact false positive this pattern is written to avoid rather than an
+#: acceptable cost of catching it.
+_WANTS_ANOTHER = re.compile(
+    r"""
+    \b(?:
+        (?:teach|show|tell|give)\s+me\s+(?:something|anything)\s+(?:else|new|different)
+      | (?:can\s+we|could\s+we|let'?s|i\s+want\s+to|i'?d\s+like\s+to)
+        \s+(?:do|try|learn|study)\s+(?:something|anything)\s+(?:else|new|different)
+      | (?:a|an|another|different|new|other)\s+(?:topic|lesson|subject)
+      | (?:next|another)\s+(?:topic|lesson|subject)
+      | change\s+(?:the\s+)?(?:topic|subject)
+      | move\s+on\s+(?:to|from)
+      | skip\s+(?:this|it|ahead)
+    )\b
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def wants_a_different_lesson(text: str) -> bool:
+    """Whether this message asks to be taught something other than this.
+
+    Consulted in `branch` before the digression check -- see there for why the
+    order is the whole fix.
+    """
+    return bool(_WANTS_ANOTHER.search(text or ""))
+
+
 def grade_answer(question: CheckQuestion, answer: str) -> bool:
     """Whether the child got it. Deterministic, in Python.
 
@@ -269,11 +339,12 @@ def grade_answer(question: CheckQuestion, answer: str) -> bool:
 def make_branch(curriculum=None):
     """Decide what happens after the child answers.
 
-    Three outcomes and a fourth that is not an outcome at all:
+    Three outcomes and two that are not outcomes at all:
 
       got_it   -> a game if one fits, otherwise straight to mastery
       partial  -> the hint ladder
       lost     -> the hint ladder, which reveals on the second miss
+      move on  -> place a different lesson, in this turn
       digressed-> answer briefly, steer back, do not count it as an attempt
     """
 
@@ -284,6 +355,36 @@ def make_branch(curriculum=None):
         if lesson is None:  # pragma: no cover
             return {}
 
+        from app.graph.nodes.safety_in import latest_user_text
+
+        # BEFORE the digression check, and that order is the fix.
+        #
+        # `is_off_topic` asks whether the message contains a money word, and
+        # "teach me something else" does not -- so the single most on-topic
+        # thing a learner can say inside a lesson was being answered with "Good
+        # question! Now, back to what we were doing." They asked to move on and
+        # were told they could not, which is also the one steer the digression
+        # cap is not meant to cover.
+        #
+        # Placement handles the rest: `concepts_touched` already carries the
+        # concept just taught, so `resume_or_place` skips it and picks the next
+        # unmastered lesson rather than re-teaching the one being abandoned.
+        if wants_a_different_lesson(latest_user_text(state)):
+            logger.info(
+                "Learner asked to move on from %s; placing another lesson.", lesson.id
+            )
+            return {
+                "learning": merge(
+                    learning,
+                    phase="placing",
+                    question_id=None,
+                    attempts=0,
+                    hint_rung=0,
+                    digression_count=0,
+                    outcome=None,
+                )
+            }
+
         flags = state.get("safety_flags") or {}
         if flags.get("off_topic"):
             return _digress(state, learning, lesson)
@@ -291,8 +392,6 @@ def make_branch(curriculum=None):
         question = _question(lesson, learning)
         if question is None:  # pragma: no cover
             return {"learning": merge(learning, phase="updating_mastery")}
-
-        from app.graph.nodes.safety_in import latest_user_text
 
         correct = grade_answer(question, latest_user_text(state))
         attempts = int(learning.get("attempts") or 0)
@@ -337,18 +436,23 @@ def _digress(state: AspireState, learning: dict, lesson: Lesson) -> dict[str, An
     example = (lesson.examples_for(band) or ["what we were doing"])[0]
     subject = example.split(".")[0][:60]
 
+    # Every band names the subject, INCLUDING the fallback. The two fallbacks
+    # used not to -- "Good question! Now, back to what we were doing." -- which
+    # is precisely the reprimand this function's docstring says to avoid, served
+    # to the two bands that were missing from the table. `16-18` and `adult`
+    # both landed there, and `adult` is the band a guardian previews in.
     if count > MAX_DIGRESSIONS:
         text = {
             "5-8": f"Ooh, let us hold that one for the end! Back to {subject}.",
             "9-12": f"Good one -- keep it for the end. For now, back to {subject}.",
             "13-15": f"Worth coming back to. Let us finish this first: {subject}.",
-        }.get(band, "Let us finish this first.")
+        }.get(band, f"Worth coming back to. Let us finish this first: {subject}.")
     else:
         text = {
             "5-8": f"Good question! Now -- back to {subject}.",
             "9-12": f"Good question! Right, back to {subject}.",
             "13-15": f"Fair question. Now, back to {subject}.",
-        }.get(band, "Good question! Now, back to what we were doing.")
+        }.get(band, f"Fair question. Now, back to {subject}.")
 
     return {
         "messages": [AIMessage(content=text)],
@@ -366,27 +470,6 @@ def _digress(state: AspireState, learning: dict, lesson: Lesson) -> dict[str, An
 # ── reteach ──────────────────────────────────────────────────────────────────
 
 
-def make_reteach(curriculum=None):
-    """After the reveal: explain why, then move on. No further attempt."""
-
-    def reteach(state: AspireState) -> dict[str, Any]:
-        book = curriculum or load_all()
-        learning = state.get("learning") or {}
-        lesson = _lesson(book, learning)
-        if lesson is None:  # pragma: no cover
-            return {}
-
-        band = _band(state)
-        points = lesson.teach_for(band)
-        body = points[-1] if points else lesson.objective
-
-        return {
-            "messages": [AIMessage(content=body)],
-            "quick_replies": _chips(band, ["Got it", "Next"]),
-            "learning": merge(learning, phase="updating_mastery", outcome="wrong"),
-        }
-
-    return reteach
 
 
 # ── mastery_update ───────────────────────────────────────────────────────────
@@ -517,7 +600,7 @@ def _chips(band: str, options: list[str]) -> list[str]:
 
 def _after_place(state: AspireState) -> str:
     learning = state.get("learning") or {}
-    return {"teaching": "teach", "done": END}.get(str(learning.get("phase")), END)
+    return {"teaching": "plan_widget", "done": END}.get(str(learning.get("phase")), END)
 
 
 def _after_check(state: AspireState) -> str:
@@ -538,6 +621,12 @@ def _after_branch(state: AspireState) -> str:
         return "hint_ladder"
     if phase == "updating_mastery":
         return "explain_back"
+    if phase == "placing":
+        # A move-on request, answered in THIS turn rather than the next one.
+        # Ending here and waiting for `_entry` to route `placing` would leave
+        # the learner who just asked for a different lesson looking at nothing
+        # until they typed again.
+        return "resume_or_place"
     return END
 
 
@@ -554,6 +643,74 @@ def _after_explain(state: AspireState) -> str:
 def _after_mastery(state: AspireState) -> str:
     learning = state.get("learning") or {}
     return "wrap_session" if learning.get("phase") == "wrapping" else "resume_or_place"
+
+
+#: Whether a message is a question about a topic rather than a lesson reply.
+#:
+#: The gate between the two machines in this subgraph. `resume_or_place` teaches
+#: what the learner is DUE; `tutor` teaches what they ASKED FOR. Before the tutor
+#: existed there was only the first, so "What is compound interest?" was answered
+#: with the next unmastered lesson -- which is the defect Track L was opened for.
+#:
+#: Every clause requires a SUBJECT, and that requirement is the whole design.
+#:
+#: "Teach me" is a request to start a lesson and belongs to placement -- the
+#: learner has named no topic, so there is nothing for a topic resolver to
+#: resolve, and routing it here would replace a curriculum with a shrug. "Teach
+#: me about compound interest" names one. The difference is `\w{3,}` after the
+#: verb, and it is why every alternative below carries one.
+#:
+#: Narrow in one more place: a message arriving while a check question is
+#: outstanding is an ANSWER, whatever it looks like. "What is a dollar worth?"
+#: typed in reply to "how much after four weeks?" is still a reply, and routing
+#: it as a new topic abandons a question the child was in the middle of. That
+#: check lives in `_entry` rather than in the pattern, because it is about the
+#: conversation's state and not about the words.
+_ASKS_ABOUT = re.compile(
+    r"""\b(?:
+        what(?:'?s|\s+is|\s+are|\s+does|\s+do)\s+(?:\w+\s+){0,3}\w{3,}
+      | (?:why|how)\s+(?:do|does|did|is|are|can|come)\b\s*(?:\w+\s+){0,3}\w{3,}
+      | tell\s+me\s+(?:about|what|how|why)\s+(?:\w+\s+){0,3}\w{3,}
+      | (?:teach|explain)\s+(?:me\s+)?(?:about\s+)?(?:\w+\s+){0,3}\w{4,}
+      | i\s+(?:want|need|would\s+like)\s+to\s+(?:know|learn|understand)\s+(?:\w+\s+){0,3}\w{3,}
+      | can\s+you\s+(?:tell|teach|explain|show)\s+me\s+(?:about\s+)?(?:\w+\s+){0,3}\w{3,}
+      | what\s+(?:is\s+)?a\s+\w{3,}
+      | what\s+about\s+\w{3,}
+      | what\s+does\s+\w+\s+mean
+    )""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+#: Verbs that ask for a lesson without naming one. These belong to PLACEMENT.
+#:
+#: Listed explicitly and checked first, because the pattern above is generous
+#: enough to match "teach me something" on the `\w{4,}` tail, and "something" is
+#: the learner declining to choose -- which is exactly the case the scheduler
+#: exists for.
+_NAMES_NOTHING = re.compile(
+    r"""^\s*(?:
+        (?:teach|show|tell)\s+me\s*(?:something|anything|a\s+lesson|more)?
+      | (?:i\s+want\s+to\s+)?learn\s*(?:something|anything|more)?
+      | (?:let'?s|lets)\s+(?:learn|start|go|begin)\b.*
+      | (?:start|begin)\s+(?:a\s+)?(?:lesson|learning)?
+      | next\s+lesson
+      | (?:another|a\s+new)\s+(?:one|lesson|topic)
+    )\s*[.!?]*\s*$""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def asks_about_a_topic(text: str) -> bool:
+    """Whether this message names something specific the learner wants explained.
+
+    False for "teach me" and true for "teach me about compound interest". The
+    distinction routes between the two machines in this subgraph, so it is
+    written to be read rather than inferred from behaviour.
+    """
+    body = (text or "").strip()
+    if not body or _NAMES_NOTHING.match(body):
+        return False
+    return bool(_ASKS_ABOUT.search(body))
 
 
 def _entry(state: AspireState) -> str:
@@ -574,10 +731,44 @@ def _entry(state: AspireState) -> str:
         return "game_result"
 
     learning = state.get("learning") or {}
+
+    # ── the tutor's claim on the turn ───────────────────────────────────────
+    #
+    # Three ways in, and the first two are what fix the reported defect:
+    #
+    #   * they asked about a topic, and there is no check outstanding;
+    #   * the tutor was already running -- a conversation about a concept
+    #     continues as a conversation about that concept, so a bare "20" or "why?"
+    #     reaches EVALUATE rather than being re-routed into placement;
+    #   * a check the TUTOR asked is outstanding.
+    #
+    # The authored curriculum keeps everything else. A learner working through a
+    # module is working through a module, and placement, the hint ladder, games
+    # and the wrap-up are all better at that than a topic resolver is.
+    from app.graph.nodes.safety_in import latest_user_text
+
+    # An empty concept store means nothing has been seeded, and the tutor would
+    # decline every turn. Falling back to the authored curriculum is the correct
+    # behaviour then, not a degraded one -- and it is what keeps a deployment
+    # that has not run `seed_concepts.py` working exactly as it did before.
+    from app.learning.concepts import get_store
+
+    if len(get_store()):
+        text = latest_user_text(state)
+        if learning.get("active_concept_id") and learning.get("resolution_source") != "none":
+            return "tutor"
+        if asks_about_a_topic(text) and not learning.get("question_id"):
+            return "tutor"
+
     phase = str(learning.get("phase") or "placing")
     return {
         "placing": "resume_or_place",
-        "teaching": "teach",
+        # `plan_widget`, never `teach` directly. A turn that resumes straight
+        # into the teaching node has no grounding and no planned primitive in
+        # state, so the lesson would be written from the curriculum alone and
+        # the widget silently skipped -- on exactly the turns a resumed lesson
+        # makes most likely.
+        "teaching": "plan_widget",
         "checking": "branch",
         "hinting": "hint_ladder",
         "reteaching": "reteach",
@@ -588,15 +779,56 @@ def _entry(state: AspireState) -> str:
     }.get(phase, "resume_or_place")
 
 
-def build_learn_graph(*, curriculum=None, store: MasteryStore | None = None):
+def build_learn_graph(
+    *,
+    curriculum=None,
+    store: MasteryStore | None = None,
+    retrieve=None,
+    plan=None,
+    invoke=None,
+    embed=None,
+    teach_retrieve=None,
+    disambiguate=None,
+    widget_plan=None,
+    widget_compose=None,
+):
+    """Compile the lesson machine.
+
+    `retrieve`, `plan` and `invoke` are the teaching turn's three optional
+    capabilities -- knowledge-base grounding, widget planning, and the model
+    that writes the words. Injected rather than constructed here for the reason
+    the Q&A subgraph gives: each has a different availability story, and a
+    subgraph that built them itself could not start when one was missing.
+
+    Every one defaults to None, which is the configuration every existing test
+    uses: the lesson falls back to the curriculum's authored text and the
+    machine behaves exactly as it did before there was a model in it.
+
+    The five arguments after `invoke` belong to the topic tutor:
+
+        embed             an utterance to a vector, for concept resolution
+        teach_retrieve    knowledge-base rows for the RAG-teach fallback
+        disambiguate      one structured call between two candidate concepts
+        widget_plan       which primitive, if any
+        widget_compose    that primitive's JSON
+
+    Kept separate from `retrieve` and `plan` rather than reusing them, because the
+    two paths ask different questions of the same capability: `retrieve` searches
+    on a placed LESSON'S objective, and `teach_retrieve` searches on what the
+    learner actually said. Sharing one argument would have meant one of the two
+    silently searching for the wrong thing.
+    """
     graph = StateGraph(AspireState)
 
     graph.add_node("resume_or_place", make_resume_or_place(curriculum, store))
-    graph.add_node("teach", make_teach(curriculum))
+    # The name is load-bearing: `INTERNAL_NODES` suppresses this node's model
+    # call by name, and without that the planner's JSON streams to the child.
+    graph.add_node("plan_widget", make_plan_widget(curriculum, retrieve=retrieve, plan=plan))
+    graph.add_node("teach", make_teach(curriculum, invoke=invoke))
     graph.add_node("check", make_check(curriculum))
     graph.add_node("branch", make_branch(curriculum))
     graph.add_node("hint_ladder", make_hint_ladder(curriculum))
-    graph.add_node("reteach", make_reteach(curriculum))
+    graph.add_node("reteach", make_reteach(curriculum, retrieve=retrieve, invoke=invoke))
     graph.add_node("explain_back", make_explain_back(curriculum))
     graph.add_node("mastery_update", make_mastery_update(curriculum, store))
     graph.add_node("wrap_session", make_wrap_session(store))
@@ -607,12 +839,35 @@ def build_learn_graph(*, curriculum=None, store: MasteryStore | None = None):
     graph.add_node("widget_result", make_widget_result(store))
     graph.add_node("game_result", make_game_result_node(store))
 
+    # The topic tutor. Named `tutor` and the name is load-bearing twice over:
+    # `INTERNAL_NODES` suppresses its raw model tokens by name so that nothing
+    # unvalidated reaches a reader, and `evals/learning_agent.py` asserts on it.
+    from app.agents.learn.tutor import make_tutor
+
+    graph.add_node(
+        "tutor",
+        make_tutor(
+            embed=embed,
+            retrieve=teach_retrieve,
+            disambiguate=disambiguate,
+            invoke=invoke,
+            plan=widget_plan,
+            compose=widget_compose,
+            mastery=store,
+        ),
+    )
+    # Straight to END. The tutor emits its own prose and its own widget directive
+    # and has nothing to hand on -- routing it into `check` would ask a second
+    # question after the one it already asked.
+    graph.add_edge("tutor", END)
+
     graph.add_conditional_edges(
         START,
         _entry,
         [
+            "tutor",
             "resume_or_place",
-            "teach",
+            "plan_widget",
             "branch",
             "hint_ladder",
             "reteach",
@@ -628,11 +883,12 @@ def build_learn_graph(*, curriculum=None, store: MasteryStore | None = None):
     # bury the response they were owed.
     graph.add_edge("widget_result", END)
     graph.add_edge("game_result", END)
-    graph.add_conditional_edges("resume_or_place", _after_place, ["teach", END])
+    graph.add_conditional_edges("resume_or_place", _after_place, ["plan_widget", END])
+    graph.add_edge("plan_widget", "teach")
     graph.add_edge("teach", "check")
     graph.add_conditional_edges("check", _after_check, [END])
     graph.add_conditional_edges(
-        "branch", _after_branch, ["hint_ladder", "explain_back", END]
+        "branch", _after_branch, ["hint_ladder", "explain_back", "resume_or_place", END]
     )
     graph.add_conditional_edges("hint_ladder", _after_hint, ["reteach", END])
     graph.add_edge("reteach", "mastery_update")
@@ -645,10 +901,189 @@ def build_learn_graph(*, curriculum=None, store: MasteryStore | None = None):
     return graph.compile()
 
 
+async def _retrieve(query: str, k: int, audience: str):
+    """Dense knowledge-base search, filtered to what this audience may see.
+
+    Deliberately the SAME retriever the Q&A subgraph uses -- one knowledge base,
+    one ingestion, one embedding model. A second retrieval path over the same
+    corpus is a second place for the audience filter to be got wrong, and the
+    one that gets forgotten is always the one serving children.
+
+    Dense only, with no BM25 half and no fusion. Q&A needs the lexical retriever
+    because a question can name an exact term the embedding misses; a lesson is
+    grounded in a concept the curriculum already named, so there is no rare term
+    to catch and nothing for fusion to reconcile.
+    """
+    from app.agents.qa.graph import _search
+    from app.agents.qa.nodes import _permitted
+
+    chunks = await _search(query, k)
+    return [chunk for chunk in chunks if _permitted(chunk, audience)]
+
+
+async def _teach_invoke(messages):
+    """The answer model, writing the lesson.
+
+    The answer model rather than the classifier's, unlike `rewrite_query`: this
+    is the prose a child reads, and it is the one call in the lesson where the
+    quality of the writing IS the product.
+    """
+    from app.agent import build_chat_model
+
+    response = await build_chat_model().ainvoke(messages)
+    content = response.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return ""
+
+
+async def _teach_retrieve(query: str):
+    """Knowledge-base rows for the RAG-teach fallback, searched on the UTTERANCE.
+
+    The other retriever searches on a placed lesson's objective, which is right
+    for a lesson the scheduler chose and wrong for a question the learner asked.
+    That distinction is not a nicety: the RAG-teach path exists precisely because
+    no concept covered the question, so searching for anything other than the
+    question would return rows about something else and teach from them.
+
+    Youth-filtered, like every other learner-facing retrieval. `audience_for`
+    cannot be used here because it reads the agent name off graph state and this
+    is called from the resolver, which is deliberately given no state -- the
+    narrow slice is the safe default and the preview path pays a little recall
+    for it.
+    """
+    from app.agents.qa.graph import _search
+    from app.agents.qa.nodes import _permitted
+
+    chunks = await _search(query, 8)
+    return [chunk for chunk in chunks if _permitted(chunk, "youth")]
+
+
+async def _embed(text: str):
+    """The utterance as a vector, through the product's cached embedder.
+
+    `embed_query_cached` rather than a fresh call: the four landing starter chips
+    are the highest-collision strings in the product and every one of them is a
+    learning question, so the cache hit rate here is high and each hit is a
+    network round trip a child does not wait through.
+    """
+    from app.rag import embed_query_cached
+
+    return await embed_query_cached(text)
+
+
+def _structured(model_setting: str):
+    """A `(system, user) -> dict` caller on a named model tier.
+
+    One factory for the three cheap structured jobs -- concept disambiguation,
+    widget planning, widget composition -- so that "which model does this?" is
+    answered by one line of config rather than by three call sites that drifted.
+
+    Returns `{}` rather than raising on any failure. Every caller treats a falsy
+    answer as "no decision", which degrades to no widget or to the RAG-teach
+    fallback: both are outcomes the lesson survives.
+    """
+
+    async def call(*, system: str, user: str) -> dict:
+        import json as _json
+
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        from app.agent import build_chat_model
+        from app.config import get_settings
+
+        settings = get_settings()
+        chosen = getattr(settings, model_setting, "") or settings.chat_model
+        try:
+            response = await build_chat_model(model=chosen).ainvoke(
+                [SystemMessage(content=system), HumanMessage(content=user)]
+            )
+        except Exception:
+            logger.info("Structured call on %s failed.", chosen, exc_info=True)
+            return {}
+
+        text = _text_of_response(response).strip()
+        # The composer returns a widget object; the planner and the disambiguator
+        # return a small decision object. Both are JSON, and both arrive fenced
+        # often enough that unwrapping here is cheaper than a retry.
+        from app.agents.learn.widgets import _unfence
+
+        try:
+            parsed = _json.loads(_unfence(text))
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    return call
+
+
+def _compose_caller():
+    """The widget composer. Returns the raw JSON string, not a dict.
+
+    Raw because `widgets.validate` parses it itself -- gate 1 exists to reject
+    malformed JSON with a named gate, and parsing it here would turn that into a
+    silent empty return with no gate attached to the failure.
+    """
+
+    async def call(*, system: str, user: str) -> str:
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        from app.agent import build_chat_model
+        from app.config import get_settings
+
+        settings = get_settings()
+        chosen = settings.learn_widget_compose_model or settings.chat_model
+        response = await build_chat_model(model=chosen).ainvoke(
+            [SystemMessage(content=system), HumanMessage(content=user)]
+        )
+        return _text_of_response(response)
+
+    return call
+
+
+def _text_of_response(response) -> str:
+    content = getattr(response, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return ""
+
+
 def build_production_learn():
     from app.learning.mastery import PostgresMasteryStore
+    from app.widgets.planner import make_planner
 
-    return build_learn_graph(store=PostgresMasteryStore())
+    from app.graph.nodes.classify import default_invoke
+
+    return build_learn_graph(
+        store=PostgresMasteryStore(),
+        retrieve=_retrieve,
+        # The planner runs on the small model. It picks one name from a list of
+        # at most nine -- see `widgets/planner.py` on why that is deliberately
+        # not a job for the answer model.
+        plan=make_planner(default_invoke),
+        invoke=_teach_invoke,
+        # The topic tutor's five. Every model here is named in `Settings`
+        # (`learn_*_model`) and nowhere else, which is the whole of the brief's
+        # model-tiering requirement: swapping the model that writes lessons is a
+        # config change, and it cannot silently re-tune the widget planner.
+        embed=_embed,
+        teach_retrieve=_teach_retrieve,
+        disambiguate=_structured("learn_resolve_model"),
+        widget_plan=_structured("learn_widget_plan_model"),
+        widget_compose=_compose_caller(),
+    )
 
 
 def register() -> None:

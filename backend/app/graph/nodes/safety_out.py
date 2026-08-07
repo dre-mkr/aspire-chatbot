@@ -16,6 +16,24 @@ Links are stripped after PII so that a redacted e-mail address cannot leave a
 `mailto:` behind. Locale is last because it is the only gate that judges the
 whole finished message.
 
+## Widgets are split out before any of it, and put back after
+
+A lesson turn can carry a composed widget between `⟦widget⟧` markers. Every
+gate here runs on the PROSE only, with the blocks lifted out first
+(`widgets/sentinel.py`) and returned afterwards.
+
+Not a special case for tidiness -- without it the widget feature cannot work at
+all. A composed widget is a few hundred characters of JSON, so gate (a) counts
+it against a thirty-five word cap, decides the reply is four hundred words
+long, and re-prompts the model to shorten it. The model shortens it by deleting
+the widget. What reaches the child is prose, and what reaches the log is a
+length violation, and neither says that a widget was destroyed.
+
+The prose is still gated in full, so nothing is weakened: a widget has its own
+seven gates in `widgets/validate.py`, and those check exactly the things these
+cannot -- band-permitted primitive, control count, formula domain, copy against
+the band's word list.
+
 ## What may use a model and what may not
 
 Detection is deterministic in every gate. Counting words is arithmetic; finding
@@ -49,8 +67,19 @@ from langchain_core.messages import AIMessage
 
 from app.graph.state import AspireState, band_index
 from app.safety import pii, vocab
+from app.widgets import sentinel
 
 logger = logging.getLogger(__name__)
+
+#: The three names the lesson subgraph is registered under.
+#:
+#: Gate (e) used to name `learn_agent` alone, which meant a guardian preview and
+#: a signed-out sample ran the identical machine with the chip requirement
+#: switched off -- and those are precisely the two audiences being shown what
+#: the product is like.
+LEARNING_AGENTS: frozenset[str] = frozenset(
+    {"learn_agent", "learning_preview", "learning_sample"}
+)
 
 #: Words allowed per answer, by band. `None` means no cap.
 #:
@@ -65,6 +94,37 @@ WORD_CAPS: dict[str, int | None] = {
     "16-18": 180,
     "adult": None,
 }
+
+#: The same ceiling, for a turn that is TEACHING rather than talking.
+#:
+#: A lesson is a different kind of message from a mascot's conversational turn and
+#: needs a different ceiling. Thirty-five words is three short sentences: correct
+#: for "good question -- back to our snow cone money", and below the FLOOR of an
+#: explanation. A concept explained to a six-year-old in thirty-five words is a
+#: definition read aloud, which is precisely the "thin and generic" report that
+#: opened Track L.
+#:
+#: The reading-stamina argument still holds and these are not generous: ninety
+#: words at 5-8 is six or seven short sentences with an example in the middle,
+#: read once, about something they asked about. What it is not is a wall of text.
+#:
+#: These MUST equal `agents/learn/contract.CONTRACTS[band].max_words`. A prompt
+#: that asks for more words than this gate permits produces a re-prompt on every
+#: single turn -- a second model call, forever, caused by two constants drifting
+#: apart. `tests/learning/test_contract.py` pins them together.
+LESSON_WORD_CAPS: dict[str, int | None] = {
+    "5-8": 90,
+    "9-12": 120,
+    "13-15": 180,
+    "16-18": 180,
+    "adult": 220,
+}
+
+
+def cap_for(band: str, agent: str | None) -> int | None:
+    """The word ceiling for this turn: the lesson cap when teaching, else the chat cap."""
+    table = LESSON_WORD_CAPS if agent in LEARNING_AGENTS else WORD_CAPS
+    return table.get(band)
 
 #: The band at and above which links may be shown, and the personas that never
 #: see them regardless.
@@ -107,8 +167,14 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-def over_cap(text: str, band: str) -> bool:
-    cap = WORD_CAPS.get(band)
+def over_cap(text: str, band: str, agent: str | None = None) -> bool:
+    """Whether this reply exceeds the ceiling for its band and its kind of turn.
+
+    `agent` defaults to None, which selects the conversational caps -- so every
+    existing caller keeps the behaviour it had, and only a turn that says it is
+    teaching gets the lesson ceiling.
+    """
+    cap = cap_for(band, agent)
     return cap is not None and word_count(text) > cap
 
 
@@ -139,13 +205,13 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
     return budget.rstrip(",;:") + "…"
 
 
-def shorten_instruction(band: str, current: int) -> str:
+def shorten_instruction(band: str, current: int, agent: str | None = None) -> str:
     """The re-prompt for gate (a). Specific, with the number in it.
 
     "Be briefer" produces a message that is 10% shorter. Naming the cap and the
     current length produces one that fits, because the model can count.
     """
-    cap = WORD_CAPS.get(band)
+    cap = cap_for(band, agent)
     return (
         f"That reply is {current} words. A learner in the {band} band can take "
         f"at most {cap}. Say the same thing in {cap} words or fewer. Keep the "
@@ -355,18 +421,31 @@ def make_safety_out(reprompt: Reprompt | None = None):
 
         band = state.get("age_band", "adult")
         persona = state.get("persona", "")
+        # Read once, used by gate (a) to pick the ceiling and by gate (e) to
+        # decide whether chips are required. One read rather than two, because
+        # the two gates disagreeing about whether this is a lesson would produce
+        # a turn held to conversational length and required to offer chips.
+        agent = state.get("active_agent")
         locale = state.get("locale", "en")
-        text = _text_of(last)
+        original = _text_of(last)
         replies = list(state.get("quick_replies") or [])
         report: dict[str, Any] = {}
 
+        # Widgets out, before anything measures or rewrites. `text` is prose
+        # from here to the end of the node, and every gate below is written as
+        # though widgets do not exist -- which is the point of doing it here.
+        text, widgets = sentinel.split(original)
+        prose_in = text
+        if widgets:
+            report["widgets_carried"] = len(widgets)
+
         # ── (a) length ──────────────────────────────────────────────────────
-        if over_cap(text, band):
+        if over_cap(text, band, agent):
             report["length_violation"] = word_count(text)
             if reprompt is not None:
-                text = await reprompt(shorten_instruction(band, word_count(text)), text)
-            if over_cap(text, band):
-                cap = WORD_CAPS[band]
+                text = await reprompt(shorten_instruction(band, word_count(text), agent), text)
+            if over_cap(text, band, agent):
+                cap = cap_for(band, agent)
                 assert cap is not None  # `over_cap` is False when the cap is None
                 logger.info(
                     "Truncating a %s-band reply at the last complete sentence "
@@ -402,8 +481,8 @@ def make_safety_out(reprompt: Reprompt | None = None):
 
             # A rewrite can push the reply back over the cap. Cheaper to
             # re-truncate deterministically than to loop the model again.
-            if over_cap(text, band):
-                cap = WORD_CAPS[band]
+            if over_cap(text, band, agent):
+                cap = cap_for(band, agent)
                 assert cap is not None
                 text = truncate_at_sentence(text, cap)
 
@@ -427,7 +506,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = stripped
 
         # ── (e) quick replies, during a lesson ──────────────────────────────
-        if state.get("active_agent") == "learn_agent":
+        if agent in LEARNING_AGENTS:
             # The model may have written its chips as a trailing bulleted list
             # rather than filling `quick_replies`. Harvest them before deciding
             # anything is missing -- and always remove them from the prose,
@@ -471,8 +550,8 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 if detect_locale(retried) in (locale, None):
                     text = retried
                     # One last length check -- the retry is a fresh generation.
-                    if over_cap(text, band):
-                        cap = WORD_CAPS[band]
+                    if over_cap(text, band, agent):
+                        cap = cap_for(band, agent)
                         assert cap is not None
                         text = truncate_at_sentence(text, cap)
                 else:
@@ -482,8 +561,16 @@ def make_safety_out(reprompt: Reprompt | None = None):
         if report:
             flags["outbound"] = report
 
+        # Widgets back in. When no gate touched the prose the ORIGINAL string is
+        # restored verbatim -- markers where the model put them, mid-paragraph
+        # if that is where it put them -- so the common case pays nothing for
+        # having been split. Only a rewritten reply moves its widgets to the end,
+        # and only because there is no longer a sentence to anchor them to.
+        if widgets:
+            text = original if text == prose_in else sentinel.reattach(text, widgets)
+
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
-        if text != _text_of(last):
+        if text != original:
             # Rewritten in place, keeping the message id, so `add_messages`
             # REPLACES the message rather than appending a second copy. Without
             # the id the transcript would carry both the unsafe original and its

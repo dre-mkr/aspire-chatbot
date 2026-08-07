@@ -310,6 +310,65 @@ class Settings(BaseSettings):
     #: every chunk a retriever returns ranks highly; word coverage can.
     qa_coverage_floor: float = Field(default=0.25, ge=0.0, le=1.0)
 
+    # --- The learning agent (Track L) -------------------------------------
+    #
+    # ## Model tiering, in ONE place
+    #
+    # Five jobs on the learning path, four of them cheap and one of them the
+    # product. Named here rather than at the call sites so that "which model
+    # writes the lesson?" is answered by reading a settings block instead of by
+    # grepping for `build_chat_model`.
+    #
+    # Empty string means "use `chat_model`". That is the default for the two that
+    # should track the answer model, and it keeps a deployment that only sets
+    # CHAT_MODEL coherent.
+    #
+    # `learn_*_model` values are "provider:model" strings passed to
+    # init_chat_model, exactly like `chat_model`. Access to OpenAI models is
+    # granted per project and an unavailable one 403s at call time rather than at
+    # startup -- check `client.models.list()` before naming one. This project's
+    # list carries no `-mini` variants, so "cheap" here means gpt-4o.
+
+    #: Writes the lesson. The one call where the writing IS the product, so it
+    #: gets the strongest model configured. Empty -> `chat_model`.
+    learn_teach_model: str = ""
+    #: Disambiguates between two or three candidate concepts. One structured
+    #: answer from a three-item menu.
+    learn_resolve_model: str = "openai:gpt-4o"
+    #: Picks one widget primitive from a short list, or none.
+    learn_widget_plan_model: str = "openai:gpt-4o"
+    #: Composes the chosen primitive's JSON. Harder than planning and easier than
+    #: teaching. Empty -> `chat_model`.
+    learn_widget_compose_model: str = ""
+    #: Judges a free-text check answer against an accept list. Numeric answers
+    #: never reach it -- Python compares those.
+    learn_evaluate_model: str = "openai:gpt-4o"
+
+    # ## Concept resolution thresholds
+    #
+    # Not hardcoded, because they are decision boundaries and the only honest way
+    # to set them is to measure. Calibrated against `evals/learning_resolution.jsonl`
+    # -- see `scripts/calibrate_resolution.py`.
+
+    #: At or above this cosine similarity, the concept is resolved outright.
+    learn_resolve_threshold: float = Field(default=0.62, ge=0.0, le=1.0)
+    #: Between the two thresholds, one cheap structured call disambiguates
+    #: between the top candidates. Below the floor, fall through to RAG-teach.
+    learn_disambiguate_floor: float = Field(default=0.45, ge=0.0, le=1.0)
+    #: How many candidates the disambiguation call is shown.
+    learn_disambiguate_k: int = Field(default=3, ge=2, le=5)
+
+    # ## The widget pipeline's independence from prose
+    #
+    #: How long the widget task may run after the prose has settled before it is
+    #: abandoned. The prose is already on screen by then, so this is the reader
+    #: waiting for a bonus -- not for their answer.
+    learn_widget_timeout_s: float = Field(default=3.5, gt=0.0, le=30.0)
+    #: A validated widget config is reused for this long. Most learning turns are
+    #: about the same few dozen concepts, so the hit rate is high and a hit skips
+    #: both widget model calls.
+    learn_widget_cache_ttl_days: int = Field(default=7, ge=1, le=90)
+
     # Widgets.
     widgets_enabled: bool = True
     #: A candidate widget is not regenerated for this long, even on a miss. The

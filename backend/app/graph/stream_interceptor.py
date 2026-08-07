@@ -68,18 +68,26 @@ from typing import Any
 
 from app.config import get_settings
 from app.schemas.directives import WidgetDirective, directive_payload
+from app.widgets.sentinel import CLOSE, OPEN
 
 logger = logging.getLogger(__name__)
 
-#: U+27E6 / U+27E7. Written as escapes rather than as literals so that a font
-#: without them, or an editor that normalises unicode, cannot silently change
-#: the protocol.
-OPEN = "⟦widget⟧"
-CLOSE = "⟦/widget⟧"
+# `OPEN` / `CLOSE` (U+27E6 / U+27E7) are re-exported from `widgets.sentinel`,
+# which is also what `safety_out` splits on. One definition, because two copies
+# of a protocol marker is a protocol with two versions.
+__all__ = ["OPEN", "CLOSE", "WIDGET_AGENTS", "INTERNAL_NODES", "StreamInterceptor"]
 
-#: The agent that may emit widgets. A tuple so the learning previews can be
-#: added later without changing the check.
-WIDGET_AGENTS: frozenset[str] = frozenset({"learn_agent"})
+#: The agents that may emit widgets.
+#:
+#: All three learning names, because they are ONE subgraph registered three
+#: times (`agents/learn/graph.py:register`) and the difference between them is
+#: which mastery row they write. A guardian previewing a lesson and a signed-out
+#: visitor sampling one are looking at the same teaching, and a taste of a
+#: lesson with the interactive part silently dropped is a worse advertisement
+#: for it than no taste at all.
+WIDGET_AGENTS: frozenset[str] = frozenset(
+    {"learn_agent", "learning_preview", "learning_sample"}
+)
 
 #: Nodes whose model calls are INTERNAL and must never reach the reader.
 #:
@@ -103,6 +111,21 @@ INTERNAL_NODES: frozenset[str] = frozenset(
         "doc_check",       # a vision verdict, as JSON
         "persist",         # the rolling summary
         "summarise",       # the escalation summary
+        # The tutor is here for a DIFFERENT reason than the rest of this list,
+        # and it is the more important one.
+        #
+        # Everything above is suppressed because its model output is machinery --
+        # JSON a reader must not see. The tutor's model output is prose, and it is
+        # suppressed because it has not been CHECKED yet. `agents/learn/render.py`
+        # validates a lesson against the band contract and regenerates it once if
+        # it fails, and neither is possible for text that has already been
+        # forwarded token by token. So the tutor emits its lesson explicitly, on
+        # the custom channel, after it has passed -- see `_on_custom`'s `prose`
+        # branch.
+        #
+        # The invariant this buys: no token a model produced reaches a child
+        # without having passed the band contract first.
+        "tutor",
     }
 )
 
@@ -246,6 +269,10 @@ class StreamInterceptor:
     _eat_leading_space: bool = False
 
     _ordinal: int = 0
+    #: Which node produced the last prose. Two nodes speaking in one turn are
+    #: two paragraphs, and this is how the boundary is noticed -- see
+    #: `_on_message`.
+    _last_node: str | None = None
     #: Prose held back because it might be the start of an opening sentinel.
     _pending: str = ""
     #: Widget JSON accumulated between the sentinels. None means "not inside a
@@ -296,7 +323,46 @@ class StreamInterceptor:
         text = _text_of(message)
         if not text:
             return []
-        return self.feed(text)
+
+        events = self._separate_from(node)
+        self._last_node = node
+        return events + self.feed(text)
+
+    def _separate_from(self, node: str | None) -> list[WireEvent]:
+        """A paragraph break when a DIFFERENT node starts speaking.
+
+        A turn can have two speakers. `teach` explains and `check` asks the
+        question, both in the same turn, and each returns its own message; the
+        stream carries them as separate `messages` events with nothing between,
+        so the reader gets
+
+            ...choosing to move money from now to later.You move EC$25 into
+            your account instead of spending it this week. What is that?
+
+        -- one sentence running into the next with no space, which reads as a
+        rendering bug and was one. The nodes are right to be separate messages:
+        the check question is authored, the explanation is generated, and
+        joining them upstream would put the authored text through the teaching
+        model's output path.
+
+        So the join is the transport's problem, which is what this is. Applied
+        on the node BOUNDARY rather than per message, because a streamed node
+        arrives as hundreds of chunks that all carry the same node name and must
+        not be separated from each other.
+
+        Three things suppress it: nothing said yet (no leading blank line), an
+        open widget block (a break inside the JSON would corrupt it), and prose
+        that already ends in a newline (the node did it itself).
+        """
+        if node is None or self._last_node is None or node == self._last_node:
+            return []
+        if self._widget is not None:
+            return []
+        if not self.prose.strip() or self.prose.endswith("\n"):
+            return []
+
+        self.prose += "\n\n"
+        return [WireEvent("token", {"i": self._next(), "t": "\n\n"})]
 
     def feed(self, text: str) -> list[WireEvent]:
         """Push raw model text through the sentinel machine.
@@ -507,6 +573,23 @@ class StreamInterceptor:
         if isinstance(turn, dict):
             self.turn = turn
             return []
+
+        # `prose` is a finished, validated lesson from the tutor node.
+        #
+        # It travels on this channel rather than on `messages` because the tutor
+        # is on `INTERNAL_NODES`: its raw model tokens are suppressed so that a
+        # lesson which fails the band contract can be regenerated before anybody
+        # reads it. What arrives here has already passed.
+        #
+        # Pushed through `feed` rather than emitted directly so that it goes
+        # through exactly the same machinery a streamed token does -- citation
+        # markers stripped, `self.prose` accumulated -- which is what keeps a
+        # tutor turn and a Q&A turn persisting identically.
+        prose = payload.get("prose")
+        if isinstance(prose, str) and prose:
+            events = self._separate_from("tutor")
+            self._last_node = "tutor"
+            return events + self.feed(prose)
 
         directive = payload.get("directive")
         if directive is None:
