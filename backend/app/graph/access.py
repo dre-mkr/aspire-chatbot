@@ -15,6 +15,35 @@ never be the one supplying them. Likewise `orion` under 16 gets
 `qa_agent_limited` -- the same Q&A subgraph with a knowledge-base filter, not a
 different, weaker agent (see `agents/qa/graph.py`).
 
+## Registration is a guardian's job, and only a guardian's
+
+`register_agent` appears in exactly one row: `_AURORA`. It used to appear in
+three, and each of the two that were removed was defensible on its own and
+wrong together with the other one:
+
+  * `_ORION_16_18` let a sixteen-year-old register themselves. A sixteen-year-old
+    is old enough to hold an account and is still not the person who should be
+    typing a national ID into a chat window to open one.
+  * `_NOVA` let staff register somebody at a branch. Acting on another person's
+    behalf is a portal function with its own auth realm and its own audit trail
+    -- the same argument that already keeps `servicing_agent` off this row.
+
+`register_agent_step1` stays on `_ANONYMOUS`, and the distinction is the point:
+step 1 collects what can be collected before an account exists and nothing that
+is PII about a minor. A signed-out visitor starting an application is usually a
+parent who has not signed in yet, and removing it would close the only route
+from the public site into the programme.
+
+## `stella` is a child's persona, so it is bounded by a child's bands
+
+The specification listed `stella` as unrestricted by age band, which meant an
+`adult` token that selected the children's mascot dropped into the child lesson
+flow. That was read as conservative -- the children's agent set is the narrow
+one -- but it is the wrong kind of conservative: the lesson machine writes
+mastery rows, picks content off a 5-8 ladder, and is gated by `safety_out` to a
+thirty-five word cap. None of that is a sensible thing to hand an adult, and an
+adult who wants it can switch persona. `_STELLA_BANDS` is the whole change.
+
 ## Anonymous overrides persona
 
 An unauthenticated caller gets the anonymous row whatever persona the client
@@ -87,8 +116,13 @@ KNOWN_AGENTS: Final[frozenset[str]] = frozenset(
 # the question this file exists to answer -- "can a fourteen-year-old reach
 # registration?" -- by looking. Every row states its whole contents.
 
-#: Any band. Two agents: learn, and a route to a human.
+#: Two agents: learn, and a route to a human.
 _STELLA: Final[tuple[str, ...]] = ("learn_agent", "escalate_agent")
+
+#: The bands `stella` covers. A token outside them gets the hard refusal, on the
+#: same reasoning as an Orion token in the 5-8 band: the persona and the band
+#: disagree, and this is not the place to decide which one is lying.
+_STELLA_BANDS: Final[frozenset[str]] = frozenset({"5-8", "9-12"})
 
 #: 13-15. Q&A is the band-filtered variant; registration is absent by design.
 _ORION_13_15: Final[tuple[str, ...]] = (
@@ -97,17 +131,22 @@ _ORION_13_15: Final[tuple[str, ...]] = (
     "escalate_agent",
 )
 
-#: 16-18. The first band that may register and service an account.
+#: 16-18. Old enough to hold and service an account, not the person who opens
+#: it -- see the module docstring on why `register_agent` is not here.
 _ORION_16_18: Final[tuple[str, ...]] = (
     "learn_agent",
     "qa_agent",
-    "register_agent",
     "servicing_agent",
     "escalate_agent",
 )
 
-#: The guardian persona. `learning_preview` lets a parent see what their child
-#: is being taught without entering the child's lesson flow.
+#: The guardian persona, and the ONLY row that reaches registration.
+#:
+#: `learning_preview` lets a parent see what their child is being taught. It is
+#: the same lesson machine the child runs -- real teaching, real widgets, real
+#: check questions -- and it scores nobody: `graph._learner` returns None for
+#: it, so nothing a guardian does while looking in is written to a mastery row.
+#: That last part was not true until it was measured; see `NON_SCORING_AGENTS`.
 _AURORA: Final[tuple[str, ...]] = (
     "qa_agent",
     "register_agent",
@@ -116,9 +155,9 @@ _AURORA: Final[tuple[str, ...]] = (
     "learning_preview",
 )
 
-#: Staff and partners. No servicing: acting on somebody else's account is a
-#: portal function with its own auth realm, not a chat function.
-_NOVA: Final[tuple[str, ...]] = ("qa_agent", "register_agent", "escalate_agent")
+#: Staff and partners. No servicing and no registration: both are acting on
+#: somebody else's account, which is a portal function with its own auth realm.
+_NOVA: Final[tuple[str, ...]] = ("qa_agent", "escalate_agent")
 
 #: No proven identity. `register_agent_step1` collects only what can be
 #: collected before an account exists, and nothing that would be PII about a
@@ -176,9 +215,12 @@ def allowed_agents(
         return []
 
     if persona == "stella":
-        # Every band, including `adult`. An adult talking to the children's
-        # mascot gets the children's agent set, which is the conservative
-        # reading and costs an adult nothing -- they can switch persona.
+        # Child bands only. An adult holding a Stella token is either a stale
+        # token or an adult who picked the children's mascot from the switcher,
+        # and neither is a reason to start writing mastery rows against a
+        # 5-8 curriculum ladder. Switching persona is one tap.
+        if age_band not in _STELLA_BANDS:
+            return []
         return list(_STELLA)
 
     if persona == "orion":

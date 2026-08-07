@@ -167,6 +167,23 @@ class ContractViolation:
         return f"{self.code}: {self.detail}"
 
 
+#: Violations that mean this is not a lesson. Only these trigger a regeneration.
+#:
+#: The split is a cost decision made deliberately. A regeneration is a second
+#: frontier call on a turn a learner is waiting through, and it is worth paying
+#: when the lesson is absent, thin, ungrounded or unanswerable -- the four ways a
+#: turn fails to teach. It is not worth paying because one sentence ran three
+#: words long: the lesson is correct, complete and on-topic, and a fresh
+#: generation is as likely to introduce a different blemish as to fix this one.
+#:
+#: Advisory violations are still recorded and still logged, so their rates are
+#: visible on the health surface and a prompt that produces them constantly can
+#: be fixed at the prompt rather than at runtime.
+BLOCKING: frozenset[str] = frozenset(
+    {"EMPTY", "TOO_SHORT", "UNGROUNDED", "NO_QUESTION", "TOO_MANY_QUESTIONS"}
+)
+
+
 @dataclass(frozen=True, slots=True)
 class ContractResult:
     """Whether a rendered lesson may be served, and if not, precisely why.
@@ -180,6 +197,21 @@ class ContractResult:
     ok: bool
     violations: tuple[ContractViolation, ...] = ()
     words: int = 0
+
+    @property
+    def blocking(self) -> tuple[ContractViolation, ...]:
+        """The violations that mean this is not a lesson."""
+        return tuple(v for v in self.violations if v.code in BLOCKING)
+
+    @property
+    def servable(self) -> bool:
+        """Whether this may be served as it stands.
+
+        `ok` means flawless. `servable` means it teaches -- which is the question
+        the renderer actually has to answer, and the difference between the two
+        is a regeneration nobody needed.
+        """
+        return not self.blocking
 
     def quoted(self) -> str:
         return "\n".join(f"  - {violation}" for violation in self.violations)

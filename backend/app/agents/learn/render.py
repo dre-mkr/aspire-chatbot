@@ -380,25 +380,35 @@ def template_lesson(
     if concept.local_example:
         pieces.append(f"{picker.choice(phrases['example'])} {concept.local_example}")
 
+    # The tail is built separately and kept whole. A trim must never take the
+    # check question with it: a lesson that ends mid-explanation with nothing to
+    # answer is a dead end, and a dead end in a lesson is where a child stops.
+    tail = ""
     if check_item is not None:
-        pieces.append(f"{picker.choice(phrases['check'])} {check_item.question}")
+        tail = f"{picker.choice(phrases['check'])} {check_item.question}".strip()
 
     text = " ".join(piece.strip() for piece in pieces if piece.strip())
     text = re.sub(r"\s{2,}", " ", text).strip()
 
-    # Trim to the ceiling at a sentence boundary. The floor is not enforceable
-    # here -- if the authored body is short, the body is short, and inventing
-    # words to reach a count is the failure this whole file prevents.
-    if word_count(text) > contract.max_words:
-        from app.graph.nodes.safety_out import truncate_at_sentence
+    # Trim the explanation to fit the ceiling WITH the question, at a sentence
+    # boundary. The floor is not enforceable here -- if the authored body is
+    # short, the body is short, and padding to reach a count is the failure this
+    # whole file exists to prevent.
+    #
+    # The question's own length comes out of the budget first, so a long check
+    # question shortens the explanation rather than overflowing the cap. Twenty
+    # words is the floor on what is left: below that the "lesson" is a question
+    # with a sentence in front of it, and serving the untrimmed body is more
+    # honest than serving that.
+    if contract.max_words is not None:
+        budget = contract.max_words - word_count(tail)
+        if word_count(text) > budget:
+            from app.graph.nodes.safety_out import truncate_at_sentence
 
-        head, _, question = text.rpartition(picker.choice(phrases["check"]))
-        if check_item is not None and question:
-            budget = max(contract.max_words - word_count(question) - 2, 20)
-            text = f"{truncate_at_sentence(head.strip(), budget)} {question.strip()}".strip()
-        else:
-            text = truncate_at_sentence(text, contract.max_words)
-    return text
+            if budget >= 20:
+                text = truncate_at_sentence(text, budget)
+
+    return f"{text} {tail}".strip() if tail else text
 
 
 def decline_text(band: str, alternatives: Sequence[TeachingConcept]) -> str:
@@ -480,7 +490,15 @@ async def render_teach(
     result = check_lesson(
         text or "", band=context.band, expect_question=expect_question, grounding_terms=terms
     )
-    if text and result.ok:
+    # `servable`, not `ok`. A lesson with one over-long sentence teaches; a
+    # lesson that is empty, thin, ungrounded or unanswerable does not, and only
+    # the second kind is worth a second frontier call. See `contract.BLOCKING`.
+    if text and result.servable:
+        if result.violations:
+            logger.info(
+                "Serving a lesson with advisory violations: %s",
+                [violation.code for violation in result.violations],
+            )
         return _finish(RenderResult(text=text, tier=1, contract=result), context)
 
     if text:
@@ -488,11 +506,15 @@ async def render_teach(
             "Lesson failed the %s contract (%d words); retrying. Violations: %s",
             context.band,
             result.words,
-            [violation.code for violation in result.violations],
+            [violation.code for violation in result.blocking],
         )
 
     # ── tier 2: one retry, with the violation quoted ────────────────────────
     if invoke is not None:
+        # Every violation is quoted, not only the blocking ones: the model is
+        # rewriting anyway, so it may as well fix the over-long sentence while it
+        # is there. It is the BLOCKING set that decided to retry, and the full
+        # set that says what to change.
         retry_block = (
             f"{turn_block}\n\n"
             "YOUR PREVIOUS ATTEMPT WAS REJECTED. What was wrong with it:\n"
@@ -513,7 +535,7 @@ async def render_teach(
             expect_question=expect_question,
             grounding_terms=terms,
         )
-        if retried and second.ok:
+        if retried and second.servable:
             return _finish(RenderResult(text=retried, tier=1, retry=True, contract=second), context)
 
         # A retry that is merely IMPERFECT still beats the template, and the

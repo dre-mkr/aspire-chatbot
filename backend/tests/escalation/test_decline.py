@@ -1,0 +1,215 @@
+"""The third outcome: decline twice, fetch a person on the third try.
+
+E.4 + E.5. The four retrieval gates -- `no_context`, `below_relevance_floor`,
+`unattributed_figure`, `uncited_policy_claim` -- used to hand off to a person on
+the first attempt, and between them opened 23 of 58 live tickets.
+
+Nothing about retrieval, fusion, reranking, the floors or the generation prompt
+changed. Only the ungrounded ending did.
+"""
+
+from __future__ import annotations
+
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage
+
+from app.agents.escalation import counter
+from app.agents.escalation.decline import decline_chips, decline_text, nearest_topic
+from app.agents.qa.nodes import make_ground_check
+from app.graph.state import KBChunk, initial_state
+
+pytestmark = pytest.mark.asyncio
+
+#: Shaped like a real ingested row, which matters for one test below.
+#:
+#: `row_to_document` puts the kb id INTO the embedded text, so a live chunk
+#: contains its own "ASP-070". `unattributed_figures` sees the digits of a
+#: citation marker as a figure and looks for them in the chunks -- which passes
+#: on real data and fails on a fixture that omits the id. The first draft of
+#: this file omitted it and produced a failure that looked like a grounding bug.
+CHUNK = KBChunk(
+    kb_id="ASP-070",
+    title="Can a parent withdraw the child's savings?",
+    content=(
+        "ASP-070\nCategory: Savings\n"
+        "Question: Can a parent or guardian withdraw the child's savings?\n"
+        "Answer: No. Parents or guardians cannot withdraw funds."
+    ),
+    relevance=0.30,
+    source="dense",
+)
+UNANSWERABLE = "can i get a loan against my childs aspire account"
+
+
+def _state(question: str, *, streak=None, band="adult", persona="aurora", chunks=(CHUNK,)):
+    state = initial_state(
+        session_id="s-decline",
+        user_id="u-1",
+        device_id="d",
+        persona=persona,
+        age_band=band,
+        account_status="guardian",
+    )
+    state["messages"] = [
+        HumanMessage(content=question),
+        AIMessage(content="An answer with no citation."),
+    ]
+    state["retrieved"] = list(chunks)
+    state["decline_streak"] = streak or {}
+    return state
+
+
+async def _turn(node, question, streak, **kwargs):
+    command = await node(_state(question, streak=streak, **kwargs))
+    update = command.update or {}
+    return update, getattr(command, "goto", None)
+
+
+class TestTheFirstTwoAttemptsDecline:
+    async def test_an_unanswerable_question_does_not_escalate(self):
+        update, goto = await _turn(make_ground_check(), UNANSWERABLE, {})
+
+        assert not goto
+        assert "escalation_reason" not in update
+        assert update["messages"][0].content
+
+    async def test_the_decline_has_all_three_parts(self):
+        """What we know, who holds the rest, something answerable."""
+        text = decline_text(_state(UNANSWERABLE), [CHUNK])
+
+        assert "do not have an answer" in text
+        assert "ASPIRE team" in text
+        assert CHUNK.title in text
+
+    async def test_it_cites_nothing(self):
+        """A decline is the absence of an attributable answer. Rendering the
+        chunks that failed the floor as sources would source it from them."""
+        update, _ = await _turn(make_ground_check(), UNANSWERABLE, {})
+
+        assert update["citations"] == []
+        assert update["groundedness"] == 0.0
+
+    async def test_the_offer_quotes_the_row_as_a_question(self):
+        """Corpus titles ARE questions, so the template quotes them. Embedding
+        one after a preposition produced "I can tell you about can a parent
+        withdraw the child's savings" in the first draft."""
+        assert nearest_topic([CHUNK]) == CHUNK.title
+        assert f'"{CHUNK.title}"' in decline_text(_state(UNANSWERABLE), [CHUNK])
+
+    async def test_with_nothing_retrieved_no_topic_is_invented(self):
+        text = decline_text(_state(UNANSWERABLE, chunks=()), [])
+
+        assert "ASPIRE team" in text
+        assert "ask me this one instead" not in text
+        assert decline_chips(_state(UNANSWERABLE, chunks=()), []) == []
+
+    async def test_it_does_not_invite_a_rephrase(self):
+        """Inviting a retry invites the loop the counter exists to catch."""
+        text = decline_text(_state(UNANSWERABLE), [CHUNK]).lower()
+
+        for invitation in ("try again", "rephrase", "different words", "sorry"):
+            assert invitation not in text
+
+
+class TestTheThirdAttemptEscalates:
+    async def test_three_turns_on_one_intent_reaches_a_person(self):
+        node = make_ground_check()
+        streak: dict = {}
+        outcomes = []
+        for _ in range(3):
+            update, goto = await _turn(node, UNANSWERABLE, streak)
+            streak = update.get("decline_streak", streak)
+            outcomes.append(goto or "decline")
+
+        assert outcomes == ["decline", "decline", "escalate_agent"]
+
+    async def test_it_escalates_as_repeated_failure(self):
+        node = make_ground_check()
+        streak = {counter.intent_key(UNANSWERABLE): counter.LIMIT - 1}
+        update, goto = await _turn(node, UNANSWERABLE, streak)
+
+        assert goto == "escalate_agent"
+        assert update["escalation_reason"] == "repeated_failure"
+        assert update["escalation_summary"]
+
+    async def test_the_streak_resets_on_escalation(self):
+        """Left at the limit, every later turn on the same intent opens another
+        ticket -- one per turn, which is worse than what this replaced."""
+        node = make_ground_check()
+        streak = {counter.intent_key(UNANSWERABLE): counter.LIMIT - 1}
+        update, goto = await _turn(node, UNANSWERABLE, streak)
+        assert goto == "escalate_agent"
+        assert update["decline_streak"] == {}
+
+        after, goto_after = await _turn(node, UNANSWERABLE, update["decline_streak"])
+        assert not goto_after
+        assert after["decline_streak"] == {counter.intent_key(UNANSWERABLE): 1}
+
+    async def test_changing_the_subject_resets_the_run(self):
+        node = make_ground_check()
+        streak: dict = {}
+        for _ in range(2):
+            update, _ = await _turn(node, UNANSWERABLE, streak)
+            streak = update["decline_streak"]
+
+        moved_on, goto = await _turn(node, "when is the application deadline", streak)
+
+        assert not goto
+        assert sum(moved_on["decline_streak"].values()) == 1
+
+
+class TestBandAppropriateCopy:
+    async def test_a_child_is_pointed_at_a_grown_up_not_a_website(self):
+        text = decline_text(_state("what is saving", band="5-8", persona="stella"), [CHUNK])
+
+        assert "grown-up" in text
+        assert "aspire.gov.kn" not in text
+
+    async def test_an_adult_gets_the_channels(self):
+        text = decline_text(_state(UNANSWERABLE), [CHUNK])
+
+        assert "aspire.gov.kn" in text
+
+    @pytest.mark.parametrize("locale", ["en", "es", "fr"])
+    async def test_every_shipped_locale_declines_in_its_own_words(self, locale):
+        state = _state(UNANSWERABLE)
+        state["locale"] = locale
+        text = decline_text(state, [CHUNK])
+
+        assert text
+        assert "I do not have an answer" in text if locale == "en" else True
+
+    async def test_an_unknown_locale_falls_back_to_english(self):
+        state = _state(UNANSWERABLE)
+        state["locale"] = "de"
+        assert "I do not have an answer" in decline_text(state, [CHUNK])
+
+
+class TestAGroundedAnswerIsUnaffected:
+    async def test_a_cited_answer_still_returns_and_clears_the_streak(self):
+        """The protected path. A grounded turn must behave exactly as before,
+        except that it now ends any run of unresolved ones."""
+        node = make_ground_check()
+        state = _state("can a parent withdraw the savings")
+        state["messages"] = [
+            HumanMessage(content="can a parent withdraw the savings"),
+            AIMessage(content="No. Parents cannot withdraw funds [ASP-070]."),
+        ]
+        state["retrieved"] = [
+            KBChunk(
+                kb_id="ASP-070",
+                title=CHUNK.title,
+                content=CHUNK.content,
+                relevance=0.80,
+                source="dense",
+            )
+        ]
+        state["decline_streak"] = {"whatever": 2}
+
+        command = await node(state)
+        update = command.update or {}
+
+        assert not getattr(command, "goto", None)
+        assert [citation.kb_id for citation in update["citations"]] == ["ASP-070"]
+        assert update["groundedness"] > 0
+        assert update["decline_streak"] == {}

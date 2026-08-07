@@ -71,7 +71,22 @@ _ETA: dict[str, str] = {
 #:
 #: `safeguarding` is the only automatic high, and it is high regardless of who
 #: raised it or what else is going on in the conversation.
+#: Keyed on `EscalationReason` values first, then on the pre-contract strings.
+#:
+#: Both sets are present because a conversation checkpointed before Track E
+#: carries the old string and must not crash on resume. The four retrieval
+#: reasons are kept for exactly that reason and nothing else -- nothing produces
+#: them any more; `ground_check` declines instead (`agents/qa/nodes.py`). When
+#: the oldest live checkpoint predates the deploy by more than a session, the
+#: bottom half of this table can go.
 _TRIAGE: dict[str, tuple[Priority, str]] = {
+    # The contract (`agents/escalation/contract.py`).
+    "safety_or_distress": ("high", "safeguarding"),
+    "user_requested_human": ("normal", "general"),
+    "account_action_needed": ("high", "servicing"),
+    "repeated_failure": ("normal", "comprehension"),
+    "complaint": ("high", "complaint"),
+    # Pre-contract, for in-flight checkpoints only.
     "safeguarding": ("high", "safeguarding"),
     "distress": ("high", "wellbeing"),
     "user_request": ("normal", "general"),
@@ -80,7 +95,6 @@ _TRIAGE: dict[str, tuple[Priority, str]] = {
     "unattributed_figure": ("normal", "accuracy"),
     "uncited_policy_claim": ("normal", "accuracy"),
     "repeated_clarification": ("normal", "comprehension"),
-    "complaint": ("high", "complaint"),
 }
 
 #: Three failed clarifications in a row is an escalation trigger in its own

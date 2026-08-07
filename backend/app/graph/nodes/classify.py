@@ -91,11 +91,20 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
         "Something about an account that already exists: balance, statements, "
         "changing details, a payment that has not arrived."
     ),
-    "escalate_agent": (
-        "The person needs a human: they asked for one, they are upset or in "
-        "difficulty, or the question is outside what this assistant can answer."
-    ),
 }
+
+# `escalate_agent` deliberately has NO description, because the router is no
+# longer offered it -- `routable()` filters it out before the menu is built.
+#
+# The description it used to carry is worth quoting, because it is the bug:
+#
+#     "The person needs a human: they asked for one, they are upset or in
+#      difficulty, or the question is outside what this assistant can answer."
+#
+# Three quite different situations, one of which ("outside what this assistant
+# can answer") describes most of the corpus's blind spots. A small model shown
+# that line, next to five agents described by topic, has been handed a catch-all
+# and will use it as one.
 
 _SYSTEM = (
     "You route one message to one handler. Choose from the list you are given "
@@ -125,6 +134,33 @@ class Classification(BaseModel):
     #: True when stickiness kept the turn in `active_agent` against a differing
     #: proposal.
     sticky: bool = False
+
+
+#: Agents the router may never select, whatever the access matrix granted.
+#:
+#: `escalate_agent` is the whole set. Fetching a person is now a decision an
+#: agent makes explicitly and states a reason for
+#: (`agents/escalation/contract.py`), or a deterministic signal
+#: (`nodes/safety_in.distress_level`, `nodes/cards` for an explicit request) --
+#: never a small model's guess about where a message belongs.
+#:
+#: Filtered out of `allowed` rather than merely omitted from the menu, and that
+#: is deliberate: omitting it from the descriptions stops the model PROPOSING it
+#: but leaves `_coerce` rung 1 able to accept it if the model names it anyway,
+#: and leaves it counted in the `len(allowed) == 1` shortcut. Removing it from
+#: the list removes it from all three at once.
+UNROUTABLE: frozenset[str] = frozenset({"escalate_agent"})
+
+
+def routable(allowed: list[str]) -> list[str]:
+    """The granted agents the router may actually choose between.
+
+    Every row in the access matrix keeps at least one routable agent after this
+    filter -- Stella keeps `learn_agent`, Nova keeps `qa_agent` -- so this cannot
+    empty a permitted caller's list and turn a grant into a 403.
+    `tests/escalation/test_router.py` walks the matrix to hold that true.
+    """
+    return [agent for agent in allowed if agent not in UNROUTABLE]
 
 
 def agent_menu(allowed: list[str]) -> str:
@@ -370,7 +406,11 @@ def make_classify(invoke=None):
     """
 
     async def classify(state: AspireState) -> dict[str, Any]:
-        allowed = list(state.get("allowed_agents") or [])
+        # `routable` drops `escalate_agent`. The access matrix still grants it --
+        # it is still a node, still reachable from `safety_in`, from the card
+        # gate and from an agent's explicit tool call -- but it is no longer
+        # something a router can decide a message "is about".
+        allowed = routable(list(state.get("allowed_agents") or []))
         if not allowed:
             # `guard` has already halted the turn; reaching here means the graph
             # was wired wrong. Fail closed rather than picking something.

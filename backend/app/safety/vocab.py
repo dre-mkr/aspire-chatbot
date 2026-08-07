@@ -189,9 +189,39 @@ def is_allowed_concept(concept: str, band: str) -> bool:
     Matching is on the normalised concept name -- underscores and hyphens read
     as spaces -- because curriculum ids are `compound_interest` and the ladder
     is written in prose.
+
+    ## Two registries, one question
+
+    The vocabulary ladder above is the authored curriculum's, and for years it was
+    the only source of concepts in the product. Seeded concepts
+    (`learning/concepts.py`, built by `scripts/seed_concepts.py`) are the second,
+    and they carry their own `band_min`/`band_max` -- reviewed by the same people,
+    recorded in the same table as the material.
+
+    Consulting both here rather than relaxing the callers keeps one function
+    answering "may this band meet this concept?" for the whole product. The
+    alternative was a widget gate that passed curriculum concepts and rejected
+    seeded ones with "not on the ladder", which is true of the ladder and false
+    of the concept -- and which drops every widget on every seeded lesson.
+
+    Still fails closed: a concept in neither registry is refused.
     """
     normalised = concept.replace("_", " ").replace("-", " ").strip().lower()
-    return normalised in concepts_for(band)
+    if normalised in concepts_for(band):
+        return True
+
+    try:
+        from app.learning.concepts import get_store
+
+        store = get_store()
+    except Exception:  # pragma: no cover - import cycles during partial startup
+        return False
+
+    slug = concept.strip().lower()
+    for candidate in store.all():
+        if candidate.slug == slug or candidate.id == concept:
+            return candidate.teachable_at(band)
+    return False
 
 
 def banned_terms(band: str) -> frozenset[str]:

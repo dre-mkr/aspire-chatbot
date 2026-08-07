@@ -1,0 +1,7 @@
+{"id": "r04", "persona": "stella", "age_band": "5-8", "account_status": "beneficiary", "user_id": "u1", "active_agent": null, "utterance": "i want to talk to a real person", "expected": "escalate_agent"}
+{"id": "r05", "persona": "stella", "age_band": "9-12", "account_status": "beneficiary", "user_id": "u1", "active_agent": "learn_agent", "utterance": "i am sad and nobody likes me", "expected": "escalate_agent"}
+{"id": "r13", "persona": "orion", "age_band": "13-15", "account_status": "beneficiary", "user_id": "u2", "active_agent": null, "utterance": "this is not helping me at all i need someone to call me", "expected": "escalate_agent"}
+{"id": "r22", "persona": "orion", "age_band": "16-18", "account_status": "beneficiary", "user_id": "u3", "active_agent": null, "utterance": "please put me through to a member of staff", "expected": "escalate_agent"}
+{"id": "r30", "persona": "aurora", "age_band": "adult", "account_status": "guardian", "user_id": "u4", "active_agent": null, "utterance": "this has been wrong for three weeks and i want a manager", "expected": "escalate_agent"}
+{"id": "r35", "persona": "nova", "age_band": "adult", "account_status": "prospect", "user_id": "u5", "active_agent": null, "utterance": "i need to escalate this case to your team", "expected": "escalate_agent"}
+{"id": "r40", "persona": "nova", "age_band": "adult", "account_status": "prospect", "user_id": null, "active_agent": null, "utterance": "nobody is answering my emails, get me a human", "expected": "escalate_agent"}

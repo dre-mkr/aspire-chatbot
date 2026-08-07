@@ -42,6 +42,8 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.register import store
+from app.agents.handoff import Handoff, filter_slots
+from app.agents.handoff import from_state as handoff_from_state
 from app.agents.register.schema import (
     CHILD_SLOTS,
     GUARDIAN_SLOTS,
@@ -88,10 +90,18 @@ def _draft(state: AspireState) -> store.Draft:
     """
     raw = state.get("registration")
     if isinstance(raw, dict) and raw.get("application_id"):
+        # A PRESENCE map, rebuilt from the path list the checkpoint carries. The
+        # walk asks "is this slot empty?" and nothing more, so a marker answers
+        # it. A node that needs a real answer -- `review` rendering the card,
+        # `submit` sending the application -- calls `load_real_values` and reads
+        # the database, where the values have always actually lived.
+        values: dict[str, Any] = {path: PRESENT for path in (raw.get("filled") or [])}
+        if raw.get("awaiting"):
+            values["__awaiting"] = raw["awaiting"]
         return store.Draft(
             application_id=raw["application_id"],
             resume_token=raw.get("resume_token", ""),
-            values=dict(raw.get("values") or {}),
+            values=values,
             child_index=int(raw.get("child_index") or 0),
             children_complete=int(raw.get("children_complete") or 0),
             status=raw.get("status", "draft"),
@@ -100,18 +110,77 @@ def _draft(state: AspireState) -> store.Draft:
     return store.new_draft(state.get("session_id"))
 
 
+async def load_real_values(draft: store.Draft) -> store.Draft:
+    """The same draft with its actual answers, read from the database.
+
+    For the two nodes that need values rather than presence: `review`, which
+    renders them (masked, via `display_value`), and `submit`, which sends them.
+    Everything else works off the presence map and never holds a real answer.
+
+    Falls back to the presence map when there is no database or no row -- the
+    turn then shows masked placeholders rather than raising, which is the honest
+    degradation: the application is still on file, this process just cannot read
+    it back.
+    """
+    if not draft.resume_token:
+        return draft
+    loaded = await store.load_draft(draft.resume_token)
+    if loaded is None:
+        logger.warning(
+            "Could not reload application %s; rendering from the presence map.",
+            draft.application_id,
+        )
+        return draft
+    loaded.child_index = draft.child_index
+    loaded.children_complete = draft.children_complete
+    return loaded
+
+
+#: Stands in for an answer in the checkpoint's presence map.
+#:
+#: The map records WHICH slots are answered, never what the answers are. The walk
+#: (`next_missing`) only asks whether a slot is empty, so a marker satisfies it
+#: exactly as well as the real value did -- and `display_value`, which needs the
+#: real thing, loads it from the database instead.
+PRESENT = "__present"
+
+
 def _persist_state(draft: store.Draft) -> dict[str, Any]:
+    """The pointers that go into the checkpoint. NEVER the answers.
+
+    ## FINDINGS.md F1, and this is the fix
+
+    This function used to return `"values": draft.values` -- the entire slot
+    dictionary, verbatim, into `AspireState.registration`, which
+    `AsyncPostgresSaver` serialises to the `checkpoint_blobs` table. A read-only
+    probe of the live store found the map key `guardian.full_name` sitting in
+    `registration`-channel blobs, and every other slot reached the same place by
+    construction: `guardian.national_id`, `guardian.date_of_birth`,
+    `child.0.date_of_birth`. Nothing purges that table -- `retention.py` has one
+    sweep and it does not touch checkpoints -- and `RegistrationState = Any`
+    meant no type constrained what landed there.
+
+    The values were never homeless. `store.save_slot` has always written
+    sensitive ones Fernet-encrypted to `application_pii` and the rest to
+    `applications.answers`, and `store.load_draft` reconstructs the whole draft
+    from those two tables. So the checkpoint copy was redundant as well as
+    dangerous, which is the happiest kind of thing to delete.
+
+    What survives is a presence map and five scalars. `filled` is a list of slot
+    PATHS -- "guardian.national_id" is a field name, not a national ID.
+    """
     return {
         "application_id": draft.application_id,
         "resume_token": draft.resume_token,
-        "values": draft.values,
+        # Paths only. This is the line F1 was about.
+        "filled": sorted(key for key in draft.values if not key.startswith("__")),
         "child_index": draft.child_index,
         "children_complete": draft.children_complete,
         "status": draft.status,
         "pending_corrections": draft.pending_corrections,
         # The slot currently being asked for. Read by `extract` on the next
         # turn, because a turn does not otherwise know which question it is
-        # answering.
+        # answering. A path, not an answer.
         "awaiting": draft.values.get("__awaiting"),
     }
 
@@ -184,14 +253,31 @@ _HANDOFF: dict[str, str] = {
 }
 
 
-def pick_slot(draft: store.Draft, *, allow_sensitive: bool = True) -> Slot | None:
+def pick_slot(
+    draft: store.Draft,
+    *,
+    allow_sensitive: bool = True,
+    handoff: Handoff | None = None,
+) -> Slot | None:
     """Which question comes next.
 
     In correction mode the walk is the flagged list and nothing else -- that is
     the whole point of F2, and it is why this branches here rather than
     filtering inside `next_missing`.
+
+    ## `handoff.do_not_reask` is enforced here, and only here
+
+    Track C.3 requires that an agent be structurally unable to ask for a slot the
+    previous agent already established. This is the enforcement point, because
+    this is the only function that decides what gets asked -- a prompt instruction
+    would be a request that this loop never reads.
+
+    `filter_slots` is applied to the candidate list before a choice is made, in
+    both branches. A barred slot is therefore not a question the agent declines
+    to ask; it is a question that was never a candidate.
     """
     if draft.in_correction_mode:
+        candidates: list[Slot] = []
         for path in draft.pending_corrections:
             base = path
             if path.startswith("child.") and path.split(".")[1].isdigit():
@@ -199,11 +285,20 @@ def pick_slot(draft: store.Draft, *, allow_sensitive: bool = True) -> Slot | Non
                 base = f"child.{parts[-1]}"
             slot = slot_for(base)
             if slot is not None and draft.values.get(path) in (None, ""):
-                return slot
-        return None
+                candidates.append(slot)
+        permitted = filter_slots(candidates, handoff)
+        return permitted[0] if permitted else None
 
+    # The barred set goes INTO the walk rather than filtering its output. The
+    # first draft of this filtered afterwards and, to get past a withheld slot,
+    # wrote a sentinel into `draft.values` -- which `_persist_state` would have
+    # checkpointed and `submit` would have sent as a real answer. Skipping inside
+    # the walk needs no sentinel and cannot corrupt the draft.
     return next_missing(
-        draft.values, child_index=draft.child_index, allow_sensitive=allow_sensitive
+        draft.values,
+        child_index=draft.child_index,
+        allow_sensitive=allow_sensitive,
+        barred=frozenset(handoff.do_not_reask) if handoff else frozenset(),
     )
 
 
@@ -220,7 +315,9 @@ def make_ask(*, allow_sensitive: bool = True):
 
     def ask(state: AspireState) -> dict[str, Any]:
         draft = _draft(state)
-        slot = pick_slot(draft, allow_sensitive=allow_sensitive)
+        slot = pick_slot(
+            draft, allow_sensitive=allow_sensitive, handoff=handoff_from_state(state)
+        )
         locale = _locale(state)
 
         if slot is None:
@@ -274,7 +371,7 @@ def make_collect(recorder=None):
 
         draft = _draft(state)
         locale = _locale(state)
-        slot = pick_slot(draft)
+        slot = pick_slot(draft, handoff=handoff_from_state(state))
         if slot is None or not slot.document:
             return {"registration": _persist_state(draft)}
 
@@ -495,10 +592,14 @@ def review_sections(draft: store.Draft) -> list[dict[str, Any]]:
 def make_review():
     """Render the whole application as an editable card."""
 
-    def review(state: AspireState) -> dict[str, Any]:
+    async def review(state: AspireState) -> dict[str, Any]:
         from app.schemas.directives import ReviewCardDirective, ReviewSection
 
-        draft = _draft(state)
+        # The one node that needs real answers rather than the presence map: it
+        # renders them. `display_value` masks the sensitive ones on the way out,
+        # so what reaches the transcript is still a mask -- but it has to be a
+        # mask OF something, and since F1 the checkpoint no longer carries it.
+        draft = await load_real_values(_draft(state))
         locale = _locale(state)
 
         directive = ReviewCardDirective(
@@ -628,7 +729,7 @@ def _needs_document(state: AspireState) -> str:
     to, so it goes straight to the node that pauses.
     """
     draft = _draft(state)
-    slot = pick_slot(draft)
+    slot = pick_slot(draft, handoff=handoff_from_state(state))
     if slot is None:
         return "review"
     return "collect" if slot.document else "ask"

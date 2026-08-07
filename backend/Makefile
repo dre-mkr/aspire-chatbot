@@ -27,14 +27,26 @@ help:
 # Run on every PROMPT change, not only on code changes. A one-word edit to a
 # system prompt moves the over-trigger rate by five points and nothing about
 # the diff says so.
-eval:
+eval: eval-learning
 	$(PYTHON) -m evals.harness
 
 eval-live:
 	$(PYTHON) -m evals.harness --live
+	$(PYTHON) evals/learning_agent.py --live
 
 eval-json:
 	$(PYTHON) -m evals.harness --json
+
+# L1-L10 plus the property sweep. Offline by default -- the model is a scripted
+# stub, which is what makes L3 ("the widget composer raises") expressible at all
+# and what keeps this runnable with no provider key. `eval-live` re-runs the same
+# assertions against the configured models.
+#
+# A dependency of `eval` rather than a separate target somebody remembers: the
+# learning agent's prompts are code, and a one-word edit to one moves the
+# measured rates by several points with nothing in the diff to say so.
+eval-learning:
+	$(PYTHON) evals/learning_agent.py
 
 test:
 	$(PYTHON) -m pytest

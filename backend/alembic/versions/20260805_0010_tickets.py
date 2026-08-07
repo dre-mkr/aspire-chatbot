@@ -9,7 +9,7 @@ Where a conversation goes when a person has to take it.
 ## Why `summary` is text and not a foreign key to the transcript
 
 A ticket is a working record for staff: it is read in a queue, exported to a
-case system, and joined to whatever the reviewer is already looking at. Pointing
+case system, and joined to whatever the @ is already looking at. Pointing
 it at the conversation would mean every one of those readers has access to the
 full transcript of a child's session, including the parts that have nothing to
 do with why the ticket exists.

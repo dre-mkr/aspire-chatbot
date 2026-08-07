@@ -379,6 +379,7 @@ def check_grounding(report: Report) -> None:
 
     served = 0
     starved = 0
+    declined = 0
     misses: list[str] = []
     starvations: list[str] = []
 
@@ -420,12 +421,42 @@ def check_grounding(report: Report) -> None:
                 starvations.append(f"{row['id']}: {question!r} -- {reason}")
             continue
 
-        # What a model produces when it has nothing to point at.
-        state["messages"].append(AIMessage(content="Yes, that is possible."))
+        # What a model produces when it has nothing to point at. The invented
+        # rate and figure are the payload: this metric is "did a hallucination
+        # reach the reader?", so the check below looks for THEM.
+        hallucination = "Yes, that is possible. The rate is 4.5% and the limit is EC$8,000."
+        state["messages"].append(AIMessage(content=hallucination))
         command = asyncio.run(check(state))
-        if command.goto != "escalate_agent":
+
+        # ## Why this is no longer `goto != "escalate_agent"`
+        #
+        # It was, and that equated "did not fetch a human" with "served a
+        # hallucination". Those were the same thing while QA had two outcomes.
+        # Track E.4 added a third: an ungrounded turn now DECLINES -- the model's
+        # text is discarded and replaced with "I do not have an answer for that",
+        # who to ask, and a question the corpus can answer -- and escalates only
+        # after three unresolved turns on one intent.
+        #
+        # Scored the old way, all twenty out-of-KB rows read as served, which
+        # would have made the metric fire on the change it was asked for while
+        # the property it names -- no invented figure reaches a reader -- was
+        # never violated. So it measures the property directly now: whatever the
+        # outcome, the reply must not contain what the model made up.
+        reply = ""
+        for message in (command.update or {}).get("messages", []):
+            reply += str(getattr(message, "content", ""))
+
+        leaked = [token for token in ("4.5%", "EC$8,000") if token in reply]
+        if leaked:
             served += 1
-            misses.append(f"{row['id']}: {question!r} was served")
+            misses.append(f"{row['id']}: {question!r} served {', '.join(leaked)}")
+        elif command.goto != "escalate_agent" and not reply.strip():
+            # Neither escalated nor said anything. A silent turn is not a
+            # hallucination but it is not an answer either.
+            served += 1
+            misses.append(f"{row['id']}: {question!r} produced no reply and no handoff")
+        elif command.goto != "escalate_agent":
+            declined += 1
 
     report.record(
         "ungrounded_answers_served",
@@ -433,6 +464,9 @@ def check_grounding(report: Report) -> None:
         out_of_kb=sum(1 for row in rows if not row.get("in_kb")),
         examples=misses[:10],
     )
+    # Not a threshold, a denominator. It is the number this change was made to
+    # move: out-of-KB turns that ended in a decline rather than a support ticket.
+    report.record("ungrounded_declined_gracefully", declined)
     report.record(
         "in_kb_starved",
         starved,

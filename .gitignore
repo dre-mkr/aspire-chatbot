@@ -9,3 +9,8 @@
 # a second copy of the repository inside this one.
 .claude/*
 !.claude/launch.json
+
+# Seeding checkpoints. Regenerable by `scripts/seed_concepts.py`, ~2.5MB of
+# intermediate model output, and the DELIVERABLES beside them (taxonomy.json,
+# concepts-review.csv, KB-GAPS.md) are what a reviewer actually reads.
+learning/.seed/

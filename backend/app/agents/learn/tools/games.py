@@ -47,6 +47,8 @@ from app.graph.state import band_index
 from app.learning.mastery import Evidence, MasteryStore
 from app.schemas.directives import GameDirective, directive_payload
 
+from app.agents.learn.state import band_of
+
 logger = logging.getLogger(__name__)
 
 GameName = Literal["scramble", "true_false", "millionaire"]
@@ -253,7 +255,7 @@ def make_game_result_node(store: MasteryStore | None = None):
         if result is None:
             return {}
 
-        band = str(state.get("age_band") or "9-12")
+        band = band_of(state)
         # None for an anonymous visitor. `MasteryStore.record` accepts it and
         # writes nothing -- see `mastery.is_persistable`.
         learner = state.get("user_id") or None

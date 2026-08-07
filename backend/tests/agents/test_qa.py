@@ -219,6 +219,24 @@ class TestAudienceFilter:
 # ── grounding ────────────────────────────────────────────────────────────────
 
 
+def assert_declined(command, gate: str) -> None:
+    """The gate fired and the turn was not answered.
+
+    Track E.4 changed the OBSERVABLE, not the gates. An ungrounded turn used to
+    hand off to a person on the first attempt; it now declines and earns the
+    handoff on the third (`agents/escalation/counter.py`). Each test below still
+    asserts that its specific gate detected its specific problem -- that is what
+    they were written for -- and reads it from `safety_flags["declined"]` rather
+    than from an escalation that no longer happens on turn one.
+    """
+    assert not command.goto, f"{gate} should decline on the first attempt, not escalate"
+    declined = (command.update or {}).get("safety_flags", {}).get("declined")
+    assert declined, "a declined turn must record which gate declined it"
+    assert declined["reason"] == gate, f"expected gate {gate}, got {declined['reason']}"
+    assert command.update["messages"][0].content, "a decline must say something"
+    assert command.update["citations"] == []
+
+
 class TestGroundCheck:
     @pytest.mark.asyncio
     async def test_a_grounded_answer_carries_citations_to_row_ids(self):
@@ -244,8 +262,7 @@ class TestGroundCheck:
 
         command = await nodes.make_ground_check()(state)
 
-        assert command.goto == "escalate_agent"
-        assert command.update["escalation_reason"] == "no_context"
+        assert_declined(command, "no_context")
 
     @pytest.mark.asyncio
     async def test_a_weak_best_chunk_escalates(self):
@@ -253,7 +270,7 @@ class TestGroundCheck:
         state["retrieved"] = chunks_for("ASP-006", score=0.05)
         state["messages"].append(AIMessage(content="Probably [ASP-006]."))
         command = await nodes.make_ground_check()(state)
-        assert command.goto == "escalate_agent"
+        assert_declined(command, "below_relevance_floor")
 
     @pytest.mark.asyncio
     async def test_an_invented_figure_escalates(self):
@@ -273,8 +290,7 @@ class TestGroundCheck:
 
         command = await nodes.make_ground_check()(state)
 
-        assert command.goto == "escalate_agent"
-        assert command.update["escalation_reason"] == "unattributed_figure"
+        assert_declined(command, "unattributed_figure")
 
     @pytest.mark.asyncio
     async def test_a_question_the_corpus_has_never_heard_of_escalates_on_coverage(self):
@@ -292,8 +308,7 @@ class TestGroundCheck:
 
         command = await nodes.make_ground_check()(state)
 
-        assert command.goto == "escalate_agent"
-        assert command.update["escalation_reason"] == "below_relevance_floor"
+        assert_declined(command, "below_relevance_floor")
 
     @pytest.mark.asyncio
     async def test_the_coverage_gate_does_not_fire_on_a_translated_question(self):
@@ -338,14 +353,37 @@ class TestGroundCheck:
             AIMessage(content="A nephew is eligible and must be enrolled by you.")
         )
         command = await nodes.make_ground_check()(state)
-        assert command.goto == "escalate_agent"
+        assert_declined(command, "uncited")
 
     @pytest.mark.asyncio
     async def test_the_escalation_summary_is_redacted(self):
+        """The summary only exists once the third attempt earns a person, so the
+        redaction has to be asserted there. It is the same `_escalate` and the
+        same `redact_for_summary`; what changed is when it is reached.
+
+        Asserted on the DECLINE turns too: a decline is shown to the reader and
+        must not echo an id back either.
+        """
+        from app.agents.escalation import counter
+
+        node = nodes.make_ground_check()
+        streak: dict = {}
+        for _ in range(counter.LIMIT - 1):
+            state = state_for("my id is A12345678, am I eligible")
+            state["retrieved"] = []
+            state["messages"].append(AIMessage(content="Yes."))
+            state["decline_streak"] = streak
+            command = await node(state)
+            streak = command.update["decline_streak"]
+            assert "A12345678" not in command.update["messages"][0].content
+
         state = state_for("my id is A12345678, am I eligible")
         state["retrieved"] = []
         state["messages"].append(AIMessage(content="Yes."))
-        command = await nodes.make_ground_check()(state)
+        state["decline_streak"] = streak
+        command = await node(state)
+
+        assert command.goto == "escalate_agent"
         assert "A12345678" not in command.update["escalation_summary"]
 
     @pytest.mark.parametrize(

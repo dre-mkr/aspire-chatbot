@@ -328,6 +328,28 @@ def _as_json_list(value: Any) -> list[dict[str, Any]]:
     return [entry for entry in value if isinstance(entry, dict)]
 
 
+#: Words that carry no topic. Removed before lexical matching, because "what is
+#: a goal" and "what is a scam" share three of four words and differ in the only
+#: one that matters.
+_STOPWORDS: frozenset[str] = frozenset(
+    "a an the is are was were what whats how why when who which do does did can "
+    "could would should i me my mine you your yours we us our it its that this "
+    "these those of to for in on at by with about from and or but if then than "
+    "so as be been being have has had get got tell show teach explain know learn "
+    "understand mean means please thanks thank want need like".split()
+)
+
+_WORDS = __import__("re").compile(r"[a-z0-9]+")
+
+
+def _content_words(text: str) -> frozenset[str]:
+    return frozenset(
+        word
+        for word in _WORDS.findall((text or "").lower())
+        if word not in _STOPWORDS and len(word) > 2
+    )
+
+
 def _as_vector(value: Any) -> list[float] | None:
     """A pgvector column as a list of floats, or None."""
     if value is None:
@@ -498,6 +520,70 @@ class ConceptStore:
 
         ranked.sort(key=lambda pair: pair[1], reverse=True)
         return ranked[:top]
+
+    def rank_lexical(
+        self, utterance: str, *, band: str, locale: str = "en", top: int = 3
+    ) -> list[tuple[TeachingConcept, float]]:
+        """The same ranking, by word overlap, for concepts with no vector.
+
+        Worse than embeddings and much better than nothing, which is the whole
+        justification. A concept row is complete teaching material the moment its
+        bodies are written; the vector is how it gets FOUND, and the two are
+        produced by different models that fail independently. A store that could
+        not resolve anything until every row had been embedded would throw away
+        an hour of generated, validated, human-reviewable material because a
+        second API was unavailable.
+
+        Scored on aliases and title, which is where the signal is: `aliases` is
+        the seeder's record of how a learner might actually phrase it ("interest
+        on interest", "money growing by itself"), and matching those is close to
+        matching an intent.
+
+        Scores are deliberately scaled into the same range as cosine similarity,
+        so the thresholds in `resolve.py` mean the same thing on both paths. An
+        alias hit is a strong signal and scores like one; a single shared content
+        word is weak and scores below the disambiguation floor.
+        """
+        words = _content_words(utterance)
+        if not words:
+            return []
+
+        ranked: list[tuple[TeachingConcept, float]] = []
+        for concept in self._by_id.values():
+            if concept.locale != locale or not concept.teachable_at(band):
+                continue
+
+            score = 0.0
+            lowered = utterance.lower()
+            for alias in (*concept.aliases, concept.title):
+                alias_words = _content_words(alias)
+                if not alias_words:
+                    continue
+                # A whole alias appearing in the utterance is as good a signal as
+                # this method has, and is scored above the resolve threshold.
+                if alias.lower() in lowered:
+                    score = max(score, 0.90)
+                    continue
+                overlap = len(alias_words & words) / len(alias_words)
+                # Scaled to peak at 0.72 -- above the resolve threshold when every
+                # word of an alias is present and below it otherwise, so a partial
+                # match goes to disambiguation rather than resolving outright.
+                score = max(score, overlap * 0.72)
+
+            slug_words = _content_words(concept.slug.replace("_", " "))
+            if slug_words and slug_words <= words:
+                score = max(score, 0.85)
+
+            if score > 0:
+                ranked.append((concept, score))
+
+        ranked.sort(key=lambda pair: pair[1], reverse=True)
+        return ranked[:top]
+
+    @property
+    def has_embeddings(self) -> bool:
+        """Whether semantic ranking is available at all."""
+        return self._matrix is not None
 
 
 async def _fetch_concepts() -> list[Any]:

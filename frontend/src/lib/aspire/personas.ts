@@ -39,10 +39,17 @@ export interface Persona {
  * ## The age ranges are the access matrix's, not marketing's (P15-017)
  *
  * These read "Ages 5–12" and "Ages 13–18" because that is what
- * `backend/app/graph/access.py` actually grants: Stella covers every band,
- * Orion is granted at 13-15 and 16-18 only. They used to say "5–9" and "10–18",
- * which described a product that does not exist — `allowed_agents("orion",
- * "9-12", …)` returns `[]`, a hard 403.
+ * `backend/app/graph/access.py` actually grants: Stella is granted at 5-8 and
+ * 9-12, Orion at 13-15 and 16-18. They used to say "5–9" and "10–18", which
+ * described a product that does not exist — `allowed_agents("orion", "9-12", …)`
+ * returns `[]`, a hard 403.
+ *
+ * Stella used to cover every band, including `adult`. She no longer does, and
+ * this line did not have to change for it: "Ages 5–12" was already what the
+ * menu promised and is now what the matrix grants. An adult who picks Stella is
+ * refused by `account._narrowing` and kept on their derived persona, which is
+ * the outcome that lets a parent still reach registration — being narrowed INTO
+ * Stella was how they used to lose it.
  *
  * That mismatch already cost the 9-12 band the whole product once: the backend's
  * default-persona table had been built from this copy rather than from the

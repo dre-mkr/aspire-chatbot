@@ -843,8 +843,18 @@ async def pass_e(
     failures: dict[str, list[str]],
     *,
     write: bool,
+    embed: bool = True,
 ) -> list[dict[str, Any]]:
-    """Embed, upsert, and export the review CSV."""
+    """Embed, upsert, and export the review CSV.
+
+    `embed=False` writes everything except the vectors, and it exists because the
+    two halves fail independently: bodies come from the chat model and vectors
+    from the embeddings model, and losing access to the second should not throw
+    away an hour of the first. A concept with no vector is still complete
+    teaching material -- `ConceptStore.rank` falls back to lexical matching over
+    titles and aliases, which is worse than embeddings and much better than
+    nothing. Re-run with `--from e` once the vectors are available.
+    """
     from app.learning.concepts import BODY_COLUMNS, TeachingConcept
 
     records: list[dict[str, Any]] = []
@@ -903,7 +913,20 @@ async def pass_e(
     )
 
     if write:
-        await _embed_records(records)
+        if embed:
+            try:
+                await _embed_records(records)
+            except Exception:
+                # The bodies are already generated and validated. Losing the
+                # embeddings model here must not cost them -- write what exists
+                # and let `--from e` fill the vectors in later.
+                logger.warning(
+                    "Embedding failed; writing %d concepts WITHOUT vectors. "
+                    "Resolution will fall back to lexical matching until "
+                    "`--from e` is re-run.",
+                    len(records),
+                    exc_info=True,
+                )
         await _upsert(records)
 
     _write_review_csv(records)
@@ -1270,7 +1293,9 @@ async def run(args: argparse.Namespace) -> int:
     logger.info("Pass D: %d concept(s) carry surviving violations.", len(failures))
 
     # ── E ────────────────────────────────────────────────────────────────────
-    records = await pass_e(taxonomy, bodies, failures, write=not args.no_write)
+    records = await pass_e(
+        taxonomy, bodies, failures, write=not args.no_write, embed=not args.no_embed
+    )
     _write_kb_gaps(records)
 
     servable = sum(1 for record in records if record["status"] == "draft")
@@ -1329,6 +1354,8 @@ def main() -> int:
                         help="run every pass but do not touch the database")
     parser.add_argument("--no-retry", action="store_true",
                         help="Pass D nulls failing bodies without regenerating")
+    parser.add_argument("--no-embed", action="store_true",
+                        help="write concepts without vectors; resolution falls back to lexical")
     parser.add_argument("--strong-model", default=os.environ.get("SEED_STRONG_MODEL", "gpt-5.5"))
     parser.add_argument("--cheap-model", default=os.environ.get("SEED_CHEAP_MODEL", "gpt-4o"))
     parser.add_argument("-v", "--verbose", action="store_true")

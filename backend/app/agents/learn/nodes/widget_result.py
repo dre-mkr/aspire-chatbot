@@ -49,6 +49,8 @@ from app.graph.state import AspireState
 from app.learning.mastery import Evidence, MasteryStore
 from app.widgets.formulas import registry
 
+from app.agents.learn.state import band_of
+
 logger = logging.getLogger(__name__)
 
 
@@ -232,7 +234,7 @@ def make_widget_result(store: MasteryStore | None = None):
         if interaction is None:
             return {}
 
-        band = str(state.get("age_band") or "9-12")
+        band = band_of(state)
         figures = recompute(interaction)
 
         # The client's own figure, compared but never used. A divergence is a
@@ -256,7 +258,7 @@ def make_widget_result(store: MasteryStore | None = None):
                 learner,
                 interaction.concept_id,
                 Evidence.WIDGET,
-                age_band=str(state.get("age_band") or "9-12"),
+                age_band=band_of(state),
             )
         except Exception:
             # The reply is the point of this turn and it is already assembled.

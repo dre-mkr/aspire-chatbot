@@ -87,19 +87,33 @@ class TestEveryAuthenticatedCombination:
         agents = set(allowed_agents(persona, band, status, user_id=USER))
         assert not agents & {"register_agent", "servicing_agent", "qa_agent"}
 
-    def test_orion_under_sixteen_never_reaches_registration(
-        self, persona, band, status
-    ):
-        """Under-16 Orion cannot register, in any account status.
+    def test_only_a_guardian_reaches_registration(self, persona, band, status):
+        """`register_agent` belongs to `aurora` and to nobody else.
 
-        Note this asserts over *every* band Orion can hold rather than over
-        "13-15" alone, so a future row for `orion`/`9-12` that quietly included
-        registration fails here.
+        The single most important property in this file, and the one most
+        likely to be eroded by a plausible-sounding change: a sixteen-year-old
+        opening their own account, a staff member registering somebody at a
+        branch. Both were once in this table and both are gone. Registration
+        collects a national ID and a date of birth, and the person supplying
+        them is the guardian.
+
+        Asserted over every signed-in combination rather than per row, so a new
+        persona or a new band cannot acquire registration without failing here.
         """
-        if persona != "orion" or band in ("16-18", "adult"):
-            return
         agents = allowed_agents(persona, band, status, user_id=USER)
+        if "register_agent" in agents:
+            assert persona == "aurora"
+
+    def test_a_signed_out_visitor_reaches_only_step_one(self, persona, band, status):
+        """Step 1 is not registration, and the distinction is load-bearing.
+
+        `register_agent_step1` collects what exists before an account does and
+        nothing that is PII about a minor, which is what makes it safe on the
+        anonymous row. The full agent must never appear there.
+        """
+        agents = allowed_agents(persona, band, status, user_id=None)
         assert "register_agent" not in agents
+        assert "register_agent_step1" in agents
 
 
 class TestAnonymous:
@@ -152,13 +166,26 @@ class TestAnonymous:
 class TestTheRowsThemselves:
     """Each row, stated once, exactly."""
 
-    @pytest.mark.parametrize("band", ALL_BANDS)
+    @pytest.mark.parametrize("band", ["5-8", "9-12"])
     @pytest.mark.parametrize("status", ALL_STATUSES)
-    def test_stella_in_every_band(self, band, status):
+    def test_stella_in_her_own_bands(self, band, status):
         assert allowed_agents("stella", band, status, user_id=USER) == [
             "learn_agent",
             "escalate_agent",
         ]
+
+    @pytest.mark.parametrize("band", ["13-15", "16-18", "adult"])
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_stella_outside_her_bands_is_refused(self, band, status):
+        """Stella is a child's persona and is bounded by a child's bands.
+
+        The `adult` case is the one that matters and the one that used to be
+        allowed: the lesson machine writes mastery rows against a 5-8 ladder
+        and caps its own prose at thirty-five words. Handing that to an adult
+        because they tapped the children's mascot in the switcher is not a
+        conservative default, it is the wrong flow. Switching persona is a tap.
+        """
+        assert allowed_agents("stella", band, status, user_id=USER) == []
 
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_orion_thirteen_to_fifteen(self, status):
@@ -170,10 +197,11 @@ class TestTheRowsThemselves:
 
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_orion_sixteen_to_eighteen(self, status):
+        """Servicing but not registration: old enough to hold an account, not
+        the person who opens one."""
         assert allowed_agents("orion", "16-18", status, user_id=USER) == [
             "learn_agent",
             "qa_agent",
-            "register_agent",
             "servicing_agent",
             "escalate_agent",
         ]
@@ -202,9 +230,10 @@ class TestTheRowsThemselves:
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_nova(self, band, status):
+        """Neither servicing nor registration: both act on another person's
+        account, which is a portal function with its own auth realm."""
         assert allowed_agents("nova", band, status, user_id=USER) == [
             "qa_agent",
-            "register_agent",
             "escalate_agent",
         ]
 

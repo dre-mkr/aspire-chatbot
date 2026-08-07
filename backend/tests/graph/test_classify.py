@@ -77,11 +77,30 @@ def replying(text: str):
 class TestTheLabelledSetIsWellFormed:
     """The fixture is data; data goes wrong quietly. These keep it honest."""
 
-    def test_there_are_forty(self):
-        assert len(CASES) == 40
+    def test_the_set_is_the_expected_size(self):
+        """Thirty-three since Track E.2.
+
+        The seven `escalate_agent` cases moved to `evals/escalation_entry.jsonl`.
+        They were never really router cases -- escalation is no longer a routing
+        destination -- and scoring the classifier on labels it cannot produce
+        would peg routing accuracy at 82.5% forever. The intents themselves are
+        still tested, harder than before: see `tests/escalation/test_router.py`,
+        which asserts each one reaches a person through the matcher, the safety
+        edge or the complaint detector.
+        """
+        assert len(CASES) == 33
 
     def test_ids_are_unique(self):
-        assert len({case["id"] for case in CASES}) == 40
+        assert len({case["id"] for case in CASES}) == len(CASES)
+
+    def test_no_case_expects_an_unroutable_agent(self):
+        """The router cannot produce these, so a label naming one is unscorable.
+
+        This is what caught the seven cases when E.2 landed.
+        """
+        from app.graph.nodes.classify import UNROUTABLE
+
+        assert not {case["expected"] for case in CASES} & UNROUTABLE
 
     def test_every_label_is_reachable_for_its_own_identity(self):
         """A label the access matrix forbids is an impossible test, not a hard one.
@@ -99,11 +118,30 @@ class TestTheLabelledSetIsWellFormed:
             )
             assert case["expected"] in permitted, case["id"]
 
-    def test_every_agent_the_matrix_can_grant_has_a_description(self):
-        """An agent with no description is one a small model will not pick."""
-        from app.graph.access import KNOWN_AGENTS
+    def test_every_routable_agent_the_matrix_can_grant_has_a_description(self):
+        """An agent with no description is one a small model will not pick.
 
-        assert KNOWN_AGENTS <= set(AGENT_DESCRIPTIONS)
+        Scoped to ROUTABLE agents since Track E.2. `escalate_agent` is still
+        granted by the matrix -- it is still a node, still reachable from the
+        safety edge, the request matcher and a tool call -- but the router is no
+        longer offered it, and this test's own premise is why: an undescribed
+        agent is one the model will not pick, which is now the intended state
+        for exactly one name.
+        """
+        from app.graph.access import KNOWN_AGENTS
+        from app.graph.nodes.classify import UNROUTABLE
+
+        assert (KNOWN_AGENTS - UNROUTABLE) <= set(AGENT_DESCRIPTIONS)
+
+    def test_no_unroutable_agent_is_described(self):
+        """The other direction, and the one that matters.
+
+        A description reintroduced for `escalate_agent` would put it back on the
+        menu, which is the whole of what E.2 removed.
+        """
+        from app.graph.nodes.classify import UNROUTABLE
+
+        assert not (UNROUTABLE & set(AGENT_DESCRIPTIONS))
 
     def test_the_set_covers_every_persona_and_both_identity_states(self):
         assert {case["persona"] for case in CASES} == {

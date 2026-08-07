@@ -220,12 +220,12 @@ def make_hint_ladder(curriculum=None):
     """The node. Emits a hint and, at rung 3, reveals and moves on."""
 
     def hint_ladder(state: Any) -> dict[str, Any]:
-        from app.agents.learn.state import merge
+        from app.agents.learn.state import band_of, merge
         from app.curriculum.schema import load_all
 
         lessons = (curriculum or load_all()).lessons
         learning = state.get("learning") or {}
-        band = str(state.get("age_band") or "9-12")
+        band = band_of(state)
 
         lesson = lessons.get(learning.get("lesson_id") or "")
         question = None

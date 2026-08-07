@@ -612,6 +612,7 @@ def next_missing(
     *,
     child_index: int = 0,
     allow_sensitive: bool = True,
+    barred: frozenset[str] | set[str] | None = None,
 ) -> Slot | None:
     """The next slot to ask for, in order. None when the section is complete.
 
@@ -638,8 +639,12 @@ def next_missing(
     whether the child already has an account -- which is exactly what can be
     collected before anyone has proven who they are.
     """
+    withheld = set(barred or ())
+
     for slot in GUARDIAN_SLOTS:
         if allow_sensitive is False and slot.sensitive:
+            continue
+        if slot.path in withheld:
             continue
         if not slot.optional and filled.get(slot.path) in (None, ""):
             return slot
@@ -648,6 +653,8 @@ def next_missing(
         if allow_sensitive is False and slot.sensitive:
             continue
         key = child_key(slot.path, child_index)
+        if slot.path in withheld or key in withheld:
+            continue
         if not slot.optional and filled.get(key) in (None, ""):
             return slot
 

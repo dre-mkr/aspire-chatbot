@@ -322,20 +322,57 @@ class CachedTurn:
     quick_replies: list[str]
 
 
+#: Agents whose turns belong to one learner and may never be replayed to another.
+#:
+#: See `cacheable`. Named here rather than inline because the same three names
+#: appear in four places now (`safety_out.LEARNING_AGENTS`,
+#: `stream_interceptor.WIDGET_AGENTS`, the registration loop in
+#: `agents/learn/graph.py`, and this) and the set is one fact.
+LESSON_AGENTS: frozenset[str] = frozenset(
+    {"learn_agent", "learning_preview", "learning_sample"}
+)
+
+
 def cacheable(record: TurnRecord) -> bool:
     """Whether this turn may be served to somebody else later.
 
-    Three exclusions and each closes a specific hole:
+    Four exclusions and each closes a specific hole:
 
       * **a card turn** -- the reply is empty and the card is a live server-side
         session belonging to one conversation. Replaying it would show a second
         reader a card with nothing behind it.
+      * **a lesson turn** -- see below.
       * **a turn with directives beyond citations and chips** -- a widget is
         generated for a specific band and a specific concept, and the widget
         promotion cache (`app/widgets/cache.py`) is where a reusable one goes.
       * **an empty reply** -- there is nothing to serve.
+
+    ## Why a lesson turn is not a cacheable answer
+
+    The cache key is `(question, language, persona, account_status, age_band)`.
+    It does not include the learner, and it cannot: the whole point of layer 1
+    is that one answer serves an audience. That is right for "when is the
+    deadline?" and wrong for every turn of a lesson, for two reasons.
+
+    The visible one is repetition. "teach me about saving" from any nine-year-old
+    on `stella` fills the same key, so for the next six hours every child asking
+    it -- and the same child asking again tomorrow -- reads a byte-identical
+    lesson. Every defence against that (`recent_openings`, a fresh generation
+    per turn, the widget planner's variety rule) lives inside the graph, and a
+    cache hit does not run the graph.
+
+    The worse one is that a lesson turn is not an answer at all, it is a state
+    transition. `resume_or_place` picks a lesson, `teach` advances `phase` to
+    `checking`, `mastery_update` writes a row. A replay serves the prose and
+    performs none of it, so the reader gets a lesson and the machine does not
+    move: the check question that should follow never comes, and their mastery
+    never records that they were taught. Measured against a live session before
+    this exclusion existed -- the same opening lesson came back three
+    conversations running and the check question never arrived.
     """
     if record.card or not record.reply.strip():
+        return False
+    if record.agent in LESSON_AGENTS:
         return False
     return all(
         directive.get("t") in ("citations", "quick_replies")

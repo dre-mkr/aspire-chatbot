@@ -206,3 +206,135 @@ async def test_a_disabled_module_never_opens_its_card() -> None:
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
     assert await gate(_state("Am I eligible?")) == {}
     assert await gate(_state("let's play a game")) == {}
+
+
+# ── registration intent, for the personas that cannot register ───────────────
+#
+# Reported from a live session on Orion 16-18: "i want to register my child"
+# came back as a support ticket. The ticket recorded its own cause --
+#
+#     i want to register my child -- The closest chunk scored 0.519,
+#     below the 0.550 floor.
+#
+# -- which is `classify` sending an INTENT to `qa_agent`, the one agent shaped
+# to answer questions by attributing them to a corpus row. There is no row that
+# answers a request to do something, so nothing cleared the floor and
+# `ground_check` handed off to `escalate_agent`.
+
+
+from app.graph.access import allowed_agents  # noqa: E402
+from app.graph.nodes.intents import wants_registration  # noqa: E402
+
+
+def _for(persona: str, band: str, message: str, **overrides):
+    """State with the REAL access matrix applied, not a hand-written list.
+
+    `guard` runs two nodes before this one, so `allowed_agents` is always
+    present in production. Deriving it here rather than hardcoding means a
+    future matrix change that hands registration back to a persona turns this
+    suite red instead of leaving a dead branch nobody notices.
+    """
+    state = _state(message, persona=persona, age_band=band, **overrides)
+    state["allowed_agents"] = allowed_agents(
+        persona, band, "prospect", user_id=state["user_id"]
+    )
+    return state
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "i want to register my child",
+        "I want to sign up",
+        "we would like to apply",
+        "register my daughter please",
+        "how do i register",
+        "start an application",
+        "quiero registrar a mi hijo",
+    ],
+)
+def test_these_are_registration_intents(message: str) -> None:
+    assert wants_registration(message) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "who registers a child for aspire",
+        "what documents do i need to register",
+        "at what age can i register",
+        "is registration still open",
+        "i want to save for a bike",
+    ],
+)
+def test_questions_about_registering_are_not_intents(message: str) -> None:
+    """A question has an answer in the corpus and must keep reaching it.
+
+    "Who registers a child?" scores 0.759 -- comfortably grounded, properly
+    cited. Intercepting it with a fixed sentence would replace a good retrieved
+    answer with a worse hardcoded one.
+    """
+    assert wants_registration(message) is False
+
+
+@pytest.mark.parametrize(
+    ("persona", "band"), [("orion", "16-18"), ("stella", "9-12"), ("nova", "adult")]
+)
+async def test_a_persona_that_cannot_register_is_answered_here(
+    persona: str, band: str
+) -> None:
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    update = await gate(_for(persona, band, "i want to register my child"))
+
+    assert "parent or guardian" in update["messages"][0].content
+    assert update["quick_replies"]
+    # No ticket, no retrieval, no model call: the node returned prose.
+    assert "ui_directives" not in update
+
+
+async def test_a_guardian_still_reaches_the_registration_agent() -> None:
+    """The case that must be UNTOUCHED. Aurora can register, so this node has
+    no opinion and the turn goes on to the classifier as before."""
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    assert await gate(_for("aurora", "adult", "i want to register my child")) == {}
+
+
+async def test_a_signed_out_visitor_still_reaches_step_one() -> None:
+    """Anonymous holds `register_agent_step1`, which is somewhere to go."""
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+    state = _state("i want to register my child")
+    state["user_id"] = None
+    state["allowed_agents"] = allowed_agents(
+        "aurora", "adult", "prospect", user_id=None
+    )
+
+    assert await gate(state) == {}
+
+
+async def test_the_reply_routes_straight_to_the_outbound_gate() -> None:
+    """Not to the classifier. `_after_cards` recognises a `cards` turn that
+    produced a message and chips, which is the branch this reply relies on."""
+    from app.graph.main_graph import _after_cards
+
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+    state = _for("orion", "16-18", "i want to register my child")
+    update = await gate(state)
+    state["messages"] = list(state["messages"]) + update["messages"]
+    state["quick_replies"] = update["quick_replies"]
+
+    assert _after_cards(state) == "safety_out"
+
+
+@pytest.mark.parametrize("locale", ["en", "es", "fr"])
+async def test_every_shipped_locale_has_its_own_copy(locale: str) -> None:
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+    message = {"en": "i want to register my child",
+               "es": "quiero registrar a mi hijo",
+               "fr": "je veux inscrire mon enfant"}[locale]
+
+    update = await gate(_for("orion", "16-18", message, locale=locale))
+
+    assert update["messages"][0].content
+    assert len(update["quick_replies"]) == 2

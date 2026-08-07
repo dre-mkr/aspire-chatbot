@@ -171,6 +171,159 @@ def wants_eligibility(message: str) -> bool:
     return any(pattern.search(folded) for pattern in _ELIGIBILITY)
 
 
+#: Somebody saying they want to APPLY, in the three shipped locales.
+#:
+#: An intent, not a question, and that distinction is the whole reason this
+#: pattern exists. "Who registers a child?" is a question and the knowledge base
+#: answers it well -- measured at 0.759 cosine. "I want to register my child" is
+#: a request to DO something, and there is no fact to retrieve for it: the same
+#: corpus tops out at 0.519 against a 0.550 grounding floor, so `qa_agent`
+#: escalates and a parent gets a support ticket instead of an answer.
+#:
+#: Tuning the corpus to close that gap was tried and measured first. Rewording
+#: the closest row lifted this phrasing to 0.539 -- still under the floor --
+#: while pushing "i want to sign my child up" from 0.573 down to 0.550 and
+#: "where do i start" from 0.425 to 0.386. A retrieval floor is not the right
+#: instrument for recognising an intent.
+_REGISTER = (
+    re.compile(
+        r"\b(?:i|we)\s+(?:want|would like|wish|need)\s+to\s+"
+        r"(?:register|sign\s+up|enroll?|apply|join)\b"
+    ),
+    re.compile(r"\b(?:register|sign\s+up|enroll?|apply)\s+(?:my|our|a|the)\s+"
+               r"(?:child|children|son|daughter|kid|kids)\b"),
+    re.compile(r"\bhow\s+do\s+(?:i|we)\s+(?:register|sign\s+up|enroll?|apply)\b"),
+    re.compile(r"\b(?:start|begin|open)\s+(?:an?\s+)?(?:application|account)\b"),
+    re.compile(r"\b(?:quiero|queremos)\s+(?:registrar|inscribir)\b"),
+    re.compile(r"\b(?:je\s+veux|nous\s+voulons)\s+(?:inscrire|enregistrer)\b"),
+)
+
+
+#: A question that happens to contain a registration verb.
+#:
+#: "What documents do I need to register?" matches "i need to register" and is
+#: not an intent -- it is a lookup the corpus answers well and cites. Guarding
+#: on the leading interrogative applies this module's existing precedence rule:
+#: lookups win ties, because getting it wrong in the lookup direction costs an
+#: accurate cited sentence and getting it wrong the other way replaces one with
+#: a fixed paragraph.
+_ASKING_ABOUT = re.compile(
+    r"^\s*(?:what|which|who|when|where|why|how much|how many|how old|is|are|does|do i qualify"
+    r"|que|qui|quand|quel|quels|quelle|combien|cual|cuales|quien|cuando|cuanto)\b"
+)
+
+
+def wants_registration(message: str) -> bool:
+    """Whether this message is somebody asking to APPLY, rather than asking about
+    applying.
+
+    Consulted only when the caller cannot reach a registration agent -- see
+    `cards.make_intent_gate`. A guardian saying this is routed to
+    `register_agent` as before and never reaches this matcher.
+    """
+    folded = _fold(message)
+    if not folded:
+        return False
+    if _ASKING_ABOUT.match(folded):
+        return False
+    return any(pattern.search(folded) for pattern in _REGISTER)
+
+
+#: Somebody asking, in as many words, for a person.
+#:
+#: Matched deterministically for the same reason eligibility and games are, and
+#: with more at stake. The router used to catch this by having `escalate_agent`
+#: in its menu described as "they asked for one, they are upset or in
+#: difficulty, or the question is outside what this assistant can answer" -- one
+#: line covering three situations, the third of which is a catch-all. Track E.2
+#: removes that menu entry; this replaces the half of it that was real.
+#:
+#: A regex has no opinion about being asked nicely, which matters here: a child
+#: who has asked for a person should not have to phrase it in a way that
+#: persuades a model.
+#: A person, named in any of the ways people actually name one.
+#:
+#: The first draft of this list covered three of the seven labelled escalation
+#: requests in `evals/routing.jsonl` and missed four -- "put me through to a
+#: member of staff", "i need someone to call me", "i need to escalate this case
+#: to your team", "i want a manager". The router used to catch all of them,
+#: loosely, by having a catch-all in its menu; removing that menu entry without
+#: widening this would have been a straight regression, and the labelled set is
+#: what caught it.
+_PERSON = r"(?:person|human|adult|adviser|advisor|agent|staff|manager|supervisor|someone|somebody)"
+
+_WANTS_HUMAN: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        rf"\b(?:speak|talk|chat)\s+(?:to|with)\s+(?:a|an|the|your|a\s+real)?\s*"
+        rf"(?:member\s+of\s+)?{_PERSON}\b",
+        rf"\b(?:put|patch|transfer)\s+me\s+(?:through|over)?\s*(?:to)?\s+(?:a|an|the)?\s*"
+        rf"(?:member\s+of\s+)?{_PERSON}\b",
+        rf"\b(?:get|give|find)\s+me\s+(?:a|an|the)?\s*(?:member\s+of\s+)?{_PERSON}\b",
+        rf"\b(?:i\s+)?(?:want|need)\s+(?:a|an|the)?\s*(?:member\s+of\s+)?{_PERSON}\b",
+        rf"\b(?:real|actual|live)\s+{_PERSON}\b",
+        rf"\b{_PERSON}\s+to\s+(?:call|ring|phone|contact)\s+me\b",
+        r"\b(?:call|ring|phone)\s+me\s+back\b",
+        r"\bhuman\s+(?:please|help|support|agent)\b",
+        r"\bcustomer\s+(?:service|support)\b",
+        r"\bescalate\s+(?:this|it|my|the)\b",
+        r"\b(?:hablar|habla)\s+con\s+(?:una\s+)?persona\b",
+        r"\bparler\s+(?:a|au|avec)\s+(?:une\s+)?(?:personne|humain|conseiller)\b",
+    )
+)
+
+#: A complaint, which is its own `EscalationReason` and had no detector at all.
+#:
+#: `COMPLAINT` exists in the contract because a complaint answered by an FAQ is a
+#: worse complaint. Nothing produced it until this list: the router used to reach
+#: escalation for "this has been wrong for three weeks and i want a manager" by
+#: guessing, and after E.2 that turn had nowhere to go.
+#:
+#: Narrow on purpose. "This is wrong" about a fact is a correction, not a
+#: complaint, and belongs with the knowledge base.
+_COMPLAINT: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\b(?:make|file|lodge|raise)\s+(?:a\s+)?complaint\b",
+        r"\bi\s+(?:want|wish)\s+to\s+complain\b",
+        r"\b(?:want|need|speak\s+to)\s+(?:a|the|your)\s+(?:manager|supervisor)\b",
+        r"\b(?:this|it)\s+(?:has\s+been|is)\s+(?:wrong|broken|unacceptable)\b",
+        r"\b(?:nobody|no\s+one)\s+(?:is\s+)?(?:answering|replying|responding)\b",
+        r"\bunacceptable\b",
+        r"\b(?:quiero|deseo)\s+(?:hacer\s+una\s+)?queja\b",
+        r"\b(?:faire|deposer)\s+une\s+reclamation\b",
+    )
+)
+
+
+def is_complaint(message: str) -> bool:
+    """Whether this message is a complaint rather than a question.
+
+    Checked BEFORE `wants_human`, because the two overlap constantly -- "this has
+    been wrong for three weeks and i want a manager" is both -- and they triage
+    differently: `COMPLAINT` is high priority in a complaint queue,
+    `USER_REQUESTED_HUMAN` is normal priority in the general one. Letting the
+    request win would quietly downgrade every complaint that happens to name a
+    person, which is most of them.
+    """
+    folded = _fold(message)
+    return bool(folded) and any(pattern.search(folded) for pattern in _COMPLAINT)
+
+
+def wants_human(message: str) -> bool:
+    """Whether this message asks for a person.
+
+    Deliberately narrow. A false positive hands somebody to a support queue they
+    did not ask for, which is the failure this whole track is reducing -- so
+    "can a person do this?" and "who should I speak to about X?" are questions
+    about the programme and are left to the knowledge base.
+    """
+    folded = _fold(message)
+    if not folded:
+        return False
+    return any(pattern.search(folded) for pattern in _WANTS_HUMAN)
+
+
 def wants_game(message: str) -> bool:
     """Whether this message is asking to play."""
     folded = _fold(message)

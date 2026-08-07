@@ -673,3 +673,40 @@ async def change_password(
             staff_id=staff.staff_id, email=staff.email, role=staff.role
         )
     }
+
+
+# ── the learning agent's health ──────────────────────────────────────────────
+
+
+@router.get("/learning/health")
+async def learning_health(
+    hours: int = 24, staff: Staff = Depends(current_staff)
+) -> dict[str, Any]:
+    """Six rates, four thresholds, and what breached them.
+
+    `breaches` is computed server-side rather than left to whoever reads the
+    numbers. A dashboard where the thresholds live in somebody's head is a
+    dashboard that agrees with everybody, and the four thresholds here came from
+    the Track L brief for reasons that are written down next to them in
+    `app/learning/health.py`.
+
+    `zero_prose_turns` has no rate and no tolerance. A learning turn that emitted
+    no lesson is the defect this workstream closed; one occurrence is a
+    regression rather than a statistic.
+    """
+    from dataclasses import asdict
+
+    from app.learning import health as learning
+
+    window = max(1, min(hours, learning.RETENTION_HOURS))
+    snapshot = await learning.snapshot(window)
+    return {
+        **asdict(snapshot),
+        "healthy": snapshot.healthy,
+        "thresholds": {
+            "teach_fallback_rate": learning.TEACH_FALLBACK_MAX,
+            "widget_drop_rate": learning.WIDGET_GATE_FAILED_MAX,
+            "resolution_none_rate": learning.RESOLUTION_NONE_MAX,
+            "zero_prose_turns": 0,
+        },
+    }

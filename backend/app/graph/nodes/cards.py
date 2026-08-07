@@ -1,9 +1,12 @@
-"""The turns where the answer is a card, decided before anything else runs.
+"""The turns answered before anything else runs.
 
-Two of them, and they are the two v1 handled with tools:
+Two cards, which are the two v1 handled with tools, and one plain sentence:
 
     eligibility  -- the audited six-question flow, `app/eligibility`
     game         -- one of the real game components, `app/games`
+    registration -- for the personas that have no registration agent to route
+                    to. Prose rather than a card, because there is nothing to
+                    hand over to; see `_registration_help`.
 
 ## Ahead of the classifier, not inside an agent
 
@@ -44,7 +47,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.graph.nodes.intents import named_game, wants_eligibility, wants_game
+from langchain_core.messages import AIMessage
+
+from app.agents.escalation.contract import EscalationReason
+from app.graph.nodes.intents import (
+    is_complaint,
+    named_game,
+    wants_eligibility,
+    wants_game,
+    wants_human,
+    wants_registration,
+)
 from app.graph.state import AspireState
 from app.schemas.directives import EligibilityDirective, directive_payload
 
@@ -53,6 +66,44 @@ logger = logging.getLogger(__name__)
 #: Locales the eligibility card has copy for. Anything else opens in English,
 #: which is what the card itself falls back to.
 _CARD_LOCALES = frozenset({"en", "es", "fr"})
+
+#: Either of these means the caller has somewhere to register.
+_REGISTRATION_AGENTS = frozenset({"register_agent", "register_agent_step1"})
+
+#: What somebody who cannot register is told, by locale.
+#:
+#: Says who does it and what to do next, in two sentences. It does NOT say
+#: "you are not allowed", because the reader is usually a parent who picked the
+#: wrong assistant from a menu, and a refusal is a worse answer than a direction.
+_REGISTRATION_HELP: dict[str, str] = {
+    "en": (
+        "An ASPIRE application is completed by a parent or guardian. Ask yours "
+        "to open ASPIRE and choose Aurora, the assistant for parents and "
+        "guardians -- or start at aspire.gov.kn or any branch."
+    ),
+    "es": (
+        "La solicitud de ASPIRE la completa un padre, madre o tutor. Pide que "
+        "abran ASPIRE y elijan Aurora, el asistente para familias, o empiecen "
+        "en aspire.gov.kn o en una sucursal."
+    ),
+    "fr": (
+        "Une demande ASPIRE est remplie par un parent ou tuteur. Demande-lui "
+        "d'ouvrir ASPIRE et de choisir Aurora, l'assistant des familles, ou de "
+        "commencer sur aspire.gov.kn ou dans une agence."
+    ),
+}
+
+#: Chips that lead somewhere the knowledge base can actually answer.
+#:
+#: "Who registers a child?" is the highest-scoring registration question in the
+#: corpus at 0.759 cosine, which is the point: a chip that lands back on the
+#: grounding floor would send the reader round the same loop that brought them
+#: here.
+_REGISTRATION_CHIPS: dict[str, list[str]] = {
+    "en": ["Who registers a child?", "What documents are needed?"],
+    "es": ["¿Quién registra?", "¿Qué documentos?"],
+    "fr": ["Qui inscrit l'enfant ?", "Quels documents ?"],
+}
 
 
 def _last_human(state: AspireState) -> str:
@@ -101,9 +152,119 @@ def make_intent_gate(
             if card is not None:
                 return card
 
+        # Before the registration help and before the router: somebody who has
+        # asked for a person is not asking anything else.
+        asked = _asked_for_a_person(message)
+        if asked is not None:
+            return asked
+
+        reply = _registration_help(state, message)
+        if reply is not None:
+            return reply
+
         return {}
 
     return intent_gate
+
+
+def _asked_for_a_person(message: str) -> dict[str, Any] | None:
+    """An explicit request for a human, recognised without a model.
+
+    ## Why this is a matcher and not a router destination
+
+    `escalate_agent` used to be one of the options the classifier chose between,
+    described as "they asked for one, they are upset or in difficulty, or the
+    question is outside what this assistant can answer". One line, three
+    situations, the last of which is a catch-all -- and a small model handed a
+    catch-all next to five topic-shaped agents uses it as one. Track E.2 removes
+    that option. This recovers the half of it that was a real signal.
+
+    ## Why a matcher rather than a tool the agents call
+
+    Because of who has to be able to reach it. Stella's whole agent set is
+    `learn_agent` and `escalate_agent` (`graph/access.py:120`), and the lesson
+    machine makes no tool calls at all -- every node in it is deterministic. A
+    tool-only design would mean a five-year-old's request for a person depends
+    on a model choosing to call a function, in an agent that never calls one.
+    Agents that DO make model calls get the tool as well; this is the floor
+    under them, not a replacement for them.
+
+    Returns no `AIMessage`. `escalate_agent` writes the reply, because it is the
+    node that knows the ticket reference and the ETA.
+    """
+    # Complaint first. The two overlap -- "wrong for three weeks and i want a
+    # manager" is both -- and a complaint triages high in its own queue while a
+    # request for a person triages normal in the general one. Checking the
+    # request first would downgrade every complaint that names a human, which is
+    # most of them.
+    if is_complaint(message):
+        reason = EscalationReason.COMPLAINT
+    elif wants_human(message):
+        reason = EscalationReason.USER_REQUESTED_HUMAN
+    else:
+        return None
+
+    logger.info("Escalating as %s without the router.", reason.value)
+    return {
+        "escalation_reason": reason.value,
+        "safety_flags": {"asked_for_human": True},
+    }
+
+
+def _registration_help(state: AspireState, message: str) -> dict[str, Any] | None:
+    """"I want to register my child", from somebody who cannot.
+
+    Returns None -- and costs nothing -- for everybody who CAN reach a
+    registration agent, which is the common case and the one that must be
+    untouched: a guardian saying this still routes to `register_agent` exactly
+    as before. `allowed_agents` is already in state; `guard` runs two nodes
+    upstream.
+
+    ## Why this is here rather than in the knowledge base
+
+    Registration is guardian-only, so `orion` 16-18 and `nova` can express the
+    intent and have no handler for it. The classifier does the sensible thing
+    with what it is offered and picks `qa_agent`, which is the wrong shape of
+    agent for the input: Q&A answers questions by attributing them to a corpus
+    row, and "I want to register my child" is not a question. Nothing scores
+    above the grounding floor, `ground_check` hands off to `escalate_agent`, and
+    the reader gets a reference number and a promise of a call back.
+
+    Measured, from the ticket that prompted this:
+
+        i want to register my child -- The closest chunk scored 0.519,
+        below the 0.550 floor.
+
+    Answering it here costs no model call, no retrieval and no ticket, and it
+    reaches every persona that cannot register rather than one row of the table.
+
+    ## Why it produces prose, unlike the two cards above
+
+    Those hand over to a component that speaks for itself. This has nothing to
+    hand over to -- the whole point is that there is no agent for it -- so the
+    node says the sentence. `_after_cards` already routes a `cards` turn that
+    produced a message and chips straight to `safety_out`, which is where the
+    band cap and the link stripper get their say, so no routing changes.
+    """
+    allowed = set(state.get("allowed_agents") or [])
+    if allowed & _REGISTRATION_AGENTS:
+        return None
+    if not wants_registration(message):
+        return None
+
+    locale = str(state.get("locale") or "en")
+    if locale not in _REGISTRATION_HELP:
+        locale = "en"
+
+    logger.info(
+        "Registration intent from %s, which cannot register; answering directly "
+        "rather than escalating.",
+        state.get("persona"),
+    )
+    return {
+        "messages": [AIMessage(content=_REGISTRATION_HELP[locale])],
+        "quick_replies": list(_REGISTRATION_CHIPS[locale]),
+    }
 
 
 def _eligibility_available(override) -> bool:

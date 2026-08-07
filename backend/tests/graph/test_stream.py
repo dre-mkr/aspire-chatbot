@@ -207,6 +207,18 @@ class TestIdentityIsNotClientControlled:
 
         The body asks for Aurora -- who reaches registration and servicing. The
         token says Stella at 9-12, whose only agents are learn and escalate.
+
+        This used to assert `usage.agent == "learn_agent"`, which was the
+        classifier's pick for this message under a Stella token and a poor proxy
+        for the property: `learn_agent` is not a registration flow, but it is
+        not a sensible destination for "I want to register" either, and the
+        assertion passed for a reason unrelated to identity.
+
+        Registration intent is now answered before the classifier by
+        `cards._registration_help`, so nothing sets `active_agent` at all and
+        the old proxy reads None. The property is unchanged and is asserted
+        directly here instead: the caller was refused Aurora's treatment and
+        given the one the token earns.
         """
         with caplog.at_level("WARNING"):
             _status, events = post(
@@ -217,8 +229,19 @@ class TestIdentityIsNotClientControlled:
                 age_band="adult",
                 account_status="guardian",
             )
-        assert events[-1]["data"]["usage"]["agent"] == "learn_agent"
+
         assert "ignored" in caplog.text
+
+        # What Aurora would have reached, and this caller must not.
+        agent = events[-1]["data"]["usage"]["agent"]
+        assert agent not in ("register_agent", "register_agent_step1", "servicing_agent")
+
+        # What a Stella token earns for this message: told that a parent or
+        # guardian applies, rather than being walked through an application.
+        prose = "".join(
+            event["data"]["t"] for event in events if event["event"] == "token"
+        )
+        assert "parent or guardian" in prose
 
     def test_a_refused_combination_still_streams_a_gated_refusal(self, client):
         """Every path reaches `safety_out`, including this one."""

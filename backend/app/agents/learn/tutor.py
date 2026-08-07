@@ -484,25 +484,52 @@ def _log_turn(
     joint -- "what is the fallback rate for 5-8 turns that resolved semantically?"
     cannot be answered from two lines that have to be correlated by timestamp.
     """
+    from app.learning.health import TurnMetrics
+
+    metrics = TurnMetrics(
+        concept_id=resolution.concept_id,
+        resolution_source=resolution.source,
+        similarity=resolution.similarity,
+        move=move.value,
+        band=band,
+        locale=locale,
+        prose_words=lesson.words,
+        teach_retry=lesson.retry,
+        teach_fallback="template" if lesson.tier == 3 else "none",
+        widget_kind=widget.kind if widget.emitted else None,
+        widget_gate_failed=widget.gate,
+        widget_cache_hit=widget.cache_hit,
+        widget_latency_ms=widget.latency_ms,
+        mastery_before=score,
+        total_ms=int((time.monotonic() - started) * 1000),
+    )
+
     logger.info(
         "learn_turn concept_id=%s resolution_source=%s similarity=%.3f move=%s band=%s "
         "locale=%s prose_words=%d teach_tier=%d teach_retry=%s teach_fallback=%s "
         "widget_kind=%s widget_gate_failed=%s widget_cache_hit=%s widget_latency_ms=%d "
         "mastery_before=%d escalated=False total_ms=%d",
-        resolution.concept_id,
-        resolution.source,
-        resolution.similarity,
-        move.value,
-        band,
-        locale,
-        lesson.words,
+        metrics.concept_id,
+        metrics.resolution_source,
+        metrics.similarity,
+        metrics.move,
+        metrics.band,
+        metrics.locale,
+        metrics.prose_words,
         lesson.tier,
-        lesson.retry,
-        "template" if lesson.tier == 3 else "none",
-        widget.kind if widget.emitted else None,
-        widget.gate or "none",
-        widget.cache_hit,
-        widget.latency_ms,
-        score,
-        int((time.monotonic() - started) * 1000),
+        metrics.teach_retry,
+        metrics.teach_fallback,
+        metrics.widget_kind,
+        metrics.widget_gate_failed or "none",
+        metrics.widget_cache_hit,
+        metrics.widget_latency_ms,
+        metrics.mastery_before,
+        metrics.total_ms,
     )
+
+    # Fire and forget. The aggregate is an alerting surface and the log line
+    # above is the record -- a counter write that could delay or break a lesson
+    # would be a worse trade than losing a data point.
+    from app.learning.health import record
+
+    asyncio.create_task(record(metrics))

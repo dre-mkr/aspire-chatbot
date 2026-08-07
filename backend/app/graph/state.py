@@ -246,6 +246,13 @@ class AspireState(TypedDict, total=False):
     #: Who answered last turn. Drives classifier stickiness: a registration
     #: half-filled or a lesson half-taught must not be abandoned because one
     #: ambiguous sentence scored marginally higher somewhere else.
+    #: Who is talking and what has happened, resolved once per turn by
+    #: `context/resolver.py` before routing and read by every node after it.
+    #:
+    #: `Any` rather than the real type for the same reason `learning` is: the
+    #: import would be circular (`context.session_context` imports this module
+    #: for `AspireState`). `context.session_context.SessionContext` is the shape.
+    context: Any
     active_agent: str | None
     #: Written by `guard` from the access matrix. Empty means a hard 403.
     allowed_agents: list[str]
@@ -275,6 +282,15 @@ class AspireState(TypedDict, total=False):
     #: in state for the transcript and for a later turn to refer back to.
     escalation_ticket: str | None
     escalation_priority: str | None
+    #: `{intent_key: consecutive_unresolved_turns}`, at most one entry.
+    #:
+    #: The only thing permitted to produce `REPEATED_FAILURE`. Lives in the
+    #: checkpoint because the checkpoint is the session, which is the scope the
+    #: counter is defined over -- and it is safe there because it holds an
+    #: integer and a few content words, no identity and no PII. Written by the
+    #: QA decline path, cleared by any grounded answer. See
+    #: `agents/escalation/counter.py`.
+    decline_streak: dict[str, int]
 
     # ── agent-local (None when that agent is not running) ───────────────────
     learning: LearningState | None
@@ -328,6 +344,7 @@ def initial_state(
         locale=locale,
         messages=[],
         summary="",
+        context=None,
         active_agent=None,
         allowed_agents=[],
         retrieved=[],
@@ -338,6 +355,7 @@ def initial_state(
         escalation_summary=None,
         escalation_ticket=None,
         escalation_priority=None,
+        decline_streak={},
         learning=None,
         registration=None,
         ui_directives=[],

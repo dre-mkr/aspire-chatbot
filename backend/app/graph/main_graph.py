@@ -51,6 +51,7 @@ from typing import Any
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
+from app.context.resolver import make_resolve_context
 from app.graph.nodes.cards import make_intent_gate
 from app.graph.nodes.classify import make_classify
 from app.graph.nodes.guard import guard
@@ -321,8 +322,49 @@ def _after_guard(state: AspireState) -> str:
     return "safety_out" if state.get("halt_reason") else "safety_in"
 
 
+#: The two inbound safety signals, in the order they are checked.
+#:
+#: `safety_in.distress_level()` raises exactly one of these. Both are urgent;
+#: only `safeguarding` pages somebody and notifies a guardian record, which is
+#: why they stay distinguishable this far down.
+_SAFETY_FLAGS: tuple[str, ...] = ("safeguarding", "distress")
+
+
+def safety_signal(state: AspireState) -> str | None:
+    """Which inbound safety flag this turn raised, or None."""
+    flags = state.get("safety_flags") or {}
+    return next((name for name in _SAFETY_FLAGS if flags.get(name)), None)
+
+
 def _after_safety_in(state: AspireState) -> str:
-    return "safety_out" if state.get("halt_reason") else "cards"
+    """Where a checked message goes: a person, a refusal, or the ordinary path.
+
+    ## Safety is checked FIRST, ahead of `halt_reason`
+
+    `safety_in` raises a distress or safeguarding flag and, until this edge
+    existed, did nothing else with it -- it logged "routing to escalation" and
+    returned, leaving the CLASSIFIER to notice `escalate_agent` in the allowed
+    list and pick it. A distressed child reached a person because a small model
+    made a routing guess, on a path with no guarantee attached to it. Removing
+    escalation from the router (E.2) would have severed that silently: the flag
+    would still be raised, the log line would still say "routing to escalation",
+    and the turn would have gone to `learn_agent`, because for Stella that is
+    the only other option there is.
+
+    So this edge exists before that removal, and it is unconditional. No
+    counter, no threshold, no allowed-agents check, no model call between the
+    signal and the handoff.
+
+    Ordering against `halt_reason` is deliberate and is the one judgement here.
+    A message can be both distressing and blocked -- a child in trouble is not
+    reliably a child using measured language -- and halting wins the tie only if
+    you think the priority is the content rule. It is not. A blocked message
+    from a child in distress still means a child in distress, so the safety
+    check runs first and the refusal copy is what gets skipped.
+    """
+    if safety_signal(state) is not None:
+        return "escalate_agent"
+    return "safety_out" if state.get("halt_reason") else "resolve_context"
 
 
 def _after_cards(state: AspireState) -> str:
@@ -336,7 +378,13 @@ def _after_cards(state: AspireState) -> str:
     turn is over, but it is not a card -- recognised by `cards` having produced
     a message, which it otherwise never does.
     """
-    if (state.get("safety_flags") or {}).get("card"):
+    flags = state.get("safety_flags") or {}
+    # An explicit request for a person, matched deterministically in `cards`.
+    # Ahead of the card check because it is the more urgent of the two and
+    # neither can be true at once.
+    if flags.get("asked_for_human"):
+        return "escalate_agent"
+    if flags.get("card"):
         return "safety_out"
     messages = state.get("messages") or []
     if state.get("quick_replies") and getattr(messages[-1], "type", None) == "ai":
@@ -344,9 +392,22 @@ def _after_cards(state: AspireState) -> str:
     return "classify"
 
 
+#: The agents `classify` may route to. Every name except `escalate_agent`.
+#:
+#: The router cannot send a turn to a person any more. Escalation is reached
+#: three other ways, all of them explicit: the safety edge out of `safety_in`,
+#: the deterministic request matcher in `cards`, and an agent calling the tool
+#: with a stated `EscalationReason`. What is removed here is the fourth way --
+#: a small model deciding a message "is about" wanting a human, which produced
+#: 23 of 58 live tickets between the grounding floor and the router.
+ROUTABLE_AGENTS: tuple[str, ...] = tuple(
+    name for name in AGENT_NAMES if name != "escalate_agent"
+)
+
+
 def _to_agent(state: AspireState) -> str:
     agent = state.get("active_agent")
-    if agent in AGENT_NAMES:
+    if agent in ROUTABLE_AGENTS:
         return str(agent)
     # `classify` guarantees this cannot happen. Handled anyway, because the
     # alternative is a KeyError inside langgraph's edge resolution, which names
@@ -381,6 +442,10 @@ def build_main_graph(
     graph.add_node("hydrate", make_hydrate(token, body))
     graph.add_node("guard", guard)
     graph.add_node("safety_in", safety_in)
+    # Before routing, so `classify` and every agent read one resolved object
+    # instead of each re-deriving persona, band, mastery and the open
+    # application. Track C.1.
+    graph.add_node("resolve_context", make_resolve_context())
     graph.add_node("cards", make_intent_gate())
     graph.add_node("classify", make_classify(classifier_invoke))
     graph.add_node("safety_out", make_safety_out(reprompt))
@@ -399,9 +464,18 @@ def build_main_graph(
     graph.add_edge(START, "hydrate")
     graph.add_edge("hydrate", "guard")
     graph.add_conditional_edges("guard", _after_guard, ["safety_in", "safety_out"])
-    graph.add_conditional_edges("safety_in", _after_safety_in, ["cards", "safety_out"])
-    graph.add_conditional_edges("cards", _after_cards, ["classify", "safety_out"])
-    graph.add_conditional_edges("classify", _to_agent, [*AGENT_NAMES, "safety_out"])
+    graph.add_conditional_edges(
+        "safety_in",
+        _after_safety_in,
+        ["resolve_context", "safety_out", "escalate_agent"],
+    )
+    graph.add_edge("resolve_context", "cards")
+    graph.add_conditional_edges(
+        "cards", _after_cards, ["classify", "safety_out", "escalate_agent"]
+    )
+    graph.add_conditional_edges(
+        "classify", _to_agent, [*ROUTABLE_AGENTS, "safety_out"]
+    )
 
     for name in AGENT_NAMES:
         graph.add_edge(name, "safety_out")

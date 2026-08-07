@@ -236,13 +236,13 @@ def make_explain_back(curriculum=None):
     def explain_back(state: Any) -> dict[str, Any]:
         from langchain_core.messages import AIMessage
 
-        from app.agents.learn.state import merge
+        from app.agents.learn.state import band_of, merge
         from app.curriculum.schema import load_all
         from app.graph.nodes.safety_in import latest_user_text
 
         lessons = (curriculum or load_all()).lessons
         learning = state.get("learning") or {}
-        band = str(state.get("age_band") or "9-12")
+        band = band_of(state)
 
         lesson = lessons.get(learning.get("lesson_id") or "")
         if lesson is None:  # pragma: no cover - guarded by routing

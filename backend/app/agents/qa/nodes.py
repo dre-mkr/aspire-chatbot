@@ -47,8 +47,21 @@ answer must appear in a chunk. A model that cannot find a row to point at for
 "can I borrow against this?" does not produce one -- which is the property a
 similarity score cannot give.
 
-An ungrounded turn hands off to `escalate_agent`. It does not apologise and
-answer anyway.
+An ungrounded turn does not apologise and answer anyway. What it does instead
+changed in Track E.4, and the gates above did not:
+
+    grounded    -> the answer, cited
+    ungrounded  -> a DECLINE (`agents/escalation/decline.py`): what we do know,
+                   who holds the rest, and a question we can answer
+    ungrounded, three turns running on one intent
+                -> a person, as REPEATED_FAILURE
+
+The four retrieval reasons -- `no_context`, `below_relevance_floor`,
+`unattributed_figure`, `uncited_policy_claim` -- used to hand straight off to
+`escalate_agent`, and between them they opened 23 of 58 live tickets. Meeting
+the edge of the corpus is not a reason to fetch a human on the first attempt;
+it is a reason to say so plainly. The streak that earns the handoff lives in
+`agents/escalation/counter.py` and is cleared by any grounded answer.
 """
 
 from __future__ import annotations
@@ -646,7 +659,7 @@ def make_ground_check(threshold: float | None = None):
         answer = _text_of(messages[-1]) if messages else ""
 
         if not chunks or not answer.strip():
-            return _escalate(state, "no_context", "Nothing in the knowledge base matched.")
+            return _ungrounded(state, "no_context", "Nothing in the knowledge base matched.")
 
         query = state.get("qa_query") or _latest_user_text(state)
 
@@ -665,7 +678,7 @@ def make_ground_check(threshold: float | None = None):
         best = max((chunk.relevance for chunk in chunks), default=0.0)
         dense_seen = any(chunk.relevance > 0.0 for chunk in chunks)
         if dense_seen and best < floor:
-            return _escalate(
+            return _ungrounded(
                 state,
                 "below_relevance_floor",
                 f"The closest chunk scored {best:.3f}, below the {floor:.3f} floor.",
@@ -687,7 +700,7 @@ def make_ground_check(threshold: float | None = None):
             matched = matched_terms(query, chunks)
             needed = required_terms(query)
             if not dense_seen and (coverage < coverage_floor or matched < needed):
-                return _escalate(
+                return _ungrounded(
                     state,
                     "below_relevance_floor",
                     f"Only {coverage:.0%} of the question's words appear in the "
@@ -702,7 +715,7 @@ def make_ground_check(threshold: float | None = None):
                 missing[:5],
                 state.get("session_id"),
             )
-            return _escalate(
+            return _ungrounded(
                 state,
                 "unattributed_figure",
                 f"The answer stated {', '.join(missing[:3])}, which no extract contains.",
@@ -730,7 +743,7 @@ def make_ground_check(threshold: float | None = None):
         grounded_citations = cited & known
 
         if not grounded_citations:
-            return _escalate(
+            return _ungrounded(
                 state,
                 "uncited",
                 "The answer cites no retrieved extract, so nothing supports it.",
@@ -740,7 +753,7 @@ def make_ground_check(threshold: float | None = None):
         # is a fabricated reference, and it reads to a person as authority.
         invented = cited - known
         if invented:
-            return _escalate(
+            return _ungrounded(
                 state,
                 "invented_citation",
                 f"The answer cited {sorted(invented)}, which was not retrieved.",
@@ -766,6 +779,10 @@ def make_ground_check(threshold: float | None = None):
                 "groundedness": groundedness,
                 "active_agent": state.get("active_agent"),
                 "quick_replies": follow_up_chips(state, chunks, grounded_citations),
+                # A resolved turn ends any run of unresolved ones. Somebody who
+                # got what they asked for is not two-thirds of the way to
+                # needing a person, whatever the next two questions do.
+                "decline_streak": {},
             }
         )
 
@@ -997,7 +1014,86 @@ def _small_talk_reply(state: AspireState) -> Command | None:
     return None
 
 
-def _escalate(state: AspireState, reason: str, detail: str) -> Command:
+def _ungrounded(state: AspireState, reason: str, detail: str) -> Command:
+    """An ungrounded turn: decline, and fetch a person only on the third try.
+
+    ## This is the change Track E.4 asked for, and the only one made to QA
+
+    Retrieval, fusion, reranking, the floors and the generation prompt are all
+    untouched. What changed is what happens when the gates say no. Every one of
+    the four retrieval reasons -- `no_context`, `below_relevance_floor`,
+    `unattributed_figure`, `uncited_policy_claim` -- used to hand off to a
+    person, and between them they produced 23 of 58 live tickets. None of them
+    is a reason to fetch a human on the first attempt; all of them are reasons
+    to say what we do know.
+
+    So the first two attempts on an intent decline (`agents/escalation/decline.py`)
+    and the third escalates as `REPEATED_FAILURE`. The streak is keyed on the
+    question, cleared by any grounded answer, and lives in the checkpoint
+    (`agents/escalation/counter.py`).
+
+    `reason` and `detail` are kept and still logged: they are the diagnostic for
+    WHY the corpus missed, which is the input to fixing the corpus, and they are
+    what the ticket carries if the third attempt arrives.
+    """
+    from app.agents.escalation import counter, decline
+    from app.agents.escalation.contract import EscalationReason
+
+    question = _latest_user_text(state)
+    streak = counter.bump(state.get("decline_streak"), question)
+    chunks = list(state.get("retrieved") or [])
+
+    if not counter.at_limit(streak, question):
+        logger.info(
+            "QA turn for session %s declined (%s, attempt %d of %d): %s",
+            state.get("session_id"),
+            reason,
+            next(iter(streak.values()), 0),
+            counter.LIMIT,
+            detail,
+        )
+        return Command(
+            update={
+                **decline.decline_update(state, chunks),
+                "decline_streak": streak,
+                # WHICH gate declined this, carried in state rather than only in
+                # the log. Without it a declined turn is indistinguishable from
+                # any other declined turn: the eval harness cannot count gates,
+                # and a test cannot assert that the figure check fired rather
+                # than the citation check. The escalation path has always
+                # carried its reason; the decline path needs the same.
+                "safety_flags": {
+                    **(state.get("safety_flags") or {}),
+                    "declined": {"reason": reason, "detail": detail},
+                },
+            }
+        )
+
+    logger.info(
+        "QA turn for session %s unresolved %d times on one intent (%s); escalating.",
+        state.get("session_id"),
+        counter.LIMIT,
+        reason,
+    )
+    return _escalate(
+        state,
+        EscalationReason.REPEATED_FAILURE.value,
+        f"Unresolved {counter.LIMIT} turns running. Last gate: {reason} -- {detail}",
+        # Reset on the way out. Left at the limit, every subsequent turn on the
+        # same intent would clear the bar again and open a second ticket, then a
+        # third -- somebody stuck on one question would generate one per turn,
+        # which is a worse version of the behaviour this track removes.
+        extra={"decline_streak": {}},
+    )
+
+
+def _escalate(
+    state: AspireState,
+    reason: str,
+    detail: str,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> Command:
     """Hand off, carrying a redacted summary and nothing else.
 
     The summary is redacted here for the same reason `tools.escalate_to_human`
@@ -1030,6 +1126,7 @@ def _escalate(state: AspireState, reason: str, detail: str) -> Command:
             "escalation_summary": pii.redact_for_summary(
                 f"{_latest_user_text(state)} -- {detail}"
             ),
+            **(extra or {}),
         },
     )
 

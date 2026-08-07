@@ -17,6 +17,8 @@ os.environ.setdefault(
     "SESSION_SECRET", "test-only-secret-not-for-production-at-least-32-bytes"
 )
 
+from langchain_core.messages import AIMessage  # noqa: E402
+
 from app.graph.stream_interceptor import (  # noqa: E402
     CLOSE,
     OPEN,
@@ -239,9 +241,93 @@ class TestOnlyTheLearningAgentEmitsWidgets:
         assert prose_of(events) == "xy"
         assert "widgets are for" in caplog.text
 
-    def test_the_learning_agent_may(self):
-        events = drain(interceptor(active_agent="learn_agent"), widget_block(), 8)
+    @pytest.mark.parametrize(
+        "agent", ["learn_agent", "learning_preview", "learning_sample"]
+    )
+    def test_every_learning_name_may(self, agent):
+        """One subgraph, registered three times, all three able to emit.
+
+        `learning_preview` (a guardian looking at what their child is taught)
+        and `learning_sample` (a signed-out visitor trying one) run the exact
+        same machine as `learn_agent`. They are also the two audiences being
+        shown what the product is like, so a lesson with its interactive half
+        silently dropped is the worst place to drop it.
+        """
+        events = drain(interceptor(active_agent=agent), widget_block(), 8)
         assert len(directives_of(events)) == 1
+
+
+@pytest.mark.asyncio
+class TestTwoSpeakersInOneTurn:
+    """`teach` explains and `check` asks, both in one turn, each its own message.
+
+    Reported from a live session:
+
+        ...choosing to move money from now to later.You move EC$25 into your
+        account instead of spending it this week. What is that?
+
+    Two messages arriving as separate `messages` events with nothing between
+    them. The nodes are right to stay separate -- the explanation is generated
+    and the question is authored -- so the join belongs here.
+    """
+
+    async def _say(self, machine, node, *chunks):
+        events = []
+        for chunk in chunks:
+            events += await machine.process(
+                ("messages", (AIMessage(content=chunk), {"langgraph_node": node}))
+            )
+        return events
+
+    def _prose(self, events):
+        return "".join(e.data["t"] for e in events if e.event == "token")
+
+    async def test_a_new_speaker_starts_a_new_paragraph(self):
+        machine = interceptor()
+        events = await self._say(machine, "teach", "Money kept is money later.")
+        events += await self._say(machine, "check", "What is that?")
+
+        assert self._prose(events) == "Money kept is money later.\n\nWhat is that?"
+
+    async def test_one_node_streaming_is_never_broken_up(self):
+        """The chunk case. A streamed node arrives as hundreds of events all
+        carrying the same node name, and a break between any two of them would
+        cut a sentence in half."""
+        machine = interceptor()
+        events = await self._say(machine, "teach", "Saving ", "means ", "keeping ", "money.")
+
+        assert self._prose(events) == "Saving means keeping money."
+
+    async def test_the_persisted_reply_matches_what_was_read(self):
+        """`prose` is what the turn is stored as. If the break only reached the
+        wire, the transcript the model reads back next turn would still have the
+        two sentences fused."""
+        machine = interceptor()
+        await self._say(machine, "teach", "Money kept is money later.")
+        await self._say(machine, "check", "What is that?")
+
+        assert machine.prose == "Money kept is money later.\n\nWhat is that?"
+
+    async def test_no_leading_break_before_the_first_speaker(self):
+        machine = interceptor()
+        events = await self._say(machine, "teach", "Money kept is money later.")
+        assert self._prose(events) == "Money kept is money later."
+
+    async def test_a_node_that_ended_its_own_paragraph_is_not_doubled(self):
+        machine = interceptor()
+        events = await self._say(machine, "teach", "Money kept is money later.\n")
+        events += await self._say(machine, "check", "What is that?")
+
+        assert "\n\n\n" not in self._prose(events)
+
+    async def test_a_widget_is_not_split_by_a_node_change(self):
+        """A break inserted between the sentinels would corrupt the JSON. Not
+        something the graph does today, and the guard is one condition."""
+        machine = interceptor()
+        await self._say(machine, "teach", f"Look at this {OPEN}")
+        events = await self._say(machine, "check", '{"kind":"compare"}')
+
+        assert "\n\n" not in self._prose(events)
 
 
 class TestBandEnforcement:

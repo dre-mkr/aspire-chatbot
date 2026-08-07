@@ -258,7 +258,7 @@ async def resolve_concept(
 
     # ── 2. semantic ─────────────────────────────────────────────────────────
     ranked: list[tuple[TeachingConcept, float]] = []
-    if embed is not None and len(store):
+    if embed is not None and len(store) and store.has_embeddings:
         try:
             vector = await embed(text)
             ranked = store.rank(
@@ -266,6 +266,24 @@ async def resolve_concept(
             )
         except Exception:
             logger.warning("Concept embedding failed; falling through.", exc_info=True)
+
+    # Lexical, when there is no vector to compare against or the embedder failed.
+    #
+    # Reached in two situations and neither is exotic: a concept table seeded
+    # while the embeddings model was unavailable, and an embedder outage on a
+    # live turn. Both leave complete teaching material in the store with no way
+    # to find it, and word overlap over titles and aliases is a poor index that
+    # is enormously better than declining every question.
+    if not ranked and len(store):
+        ranked = store.rank_lexical(
+            text, band=band, locale=locale, top=settings.learn_disambiguate_k
+        )
+        if ranked:
+            logger.debug(
+                "Resolved lexically (%s at %.2f); the store has no usable vectors.",
+                ranked[0][0].slug,
+                ranked[0][1],
+            )
 
     if ranked:
         best, score = ranked[0]
