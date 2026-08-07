@@ -170,17 +170,45 @@ same way a code change is. `--live` re-runs the same assertions against real mod
 
 ## Test results
 
-| | Result |
-|---|---|
-| Baseline (before any change) | 3047 passed, **2 failed**, 3 skipped — both failures environmental and pre-existing |
-| Learning + widgets + graph subsets after the work | **1725 → 2015 passed, 0 failed** |
-| New tests added | **222** in `tests/learning/` (planner 24, resolve 38, contract 28, prose-survives-widgets 14, plus existing) |
-| `evals/learning_agent.py` | **11/11** |
+| | Passed | Failed |
+|---|---|---|
+| Baseline, before any change (47 min) | 3047 | **2** — both environmental, pre-existing |
+| Full suite after the work (26 min) | 3110 | 9 failed + 4 errors |
+| Same, after the three test updates below | **3113** | **6 failed + 4 errors, all environmental** |
+| `tests/learning/` alone | **250** | 0 |
+| `tests/voice tests/safety tests/register tests/games tests/eligibility` | **652** | 0 |
+| Frontend `parser.test.ts` (directive ordering) | **13** | 0 |
+| `evals/learning_agent.py` | **11/11 scenarios** | 0 |
 
-Four tests fail on the full suite for reasons that are **not** this work:
-`test_planner_accuracy_and_over_trigger` and `test_routing_accuracy_against_the_labelled_set`
-are live-model evals now returning HTTP 429 `credit_balance_exhausted`; the other
-two are the pre-existing environmental pair from the baseline.
+New tests: **250** in `tests/learning/` — planner 24 (including a 24,000-case
+cross-product), resolve 38, contract 28, prose-survives-widgets 14, plus the
+existing suite.
+
+### Every remaining failure, accounted for
+
+Three were mine and are fixed:
+
+| Test | Why it broke | Fix |
+|---|---|---|
+| `test_teach.py::test_a_planned_kind_adds_its_composition_instructions` | asserted the inline sentinel reaches the prompt | inverted — it now asserts it does **not**, with the mechanism documented |
+| `test_teach.py::test_a_kind_that_was_written_is_remembered` | same path | asserts no widget is recorded on the authored path |
+| `test_resolve.py::test_an_embedder_that_raises_falls_through` | the lexical fallback now resolves it | asserts the fallback resolves by name, plus a new test that it does not invent a match |
+
+Six failures and four errors remain, **none of them this work**:
+
+| Test | Cause |
+|---|---|
+| `test_classify.py::test_routing_accuracy_against_the_labelled_set` | HTTP 429 `credit_balance_exhausted` |
+| `test_planner.py::test_planner_accuracy_and_over_trigger` | same |
+| `test_retriever_equivalence.py` (2 failed, 4 errors) | same — needs `embed_query_cached` |
+| `test_no_pii_in_logs.py::test_the_retrieval_line_still_says_something_useful` | pre-existing, in the baseline |
+| `test_ops_endpoints.py::test_disabled_debug_route_is_indistinguishable_from_an_absent_one` | pre-existing, in the baseline |
+
+I also introduced one regression during the work and caught it before committing:
+routing `"teach me"` to the tutor broke seven curriculum-lesson tests. `"teach me"`
+names no topic and belongs to placement; `asks_about_a_topic` now requires a
+subject after the verb, and falls back to the curriculum entirely when the concept
+store is empty.
 
 ---
 
