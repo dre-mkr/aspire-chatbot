@@ -1,1 +1,0 @@
-Rewrite the last user message into a standalone search query. Resolve pronouns and anything left out, using the conversation for context. Keep the user's own words wherever you can -- you are preparing a search, not improving a question. Reply with the query and nothing else. If the message already stands alone, repeat it unchanged.
