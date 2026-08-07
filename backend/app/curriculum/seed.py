@@ -104,11 +104,14 @@ async def seed_curriculum(curriculum: Any | None = None) -> int:
                         sql(
                             """
                             INSERT INTO concepts (
-                                id, name, band_min, band_max, module_id, vocabulary
+                                id, slug, title,
+                                name, band_min, band_max, module_id, vocabulary
                             ) VALUES (
-                                :id, :name, :band_min, :band_max, :module, :vocabulary
+                                :id, :slug, :title,
+                                :name, :band_min, :band_max, :module, :vocabulary
                             )
                             ON CONFLICT (id) DO UPDATE SET
+                                title = EXCLUDED.title,
                                 name = EXCLUDED.name,
                                 band_min = EXCLUDED.band_min,
                                 band_max = EXCLUDED.band_max,
@@ -118,6 +121,34 @@ async def seed_curriculum(curriculum: Any | None = None) -> int:
                         ),
                         {
                             "id": concept.id,
+                            # `slug` and `title` are NOT NULL as of migration 0016,
+                            # which gave this table teaching bodies and the columns
+                            # that resolve an utterance to one.
+                            #
+                            # They are supplied on the INSERT list even though every
+                            # authored concept already exists and this statement
+                            # always takes the UPDATE branch. That is not belt and
+                            # braces -- it is required. Postgres evaluates NOT NULL
+                            # when it forms the candidate tuple, which happens BEFORE
+                            # it consults the arbiter index and discovers the
+                            # conflict. A null here fails the whole statement even
+                            # when the row it would have updated is sitting there
+                            # with a perfectly good slug in it.
+                            #
+                            # That is exactly how this broke: the five authored rows
+                            # were correct, the migration had backfilled them, and
+                            # startup still raised `NotNullViolationError` on every
+                            # boot -- silently, because this function swallows and
+                            # logs rather than refusing to start. The visible symptom
+                            # was mastery quietly not recording.
+                            #
+                            # `slug` mirrors `id` for authored concepts; synthesised
+                            # ones (`CON-####`) carry a separate slug. It is absent
+                            # from the DO UPDATE list because `id` is the conflict
+                            # target and therefore cannot change, which makes
+                            # `slug = EXCLUDED.slug` a provable no-op.
+                            "slug": concept.id,
+                            "title": concept.name,
                             "name": concept.name,
                             "band_min": concept.band_min,
                             "band_max": concept.band_max,

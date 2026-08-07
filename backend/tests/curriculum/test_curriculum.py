@@ -389,6 +389,76 @@ class TestTheSeed:
         assert seeded == set(curriculum.concepts)
 
     @pytest.mark.anyio
+    async def test_the_insert_supplies_every_column_the_table_requires(self):
+        """The INSERT must name every NOT NULL column that has no default.
+
+        This is the one assertion in this class that reads the real schema, and it
+        is here because the faked-session test above cannot fail on a missing
+        column -- there is no table behind it, so a null is just a dict key that
+        was never set.
+
+        The gap it closes is a repeat of the one in the class docstring, one layer
+        down. Migration 0016 gave `concepts` teaching bodies and made `slug` and
+        `title` NOT NULL; this seeder still listed the original six columns. Every
+        startup then raised `NotNullViolationError` and swallowed it, so mastery
+        stopped recording and nothing said so.
+
+        The detail that makes it worth a schema round trip: the five authored rows
+        already existed with correct slugs, and `ON CONFLICT (id) DO UPDATE` still
+        failed. Postgres evaluates NOT NULL when it forms the candidate tuple,
+        before it consults the arbiter index -- so the UPDATE branch that would
+        have been fine was never reached. No amount of reasoning about the fake
+        session finds that; only the constraint does.
+
+        Skips without a database. That is a real hole in CI and an honest one:
+        the alternative is duplicating the column list into the test, which is the
+        same mistake being tested for, written twice.
+        """
+        import inspect
+        import re
+
+        url = os.environ.get("DATABASE_URL", "")
+        if not url:
+            pytest.skip("no DATABASE_URL; this assertion needs the real schema")
+
+        import asyncpg
+
+        from app.curriculum import seed as seed_module
+
+        source = inspect.getsource(seed_module)
+        match = re.search(
+            r"INSERT INTO concepts\s*\((.*?)\)\s*VALUES", source, re.DOTALL
+        )
+        assert match, "could not find the concepts INSERT to check"
+        supplied = {
+            column.strip() for column in match.group(1).split(",") if column.strip()
+        }
+
+        connection = await asyncpg.connect(
+            url.replace("postgresql+asyncpg://", "postgresql://")
+        )
+        try:
+            rows = await connection.fetch(
+                """
+                SELECT column_name
+                  FROM information_schema.columns
+                 WHERE table_name = 'concepts'
+                   AND is_nullable = 'NO'
+                   AND column_default IS NULL
+                """
+            )
+        finally:
+            await connection.close()
+
+        required = {row["column_name"] for row in rows}
+        missing = required - supplied
+        assert not missing, (
+            f"concepts requires {sorted(missing)} but the seeder's INSERT does not "
+            f"supply them. Startup will raise NotNullViolationError and swallow it, "
+            f"and mastery will stop recording."
+        )
+
+    @pytest.mark.anyio
     async def test_a_failure_is_logged_and_not_raised(self, curriculum, monkeypatch):
         """A curriculum that cannot be seeded must not stop the service starting.
 
