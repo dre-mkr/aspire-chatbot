@@ -150,10 +150,25 @@ def allowed_checkpoint_types() -> list[tuple[str, str]]:
     so this only has to name ours.
     """
     from app.agents.register.schema import Application
+    from app.context.session_context import SessionContext
     from app.graph.state import Citation, KBChunk
     from app.schemas.directives import UIDirective
 
-    models = _models_reachable_from(KBChunk, Citation, UIDirective, Application)
+    # `SessionContext` is a root because `AspireState.context` holds one and the
+    # checkpoint round-trips it. Left out, langgraph logged
+    #
+    #     Blocked deserialization of app.context.session_context.SessionContext
+    #
+    # once per resumed turn and handed the node `None`. Nothing failed -- every
+    # agent falls back to a history-free prompt -- so the visible symptom was an
+    # assistant that forgot the conversation whenever a turn resumed from the
+    # checkpoint, which is every turn after the first.
+    #
+    # `Turn`, `ApplicationRef` and `TicketRef` arrive transitively through the
+    # annotations; `_models_reachable_from` walks them.
+    models = _models_reachable_from(
+        KBChunk, Citation, UIDirective, Application, SessionContext
+    )
     return sorted((model.__module__, model.__name__) for model in models)
 
 

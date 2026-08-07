@@ -150,8 +150,16 @@ async def _from_database(user_id: str | None) -> dict[str, Any]:
             application = (
                 await db.execute(
                     sql(
+                        # `owner_user_id`, not `owner_id`. The column has been
+                        # `owner_user_id` since migration 0014 created the table;
+                        # `conversations` is the one with `owner_id`, and the two
+                        # got crossed here. Postgres raised UndefinedColumnError on
+                        # every signed-in turn, this whole function fell to its
+                        # except branch, and the agent lost the learner's display
+                        # name and any draft application alongside the one lookup
+                        # that was actually wrong.
                         "SELECT id, status FROM applications "
-                        "WHERE owner_id = :uid AND status = 'draft' "
+                        "WHERE owner_user_id = :uid AND status = 'draft' "
                         "ORDER BY created_at DESC LIMIT 1"
                     ),
                     {"uid": user_id},
