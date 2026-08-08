@@ -80,20 +80,66 @@ AGENT_NAMES: tuple[str, ...] = (
 )
 
 
-def make_stub(name: str):
-    """A placeholder agent that says, in the transcript, that it is one.
+#: What an unbuilt agent says. One per locale, and it names nothing internal.
+#:
+#: The previous text was `f"[{name} is not built yet.]"`, which reached a real
+#: reader asking a real question -- see `classify.routable`. Two things were wrong
+#: with it and only one is cosmetic: it exposed an internal agent name and a
+#: bracketed developer note to somebody who had asked about a probable scam, and
+#: it told them nothing about what to do next.
+#:
+#: This is deliberately NOT an apology or an error. `learning/OBJECTIONS.md` and
+#: the child-safety rules both say a failure renders as an ordinary message or as
+#: nothing at all -- never as "something went wrong", which teaches a child that
+#: the product handling their savings is unreliable.
+_NOT_BUILT: dict[str, str] = {
+    "en": (
+        "I cannot help with that one here yet. If it is about your account, the "
+        "ASPIRE team can sort it out. Is there something about saving or the "
+        "programme I can help with instead?"
+    ),
+    "es": (
+        "Todavía no puedo ayudarte con eso aquí. Si es sobre tu cuenta, el equipo "
+        "de ASPIRE puede resolverlo. ¿Hay algo sobre ahorro o el programa en lo "
+        "que sí pueda ayudarte?"
+    ),
+    "fr": (
+        "Je ne peux pas encore t'aider avec cela ici. Si cela concerne ton compte, "
+        "l'équipe ASPIRE peut s'en occuper. Puis-je t'aider avec l'épargne ou le "
+        "programme à la place?"
+    ),
+}
 
-    Says it as an ordinary assistant message rather than raising, because the
-    point of the stub is to prove the wiring: a turn must reach the right node,
-    be gated by `safety_out`, and be persisted. An exception would prove none of
-    that.
+
+def make_stub(name: str):
+    """A placeholder agent, which must not read as a placeholder.
+
+    Says something ordinary rather than raising, because the point of the stub is
+    to prove the wiring: a turn must reach the right node, be gated by
+    `safety_out`, and be persisted. An exception would prove none of that.
+
+    What it says is now fit for a reader, because a reader saw the old version.
+    `routable` should mean this node is unreachable by routing; this is the
+    second line of defence, for the paths routing does not own -- `_coerce`
+    accepting a name the model volunteered, stickiness holding a turn in the
+    agent the previous one used, or a deployment whose registration failed and
+    fell back to stubs.
     """
 
     async def stub(state: AspireState) -> dict[str, Any]:
-        logger.info("Stub agent %s handled a turn for session %s.", name, state.get("session_id"))
+        # WARNING, not INFO. Reaching a stub means routing let through an agent
+        # with no implementation, and the reader got a deflection instead of an
+        # answer. That is a defect every time, not a normal event.
+        logger.warning(
+            "Stub agent %s handled a turn for session %s; the reader was "
+            "deflected. Routing should have excluded it.",
+            name,
+            state.get("session_id"),
+        )
+        locale = str(state.get("locale") or "en")
         return {
             "messages": [
-                AIMessage(content=f"[{name} is not built yet.]")
+                AIMessage(content=_NOT_BUILT.get(locale, _NOT_BUILT["en"]))
             ],
             "active_agent": name,
         }

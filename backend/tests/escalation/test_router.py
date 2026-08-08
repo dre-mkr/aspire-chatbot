@@ -148,3 +148,70 @@ class TestAskingForAPerson:
         state.update(await gate(state) or {})
 
         assert _after_cards(state) == "classify"
+
+
+class TestUnbuiltAgentsAreNotDestinations:
+    """`UNBUILT` must match what is actually registered.
+
+    The constant exists because reading the live registry is unsafe -- see
+    `classify.UNBUILT`. The cost of declaring a fact instead of deriving it is
+    that it can drift, so this holds it against the real thing.
+    """
+
+    async def test_the_declaration_matches_the_registry(self):
+        """Whatever has no builder after `register_all()` must be in `UNBUILT`.
+
+        Fails in both directions on purpose. An agent that gains an
+        implementation and stays listed here is silently unroutable, which is the
+        quieter and more expensive half: nobody notices an agent that is never
+        chosen.
+        """
+        import app.graph.main_graph as main_graph
+        from app.graph.nodes.classify import UNBUILT
+
+        main_graph.register_all()
+        stubs = set(main_graph.AGENT_NAMES) - set(main_graph.AGENT_BUILDERS)
+
+        assert stubs == set(UNBUILT), (
+            f"UNBUILT says {sorted(UNBUILT)} but the registry leaves {sorted(stubs)} "
+            f"on a stub. An agent with no builder must be in UNBUILT or the router "
+            f"can send a reader to a placeholder; one WITH a builder must not be, "
+            f"or it is unreachable."
+        )
+
+    async def test_a_stub_is_never_offered_to_the_router(self):
+        """The end-to-end property, on the row that actually granted it."""
+        from app.graph.nodes.classify import routable
+
+        granted = allowed_agents("aurora", "adult", "beneficiary", user_id="u")
+        assert "servicing_agent" in granted, (
+            "this test is meaningless if the matrix stopped granting it"
+        )
+        assert "servicing_agent" not in routable(granted)
+        assert routable(granted), "the row must keep something to route to"
+
+    async def test_filtering_is_independent_of_registration_order(self):
+        """`routable` must not change with what has been imported so far.
+
+        The first version of this filter read `AGENT_BUILDERS` at call time. A
+        partially populated registry -- one failed import, or another test having
+        replaced it -- then stripped agents that were built, emptying Stella's row
+        to `[]` and turning a permitted grant into nothing to route to.
+        """
+        import app.graph.main_graph as main_graph
+        from app.graph.nodes.classify import routable
+
+        row = allowed_agents("stella", "9-12", "prospect", user_id="u")
+        expected = routable(row)
+
+        saved = dict(main_graph.AGENT_BUILDERS)
+        try:
+            main_graph.AGENT_BUILDERS.clear()
+            assert routable(row) == expected, "an empty registry changed routing"
+            main_graph.AGENT_BUILDERS.update({"qa_agent": lambda: None})
+            assert routable(row) == expected, "a partial registry changed routing"
+        finally:
+            main_graph.AGENT_BUILDERS.clear()
+            main_graph.AGENT_BUILDERS.update(saved)
+
+        assert expected == ["learn_agent"]

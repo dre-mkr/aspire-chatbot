@@ -151,6 +151,32 @@ class Classification(BaseModel):
 #: the list removes it from all three at once.
 UNROUTABLE: frozenset[str] = frozenset({"escalate_agent"})
 
+#: Agents the access matrix grants that have no implementation behind them.
+#:
+#: `servicing_agent` is the whole set. It is granted to account holders,
+#: described to the router as "a payment that has not arrived", and backed by
+#: `make_stub` -- so a turn routed there showed the reader
+#:
+#:     [servicing_agent is not built yet.]
+#:
+#: Observed on "someone messaged me saying i won money", a scam question a small
+#: model reasonably read as a missing payment. A young person asking about a
+#: probable scam was answered with a bracketed developer note.
+#:
+#: A STATIC declaration, not a lookup of `main_graph.AGENT_BUILDERS`, and that
+#: distinction is the whole design. Reading the live registry was the first
+#: attempt and it is unsafe: the registry is populated lazily by `register_all()`,
+#: whose docstring notes that a failed import leaves that agent on its stub. A
+#: partially populated registry would then filter away agents that ARE built --
+#: it emptied Stella's row to `[]` in a full test run, turning a permitted grant
+#: into no routable agent at all, which is precisely the failure `routable`'s
+#: docstring promises cannot happen.
+#:
+#: So the fact is declared here and `tests/escalation/test_router.py` holds it
+#: against the real registry, which makes drift a failing test rather than a
+#: routing change nobody chose.
+UNBUILT: frozenset[str] = frozenset({"servicing_agent"})
+
 
 def routable(allowed: list[str]) -> list[str]:
     """The granted agents the router may actually choose between.
@@ -159,8 +185,19 @@ def routable(allowed: list[str]) -> list[str]:
     filter -- Stella keeps `learn_agent`, Nova keeps `qa_agent` -- so this cannot
     empty a permitted caller's list and turn a grant into a 403.
     `tests/escalation/test_router.py` walks the matrix to hold that true.
+
+    An agent with no implementation is not a destination either -- see `UNBUILT`
+    for why `servicing_agent` is excluded and why that fact is declared rather
+    than looked up.
+
+    Filtering here rather than deleting the descriptions, for the reason
+    `UNROUTABLE` gives above: dropping a description stops the model PROPOSING an
+    agent and still leaves `_coerce` able to accept it and the
+    `len(allowed) == 1` shortcut able to select it. Removing it from the list
+    removes it from all three.
     """
-    return [agent for agent in allowed if agent not in UNROUTABLE]
+    excluded = UNROUTABLE | UNBUILT
+    return [agent for agent in allowed if agent not in excluded]
 
 
 def agent_menu(allowed: list[str]) -> str:
