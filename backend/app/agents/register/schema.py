@@ -638,6 +638,26 @@ def next_missing(
     survives the filter is the shape of an application -- relationship, parish,
     whether the child already has an account -- which is exactly what can be
     collected before anyone has proven who they are.
+
+    ## `optional` means "may be skipped", not "is never asked"
+
+    This walk used to test `not slot.optional`, so an optional slot could never
+    be returned and was therefore never asked. That made three fields
+    unreachable -- `guardian.email`, `child.school`, `child.photo` -- each with a
+    prompt and a reask authored in all three locales, and it made dead code of
+    the skip affordance that already existed: `_skip_chip` builds a localised
+    Skip chip, `extract` recognises "skip"/"saltar"/"passer", and `collect`
+    honours `{"skipped": true}` on an upload resume. Every part of skipping
+    worked except being offered the chance.
+
+    It also quietly broke the confirmation. `review.confirm` notifies the
+    guardian at `guardian.email` and falls back to the phone number, so the
+    promise "I have sent a copy of this to you" always ran on the fallback.
+
+    A skipped slot is excluded through `barred`, which the caller assembles --
+    see `graph.pick_slot`. Deliberately not by writing a sentinel into `filled`:
+    the comment there explains that an earlier attempt did exactly that and the
+    sentinel reached `submit` as a real answer.
     """
     withheld = set(barred or ())
 
@@ -646,7 +666,7 @@ def next_missing(
             continue
         if slot.path in withheld:
             continue
-        if not slot.optional and filled.get(slot.path) in (None, ""):
+        if filled.get(slot.path) in (None, ""):
             return slot
 
     for slot in CHILD_SLOTS:
@@ -655,7 +675,7 @@ def next_missing(
         key = child_key(slot.path, child_index)
         if slot.path in withheld or key in withheld:
             continue
-        if not slot.optional and filled.get(key) in (None, ""):
+        if filled.get(key) in (None, ""):
             return slot
 
     return None

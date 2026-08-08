@@ -116,6 +116,17 @@ class Draft:
     children_complete: int = 0
     status: str = "draft"
     pending_corrections: list[str] = field(default_factory=list)
+    #: Optional slots the parent declined, as resolved keys (`child.0.photo`).
+    #:
+    #: A list beside the values rather than a sentinel inside them. `next_missing`
+    #: reads "unfilled" as `None` or `""`, so recording a skip as a value would
+    #: either be indistinguishable from unanswered -- asking forever -- or would
+    #: need a magic string, which `graph.pick_slot` already explains reached
+    #: `submit` as a real answer the last time it was tried.
+    #:
+    #: Keys, not paths, because `child.photo` is skippable per child: declining a
+    #: photo for the first child must not decline it for the second.
+    skipped: list[str] = field(default_factory=list)
 
     def key_for(self, path: str) -> str:
         return child_key(path, self.child_index)

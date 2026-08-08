@@ -106,6 +106,7 @@ def _draft(state: AspireState) -> store.Draft:
             children_complete=int(raw.get("children_complete") or 0),
             status=raw.get("status", "draft"),
             pending_corrections=list(raw.get("pending_corrections") or []),
+            skipped=list(raw.get("skipped") or []),
         )
     return store.new_draft(state.get("session_id"))
 
@@ -133,6 +134,12 @@ async def load_real_values(draft: store.Draft) -> store.Draft:
         return draft
     loaded.child_index = draft.child_index
     loaded.children_complete = draft.children_complete
+    # Skips live in the checkpoint, not in the database -- declining to give an
+    # email writes no row anywhere, which is the whole point of declining. So a
+    # draft rebuilt from `applications` and `application_pii` has none of them,
+    # and carrying them across is what stops `review`'s correction loop asking
+    # again for the three fields the parent just said no to.
+    loaded.skipped = list(draft.skipped)
     return loaded
 
 
@@ -178,6 +185,11 @@ def _persist_state(draft: store.Draft) -> dict[str, Any]:
         "children_complete": draft.children_complete,
         "status": draft.status,
         "pending_corrections": draft.pending_corrections,
+        # Optional slots the parent declined. Keys, like `filled` -- a field name
+        # is not an answer, so this carries no PII and belongs in the checkpoint
+        # for the same reason `filled` does: without it a resumed conversation
+        # re-asks for the email they just declined.
+        "skipped": list(draft.skipped),
         # The slot currently being asked for. Read by `extract` on the next
         # turn, because a turn does not otherwise know which question it is
         # answering. A path, not an answer.
@@ -294,11 +306,15 @@ def pick_slot(
     # wrote a sentinel into `draft.values` -- which `_persist_state` would have
     # checkpointed and `submit` would have sent as a real answer. Skipping inside
     # the walk needs no sentinel and cannot corrupt the draft.
+    # Two reasons a slot is not a candidate, and they merge here because the walk
+    # only needs to know that it is not one. A barred slot was answered to another
+    # agent; a skipped slot was declined by this parent. Neither should be asked,
+    # and neither writes anything into `draft.values`.
     return next_missing(
         draft.values,
         child_index=draft.child_index,
         allow_sensitive=allow_sensitive,
-        barred=frozenset(handoff.do_not_reask) if handoff else frozenset(),
+        barred=frozenset(handoff.do_not_reask if handoff else ()) | frozenset(draft.skipped),
     )
 
 
@@ -385,7 +401,10 @@ def make_collect(recorder=None):
         payload = _assert_no_bytes(raw if isinstance(raw, dict) else {})
 
         if payload.get("skipped") and slot.optional:
-            await store.save_slot(draft, slot.path, None)
+            # No `save_slot`. Writing None persisted a row saying the document
+            # was answered-as-nothing, and left the walk still seeing an empty
+            # slot -- so the card came back on the next turn.
+            _record_skip(draft, slot)
             draft.values.pop("__awaiting", None)
             return {"registration": {**_persist_state(draft), "phase": "next"}}
 
@@ -449,6 +468,20 @@ def _document_label(draft: store.Draft, slot: Slot) -> str:
     return f"{possessive} {slot.label[0].lower()}{slot.label[1:]}"
 
 
+def _record_skip(draft: store.Draft, slot: Slot) -> None:
+    """Note that this parent declined an optional slot, once.
+
+    Keyed through `draft.key_for`, so declining a photo for the first child says
+    nothing about the second. Idempotent because a resumed turn can re-run the
+    node that recorded it -- `collect` in particular replays from the top after
+    an `interrupt`.
+    """
+    key = draft.key_for(slot.path)
+    if key not in draft.skipped:
+        draft.skipped.append(key)
+    logger.info("[skipped: %s]", slot.path.rsplit(".", 1)[-1])
+
+
 def _options_for(slot: Slot, locale: str) -> list[str]:
     """Tap targets when the answer is one of a closed set.
 
@@ -497,7 +530,10 @@ def make_extract():
         locale = _locale(state)
 
         if slot.optional and answer.lower() in ("skip", "saltar", "passer", ""):
-            draft.set(slot.path, None)
+            # Recorded as a skip, not written as a None. `next_missing` reads
+            # `None` as unfilled, so setting the value here would ask the same
+            # question on the next turn and every turn after it.
+            _record_skip(draft, slot)
             draft.values.pop("__awaiting", None)
             return {"registration": {**_persist_state(draft), "phase": "next"}}
 

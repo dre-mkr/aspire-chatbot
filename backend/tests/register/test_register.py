@@ -74,10 +74,23 @@ class TestTheSchemaIsTheSourceOfTruth:
         filled["guardian.full_name"] = "Rachel Providence"
         assert rs.next_missing(filled).path == "guardian.national_id"
 
-    def test_an_optional_slot_never_blocks_the_walk(self):
-        """`guardian.email` is optional, so an empty one does not stop progress."""
+    def test_an_optional_slot_is_still_asked_for(self):
+        """`optional` decides whether it may be DECLINED, not whether it is asked.
+
+        The walk used to step over optional slots entirely, which is why
+        `guardian.email`, `child.school` and `child.photo` were unreachable.
+        Declining is expressed through `barred` -- see the next test -- so that
+        nothing has to be written into the answers to represent a refusal.
+        """
         filled = {slot.path: "x" for slot in rs.GUARDIAN_SLOTS if not slot.optional}
-        assert rs.next_missing(filled).path.startswith("child.")
+        assert rs.next_missing(filled).path == "guardian.email"
+
+    def test_a_declined_slot_is_passed_over(self):
+        """`barred` is how a skip is honoured, and it writes nothing to `filled`."""
+        filled = {slot.path: "x" for slot in rs.GUARDIAN_SLOTS if not slot.optional}
+        assert rs.next_missing(
+            filled, barred=frozenset({"guardian.email"})
+        ).path.startswith("child.")
 
     def test_every_slot_has_copy_in_every_locale(self):
         for slot in rs.SLOTS:
@@ -247,8 +260,16 @@ class TestTheSlotLoop:
         assert result["registration"]["awaiting"] == "guardian.relationship"
         assert "related" in result["messages"][-1].content.lower()
 
-    async def test_an_optional_slot_can_be_skipped(self):
-        graph = rg.build_register_graph()
+    async def test_an_optional_slot_is_asked_and_offers_a_skip_chip(self):
+        """`optional` means "may be declined", not "is never asked".
+
+        This test used to assert the opposite -- that the walk stepped straight
+        past `guardian.email` to the child section -- which is how three fields
+        with prompts and reask copy authored in all three locales came to be
+        unreachable, and how the skip affordance that already existed
+        (`_skip_chip`, and `extract` recognising "skip"/"saltar"/"passer") became
+        dead code.
+        """
         draft = store.Draft(
             application_id="app-2",
             resume_token="t",
@@ -263,10 +284,56 @@ class TestTheSlotLoop:
             return draft
 
         graph = rg.build_register_graph(loader=loader)
-        state = state_for("hi", safety_flags={"resume_token": "t"})
-        result = await graph.ainvoke(state)
-        # Every required guardian slot is filled, so the walk has moved on.
-        assert result["registration"]["awaiting"].startswith("child.")
+        result = await graph.ainvoke(
+            state_for("hi", safety_flags={"resume_token": "t"})
+        )
+
+        assert result["registration"]["awaiting"] == "guardian.email"
+        assert result["quick_replies"] == ["Skip"]
+
+    async def test_skipping_an_optional_slot_advances_the_walk(self):
+        """And does so without writing an answer for it.
+
+        The skip is recorded as a key in `skipped`, not as a None in `values`.
+        `next_missing` reads None as unfilled, so storing one would ask the same
+        question again on the next turn, and every turn after it.
+        """
+        draft = store.Draft(
+            application_id="app-2b",
+            resume_token="t",
+            values={
+                slot.path: "x"
+                for slot in rs.GUARDIAN_SLOTS
+                if not slot.optional and slot.path != "guardian.email"
+            },
+        )
+        async def loader(token: str):
+            return draft
+
+        graph = rg.build_register_graph(loader=loader)
+        # `_entry` routes to `extract` on `registration.awaiting`, which is state
+        # rather than the draft -- the draft is only reloaded once the turn knows
+        # which question it is answering.
+        result = await graph.ainvoke(
+            state_for(
+                "skip",
+                registration={
+                    "application_id": "app-2b",
+                    "resume_token": "t",
+                    "filled": [
+                        slot.path
+                        for slot in rs.GUARDIAN_SLOTS
+                        if not slot.optional and slot.path != "guardian.email"
+                    ],
+                    "awaiting": "guardian.email",
+                },
+            )
+        )
+
+        registration = result["registration"]
+        assert "guardian.email" in registration["skipped"]
+        assert "guardian.email" not in registration["filled"]
+        assert registration["awaiting"] != "guardian.email"
 
     async def test_a_closed_set_slot_offers_its_options_as_chips(self):
         draft = store.Draft(

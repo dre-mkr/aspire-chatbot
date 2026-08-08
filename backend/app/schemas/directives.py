@@ -137,6 +137,17 @@ class UploadDirective(_Directive):
     accepts: list[str] = Field(min_length=1, max_length=8)
     max_mb: int = Field(default=10, ge=1, le=50)
     help: str = Field(default="", max_length=300)
+    #: Whether the card may offer a skip control.
+    #:
+    #: `collect` already honours `{"skipped": true}` on resume for an optional
+    #: slot, and `child.photo` is the one that is. Without this the client has no
+    #: way to know which cards may be declined, so it must either offer skip on
+    #: all of them -- letting a parent decline a birth certificate the
+    #: application cannot be submitted without -- or on none, which is what it
+    #: did.
+    #:
+    #: Defaults False so a card is not skippable unless it says so.
+    optional: bool = False
 
 
 # ── review card ──────────────────────────────────────────────────────────────

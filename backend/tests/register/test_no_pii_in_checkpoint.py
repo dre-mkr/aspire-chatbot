@@ -71,6 +71,10 @@ class TestNoAnswerReachesTheCheckpoint:
             "status",
             "pending_corrections",
             "awaiting",
+            # Slot keys the parent declined. Same class as `filled` -- a field
+            # name, never an answer -- and pinned as such by
+            # `test_skipped_carries_keys_not_answers` below.
+            "skipped",
         }
 
     def test_filled_carries_paths_not_answers(self):
@@ -80,6 +84,24 @@ class TestNoAnswerReachesTheCheckpoint:
 
         assert "guardian.national_id" in persisted["filled"]
         assert "A12345678" not in json.dumps(persisted["filled"])
+
+    def test_skipped_carries_keys_not_answers(self):
+        """A decline is recorded as which field was declined, never as a value.
+
+        The whitelist above is what stops a new key reaching `checkpoint_blobs`
+        unnoticed, which is the F1 protection. Widening it is only safe if the
+        new key is the same class of thing as the others, so this asserts it
+        rather than leaving the widening to stand on its own.
+        """
+        from app.agents.register import store
+
+        draft = _filled_draft()
+        draft.skipped = ["guardian.email", "child.0.school"]
+
+        persisted = _persist_state(draft)
+
+        assert persisted["skipped"] == ["guardian.email", "child.0.school"]
+        assert "@" not in json.dumps(persisted["skipped"])
 
     def test_the_awaiting_pointer_is_a_path(self):
         assert _persist_state(_filled_draft())["awaiting"] == "child.0.date_of_birth"

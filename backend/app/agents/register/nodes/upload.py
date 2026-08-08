@@ -88,6 +88,10 @@ def upload_directive(slot: Slot, locale: str, *, label: str | None = None) -> An
         accepts=ACCEPTS,
         max_mb=MAX_MB,
         help=(HELP.get(slot.path, {}).get(locale) or HELP.get(slot.path, {}).get("en", "")),
+        # Carried from the slot table, so the card offers skip on exactly the
+        # documents `collect` will accept a skip for. Deriving it here rather
+        # than listing paths in the client keeps one definition of optional.
+        optional=slot.optional,
     )
 
 
