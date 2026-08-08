@@ -224,32 +224,72 @@ def make_tutor(
         # ── 4. the lesson goes out. Nothing below can take it away. ─────────
         _emit_prose(lesson.spoken or lesson.text)
 
-        widget = await _await_widget(widget_task)
-        if widget.emitted:
-            _emit_directive(widget.payload)
+        # And this is what makes that sentence true rather than merely intended.
+        #
+        # It used to be a comment describing an ordering, which is not the same
+        # as a guarantee: the prose had been streamed, so anything raising below
+        # could not unsend it, but it COULD take down the node -- and then
+        # `api/stream.py` catches, emits `error: upstream`, and returns without
+        # persisting. The reader watches a complete lesson appear and then be
+        # told the assistant is unavailable, and nothing is written to the
+        # transcript. That is worse than either outcome on its own.
+        #
+        # It happened. `_state_after` dereferenced a null check item on the
+        # RAG-teach path and destroyed a turn whose 140 words of prose had
+        # already been generated, validated and sent.
+        #
+        # So the three steps below are wrapped as a group. Each is a bookkeeping
+        # step -- a widget, a log line, the state a checkpoint keeps -- and not
+        # one of them is worth a lesson. On failure the turn still returns the
+        # message and its chips, so the transcript is written and the
+        # conversation continues; what is lost is the mastery bookkeeping for one
+        # turn, which spaced repetition will revisit anyway.
+        try:
+            widget = await _await_widget(widget_task)
+            if widget.emitted:
+                _emit_directive(widget.payload)
 
-        _log_turn(
-            resolution=resolution,
-            move=move,
-            band=band,
-            locale=locale,
-            lesson=lesson,
-            widget=widget,
-            score=score,
-            started=started,
-        )
+            _log_turn(
+                resolution=resolution,
+                move=move,
+                band=band,
+                locale=locale,
+                lesson=lesson,
+                widget=widget,
+                score=score,
+                started=started,
+            )
 
-        return _state_after(
-            state=state,
-            learning=learning,
-            resolution=resolution,
-            move=move,
-            band=band,
-            lesson=lesson,
-            widget=widget,
-            check_item=check_item,
-            snapshot=snapshot,
-        )
+            return _state_after(
+                state=state,
+                learning=learning,
+                resolution=resolution,
+                move=move,
+                band=band,
+                lesson=lesson,
+                widget=widget,
+                check_item=check_item,
+                snapshot=snapshot,
+            )
+        except Exception:
+            logger.exception(
+                "The lesson was delivered and the bookkeeping after it failed "
+                "(concept=%s move=%s band=%s). Serving the lesson.",
+                resolution.concept_id,
+                move.value,
+                band,
+            )
+            widget_task.cancel()
+            # The minimum that keeps the turn coherent: what was said, and a way
+            # to reply. Deliberately NOT a partial `merge` of the learning state
+            # -- the failure is in computing that state, so writing half of it
+            # would leave the machine in a phase whose invariants nobody checked.
+            # An untouched `learning` resumes exactly where the last good turn
+            # left it.
+            return {
+                "messages": [AIMessage(content=lesson.text)],
+                "quick_replies": _chips(band, _chip_options(move, band)),
+            }
 
     return tutor
 
@@ -399,7 +439,20 @@ def _state_after(
             # as a new knowledge query.
             awaiting_check_answer=bool(check_item) and asked,
             pending_check_id=check_item.id if (check_item and asked) else None,
-            seen_check_ids=seen_check(learning, check_item.id if asked else None),
+            # `check_item and asked`, matching the three lines around it. Guarding
+            # on `asked` alone crashed the whole turn on the RAG-teach path, which
+            # is the one path where a lesson asks a question that no check item
+            # backs: there is no concept, so there is no check bank, so
+            # `select_check` returns None -- while `asked` is still True, because
+            # the lesson genuinely does end with a question invented from the
+            # retrieved rows.
+            #
+            # `seen_check` already accepts None and returns the list unchanged.
+            # Nothing needed to be taught how to handle this; the attribute access
+            # simply happened before it could.
+            seen_check_ids=seen_check(
+                learning, check_item.id if (check_item and asked) else None
+            ),
             turns_on_concept=on_concept(learning, concept_id),
             turns_since_check=0 if (check_item and asked) else int(learning.get("turns_since_check") or 0) + 1,
             # Cleared on any move that is not a hint. The ladder counts

@@ -429,3 +429,154 @@ class TestTheInvariant:
             assert kinds.index("prose") < kinds.index("directive"), (
                 "the widget must arrive after the prose has settled"
             )
+
+
+class TestNothingAfterTheProseCanTakeItAway:
+    """The other half of the invariant, and the half that shipped broken.
+
+    `test_a_widget_never_arrives_without_a_lesson` proves a widget cannot arrive
+    without prose. It does not prove the converse that matters just as much: that
+    prose already sent cannot be retracted by something failing behind it.
+
+    It could be. `_state_after` dereferenced a null check item and raised, the
+    node died, `api/stream.py` caught it and emitted `error: upstream`, and the
+    reader watched a complete 140-word lesson appear and then be told the
+    assistant was unavailable. Nothing was persisted either, because the except
+    branch returns before `persist_turn`.
+
+    Observed in production on the RAG-teach path, which is the one path where a
+    lesson asks a question that no check item backs -- no concept, so no check
+    bank, so `select_check` returns None while the lesson still ends in a
+    question invented from the retrieved rows.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_rag_lesson_with_no_check_item_completes(self):
+        """The exact production failure: `asked` is true and `check_item` is None.
+
+        Asserts the turn returns rather than raising, and that it returns the
+        lesson. Before the fix this raised AttributeError on `check_item.id`.
+        """
+        node = tutor_module.make_tutor(
+            embed=None,
+            invoke=a_teach_call,
+            plan=None,
+            compose=None,
+            cache=None,
+            retrieve=None,
+        )
+
+        from app.learning.concepts import set_store
+
+        # An empty store is what forces the RAG path: nothing to resolve against,
+        # so `concept` is None and `select_check` has no bank to select from.
+        empty = ConceptStore()
+        empty.load([])
+        set_store(empty)
+        try:
+            result = await node(
+                {
+                    "messages": [],
+                    "age_band": "16-18",
+                    "locale": "en",
+                    "active_agent": "learn_agent",
+                    "learning": {},
+                }
+            )
+        finally:
+            set_store(None)
+
+        assert result is not None
+        assert result.get("messages"), "the lesson must survive a missing check item"
+
+    @pytest.mark.asyncio
+    async def test_bookkeeping_that_raises_still_serves_the_lesson(self):
+        """Break `_state_after` outright. The reader must still get the lesson.
+
+        The general form of the bug rather than the specific one. Whatever fails
+        after the prose is emitted -- a widget, a log line, the state write -- it
+        is bookkeeping, and no bookkeeping is worth a lesson the child has already
+        started reading.
+        """
+        emitted: list[str] = []
+
+        class Recorder:
+            def __call__(self, payload):
+                if "prose" in payload:
+                    emitted.append(payload["prose"])
+
+        import app.agents.learn.tutor as module
+
+        def explode(**_):
+            raise RuntimeError("bookkeeping is broken")
+
+        node = module.make_tutor(
+            embed=None, invoke=a_teach_call, plan=None, compose=None, cache=None
+        )
+
+        recorder = Recorder()
+        original_writer = module._writer
+        original_state = module._state_after
+        module._writer = lambda: recorder
+        module._state_after = explode
+        try:
+            result = await node(
+                {
+                    "messages": [],
+                    "age_band": "9-12",
+                    "locale": "en",
+                    "active_agent": "learn_agent",
+                    "learning": {"active_concept_id": "CON-0042"},
+                }
+            )
+        finally:
+            module._writer = original_writer
+            module._state_after = original_state
+
+        assert emitted, "the prose must have been sent"
+        assert result is not None, "a failure after the prose must not kill the node"
+        assert result.get("messages"), "the transcript must still receive the lesson"
+        assert result["messages"][0].content == A_GOOD_LESSON
+
+    @pytest.mark.asyncio
+    async def test_state_after_tolerates_a_null_check_item_directly(self):
+        """`_state_after` itself, below the safety net.
+
+        This test exists because of what the two above CANNOT see. The net that
+        keeps a delivered lesson alive also swallows the exception that would
+        have revealed why it was needed -- reverting the null guard leaves both
+        of them green, because the turn still completes and still serves prose.
+
+        A safety net makes failures behind it survivable, not absent. So the
+        assertion has to go under the net and call the function directly, where a
+        regression surfaces as the AttributeError it is rather than as a log line
+        nobody is grepping for.
+        """
+        import app.agents.learn.tutor as module
+        from app.agents.learn.planner import LearnerSnapshot, Move
+        from app.agents.learn.render import RenderResult
+        from app.agents.learn.resolve import ConceptResolution
+        from app.agents.learn.widgets import WidgetOutcome
+
+        state = module._state_after(
+            state={"age_band": "16-18"},
+            learning={},
+            # The RAG path: no concept resolved, so no check bank to draw from.
+            resolution=ConceptResolution(
+                concept=None, source="rag", similarity=0.583, kb_rows=("FIN-011",)
+            ),
+            move=Move.TEACH,
+            band="16-18",
+            lesson=RenderResult(text=A_GOOD_LESSON, tier=1),
+            widget=WidgetOutcome(gate="provenance"),
+            check_item=None,
+            snapshot=LearnerSnapshot(),
+        )
+
+        assert state["messages"][0].content == A_GOOD_LESSON
+        learning = state["learning"]
+        assert learning["awaiting_check_answer"] is False, (
+            "no check item means no answer is owed, whatever the move was"
+        )
+        assert learning["pending_check_id"] is None
+        assert learning["seen_check_ids"] == []
