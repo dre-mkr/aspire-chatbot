@@ -248,9 +248,33 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         "messages": [HumanMessage(content=message)] if message else []
     }
 
+    # A document the parent has just uploaded, resuming a paused registration.
+    #
+    # `register/nodes/upload.py` calls `interrupt()` and waits for the id inside
+    # the same stack frame, so the resumption is not a new turn with a message in
+    # it -- it is `Command(resume=...)` handed back to the paused node. Passing an
+    # ordinary payload here would restart the graph from START, re-run
+    # `resume_or_start`, and ask for the document again, forever.
+    #
+    # This is what made registration unfinishable. The interrupt was correct and
+    # the client had nothing to answer it with: nothing emitted the request and
+    # nothing accepted the reply, so a parent who answered every typed question
+    # reached the ID photo and the assistant simply went silent.
+    upload_result = body.get("__upload_result")
+    graph_input: Any = payload
+    if isinstance(upload_result, dict) and upload_result.get("document_id"):
+        from langgraph.types import Command
+
+        graph_input = Command(resume=upload_result)
+        logger.info(
+            "Resuming session %s with document %s.",
+            thread_id,
+            upload_result.get("document_id"),
+        )
+
     try:
         async for chunk in graph.astream(
-            payload,
+            graph_input,
             config=config,
             stream_mode=["messages", "custom"],
         ):
@@ -298,6 +322,24 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     # changed its mind about.
     turn = interceptor.turn or {}
     directives = _closing_directives(turn)
+
+    # A graph paused on `interrupt()` is asking the reader for something, and the
+    # payload it paused with IS the directive that asks. Nothing read it before,
+    # so the registration agent's upload request -- correctly built, correctly
+    # shaped, carrying `t: "upload"` for `DirectiveRegistry` to render -- was
+    # constructed on every document slot and thrown away on every document slot.
+    #
+    # Read from the checkpoint rather than the stream: `__interrupt__` is
+    # published on the "updates" and "values" stream modes, and this transport
+    # subscribes to "messages" and "custom" deliberately (see the interceptor).
+    # `aget_state` is one read against a checkpointer that is already open.
+    #
+    # Appended to the closing directives rather than emitted separately so it
+    # passes through the same ordinal counter as everything else -- the client
+    # positions by ordinal, and a directive outside that sequence is a directive
+    # it cannot place.
+    directives.extend(await _pending_interrupts(graph, config))
+
     for directive in directives:
         yield interceptor.directive(directive).encode()
 
@@ -328,6 +370,43 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     # Compression is a model call and it is deliberately out here, past `done`,
     # so the reader never waits through it. See `turn.summarise_thread`.
     await turn_service.summarise_thread(graph, config)
+
+
+async def _pending_interrupts(graph: Any, config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Directives for whatever the graph is paused waiting for. Usually none.
+
+    An interrupt value is only a directive if it looks like one -- it must carry
+    `t`, the discriminator `DirectiveRegistry` switches on. Anything else is an
+    interrupt some other node raised for its own reasons, and forwarding an
+    unrecognised object to the client would render nothing and log a warning at
+    best.
+
+    Never raises into the turn. This runs after `done` is prepared and the reader
+    already has the prose; a checkpointer blip must cost the upload card, not the
+    answer.
+    """
+    try:
+        snapshot = await graph.aget_state(config)
+    except Exception:
+        logger.warning("Could not read the graph state for pending interrupts.", exc_info=True)
+        return []
+
+    found: list[dict[str, Any]] = []
+    for task in getattr(snapshot, "tasks", ()) or ():
+        for interrupt in getattr(task, "interrupts", ()) or ():
+            value = getattr(interrupt, "value", None)
+            if isinstance(value, dict) and value.get("t"):
+                # `type` is the node's own name for it and means nothing on the
+                # wire; `t` is the directive discriminator. Both are present in
+                # the payload `upload.py` builds, and only one belongs here.
+                found.append({key: item for key, item in value.items() if key != "type"})
+            elif value is not None:
+                logger.warning(
+                    "A graph interrupt carried %s, which is not a directive; the "
+                    "reader has no way to answer it.",
+                    type(value).__name__,
+                )
+    return found
 
 
 def _wants_card(message: str) -> bool:

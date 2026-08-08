@@ -218,11 +218,34 @@ async def save_slot(draft: Draft, path: str, value: Any) -> None:
                 {"id": draft.application_id, "slot": key, "blob": blob},
             )
         else:
+            # The casts are load-bearing, not decoration.
+            #
+            # `to_jsonb` and `jsonb_build_object` are polymorphic, and asyncpg
+            # sends a bind parameter with no type attached. Postgres cannot
+            # resolve `to_jsonb(unknown)` and raises
+            #
+            #     DatatypeMismatchError: could not determine polymorphic type
+            #     because input has type unknown
+            #
+            # so EVERY non-sensitive slot failed to save. The first three slots
+            # are sensitive and take the branch above, which is why registration
+            # got as far as the guardian's name, ID and date of birth before
+            # dying on `guardian.relationship` -- far enough in to look like it
+            # worked and to have collected real PII first.
+            #
+            # `text` rather than a typed cast per slot, because `_serialise`
+            # already returns a string for every value including dates and
+            # booleans, and the load path reads `answers` back verbatim without
+            # `_deserialise`. Storing a real JSON boolean here would round-trip
+            # `child.existing_account` as Python True where the rest of this
+            # module expects the string "true".
             await db.execute(
                 sql(
                     """
                     UPDATE applications
-                       SET answers = answers || jsonb_build_object(:slot, to_jsonb(:value)),
+                       SET answers = answers || jsonb_build_object(
+                               CAST(:slot AS text), to_jsonb(CAST(:value AS text))
+                           ),
                            updated_at = now()
                      WHERE id = CAST(:id AS uuid)
                     """
