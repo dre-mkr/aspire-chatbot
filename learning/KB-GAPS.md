@@ -2110,3 +2110,67 @@ Domain `budgeting` · bands 9-12–adult · status `draft` · built from 3 row(s
 - Digital security advice about saved card details was left out; the source only supports removing saved card details so buying takes effort.
 - Any investment, interest, dividend, or wealth-building content was left out because the concept and source rows are about managing spending.
 - Moral statements about being disciplined, responsible, or a good person with money were left out because the source rows frame the issue as control and decision-making, not character.
+
+---
+
+## Domains with no concepts at all
+
+Added after a live turn exposed the cost. Pass C of the seeder generates the
+teaching bodies, and it exhausted the OpenAI account's credits partway through.
+The taxonomy from Pass A proposed 114 concepts; 72 reached the database. The 42
+that did not are not spread evenly — three domains were lost entirely.
+
+| Domain | Proposed | Seeded | Lost |
+|---|---:|---:|---:|
+| aspire_programme | 43 | 41 | 2 |
+| budgeting | 24 | 13 | 11 |
+| saving | 16 | 12 | 4 |
+| investing | 9 | 4 | 5 |
+| earning | 7 | 2 | 5 |
+| **credit** | 6 | **0** | 6 |
+| **goals** | 5 | **0** | 5 |
+| **scams** | 4 | **0** | 4 |
+| **Total** | **114** | **72** | **42** |
+
+### Why `scams` is the one to fix first
+
+The four missing concepts are `scam_red_flags`, `phishing_personal_info`,
+`investment_fraud_ponzi` and `scam_response_reporting`. The knowledge base has 14
+rows mentioning scams, so the source material is there and only the teaching
+bodies are missing.
+
+This surfaced because a real user asked *"someone messaged me saying i won
+money"* — a textbook prize scam, and one of the most valuable teaching moments a
+youth financial-literacy product can get. The tutor had nothing to resolve it
+to, so it fell through to RAG-teach at best.
+
+A programme that hands young people a savings account and cannot teach them to
+recognise a scam has a gap in the place it can least afford one.
+
+### Recovering it
+
+```bash
+python scripts/seed_concepts.py --from c
+```
+
+Be aware of what that costs, because there is no cheaper option today. `--from c`
+reads the Pass B checkpoint and re-runs Pass C **in full** — all 114 concepts,
+not the 42 that are missing. Pass C checkpoints only on completion (its file
+currently holds the 69 it managed before the credits ran out) and has no
+within-pass resume, so the 69 already generated are paid for twice.
+
+Two ways to make that cheaper, neither implemented:
+
+- a `--domains` filter, so the three lost domains can be generated alone. This is
+  the obvious one and it is perhaps twenty lines: Pass C already iterates the
+  taxonomy, and the taxonomy carries `domain` on every entry.
+- incremental checkpointing inside Pass C, writing each concept as it lands.
+  Better in general and more work.
+
+An earlier draft of this section documented `--domains` as though it existed. It
+does not — the flags are `--dry-run`, `--from`, `--force`, `--limit`,
+`--no-write`, `--no-retry`, `--no-embed`, `--strong-model`, `--cheap-model`.
+Check `--help` before budgeting a run.
+
+`credit` and `goals` matter too and are less urgent: no one is defrauded by not
+knowing what a goal is.
