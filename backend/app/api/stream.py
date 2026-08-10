@@ -162,6 +162,16 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         )
 
     try:
+        # Deliberately NOT `subgraphs=True`. The custom channel carries only
+        # what the main graph's nodes write, which is why a subgraph's directive
+        # never reached the transport -- but turning the flag on made every
+        # answer arrive twice (measured in the browser: the whole reply, printed
+        # again with no separator), because a node's streamed deltas and the
+        # finished message it returns both surface once the boundary is opened.
+        #
+        # A subgraph reaches the client through STATE instead: `ui_directives`
+        # is merged into the main graph's state and published by `persist`, and
+        # that is the path the cards already use. See `learn/tutor._state_after`.
         async for chunk in graph.astream(
             graph_input,
             config=config,

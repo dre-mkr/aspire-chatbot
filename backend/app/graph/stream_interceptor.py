@@ -135,10 +135,21 @@ class StreamInterceptor:
     # ── the entry point ─────────────────────────────────────────────────────
 
     async def process(self, chunk: Any) -> list[WireEvent]:
-        """One graph chunk in, zero or more wire events out."""
-        if not isinstance(chunk, tuple) or len(chunk) != 2:
+        """One graph chunk in, zero or more wire events out.
+
+        `(mode, payload)` from `astream`. The three-element form that
+        `subgraphs=True` produces is accepted too, so that turning the flag on
+        cannot silently drop every event -- but the transport does not use it;
+        see the note in `api/stream.py` for what it cost.
+        """
+        if not isinstance(chunk, tuple):
             return []
-        mode, payload = chunk
+        if len(chunk) == 3:
+            _namespace, mode, payload = chunk
+        elif len(chunk) == 2:
+            mode, payload = chunk
+        else:
+            return []
 
         if mode == "messages":
             return await self._on_message(payload)

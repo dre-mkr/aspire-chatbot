@@ -139,7 +139,18 @@ class Settings(BaseSettings):
     #: Picks one widget primitive from a short list, or none.
     learn_widget_plan_model: str = "openai:gpt-4o"
     #: Composes the chosen primitive's JSON.
-    learn_widget_compose_model: str = ""
+    #:
+    #: gpt-4o, the planner's tier, rather than the empty default that meant
+    #: `chat_model`. Measured against the running service: composing on
+    #: gpt-5.6-luna took ~5.4s against the 3.5s post-prose budget below, so the
+    #: widget lost that race on essentially every lesson turn and the feature
+    #: never reached a reader -- `widget_gate_failed=timeout`, silently.
+    #:
+    #: Composing a widget is filling in a fixed JSON shape from a concept that
+    #: has already been chosen. It is mechanical, it is what this file's own
+    #: tiering calls "harder than planning and easier than teaching", and the
+    #: nine gates in `widgets/validate.py` judge the result either way.
+    learn_widget_compose_model: str = "openai:gpt-4o"
     #: Judges a free-text check answer against an accept list.
     learn_evaluate_model: str = "openai:gpt-4o"
 

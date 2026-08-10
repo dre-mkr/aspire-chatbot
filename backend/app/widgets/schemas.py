@@ -162,7 +162,20 @@ class _BaseWidget(_WidgetModel):
 
     v: int = Field(default=1, ge=1, le=1)
     #: Which curriculum concept this teaches.
+    #:
+    #: Lower-cased before the pattern is applied. The concept store seeds ids as
+    #: `CON-0019` and this pattern demands a lowercase leading letter, so a
+    #: composer that copied the id it was given failed the schema while one that
+    #: lowercased it used to fail the band gate -- there was no spelling that
+    #: passed both, and the feature was dropped on every lesson turn as a result.
+    #: Case is not meaningful in an identifier; the case-insensitive lookup in
+    #: `safety.vocab.is_allowed_concept` is the other half of this.
     concept_id: str = Field(pattern=r"^[a-z][a-z0-9_.\-]{0,63}$")
+
+    @field_validator("concept_id", mode="before")
+    @classmethod
+    def _fold_case(cls, value: Any) -> Any:
+        return value.strip().lower() if isinstance(value, str) else value
     title: SafeText
     caption: SafeBody = ""
     #: The same lesson, in words, for a screen reader. See above.

@@ -136,9 +136,19 @@ def is_allowed_concept(concept: str, band: str) -> bool:
     except Exception:  # pragma: no cover - import cycles during partial startup
         return False
 
-    slug = concept.strip().lower()
+    # Both compared case-insensitively. An id is an identifier, not copy, and
+    # the two sides of this comparison are written by different authors: the
+    # store carries `CON-0019` from the seed, while the widget composer emits
+    # whatever case the model wrote. Measured: a composed compound-interest
+    # widget was dropped as "not on the 13-15 ladder" because it said
+    # `con-0019` -- the gate's failure silently deletes the feature, so a case
+    # mismatch must not be able to cause it.
+    #
+    # This does NOT widen the gate. The concept must still exist in the store
+    # and still return `teachable_at(band)`.
+    wanted = concept.strip().lower()
     for candidate in store.all():
-        if candidate.slug == slug or candidate.id == concept:
+        if candidate.slug.lower() == wanted or candidate.id.lower() == wanted:
             return candidate.teachable_at(band)
     return False
 
