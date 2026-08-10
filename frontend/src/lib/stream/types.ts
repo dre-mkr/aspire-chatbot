@@ -110,7 +110,17 @@ export interface ProgressDirective {
 
 export interface CitationsDirective {
 	t: "citations";
-	refs: Array<{ kb_id: string; title: string }>;
+	/**
+	 * `question` and `snippet` are what make this panel readable. The inline
+	 * `[ASP-xxx]` marker is stripped from the prose server-side, so this is the
+	 * only provenance a reader ever gets — a bare title is not provenance.
+	 */
+	refs: Array<{
+		kb_id: string;
+		title: string;
+		question?: string;
+		snippet?: string;
+	}>;
 }
 
 export interface EscalatedDirective {

@@ -195,12 +195,17 @@ def _publish_turn(state: AspireState) -> None:
             directive if isinstance(directive, dict) else directive_payload(directive)
         )
 
+    # Every field the panel renders, not just the id and the title. This is the
+    # only crossing citations make from state to the wire, so a field missing
+    # here is a field the reader can never be shown however well it was filled.
     citations = []
     for citation in state.get("citations") or []:
         citations.append(
             {
                 "kb_id": getattr(citation, "kb_id", ""),
                 "title": getattr(citation, "title", ""),
+                "question": getattr(citation, "question", ""),
+                "snippet": getattr(citation, "snippet", ""),
             }
         )
 

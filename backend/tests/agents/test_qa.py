@@ -543,12 +543,108 @@ class TestFollowUpChips:
 
         assert chips == ["Who can join?"]
 
-    def test_at_most_two(self):
+    def test_never_more_than_the_cap(self):
+        """Asserted against the constant, so raising it is one edit and not two."""
         chunks = self._chunks("A?", "B?", "C?", "D?", "E?")
-        assert len(nodes.follow_up_chips(state_for("q"), chunks, set())) == 2
+        chips = nodes.follow_up_chips(state_for("q"), chunks, set())
+        assert len(chips) == nodes.FOLLOW_UP_CHIPS
 
     def test_no_retrieval_means_no_chips(self):
         assert nodes.follow_up_chips(state_for("q"), [], set()) == []
+
+    def test_the_snippet_drops_the_column_scaffolding(self):
+        """A reader must never be shown `id:` and `subcategory:`.
+
+        `ingest.row_to_document` stores a row as labelled column lines, and the
+        sources panel is reader-facing copy, not a database dump.
+        """
+        row = (
+            "Category: Eligibility\n"
+            "Question: What is the maximum age to join ASPIRE?\n"
+            "Answer: ASPIRE is for young people up to age 18.\n"
+            "id: ASP-030\n"
+            "subcategory: Age maximum"
+        )
+        assert nodes.snippet_of(row) == "ASPIRE is for young people up to age 18."
+
+    def test_a_row_with_no_answer_column_keeps_its_text(self):
+        """The other schema `ingest` supports must still show something."""
+        assert nodes.snippet_of("Just some prose about saving.") == (
+            "Just some prose about saving."
+        )
+
+    def test_a_fully_cited_answer_still_offers_chips(self):
+        """The failure this pool exists for, measured against the live service.
+
+        `qa_rerank_k` is 4, so a good answer is handed four extracts and cites
+        all four -- and every candidate is then excluded as already-cited. The
+        turn produced NO quick_replies directive at all. The reranker's dropped
+        hits are the fallback, and they are the right one: real corpus
+        questions, ranked by the same retrieval, that the answer did not use.
+        """
+        cited = self._chunks("What is ASPIRE?", "Who can join?")
+        related = [
+            KBChunk(
+                kb_id="ASP-090",
+                content="x",
+                title="What documents are needed?",
+                metadata={"question": "What documents are needed?"},
+            )
+        ]
+        chips = nodes.follow_up_chips(
+            state_for("tell me about aspire", qa_related=related),
+            cited,
+            {"ASP-001", "ASP-002"},
+        )
+
+        assert chips == ["What documents are needed?"]
+
+    def test_a_chip_restating_a_cited_row_is_not_offered(self):
+        """Two rows, one question. Excluding by id alone is not enough.
+
+        Measured: an eligibility answer that cited the maximum-age row offered
+        "What is the maximum age cap for ASPIRE participation?" straight back,
+        because it is a different row asking the same thing.
+        """
+        chunks = self._chunks("What is the maximum age to join ASPIRE?")
+        related = [
+            KBChunk(
+                kb_id="ASP-091",
+                content="x",
+                title="What is the maximum age cap for ASPIRE participation?",
+                metadata={
+                    "question": "What is the maximum age cap for ASPIRE participation?"
+                },
+            ),
+            KBChunk(
+                kb_id="ASP-092",
+                content="x",
+                title="How do I apply?",
+                metadata={"question": "How do I apply?"},
+            ),
+        ]
+        chips = nodes.follow_up_chips(
+            state_for("how old can you be", qa_related=related), chunks, {"ASP-001"}
+        )
+
+        assert chips == ["How do I apply?"]
+
+    def test_a_question_asked_earlier_in_the_thread_is_not_offered(self):
+        """Deduping against the last turn alone is not enough.
+
+        A chip offering something answered six turns ago reads as the assistant
+        not having listened, and the reader cannot know it would only repeat.
+        """
+        state = state_for("What documents are needed?")
+        state["messages"] = [
+            HumanMessage(content="Who can join ASPIRE?"),
+            AIMessage(content="Children aged 5 to 18."),
+            HumanMessage(content="What documents are needed?"),
+        ]
+        chunks = self._chunks("Who can join ASPIRE?", "How do I apply?")
+        chips = nodes.follow_up_chips(state, chunks, set())
+
+        assert chips == ["How do I apply?"]
 
     def test_a_longer_restatement_of_the_question_is_not_offered(self):
         """Different row, same question."""

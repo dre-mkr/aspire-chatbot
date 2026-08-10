@@ -227,21 +227,27 @@ def make_rerank(score=None):
         top = get_settings().qa_rerank_k
 
         if score is None:
-            return {"retrieved": chunks[:top]}
+            return {"retrieved": chunks[:top], "qa_related": chunks[top:]}
 
         query = state.get("qa_query") or _latest_user_text(state)
         try:
             scores = await score(query, chunks)
         except Exception:
             logger.warning("Reranking failed; keeping the fused order.", exc_info=True)
-            return {"retrieved": chunks[:top]}
+            return {"retrieved": chunks[:top], "qa_related": chunks[top:]}
 
         paired = sorted(zip(chunks, scores), key=lambda pair: -pair[1])
         return {
             "retrieved": [
                 chunk.model_copy(update={"score": float(value)})
                 for chunk, value in paired[:top]
-            ]
+            ],
+            # What the cut dropped, still in rank order. These are the corpus
+            # questions nearest to the one asked that the answer did NOT use,
+            # which is exactly what a follow-up chip should offer -- and without
+            # keeping them a good answer has no chips at all, because it cites
+            # every chunk it was given and `qa_rerank_k` is 4.
+            "qa_related": [chunk for chunk, _ in paired[top:]],
         }
 
     return rerank
@@ -514,8 +520,17 @@ def make_ground_check(threshold: float | None = None):
                 f"The answer cited {sorted(invented)}, which was not retrieved.",
             )
 
+        # The marker the model wrote inline is stripped before the prose reaches
+        # the reader (`stream_interceptor.strip_citation_markers`), so this panel
+        # is the ONLY provenance anybody sees. A bare title is not provenance --
+        # it carries the row's own question and the text that backs the claim.
         citations = [
-            Citation(kb_id=chunk.kb_id, title=chunk.title)
+            Citation(
+                kb_id=chunk.kb_id,
+                title=chunk.title,
+                question=str(chunk.metadata.get("question") or "").strip(),
+                snippet=snippet_of(chunk.content),
+            )
             for chunk in chunks
             if chunk.kb_id in grounded_citations
         ]
@@ -539,22 +554,100 @@ def make_ground_check(threshold: float | None = None):
     return ground_check
 
 
-#: How many chips go under an answer.
-FOLLOW_UP_CHIPS = 2
+#: How much of a cited row the sources panel shows.
+SNIPPET_MAX_CHARS = 240
 
-#: `QuickReplyOption.label`'s cap.
-CHIP_MAX_CHARS = 60
+#: The `Answer:` line `ingest.row_to_document` writes, and any other column line.
+_ANSWER_LINE = re.compile(r"^\s*answer\s*:\s*", re.IGNORECASE)
+_FIELD_LINE = re.compile(r"^\s*[A-Za-z][A-Za-z0-9_ ]{0,30}\s*:\s")
+
+
+def answer_text(content: str) -> str:
+    """A row's answer, without the column scaffolding around it.
+
+    `ingest.row_to_document` stores a row as `Category: …`, `Question: …`,
+    `Answer: …` and then every leftover column. Rendering that verbatim shows a
+    reader `id:` and `subcategory:`, which is worse than showing nothing -- so
+    the panel gets the answer and only the answer.
+
+    Falls back to the whole text for a row that is not QA-shaped, which is the
+    other schema `ingest` supports.
+    """
+    lines = (content or "").splitlines()
+    for index, line in enumerate(lines):
+        if not _ANSWER_LINE.match(line):
+            continue
+        body = [_ANSWER_LINE.sub("", line).strip()]
+        for following in lines[index + 1 :]:
+            if _FIELD_LINE.match(following):
+                break
+            body.append(following.strip())
+        text = " ".join(part for part in body if part).strip()
+        if text:
+            return text
+    return " ".join((content or "").split())
+
+
+def snippet_of(content: str) -> str:
+    """The cited row's answer, cut at a word boundary.
+
+    Corpus text, so there is nothing to redact -- but a reader sees it, so it
+    ends on a whole word rather than mid-syllable.
+    """
+    text = " ".join(answer_text(content).split())
+    if len(text) <= SNIPPET_MAX_CHARS:
+        return text
+    cut = text[:SNIPPET_MAX_CHARS]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > SNIPPET_MAX_CHARS // 2 else cut).rstrip(" ,;:-") + "…"
+
+
+#: How many chips go under an answer. Three: enough to offer a direction,
+#: few enough to read at a glance rather than as a menu.
+FOLLOW_UP_CHIPS = 3
+
+#: A chip's character cap, set from the corpus rather than guessed.
+#:
+#: Measured over the 706 authored questions: median 42, p90 63, longest 102.
+#: At 60 this dropped 98 of them (14%) -- including entirely readable ones like
+#: "Are children living in Nevis eligible for the ASPIRE programme?" (63). At 72
+#: it keeps 96% and still fits the chip grid's column.
+CHIP_MAX_CHARS = 72
 
 
 def follow_up_chips(
     state: AspireState, chunks: list[KBChunk], cited: set[str]
 ) -> list[str]:
-    """Two more questions the knowledge base can actually answer."""
-    asked = _words(_last_question(state))
+    """More questions the knowledge base can actually answer.
+
+    ## Candidates come from two pools, and the second one is why this works
+
+    The reranked chunks first, then `qa_related` -- the fused hits the reranker
+    dropped. Measured against the running service: a good answer produced ZERO
+    chips, because `qa_rerank_k` is 4, the model was handed 4 extracts, and it
+    cited all four. Drawing only from uncited top-4 rows means the chips vanish
+    exactly when the answer is at its best.
+
+    Rows 5-12 of the fusion are the corpus questions nearest to the one asked
+    that the answer did not use -- real questions, with real answers behind
+    them, chosen by the retriever rather than invented by a second model call.
+    """
+    asked = _asked_questions(state)
+    # What the ANSWER already covered, by question rather than by id. Two rows
+    # can ask one question -- ASP-029 "What is the minimum age to join ASPIRE?"
+    # and ASP-241 "What is the minimum age requirement for ASPIRE enrolment?" --
+    # so excluding cited ids alone still offered the reader a fact they had just
+    # been given. Measured: an eligibility answer that stated both the minimum
+    # and the maximum age offered both of them back as chips.
+    covered = [
+        _words(str(chunk.metadata.get("question") or chunk.title or ""))
+        for chunk in chunks
+        if chunk.kb_id in cited
+    ]
     seen: list[set[str]] = []
     chips: list[str] = []
 
-    for chunk in chunks:
+    for chunk in [*chunks, *(state.get("qa_related") or [])]:
         if chunk.kb_id in cited:
             continue
         question = str(chunk.metadata.get("question") or chunk.title or "").strip()
@@ -564,8 +657,10 @@ def follow_up_chips(
         words = _words(question)
         if not words:
             continue
-        # Near-duplicates, not just exact ones.
-        if _restates(words, asked) or any(_restates(words, other) for other in seen):
+        # Near-duplicates, not just exact ones -- against everything asked in
+        # this thread, everything the answer covered, and everything already
+        # offered on this turn.
+        if any(_restates(words, other) for other in (*asked, *covered, *seen)):
             continue
 
         seen.append(words)
@@ -611,12 +706,24 @@ def _restates(candidate: set[str], other: set[str]) -> bool:
     return shared / min(len(candidate), len(other)) >= _RESTATEMENT
 
 
-def _last_question(state: AspireState) -> str:
-    for message in reversed(state.get("messages") or []):
-        if getattr(message, "type", None) == "human":
-            content = getattr(message, "content", "")
-            return content if isinstance(content, str) else ""
-    return ""
+def _asked_questions(state: AspireState) -> list[set[str]]:
+    """Every question the reader has asked in this thread, as word sets.
+
+    The WHOLE thread, not just the last turn. A chip offering something that was
+    asked and answered six turns ago reads as the assistant not having listened,
+    and the reader has no way to know it would only repeat itself.
+    """
+    asked: list[set[str]] = []
+    for message in state.get("messages") or []:
+        if getattr(message, "type", None) != "human":
+            continue
+        content = getattr(message, "content", "")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        words = _words(content)
+        if words:
+            asked.append(words)
+    return asked
 
 
 # ── small talk ─────────────────────────────────────────────────────────────── "Ungrounded means escalate, not…

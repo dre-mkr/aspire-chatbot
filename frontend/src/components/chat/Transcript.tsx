@@ -533,11 +533,25 @@ function Sources({ sources }: { sources: Array<Source> }) {
 			<ul className="sources__list">
 				{sources.map((source, index) => {
 					const label = source.metadata?.question ?? source.metadata?.category;
+					const reference = source.metadata?.kb_id;
+					// The snippet only earns its space when it says something the
+					// label does not; on a short row the two can be the same text.
+					const snippet =
+						source.content && source.content !== String(label ?? "")
+							? source.content
+							: null;
 					return (
 						// biome-ignore lint/suspicious/noArrayIndexKey: snippets can repeat text; position is their identity
 						<li key={index} className="source">
-							{label ? <p className="source__label">{String(label)}</p> : null}
-							<p className="source__text">{source.content}</p>
+							<p className="source__head">
+								{reference ? (
+									<span className="source__ref">{String(reference)}</span>
+								) : null}
+								{label ? (
+									<span className="source__label">{String(label)}</span>
+								) : null}
+							</p>
+							{snippet ? <p className="source__text">{snippet}</p> : null}
 						</li>
 					);
 				})}

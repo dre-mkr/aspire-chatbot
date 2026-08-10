@@ -146,6 +146,11 @@ class CitationRef(BaseModel):
 
     kb_id: str
     title: str = ""
+    #: The question the row answers, and the text that backs the claim. Both are
+    #: corpus copy: the reader never sees the inline marker, so the panel has to
+    #: stand on its own.
+    question: str = ""
+    snippet: str = ""
 
 
 class CitationsDirective(_Directive):

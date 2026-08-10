@@ -125,8 +125,14 @@ export async function streamAspire(
 				case "citations":
 					for (const ref of (directive as CitationsDirective).refs) {
 						sources.push({
-							content: ref.title || ref.kb_id,
-							metadata: { kb_id: ref.kb_id, title: ref.title },
+							// The row's own text, so the panel shows evidence rather
+							// than restating the title it is already labelled with.
+							content: ref.snippet || ref.title || ref.kb_id,
+							metadata: {
+								kb_id: ref.kb_id,
+								title: ref.title,
+								question: ref.question || ref.title,
+							},
 						});
 					}
 					return;

@@ -65,6 +65,7 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         update["safety_flags"] = {}
         update["halt_reason"] = None
         update["retrieved"] = []
+        update["qa_related"] = []
         update["groundedness"] = 0.0
         # RESET rather than `[]`: both of these accumulate, so an empty list would append nothing and last turn's chips…
         update["ui_directives"] = RESET

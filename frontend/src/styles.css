@@ -2207,13 +2207,39 @@ body {
 	border-top: 1px solid var(--hairline);
 }
 
-/* `.answer p` is more specific than a lone class, so both of these carry the parent to win the cascade rather t… */
+/* `.answer p` is more specific than a lone class, so these carry the parent to win the cascade rather than !important. */
+.answer .source__head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 6px;
+}
+
+/* The row id, as the reader would quote it on the phone. Monospace and boxed
+   because it is a reference, not prose — the inline marker is stripped from the
+   answer, so this is the only place the id is ever visible. */
+.source__ref {
+	flex-shrink: 0;
+	padding: 2px 7px;
+	border: 1px solid var(--wash-18);
+	border-radius: 6px;
+	background: var(--wash-6);
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	color: var(--plum);
+	/* Selectable: copying the reference is the point of showing it. */
+	user-select: all;
+}
+
 .answer .source__label {
-	margin: 0 0 5px;
+	margin: 0;
 	font-size: 0.78125rem;
 	font-weight: 600;
 	line-height: 1.45;
-	color: var(--plum);
+	color: var(--plum-deep);
+	text-wrap: pretty;
 }
 
 .answer .source__text {
@@ -2223,6 +2249,7 @@ body {
 	color: var(--slate);
 	/* Snippets are extracts and can be long; the label is what you scan. */
 	white-space: pre-line;
+	text-wrap: pretty;
 }
 
 /* ── Failed turn ────────────────────────────────────────────────────────── */

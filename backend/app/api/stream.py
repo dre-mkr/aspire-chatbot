@@ -340,6 +340,8 @@ def _closing_directives(turn: dict[str, Any]) -> list[dict[str, Any]]:
                         CitationRef(
                             kb_id=citation.get("kb_id", ""),
                             title=citation.get("title", ""),
+                            question=citation.get("question", ""),
+                            snippet=citation.get("snippet", ""),
                         )
                         for citation in citations[:8]
                     ]

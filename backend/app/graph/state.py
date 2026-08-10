@@ -55,6 +55,12 @@ class Citation(BaseModel):
 
     kb_id: str
     title: str = ""
+    #: The question this row was authored to answer.
+    question: str = ""
+    #: The opening of the row's text. The inline `[ASP-xxx]` marker is stripped
+    #: before the prose reaches the reader, so this panel is the only provenance
+    #: there is -- and a bare title is not provenance.
+    snippet: str = ""
     #: The sentence or clause in the answer this reference supports, when the grounding check could attribute one.
     supports: str = ""
 
@@ -122,6 +128,10 @@ class AspireState(TypedDict, total=False):
 
     # ── retrieval ───────────────────────────────────────────────────────────
     retrieved: list[KBChunk]
+    #: Fused hits the reranker dropped, still ranked. Not shown to the model --
+    #: they are where follow-up chips come from, because a good answer cites
+    #: every chunk it was given and would otherwise offer nothing to tap.
+    qa_related: list[KBChunk]
     citations: Annotated[list[Citation], merge_citations]
     #: 0.0-1.0.
     groundedness: float

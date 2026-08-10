@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	CheckIcon,
 	ExitIcon,
@@ -88,7 +88,6 @@ export function WordScramble({
 	const copy = COPY;
 
 	const [tray, setTray] = useState<Array<string>>([]);
-	const [used, setUsed] = useState<Array<boolean>>([]);
 	const [slots, setSlots] = useState<Array<Placed | null>>([]);
 	const [wrong, setWrong] = useState<string | null>(null);
 	const [shake, setShake] = useState(0);
@@ -105,10 +104,26 @@ export function WordScramble({
 	useEffect(() => {
 		const letters = state.prompt.text.split("");
 		setTray(letters);
-		setUsed(letters.map(() => false));
 		setSlots(letters.map(() => null));
 		setWrong(null);
 	}, [wordKey]);
+
+	/**
+	 * Which tray tiles are spent — DERIVED, never stored.
+	 *
+	 * It was a second `useState` kept in step with `slots` by hand, and the two
+	 * desynchronised: every placement read `slots` from a stale closure, so
+	 * clicks landing in one render batch all targeted the first empty slot while
+	 * each still marked its own tile used. The result was a card with four
+	 * letters consumed, no letters placed, and no way to finish the word.
+	 *
+	 * A tile is used exactly when a slot holds it. Deriving that makes the two
+	 * incapable of disagreeing, rather than merely unlikely to.
+	 */
+	const used = useMemo(
+		() => tray.map((_, index) => slots.some((slot) => slot?.from === index)),
+		[tray, slots],
+	);
 
 	const filled = slots.filter(Boolean).length;
 	const complete = summary !== null && resolved === null;
@@ -116,31 +131,35 @@ export function WordScramble({
 
 	const place = useCallback(
 		(index: number) => {
-			if (used[index] || resolved) return;
-			const target = slots.indexOf(null);
-			if (target < 0) return;
-			setUsed((current) => current.map((u, i) => (i === index ? true : u)));
-			setSlots((current) =>
-				current.map((s, i) =>
-					i === target ? { ch: tray[index], from: index } : s,
-				),
-			);
+			if (resolved) return;
+			// Both the guard and the target slot are decided against the CURRENT
+			// slots inside the updater, not against a closure. Two placements in
+			// one render batch would otherwise both aim at the first empty slot,
+			// and the second would overwrite the first.
+			setSlots((current) => {
+				if (current.some((slot) => slot?.from === index)) return current;
+				const target = current.indexOf(null);
+				if (target < 0) return current;
+				return current.map((slot, i) =>
+					i === target ? { ch: tray[index], from: index } : slot,
+				);
+			});
 			setWrong(null);
 		},
-		[resolved, slots, tray, used],
+		[resolved, tray],
 	);
 
 	const unplace = useCallback(
 		(index: number) => {
-			const placed = slots[index];
-			if (!placed || resolved) return;
-			setUsed((current) =>
-				current.map((u, i) => (i === placed.from ? false : u)),
+			if (resolved) return;
+			setSlots((current) =>
+				current[index] === null
+					? current
+					: current.map((slot, i) => (i === index ? null : slot)),
 			);
-			setSlots((current) => current.map((s, i) => (i === index ? null : s)));
 			setWrong(null);
 		},
-		[resolved, slots],
+		[resolved],
 	);
 
 	const shuffle = useCallback(() => {
@@ -151,14 +170,14 @@ export function WordScramble({
 		}
 		const remap = new Map(order.map((old, next) => [old, next]));
 		setTray(order.map((i) => tray[i]));
-		setUsed(order.map((i) => used[i]));
-		// Slots keep their letters; only the tray index each came from moves.
+		// Slots keep their letters; only the tray index each came from moves --
+		// and `used` follows from that, so there is nothing else to re-map.
 		setSlots((current) =>
 			current.map((s) =>
 				s ? { ch: s.ch, from: remap.get(s.from) ?? s.from } : null,
 			),
 		);
-	}, [tray, used]);
+	}, [tray]);
 
 	/** Records a finished word and, if the set is done, the closing summary. */
 	const settle = useCallback(
