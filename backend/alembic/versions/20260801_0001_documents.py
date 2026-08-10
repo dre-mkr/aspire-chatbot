@@ -1,14 +1,4 @@
-"""pgvector extension and the documents table
-
-Revision ID: 0001_documents
-Revises:
-Create Date: 2026-08-01
-
-The retrieval corpus. Filter columns are real columns rather than JSONB keys
-because each one belongs in the WHERE clause of every search, and an index on a
-real column is what lets Postgres shrink the candidate set before the similarity
-math runs.
-"""
+"""pgvector extension and the documents table Revision ID: 0001_documents Revises: Create Date: 2026-08-01 The r…"""
 
 from __future__ import annotations
 
@@ -29,8 +19,7 @@ EMBEDDING_DIMENSIONS = 3072
 
 
 def upgrade() -> None:
-    # pgvector ships on every Neon plan but is installed PER DATABASE, so this
-    # runs in each one rather than once per project.
+    # pgvector ships on every Neon plan but is installed PER DATABASE, so this runs in each one rather than once pe…
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     op.create_table(
@@ -71,13 +60,11 @@ def upgrade() -> None:
         ),
     )
 
-    # Language is in the WHERE clause of every retrieval and is what the partial
-    # vector indexes partition on, so it earns a plain b-tree.
+    # Language is in the WHERE clause of every retrieval and is what the partial vector indexes partition on, so it…
     op.create_index("ix_documents_language", "documents", ["language"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_documents_language", table_name="documents")
     op.drop_table("documents")
-    # The extension is deliberately NOT dropped: another table in the same
-    # database may be using it, and dropping it would take their columns too.
+    # The extension is deliberately NOT dropped: another table in the same database may be using it, and dropping i…

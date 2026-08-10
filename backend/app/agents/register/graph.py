@@ -1,37 +1,4 @@
-"""The slot loop. The schema decides; the model phrases and extracts.
-
-    resume_or_start → next_missing_slot → ask → extract → validate
-                            ↑                                 │
-                            │                    ok ──────────┴──── invalid
-                            │                     │                   │
-                            │              persist_slot     reask_with_reason
-                            └──────────────────────┴───────────────────┘
-
-    no slots remain → review_card → attest → submit → confirm
-
-## Guardian completes before child, and the order is not the model's to change
-
-`schema.next_missing` walks a tuple. There is no branch in it that reorders the
-form because the conversation happened to cover something early, and there is no
-prompt instruction the model could follow to skip a field. A parent who
-volunteers the child's name during the guardian section has that recorded and is
-still asked for their own address next.
-
-## PII never reaches `messages` or `summary`
-
-Two mechanisms, and both are needed. `store.save_slot` writes sensitive values
-to `application_pii` encrypted rather than to the transcript; and this graph
-appends `[collected: date_of_birth]` to the conversation instead of the value.
-`test_register.py` dumps the rolling summary after a completed application and
-asserts it contains no DOB, no national ID and no address.
-
-## This agent is unreachable for a child
-
-Not by a check here -- by the access matrix. `stella` and `orion` under 16 never
-receive `register_agent`, so the classifier is never shown it and cannot route
-to it. Repeating the check inside the agent would be a second place for the rule
-to live and differ.
-"""
+"""The slot loop."""
 
 from __future__ import annotations
 
@@ -56,8 +23,7 @@ from app.graph.state import AspireState
 
 logger = logging.getLogger(__name__)
 
-#: The consent text version currently on screen. Bumped when the wording
-#: changes, and stored with every attestation -- see `store.attest_and_submit`.
+#: The consent text version currently on screen.
 CONSENT_VERSION = "2026-08-v1"
 
 CONSENT_TEXT: dict[str, str] = {
@@ -81,20 +47,10 @@ def _locale(state: AspireState) -> str:
 
 
 def _draft(state: AspireState) -> store.Draft:
-    """The draft this turn is working on, from state or fresh.
-
-    Held in `AspireState.registration` as a plain dict so it survives
-    checkpointing as JSON, and rehydrated into a `Draft` here. A dataclass in
-    state would serialise fine and come back as a dict on the next turn, which
-    is the kind of asymmetry that produces an AttributeError three turns later.
-    """
+    """The draft this turn is working on, from state or fresh."""
     raw = state.get("registration")
     if isinstance(raw, dict) and raw.get("application_id"):
-        # A PRESENCE map, rebuilt from the path list the checkpoint carries. The
-        # walk asks "is this slot empty?" and nothing more, so a marker answers
-        # it. A node that needs a real answer -- `review` rendering the card,
-        # `submit` sending the application -- calls `load_real_values` and reads
-        # the database, where the values have always actually lived.
+        # A PRESENCE map, rebuilt from the path list the checkpoint carries.
         values: dict[str, Any] = {path: PRESENT for path in (raw.get("filled") or [])}
         if raw.get("awaiting"):
             values["__awaiting"] = raw["awaiting"]
@@ -112,17 +68,7 @@ def _draft(state: AspireState) -> store.Draft:
 
 
 async def load_real_values(draft: store.Draft) -> store.Draft:
-    """The same draft with its actual answers, read from the database.
-
-    For the two nodes that need values rather than presence: `review`, which
-    renders them (masked, via `display_value`), and `submit`, which sends them.
-    Everything else works off the presence map and never holds a real answer.
-
-    Falls back to the presence map when there is no database or no row -- the
-    turn then shows masked placeholders rather than raising, which is the honest
-    degradation: the application is still on file, this process just cannot read
-    it back.
-    """
+    """The same draft with its actual answers, read from the database."""
     if not draft.resume_token:
         return draft
     loaded = await store.load_draft(draft.resume_token)
@@ -134,48 +80,17 @@ async def load_real_values(draft: store.Draft) -> store.Draft:
         return draft
     loaded.child_index = draft.child_index
     loaded.children_complete = draft.children_complete
-    # Skips live in the checkpoint, not in the database -- declining to give an
-    # email writes no row anywhere, which is the whole point of declining. So a
-    # draft rebuilt from `applications` and `application_pii` has none of them,
-    # and carrying them across is what stops `review`'s correction loop asking
-    # again for the three fields the parent just said no to.
+    # Skips live in the checkpoint, not in the database -- declining to give an email writes no row anywhere, which…
     loaded.skipped = list(draft.skipped)
     return loaded
 
 
 #: Stands in for an answer in the checkpoint's presence map.
-#:
-#: The map records WHICH slots are answered, never what the answers are. The walk
-#: (`next_missing`) only asks whether a slot is empty, so a marker satisfies it
-#: exactly as well as the real value did -- and `display_value`, which needs the
-#: real thing, loads it from the database instead.
 PRESENT = "__present"
 
 
 def _persist_state(draft: store.Draft) -> dict[str, Any]:
-    """The pointers that go into the checkpoint. NEVER the answers.
-
-    ## FINDINGS.md F1, and this is the fix
-
-    This function used to return `"values": draft.values` -- the entire slot
-    dictionary, verbatim, into `AspireState.registration`, which
-    `AsyncPostgresSaver` serialises to the `checkpoint_blobs` table. A read-only
-    probe of the live store found the map key `guardian.full_name` sitting in
-    `registration`-channel blobs, and every other slot reached the same place by
-    construction: `guardian.national_id`, `guardian.date_of_birth`,
-    `child.0.date_of_birth`. Nothing purges that table -- `retention.py` has one
-    sweep and it does not touch checkpoints -- and `RegistrationState = Any`
-    meant no type constrained what landed there.
-
-    The values were never homeless. `store.save_slot` has always written
-    sensitive ones Fernet-encrypted to `application_pii` and the rest to
-    `applications.answers`, and `store.load_draft` reconstructs the whole draft
-    from those two tables. So the checkpoint copy was redundant as well as
-    dangerous, which is the happiest kind of thing to delete.
-
-    What survives is a presence map and five scalars. `filled` is a list of slot
-    PATHS -- "guardian.national_id" is a field name, not a national ID.
-    """
+    """The pointers that go into the checkpoint."""
     return {
         "application_id": draft.application_id,
         "resume_token": draft.resume_token,
@@ -185,14 +100,9 @@ def _persist_state(draft: store.Draft) -> dict[str, Any]:
         "children_complete": draft.children_complete,
         "status": draft.status,
         "pending_corrections": draft.pending_corrections,
-        # Optional slots the parent declined. Keys, like `filled` -- a field name
-        # is not an answer, so this carries no PII and belongs in the checkpoint
-        # for the same reason `filled` does: without it a resumed conversation
-        # re-asks for the email they just declined.
+        # Optional slots the parent declined.
         "skipped": list(draft.skipped),
-        # The slot currently being asked for. Read by `extract` on the next
-        # turn, because a turn does not otherwise know which question it is
-        # answering. A path, not an answer.
+        # The slot currently being asked for.
         "awaiting": draft.values.get("__awaiting"),
     }
 
@@ -222,8 +132,7 @@ def make_resume_or_start(loader=None):
             )
             logger.info("started application %s", draft.application_id)
         elif draft.in_correction_mode:
-            # F2's loop. ONLY the flagged slots are walked, and then it returns
-            # straight to review -- the parent does not refill the form.
+            # F2's loop.
             logger.info(
                 "application %s reopened for corrections: %s",
                 draft.application_id,
@@ -239,11 +148,6 @@ def make_resume_or_start(loader=None):
 
 
 #: What an anonymous caller is told when the walk runs out of slots it may ask.
-#:
-#: Not an error and not a refusal to help -- the application so far is kept, and
-#: signing in resumes it (`resume_or_start`). It is the point past which the
-#: remaining questions are a national ID and a date of birth, which is a
-#: grown-up's job to answer.
 _HANDOFF: dict[str, str] = {
     "en": (
         "That is everything I can take without a grown-up. The next questions "
@@ -271,23 +175,7 @@ def pick_slot(
     allow_sensitive: bool = True,
     handoff: Handoff | None = None,
 ) -> Slot | None:
-    """Which question comes next.
-
-    In correction mode the walk is the flagged list and nothing else -- that is
-    the whole point of F2, and it is why this branches here rather than
-    filtering inside `next_missing`.
-
-    ## `handoff.do_not_reask` is enforced here, and only here
-
-    Track C.3 requires that an agent be structurally unable to ask for a slot the
-    previous agent already established. This is the enforcement point, because
-    this is the only function that decides what gets asked -- a prompt instruction
-    would be a request that this loop never reads.
-
-    `filter_slots` is applied to the candidate list before a choice is made, in
-    both branches. A barred slot is therefore not a question the agent declines
-    to ask; it is a question that was never a candidate.
-    """
+    """Which question comes next."""
     if draft.in_correction_mode:
         candidates: list[Slot] = []
         for path in draft.pending_corrections:
@@ -301,15 +189,7 @@ def pick_slot(
         permitted = filter_slots(candidates, handoff)
         return permitted[0] if permitted else None
 
-    # The barred set goes INTO the walk rather than filtering its output. The
-    # first draft of this filtered afterwards and, to get past a withheld slot,
-    # wrote a sentinel into `draft.values` -- which `_persist_state` would have
-    # checkpointed and `submit` would have sent as a real answer. Skipping inside
-    # the walk needs no sentinel and cannot corrupt the draft.
-    # Two reasons a slot is not a candidate, and they merge here because the walk
-    # only needs to know that it is not one. A barred slot was answered to another
-    # agent; a skipped slot was declined by this parent. Neither should be asked,
-    # and neither writes anything into `draft.values`.
+    # The barred set goes INTO the walk rather than filtering its output.
     return next_missing(
         draft.values,
         child_index=draft.child_index,
@@ -319,15 +199,7 @@ def pick_slot(
 
 
 def make_ask(*, allow_sensitive: bool = True):
-    """Ask for the next slot, with its options as quick replies.
-
-    `allow_sensitive=False` builds the anonymous variant. Two things change and
-    the second is the one that matters: the walk skips PII slots, AND running
-    out of slots stops instead of advancing to `review`. Advancing would submit
-    an application whose identifying fields were never collected, which is worse
-    than the bug being fixed -- so the anonymous walk ends in a handoff and the
-    draft stays open for a guardian to resume.
-    """
+    """Ask for the next slot, with its options as quick replies."""
 
     def ask(state: AspireState) -> dict[str, Any]:
         draft = _draft(state)
@@ -360,21 +232,7 @@ def make_ask(*, allow_sensitive: bool = True):
 
 
 def make_collect(recorder=None):
-    """A document slot: pause the graph, take an id, store it, move on.
-
-    `interrupt()` suspends mid-node. The checkpoint holds everything, the client
-    renders `UploadCard`, and `Command(resume=...)` continues from the same line
-    with the document id.
-
-    The question and its answer stay in ONE stack frame, which is the reason for
-    an interrupt rather than a state flag and a second turn: a loop that emitted
-    "please upload" and ended the turn would have to re-derive which slot the
-    upload belonged to, from state the parent may have changed by typing
-    something else in between.
-
-    An upload that never arrives leaves the graph PAUSED rather than advanced,
-    which is the correct state -- the slot is not filled.
-    """
+    """A document slot: pause the graph, take an id, store it, move on."""
 
     async def collect(state: AspireState) -> dict[str, Any]:
         from langgraph.types import interrupt
@@ -394,17 +252,7 @@ def make_collect(recorder=None):
         draft.values["__awaiting"] = slot.path
         label = _document_label(draft, slot)
 
-        # Everything above runs AGAIN on resume -- `interrupt` replays the node
-        # from the top -- so nothing above it may have a side effect that must
-        # not happen twice. Nothing does: three reads and a dict write.
-        #
-        # `draft.application_id` goes to the card so the browser signs its upload
-        # into THIS application's prefix. `_record_document` below derives the
-        # stored key from the same id, and the two agreeing is the whole point:
-        # they did not, so every document ever uploaded was written under the
-        # caller's session id and recorded under an application id that had no
-        # object at it. `resume_or_start` has already awaited `open_application`,
-        # so the row the presign endpoint checks ownership against exists by now.
+        # Everything above runs AGAIN on resume -- `interrupt` replays the node from the top -- so nothing above it may…
         raw = interrupt(
             interrupt_payload(
                 slot, locale, label=label, application_id=draft.application_id
@@ -413,17 +261,14 @@ def make_collect(recorder=None):
         payload = _assert_no_bytes(raw if isinstance(raw, dict) else {})
 
         if payload.get("skipped") and slot.optional:
-            # No `save_slot`. Writing None persisted a row saying the document
-            # was answered-as-nothing, and left the walk still seeing an empty
-            # slot -- so the card came back on the next turn.
+            # No `save_slot`.
             _record_skip(draft, slot)
             draft.values.pop("__awaiting", None)
             return {"registration": {**_persist_state(draft), "phase": "next"}}
 
         ref = document_ref(payload)
         if ref is None:
-            # Resumed with nothing usable. The slot stays unfilled and the loop
-            # asks again: an upload that did not happen must not advance a form.
+            # Resumed with nothing usable.
             logger.info("document slot %s resumed with no id", slot.path)
             return {"registration": {**_persist_state(draft), "phase": "reask"}}
 
@@ -432,9 +277,7 @@ def make_collect(recorder=None):
             try:
                 await recorder(draft, slot.path, payload)
             except Exception:
-                # The document is in storage and the slot is filled. Losing the
-                # row is a reconciliation problem, not a reason to make a parent
-                # photograph a birth certificate twice.
+                # The document is in storage and the slot is filled.
                 logger.exception(
                     "Could not record document %s for %s", ref["document_id"], slot.path
                 )
@@ -464,12 +307,7 @@ def make_collect(recorder=None):
 
 
 def _document_label(draft: store.Draft, slot: Slot) -> str:
-    """"Rachel's birth certificate", not "child.birth_certificate".
-
-    A parent photographing documents for a second child in one sitting needs to
-    know which child this one is for, and the name is already collected by the
-    time any document slot is reached.
-    """
+    """"Rachel's birth certificate", not "child.birth_certificate"."""
     if not slot.path.startswith("child."):
         return slot.label
     name = draft.values.get(f"child.{draft.child_index}.full_name")
@@ -481,13 +319,7 @@ def _document_label(draft: store.Draft, slot: Slot) -> str:
 
 
 def _record_skip(draft: store.Draft, slot: Slot) -> None:
-    """Note that this parent declined an optional slot, once.
-
-    Keyed through `draft.key_for`, so declining a photo for the first child says
-    nothing about the second. Idempotent because a resumed turn can re-run the
-    node that recorded it -- `collect` in particular replays from the top after
-    an `interrupt`.
-    """
+    """Note that this parent declined an optional slot, once."""
     key = draft.key_for(slot.path)
     if key not in draft.skipped:
         draft.skipped.append(key)
@@ -495,12 +327,7 @@ def _record_skip(draft: store.Draft, slot: Slot) -> None:
 
 
 def _options_for(slot: Slot, locale: str) -> list[str]:
-    """Tap targets when the answer is one of a closed set.
-
-    Capped at four, because a parish list of fourteen is a scrolling menu rather
-    than a tap target. The full list is still accepted as typed text -- the
-    chips are a shortcut, not the only route.
-    """
+    """Tap targets when the answer is one of a closed set."""
     if not slot.options:
         return _skip_chip(slot, locale)
     return [option.title() for option in slot.options[:4]]
@@ -520,14 +347,7 @@ def _skip_chip(slot: Slot, locale: str) -> list[str]:
 
 
 def make_extract():
-    """Parse the answer with the SLOT's parser. No model call.
-
-    The model's job was to phrase the question. Turning "the fourteenth of March
-    twenty-fifteen" into a date is a parsing problem with a right answer, and a
-    model doing it produces 14/03/2015 most of the time and 03/14/2015 the rest
-    -- which is a different child's birthday and nothing downstream would
-    notice.
-    """
+    """Parse the answer with the SLOT's parser."""
 
     async def extract(state: AspireState) -> dict[str, Any]:
         draft = _draft(state)
@@ -542,9 +362,7 @@ def make_extract():
         locale = _locale(state)
 
         if slot.optional and answer.lower() in ("skip", "saltar", "passer", ""):
-            # Recorded as a skip, not written as a None. `next_missing` reads
-            # `None` as unfilled, so setting the value here would ask the same
-            # question on the next turn and every turn after it.
+            # Recorded as a skip, not written as a None.
             _record_skip(draft, slot)
             draft.values.pop("__awaiting", None)
             return {"registration": {**_persist_state(draft), "phase": "next"}}
@@ -567,9 +385,7 @@ def make_extract():
                 pending for pending in draft.pending_corrections if pending != key
             ]
 
-        # The transcript gets a MARKER, never the value. `[collected: ...]` is
-        # what the model needs to know the field is done, and is the only thing
-        # it needs.
+        # The transcript gets a MARKER, never the value.
         note = (
             f"[collected: {slot.path.rsplit('.', 1)[-1]}]"
             if slot.sensitive
@@ -586,12 +402,7 @@ def make_extract():
 
 
 def review_sections(draft: store.Draft) -> list[dict[str, Any]]:
-    """The whole application, grouped, with sensitive values MASKED.
-
-    Masked rather than omitted: a parent checking their own ID number needs to
-    recognise it, and `••••5678` does that without putting the number into a
-    transcript that is persisted and read back.
-    """
+    """The whole application, grouped, with sensitive values MASKED."""
     guardian_fields = []
     for slot in GUARDIAN_SLOTS:
         if slot.document:
@@ -643,10 +454,7 @@ def make_review():
     async def review(state: AspireState) -> dict[str, Any]:
         from app.schemas.directives import ReviewCardDirective, ReviewSection
 
-        # The one node that needs real answers rather than the presence map: it
-        # renders them. `display_value` masks the sensitive ones on the way out,
-        # so what reaches the transcript is still a mask -- but it has to be a
-        # mask OF something, and since F1 the checkpoint no longer carries it.
+        # The one node that needs real answers rather than the presence map: it renders them.
         draft = await load_real_values(_draft(state))
         locale = _locale(state)
 
@@ -672,13 +480,7 @@ def make_review():
 
 
 def make_submit():
-    """Attest and submit. Refuses without explicit consent.
-
-    The attestation arrives as a flag the review card sets, and it carries the
-    consent VERSION that was on screen. Submitting without it is refused here as
-    well as by the schema's check constraint -- one of those is the control and
-    the other is the guarantee.
-    """
+    """Attest and submit."""
 
     async def submit(state: AspireState) -> dict[str, Any]:
         draft = _draft(state)
@@ -753,15 +555,9 @@ def _after_extract(state: AspireState) -> str:
     raw = state.get("registration") or {}
     phase = raw.get("phase")
     if phase == "reask":
-        # The re-ask has already been said. The turn ends and the parent
-        # answers again -- there is no loop here that could ask twice in one
-        # turn.
+        # The re-ask has already been said.
         return END
-    # `route`, not `ask`. The next slot may be a document, which never reaches
-    # `ask` -- there is no question to type an answer to, so it goes straight to
-    # the node that pauses on `interrupt()`. Returning `ask` here jumped over
-    # that decision and raised `KeyError: 'ask'` from the edge resolver, because
-    # `ask` is not one of this edge's declared destinations.
+    # `route`, not `ask`.
     return "route"
 
 
@@ -771,11 +567,7 @@ def _after_ask(state: AspireState) -> str:
 
 
 def _needs_document(state: AspireState) -> str:
-    """Whether the next slot is a document, decided before anything is asked.
-
-    A document slot never reaches `ask`: there is no question to type an answer
-    to, so it goes straight to the node that pauses.
-    """
+    """Whether the next slot is a document, decided before anything is asked."""
     draft = _draft(state)
     slot = pick_slot(draft, handoff=handoff_from_state(state))
     if slot is None:
@@ -791,11 +583,7 @@ def _after_collect(state: AspireState) -> str:
 
 
 def _after_doc_check(state: AspireState) -> str:
-    """A retake request ends the turn; anything else continues the walk.
-
-    `doc_check` never rejects, so "continue" is the only other outcome -- a
-    flagged document is accepted and the flag goes to the admin queue.
-    """
+    """A retake request ends the turn; anything else continues the walk."""
     raw = state.get("registration") or {}
     document = raw.get("__last_document") or {}
     return END if document.get("retakes_requested") else "resume_or_start"
@@ -824,9 +612,7 @@ def build_register_graph(
         START, _entry, ["resume_or_start", "extract", "review", "submit"]
     )
     graph.add_edge("resume_or_start", "route")
-    # `route` exists so the document/typed split is a conditional edge with a
-    # name in the graph diagram. Deciding it inside `ask` would hide the fact
-    # that a document slot takes a completely different path.
+    # `route` exists so the document/typed split is a conditional edge with a name in the graph diagram.
     graph.add_conditional_edges("route", _needs_document, ["ask", "collect", "review"])
     graph.add_conditional_edges("ask", _after_ask, ["review", END])
     graph.add_conditional_edges(
@@ -837,11 +623,7 @@ def build_register_graph(
     graph.add_edge("review", END)
     graph.add_edge("submit", END)
 
-    # A checkpointer is REQUIRED for `interrupt()` to resume -- without one the
-    # paused state has nowhere to live, and `Command(resume=...)` restarts the
-    # turn from the beginning. Compiling without one is still legal and still
-    # useful (the typed-slot path needs no interrupt), which is why this is a
-    # parameter rather than an assertion.
+    # A checkpointer is REQUIRED for `interrupt()` to resume -- without one the paused state has nowhere to live, a…
     return graph.compile(checkpointer=checkpointer)
 
 
@@ -851,12 +633,7 @@ async def _passthrough(state: AspireState) -> dict[str, Any]:
 
 
 async def _no_doc_check(state: AspireState) -> dict[str, Any]:
-    """No vision model configured. Every document passes silently.
-
-    A supported configuration rather than a test-only one: it is exactly the
-    behaviour before `doc_check` existed, which is what makes turning the node
-    on a safe change.
-    """
+    """No vision model configured."""
     return {}
 
 
@@ -896,21 +673,7 @@ def build_production_register(*, allow_sensitive: bool = True):
 
 
 def register() -> None:
-    """Register both registration agent names, as two DIFFERENT graphs.
-
-    `register_agent_step1` is the anonymous variant. It is the same flow -- a
-    signed-out parent who signs in mid-application continues rather than
-    starting again -- but it may not ask for PII, and the difference has to be
-    built in here because there is nowhere else it can live.
-
-    It used to be built here as literally the same graph, both names bound to a
-    factory that took no arguments and so could not tell which name it was
-    serving. The docstring claimed "the access matrix is what stops it reaching
-    the slots that need an account"; the access matrix returns agent NAMES, has
-    no vocabulary for slots, and is never consulted again after routing. The
-    result was that an unauthenticated caller -- band `5-8` by default -- was
-    asked for their full name and then their national ID number.
-    """
+    """Register both registration agent names, as two DIFFERENT graphs."""
     from functools import partial
 
     from app.graph.main_graph import register_agent

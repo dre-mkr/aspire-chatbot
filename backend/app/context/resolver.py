@@ -1,39 +1,4 @@
-"""Building the SessionContext: one node, one round trip, one cache.
-
-Runs between `safety_in` and `cards`, which is before routing -- so the router
-and every agent after it read the same object, and nothing downstream needs to
-ask the database who this is.
-
-## One round trip, and why it is one
-
-The four reads this needs -- the user row, the mastery rows, the open
-application, the last ticket -- are four queries against one database in one
-session. They are issued together in a single `session()` block rather than by
-four nodes at four points in the turn, which is the shape the diagnosis found:
-`resume_or_place` fetched mastery (`learn/graph.py:112`), the registration
-subgraph walked the draft, and nothing shared either.
-
-## The cache is keyed on the session and is deliberately short
-
-`SESSION_TTL` is 90 seconds. Long enough that a reader typing three messages in
-a row pays for one resolve; short enough that a mastery row written by turn two
-is visible on turn four. It is NOT a correctness mechanism -- every field here is
-re-read on a miss -- so the failure mode of a stale entry is a slightly old
-mastery figure in a prompt, not a wrong answer.
-
-Two things are deliberately excluded from the cached payload and recomputed on
-every turn: `now`, because a cached clock is a wrong clock, and `recent_turns`,
-because those come from graph state rather than the database and change every
-turn by definition.
-
-## Identity is copied, not looked up
-
-`persona`, `age_band`, `account_status` and `locale` come off state, which
-`hydrate` filled from the signed token after discarding anything the body tried
-to set (`graph/nodes/hydrate.py:122`). This module never reads the body and never
-re-derives identity from the account -- if the token and the account disagree,
-the token is the authority and `account.derive` is where that is settled.
-"""
+"""Building the SessionContext: one node, one round trip, one cache."""
 
 from __future__ import annotations
 
@@ -60,11 +25,7 @@ _CACHE_PREFIX = "ctx:"
 
 
 def _recent_turns(state: AspireState) -> list[Turn]:
-    """The last few exchanges, verbatim, oldest first.
-
-    From `messages` rather than from the database: the graph's own message list
-    is the authority for what was said this session, and it is already in memory.
-    """
+    """The last few exchanges, verbatim, oldest first."""
     turns: list[Turn] = []
     for message in list(state.get("messages") or [])[-RECENT_TURNS:]:
         kind = getattr(message, "type", None)
@@ -84,12 +45,7 @@ def _recent_turns(state: AspireState) -> list[Turn]:
 
 
 def _normalise_mastery(rows: list[Any]) -> dict[str, float]:
-    """The integer mastery scale as 0.0-1.0.
-
-    Normalised here so that no reader of `SessionContext` needs to know the
-    ceiling is 3 (`learning/mastery.py:50`). A consumer comparing against a
-    threshold should be comparing fractions.
-    """
+    """The integer mastery scale as 0.0-1.0."""
     from app.learning.mastery import MAX_SCORE
 
     return {
@@ -111,14 +67,7 @@ def _seen_today(rows: list[Any]) -> list[str]:
 
 
 async def _from_database(user_id: str | None) -> dict[str, Any]:
-    """The four reads, in one session. Returns plain JSON-able values.
-
-    Every read is individually optional. A learner with no mastery rows, no
-    application and no ticket is the normal case for a first session, and none of
-    those absences is an error -- so each failure degrades to its own empty value
-    rather than failing the turn. A context that is missing `display_name` still
-    routes correctly; a turn that raised here would not run at all.
-    """
+    """The four reads, in one session."""
     empty: dict[str, Any] = {
         "display_name": None,
         "mastery": {},
@@ -150,14 +99,7 @@ async def _from_database(user_id: str | None) -> dict[str, Any]:
             application = (
                 await db.execute(
                     sql(
-                        # `owner_user_id`, not `owner_id`. The column has been
-                        # `owner_user_id` since migration 0014 created the table;
-                        # `conversations` is the one with `owner_id`, and the two
-                        # got crossed here. Postgres raised UndefinedColumnError on
-                        # every signed-in turn, this whole function fell to its
-                        # except branch, and the agent lost the learner's display
-                        # name and any draft application alongside the one lookup
-                        # that was actually wrong.
+                        # `owner_user_id`, not `owner_id`.
                         "SELECT id, status FROM applications "
                         "WHERE owner_user_id = :uid AND status = 'draft' "
                         "ORDER BY created_at DESC LIMIT 1"
@@ -228,11 +170,7 @@ async def _store(session_id: str, payload: dict[str, Any]) -> None:
 
 
 def make_resolve_context(loader=None):
-    """The node. `loader` is `async (user_id) -> dict`, injected for tests.
-
-    Writes `state["context"]`. Runs before routing so that `classify` and every
-    agent read one object rather than each deriving its own view.
-    """
+    """The node."""
 
     async def resolve_context(state: AspireState) -> dict[str, Any]:
         from app.cache import corpus_fingerprint
@@ -250,9 +188,7 @@ def make_resolve_context(loader=None):
         application = payload.get("open_application")
         ticket = payload.get("last_escalation")
 
-        # The registration draft's own step pointer wins over the database row:
-        # it is this turn's state and the row is one turn behind. Only the
-        # pointer is taken -- never `values`, which is FINDINGS.md F1.
+        # The registration draft's own step pointer wins over the database row: it is this turn's state and the row is…
         registration = state.get("registration")
         if isinstance(registration, dict) and registration.get("application_id"):
             application = {

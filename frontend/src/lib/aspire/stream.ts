@@ -1,48 +1,4 @@
-/**
- * The chat transport. One turn, streamed, through the graph.
- *
- * ## What changed, and what deliberately did not
- *
- * The wire is now `POST /v2/chat/stream` and the events are ASPIRE's own
- * (`token`, `directive`, `done`, `error`) rather than AG-UI's. What is
- * unchanged is this function's shape: it still resolves to the same
- * `AskResult`, so the typewriter, the cards, the sources and the chips cannot
- * tell which backend produced it. `use-conversation.ts` did not have to change
- * to switch transports, which is the whole point of keeping this seam.
- *
- * `@tanstack/ai-client` is gone with AG-UI. It was used for one thing — an SSE
- * connection adapter — and `lib/stream/client.ts` reads the body itself, with a
- * frame splitter that is tested directly under `node --test`.
- *
- * ## Where the v1 concepts went
- *
- *   `sources`      ← the `citations` directive
- *   `followUps`    ← the `quick_replies` directive. NOT a second model call any
- *                    more: the agents emit chips from what they actually did,
- *                    so a turn no longer pays for two questions to put under
- *                    itself. They arrive with the turn rather than seconds
- *                    after it, which is why there is no late `follow_ups`
- *                    event to wait for.
- *   `startedGame`  ← the `game` directive
- *   `startedEligibility` ← the `eligibility` directive
- *   `directives`   ← everything else, in ordinal order, for the transcript to
- *                    render inline. New, and additive: a caller that ignores it
- *                    behaves exactly as it did.
- *
- * Both card directives are REMOVED from `directives` once mapped. That is what
- * stops a game being mounted twice — once by the transcript's card row and once
- * by the directive renderer — which is a failure that would only show up as two
- * server-side game sessions racing over one thread.
- *
- * ## Falling back
- *
- * There is nothing to fall back to. `/chat` and `/chat/stream` are gone, and a
- * second path that answered the same question differently is how a streaming
- * transport quietly becomes a second product. A stream that never opened and a
- * stream that broke are both failed turns, reported as such — the service
- * records the question before it answers, so retrying would ask the model twice
- * and append a second copy of the turn.
- */
+/** The chat transport. */
 
 import { streamTurn } from "../stream/client";
 import { forget, graphSession } from "../stream/session";
@@ -51,6 +7,7 @@ import type {
 	Directive,
 	EligibilityDirective,
 	GameDirective,
+	GameResultPayload,
 	QuickRepliesDirective,
 	UploadResult,
 	WidgetInteraction,
@@ -72,9 +29,7 @@ function newThreadId(): string {
 	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
 		return crypto.randomUUID();
 	}
-	// Older Safari on a school tablet. Not a security value — it names a
-	// conversation — so `Math.random` is adequate and `crypto` is preferred
-	// only because it is there.
+	// Older Safari on a school tablet.
 	return `t-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
 
@@ -84,29 +39,12 @@ export async function streamAspire(
 		onDelta?: (delta: string) => void;
 		onTextEnd?: () => void;
 		onTurn?: (result: AskResult) => void;
-		/**
-		 * A widget interaction instead of a typed message.
-		 *
-		 * Same transport, same result shape, a different endpoint: what a child
-		 * did with a widget is a turn the agent has to answer referencing their
-		 * actual numbers, not an event to be counted. The interaction rides on
-		 * `safety_flags` server-side rather than in `messages`, so it never
-		 * enters the transcript the model reads back.
-		 */
+		/** A widget interaction instead of a typed message. */
 		interaction?: WidgetInteraction;
-		/**
-		 * The answer to a document upload the graph is PAUSED on.
-		 *
-		 * Not prose, and it cannot be. A document slot suspends the graph inside
-		 * `interrupt()`, and the only thing that continues a suspended node is
-		 * `Command(resume=...)`. An ordinary message re-enters at START, re-runs
-		 * `resume_or_start` and asks for the first slot again -- so a parent who
-		 * answered every question reached the ID photo and was sent back to
-		 * "What is your full name?" forever. The server reads this off
-		 * `__upload_result` and hands it to the paused node; see the note in
-		 * `api/stream.py`.
-		 */
+		/** The answer to a document upload the graph is PAUSED on. */
 		uploadResult?: UploadResult;
+		/** A finished game's score instead of a typed message. */
+		gameResult?: GameResultPayload;
 	},
 ): Promise<AskResult> {
 	const {
@@ -116,6 +54,7 @@ export async function streamAspire(
 		language = "en",
 		interaction,
 		uploadResult,
+		gameResult,
 		onDelta,
 		onTextEnd,
 		onTurn,
@@ -158,9 +97,13 @@ export async function streamAspire(
 					body: interaction as unknown as Record<string, unknown>,
 				}
 			: {}),
-		// The ordinary chat path, unlike an interaction: this IS the turn that
-		// answers the upload the graph is waiting on, so it carries the message
-		// field the endpoint always reads, plus the resume payload beside it.
+		...(gameResult
+			? {
+					path: "/v2/game/result",
+					body: gameResult as unknown as Record<string, unknown>,
+				}
+			: {}),
+		// The ordinary chat path, unlike an interaction: this IS the turn that answers the upload the graph is waiting…
 		...(uploadResult
 			? {
 					body: {
@@ -174,18 +117,10 @@ export async function streamAspire(
 			: {}),
 		onToken: (text) => onDelta?.(text),
 		onDirective: (directive) => {
-			// Directives close the prose in this protocol: the server emits them
-			// from the settled state, after the last token. Worth signalling
-			// separately from `done`, because `done` is also behind the turn's
-			// persistence and the reveal should not hold its last word for that.
+			// Directives close the prose in this protocol: the server emits them from the settled state, after the last tok…
 			closeProse();
 
-			// Cast per branch rather than relying on narrowing. `Directive` is an
-			// OPEN union -- it ends in `UnknownDirective { t: string }` so a
-			// backend that ships a new type before this build knows about it is a
-			// normal deploy rather than a crash -- and an open union widens `t` to
-			// `string`, which defeats discrimination. The cast is safe because the
-			// server's union is closed and discriminated on the same field.
+			// Cast per branch rather than relying on narrowing.
 			switch (directive.t) {
 				case "citations":
 					for (const ref of (directive as CitationsDirective).refs) {
@@ -207,12 +142,10 @@ export async function streamAspire(
 					startedGame = {
 						gameType: game,
 						displayName: game.replace(/_/g, " "),
-						// The transcript picks its component from this. The graph
-						// names the game, not the item, so `true_false` is the one
-						// that renders a statement and everything else renders a
-						// scramble — same rule the v1 payload carried.
+						// The transcript picks its component from this.
 						kind: game === "true_false" ? "statement" : "scramble",
 						total: 0,
+						concept: (directive as GameDirective).concept ?? "saving_basics",
 					};
 					return;
 				}
@@ -236,16 +169,14 @@ export async function streamAspire(
 
 	if (result.error) {
 		if (result.error.code === "unauthenticated") {
-			// The token expired mid-conversation. Dropped so the next turn mints
-			// a fresh one rather than failing identically forever.
+			// The token expired mid-conversation.
 			forget(thread);
 		}
 		throw new AspireError(result.error.message, true);
 	}
 
 	const answer: AskResult = {
-		// A card turn produces no prose at all — the server never asks a model
-		// to write any — so an empty reply here is correct and not a fault.
+		// A card turn produces no prose at all — the server never asks a model to write any — so an empty reply here is…
 		reply: startedGame || startedEligibility ? "" : result.text,
 		threadId: thread,
 		sources,
@@ -255,9 +186,7 @@ export async function streamAspire(
 		directives: directives.filter((d) => !CARD_TYPES.has(d.t)),
 	};
 
-	// Handed over before this function resolves, matching the old contract:
-	// the caller settles the turn on this rather than on the promise, so the
-	// sources and the action row appear with the last word.
+	// Handed over before this function resolves, matching the old contract: the caller settles the turn on this rat…
 	onTurn?.(answer);
 	return answer;
 }

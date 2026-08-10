@@ -1,11 +1,4 @@
-"""The Q&A subgraph: retrieval, grounding, and the tools that do the arithmetic.
-
-The acceptance criteria for A5 are two sentences: every answer carries citations
-to KB row ids, and a deliberately out-of-KB question routes to escalation
-instead of producing an answer. Both appear here as named tests, along with the
-failure that RAG systems actually have -- a plausible number that came from the
-model rather than from a chunk.
-"""
+"""The Q&A subgraph: retrieval, grounding, and the tools that do the arithmetic."""
 
 from __future__ import annotations
 
@@ -37,13 +30,7 @@ CORPUS: list[tuple[str, str]] = [
 
 
 def chunks_for(*ids: str, score: float = 0.9, relevance: float | None = None) -> list[KBChunk]:
-    """Chunks as the dense retriever would produce them.
-
-    `relevance` defaults to `score` because that is the realistic case: a chunk
-    the dense side returned carries a calibrated cosine similarity. Pass 0.0 to
-    simulate a BM25-only hit, which is what makes `ground_check` fall through
-    to the lexical floor.
-    """
+    """Chunks as the dense retriever would produce them."""
     lookup = dict(CORPUS)
     return [
         KBChunk(
@@ -95,12 +82,7 @@ def generating(text: str):
 class TestHybridRetrieval:
     @pytest.mark.asyncio
     async def test_bm25_finds_an_exact_term_the_dense_side_missed(self):
-        """The reason both halves exist.
-
-        "ASP-004" has no meaning for an embedding to map -- it is a token. A
-        dense-only retriever returns whatever is semantically nearest to a row
-        id, which is nothing in particular.
-        """
+        """The reason both halves exist."""
         node = nodes.make_hybrid_retrieve(dense_returning("ASP-001"), corpus)
         result = await node(state_for("what does ASP-004 say"))
         assert "ASP-004" in {chunk.kb_id for chunk in result["retrieved"]}
@@ -123,12 +105,7 @@ class TestHybridRetrieval:
         assert result["retrieved"]
 
     def test_rrf_uses_ranks_and_not_scores(self):
-        """Agreement near the top wins, without either score being comparable.
-
-        `a` is 1st and 2nd; `c` is 3rd and 1st; `b` is 2nd and 3rd. RRF puts
-        `a` first because both retrievers rate it highly, and `c` above `b`
-        because one retriever rates it top -- all from ranks alone.
-        """
+        """Agreement near the top wins, without either score being comparable."""
         fused = nodes.rrf_fuse([["a", "b", "c"], ["c", "a", "b"]], k=60)
         assert fused["a"] > fused["c"] > fused["b"]
 
@@ -136,10 +113,7 @@ class TestHybridRetrieval:
         assert nodes.rrf_fuse([[], ["a"]])["a"] > 0
 
     def test_the_tokeniser_keeps_currency_together(self):
-        """Dropping `$` splits "EC$500" into "ec" and "500".
-
-        "500" then matches every row with a number in it, which is most of them.
-        """
+        """Dropping `$` splits "EC$500" into "ec" and "500"."""
         assert "ec$25" in nodes._tokens("The minimum is EC$25 today")
 
 
@@ -158,8 +132,7 @@ class TestAudienceFilter:
         assert nodes._audience(state_for("x", active_agent=agent)) == audience
 
     def test_an_untagged_row_is_visible_to_everyone(self):
-        """Defaulting to hidden would empty the corpus for two agents on the day
-        the tags were added."""
+        """Defaulting to hidden would empty the corpus for two agents on the day the tags were added."""
         chunk = KBChunk(kb_id="ASP-001", content="x")
         assert nodes._permitted(chunk, "public")
         assert nodes._permitted(chunk, "youth")
@@ -173,38 +146,14 @@ class TestAudienceFilter:
         "tag", ["general", "student", "child", "parent", "teacher"]
     )
     def test_the_corpus_vocabulary_reaches_the_filtered_agents(self, tag: str):
-        """The regression, and it was a total one.
-
-        `_permitted` tested for `"public" in tags` and `"youth" in tags`. The
-        knowledge base uses neither word. Counted on the live 706-row table:
-
-            student 246   parent 188   general 166   child 57   teacher 49
-
-        So `qa_agent_public` and `qa_agent_limited` matched NOTHING on every
-        turn since they were written -- retrieval returned an empty list,
-        `ground_check` refused to answer without context, and the turn
-        escalated. It failed in the safe direction, which is why no wrong answer
-        was ever produced and why nobody noticed: an anonymous visitor and every
-        13-15 reader simply got a ticket instead of an answer, always.
-        """
+        """The regression, and it was a total one."""
         chunk = KBChunk(kb_id="ASP-001", content="x", metadata={"audience": tag})
         assert nodes._permitted(chunk, "public"), f"{tag!r} is invisible to the public agent"
         assert nodes._permitted(chunk, "youth"), f"{tag!r} is invisible to the youth agent"
 
     @pytest.mark.parametrize("tag", ["staff", "internal", "reviewer_only"])
     def test_a_tier_the_corpus_does_not_publish_is_barred(self, tag: str):
-        """What the filter is actually for, now and later.
-
-        Both child slices list the five tags the corpus uses, so today the
-        filter withholds nothing -- see `AUDIENCE_TAGS` for why saying so is
-        better than pretending otherwise. Its value is the default: a tier added
-        tomorrow for reviewer notes or unpublished policy is barred from
-        children without this file changing.
-
-        An earlier version of this test asserted the opposite for `parent` and
-        `teacher`, and that cost a nine-year-old the answer to "what is the
-        minimum age?" -- every row that answers it is tagged `parent`.
-        """
+        """What the filter is actually for, now and later."""
         chunk = KBChunk(kb_id="ASP-500", content="x", metadata={"audience": tag})
         assert not nodes._permitted(chunk, "public")
         assert not nodes._permitted(chunk, "youth")
@@ -220,15 +169,7 @@ class TestAudienceFilter:
 
 
 def assert_declined(command, gate: str) -> None:
-    """The gate fired and the turn was not answered.
-
-    Track E.4 changed the OBSERVABLE, not the gates. An ungrounded turn used to
-    hand off to a person on the first attempt; it now declines and earns the
-    handoff on the third (`agents/escalation/counter.py`). Each test below still
-    asserts that its specific gate detected its specific problem -- that is what
-    they were written for -- and reads it from `safety_flags["declined"]` rather
-    than from an escalation that no longer happens on turn one.
-    """
+    """The gate fired and the turn was not answered."""
     assert not command.goto, f"{gate} should decline on the first attempt, not escalate"
     declined = (command.update or {}).get("safety_flags", {}).get("declined")
     assert declined, "a declined turn must record which gate declined it"
@@ -274,15 +215,9 @@ class TestGroundCheck:
 
     @pytest.mark.asyncio
     async def test_an_invented_figure_escalates(self):
-        """The failure RAG systems actually have.
-
-        The model was given four chunks about eligibility, asked for a deposit
-        minimum, and produced a plausible number in the same voice as the
-        grounded sentences around it.
-        """
+        """The failure RAG systems actually have."""
         state = state_for("what is the minimum deposit")
-        # The right chunk WAS retrieved -- coverage is total, so the relevance
-        # gate passes and this test is about the attribution gate alone.
+        # The right chunk WAS retrieved -- coverage is total, so the relevance gate passes and this test is about the a…
         state["retrieved"] = chunks_for("ASP-003")
         state["messages"].append(
             AIMessage(content="The minimum opening deposit is EC$500 [ASP-003].")
@@ -294,15 +229,9 @@ class TestGroundCheck:
 
     @pytest.mark.asyncio
     async def test_a_question_the_corpus_has_never_heard_of_escalates_on_coverage(self):
-        """The gate a rank-fusion score cannot provide.
-
-        Retrieval always returns its twelve nearest neighbours, however far away
-        they are, so every chunk scores highly on RRF. Coverage is what notices
-        that none of the question's words appear anywhere in them.
-        """
+        """The gate a rank-fusion score cannot provide."""
         state = state_for("how do I renew a fishing licence")
-        # BM25-only: the dense side saw nothing, so the lexical floor is what
-        # has to catch this. That is the case the check exists for.
+        # BM25-only: the dense side saw nothing, so the lexical floor is what has to catch this.
         state["retrieved"] = chunks_for("ASP-006", "ASP-007", relevance=0.0)
         state["messages"].append(AIMessage(content="At the fisheries office [ASP-006]."))
 
@@ -312,13 +241,7 @@ class TestGroundCheck:
 
     @pytest.mark.asyncio
     async def test_the_coverage_gate_does_not_fire_on_a_translated_question(self):
-        """The corpus is English and cross-lingual retrieval is deliberate.
-
-        Word overlap between a French question and an English chunk is zero by
-        construction, so applying coverage there would escalate every Spanish
-        and French turn in the product. Those turns are governed by the
-        attribution gates instead.
-        """
+        """The corpus is English and cross-lingual retrieval is deliberate."""
         state = state_for("quel est le dépôt minimum", locale="fr")
         state["retrieved"] = chunks_for("ASP-003")
         state["messages"].append(
@@ -357,13 +280,7 @@ class TestGroundCheck:
 
     @pytest.mark.asyncio
     async def test_the_escalation_summary_is_redacted(self):
-        """The summary only exists once the third attempt earns a person, so the
-        redaction has to be asserted there. It is the same `_escalate` and the
-        same `redact_for_summary`; what changed is when it is reached.
-
-        Asserted on the DECLINE turns too: a decline is shown to the reader and
-        must not echo an id back either.
-        """
+        """The summary only exists once the third attempt earns a person, so the redaction has to be asserted there."""
         from app.agents.escalation import counter
 
         node = nodes.make_ground_check()
@@ -579,16 +496,7 @@ class TestHandoffs:
 
 
 class TestFollowUpChips:
-    """Two more questions the corpus can actually answer.
-
-    `/chat` spent a second model call per turn inventing these, shown only the
-    question and the answer. It had no idea what the knowledge base contained,
-    so a suggestion was as likely to be a question ASPIRE cannot answer as one
-    it can -- and tapping one of those lands on a refusal or an escalation.
-
-    These come from retrieval that already happened, so they cost nothing and
-    every one of them has a row behind it.
-    """
+    """Two more questions the corpus can actually answer."""
 
     def _chunks(self, *questions: str) -> list[KBChunk]:
         return [
@@ -643,13 +551,7 @@ class TestFollowUpChips:
         assert nodes.follow_up_chips(state_for("q"), [], set()) == []
 
     def test_a_longer_restatement_of_the_question_is_not_offered(self):
-        """Different row, same question.
-
-        "What is the minimum age?" and "What is the minimum age requirement for
-        ASPIRE enrolment?" are two corpus rows and one question. Offering the
-        second under an answer to the first reads as not having listened, and an
-        exact-match dedupe does not catch it.
-        """
+        """Different row, same question."""
         chunks = self._chunks(
             "What is the minimum age requirement for ASPIRE enrolment?",
             "What is the maximum age to join ASPIRE?",
@@ -661,12 +563,7 @@ class TestFollowUpChips:
         assert chips == ["What is the maximum age to join ASPIRE?"]
 
     def test_a_one_word_question_does_not_suppress_everything(self):
-        """The guard on the guard, and the product's most-asked question.
-
-        "What is ASPIRE?" has ONE content word, so containment scores 1.0
-        against every question that mentions ASPIRE. Unguarded, the restatement
-        rule dropped every chip under the most common answer in the product.
-        """
+        """The guard on the guard, and the product's most-asked question."""
         chunks = self._chunks(
             "What does ASPIRE stand for?", "What is the goal of ASPIRE?"
         )

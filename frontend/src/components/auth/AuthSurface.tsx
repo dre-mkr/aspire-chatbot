@@ -1,19 +1,7 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-/**
- * The shell both auth pages sit in.
- *
- * A split surface: the brand panel on the left carries the gradient and says
- * what ASPIRE is, the white column on the right carries the form. On a narrow
- * screen the panel becomes a header and the form rises over it as a sheet,
- * which is why the column has its own radius and a negative top margin rather
- * than the two being separate blocks.
- *
- * One component for sign-in and sign-up on purpose. They are the same surface
- * at two moments, and the step indicator is the only structural difference
- * between them — building two would guarantee they drift.
- */
+/** The shell both auth pages sit in. */
 
 interface AuthSurfaceProps {
 	/** What this screen is called, as a heading. */
@@ -28,14 +16,7 @@ interface AuthSurfaceProps {
 	/** The line under the form: "New to ASPIRE?" and its link. */
 	footText?: string;
 	footLinkLabel?: string;
-	/**
-	 * A real route, checked against the route tree.
-	 *
-	 * It was `string`, which widened `<Link to>` back to an unchecked value and
-	 * was the only such escape in the codebase — a typo'd route compiled cleanly
-	 * and landed on the not-found handler at runtime. `LinkProps["to"]` is the
-	 * router's own union, so the route tree is what validates this.
-	 */
+	/** A real route, checked against the route tree. */
 	footLinkTo?: LinkProps["to"];
 	footNote?: string;
 }
@@ -61,8 +42,7 @@ export function AuthSurface({
 	return (
 		<div className="auth">
 			<div className="auth__panel">
-				{/* Ambient only, and hidden from assistive tech: two blurred
-				    washes that give the flat gradient some depth. */}
+				{/* Ambient only, and hidden from assistive tech: two blurred washes that give the flat gradient some depth. */}
 				<div className="auth__orb auth__orb--a" aria-hidden="true" />
 				<div className="auth__orb auth__orb--b" aria-hidden="true" />
 
@@ -70,9 +50,7 @@ export function AuthSurface({
 					<img
 						className="auth__logo"
 						src="/brand/aspire-wordmark.png"
-						// Reserves the box before the image decodes. Rail.tsx sets the
-						// same intrinsic size; without it this shifts the whole auth
-						// panel on first paint.
+						// Reserves the box before the image decodes.
 						width={190}
 						height={48}
 						alt="ASPIRE — Achieving Success through Personal Investment, Resources and Education"
@@ -127,14 +105,10 @@ export function AuthSurface({
 
 					{step ? (
 						<div className="auth__steps">
-							{/* The bars are decorative: the line beneath them says
-							    "Step 2 of 4" in words, which is the thing worth
-							    announcing. A role="group" here would make a screen
-							    reader walk four empty spans to learn nothing. */}
+							{/* The bars are decorative: the line beneath them says "Step 2 of 4" in words, which is the thing worth announci… */}
 							<div className="auth__segs" aria-hidden="true">
 								{Array.from({ length: step.total }, (_, index) => (
 									<span
-										// Segments are positional and fixed in number.
 										// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
 										key={index}
 										className="auth__seg"

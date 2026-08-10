@@ -1,35 +1,4 @@
-"""Who is asking, proved rather than asserted.
-
-This replaces the header-principal model in 0005, which read an
-`X-Aspire-Device` value straight off the request and treated it as identity.
-That was an IDOR. The device id is not a secret: it is sent on every request,
-stored in the browser, and guessable in principle -- so anyone holding another
-person's went straight to their conversations.
-
-The rule this module exists to enforce, stated once:
-
-    **A device id seeds the creation of an anonymous identity. It is never
-    accepted as proof of one.**
-
-Concretely, nothing here looks a user up by `device_id`. `POST
-/api/auth/anonymous` always creates a NEW row, even when the caller presents a
-device id that already exists, because the alternative -- "hand me a device id
-and I will hand you a session for whoever owns it" -- is precisely the hole
-being closed. `device_id` is stored for abuse investigation and nothing else.
-
-Authorisation goes through a signed token and only a signed token.
-
-## Tokens
-
-A JWT signed with `SESSION_SECRET`, carrying the user's id, their account type,
-and the `session_epoch` it was minted under. Revocation needs no denylist and no
-shared cache: bumping a user's epoch refuses every token already issued for
-them, which is what claiming an anonymous identity and signing out both do.
-
-Short-lived, and refreshed by the client well before expiry. Expiry mid-stream
-must never interrupt a reply, so `/chat` and `/chat/stream` accept a token that
-has recently expired -- see `GRACE`. A read endpoint does not.
-"""
+"""Who is asking, proved rather than asserted."""
 
 from __future__ import annotations
 
@@ -50,31 +19,8 @@ logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
 #: How long a session lasts before the client must refresh it.
-#:
-#: DECISION (P9-005, 2026-08-04): shortened from 30 days to 7, and `jti` stays
-#: unrecorded.
-#:
-#: A `jti` is minted on every token and never written down or checked, so there
-#: is no replay protection: a stolen token is usable for its whole life unless
-#: somebody bumps that user's `session_epoch`. Standard for stateless JWT, and
-#: the two ways out are a denylist or a shorter window.
-#:
-#: A denylist is rejected on purpose. It would put a Valkey read on the auth
-#: path of every request, which means the service stops authenticating when the
-#: cache is down -- trading a small, bounded risk for an availability dependency
-#: on a component this codebase deliberately treats as optional everywhere else
-#: (see `_within_limit`, and every "never raises" comment in `cache.py`).
-#:
-#: So the window shrinks instead. 30 days on a children's product is a long time
-#: to be wrong about; 7 keeps the refresh path (which already exists and is
-#: exercised on every load) doing the work, and revocation via `session_epoch`
-#: remains immediate for the cases that matter -- sign-out and account claim.
 TOKEN_TTL = timedelta(days=7)
 #: How long past expiry a token still satisfies the chat endpoints.
-#:
-#: A reply can take a minute; a token expiring during one must not turn into an
-#: error the reader sees. Read endpoints get no grace -- they can simply be
-#: retried after a refresh.
 GRACE = timedelta(minutes=10)
 
 ACCOUNT_ANONYMOUS = "anonymous"
@@ -102,17 +48,12 @@ def _secret() -> str:
     settings = get_settings()
     secret = getattr(settings, "session_secret", None)
     if not secret:
-        # Refused rather than defaulted. A signing key with a fallback value is
-        # a signing key an attacker also has.
+        # Refused rather than defaulted.
         raise RuntimeError(
             "SESSION_SECRET is not set. Sessions cannot be signed without it."
         )
     if len(secret.encode("utf-8")) < MIN_SECRET_BYTES:
-        # The presence check above is not the strength check. A short key is
-        # accepted by every JWT library and signs perfectly valid tokens, so
-        # nothing downstream would ever complain -- and this key also feeds
-        # `hash_ip`, so a weak one makes the address pseudonymisation weak too.
-        # Refused at the same point and in the same way as an absent one.
+        # The presence check above is not the strength check.
         raise RuntimeError(
             f"SESSION_SECRET is {len(secret.encode('utf-8'))} bytes; it must be at "
             f"least {MIN_SECRET_BYTES}. Generate one with: "
@@ -131,10 +72,7 @@ def mint_token(user_id: uuid.UUID, account_type: str, session_epoch: int) -> str
             "epo": session_epoch,
             "iat": int(now.timestamp()),
             "exp": int((now + TOKEN_TTL).timestamp()),
-            # Kept, and deliberately not recorded -- see TOKEN_TTL. It makes
-            # every token unique, which is what stops two tokens minted in the
-            # same second for the same user being byte-identical, and it is the
-            # handle a denylist would use if the decision above is ever revisited.
+            # Kept, and deliberately not recorded -- see TOKEN_TTL.
             "jti": uuid.uuid4().hex,
         },
         _secret(),
@@ -143,13 +81,7 @@ def mint_token(user_id: uuid.UUID, account_type: str, session_epoch: int) -> str
 
 
 def _decode(token: str, *, grace: timedelta = timedelta(0)) -> Principal | None:
-    """Verify a token and return who it is for, or None.
-
-    Returns None for every failure -- bad signature, wrong algorithm, expired,
-    malformed. The caller decides whether that is a 401 or simply "no identity";
-    it must never be told which of those went wrong, because the difference is
-    only useful to somebody probing.
-    """
+    """Verify a token and return who it is for, or None."""
     try:
         claims = jwt.decode(
             token,
@@ -179,12 +111,7 @@ def _bearer(authorization: str | None) -> str | None:
 async def optional_principal(
     authorization: str | None = Header(default=None),
 ) -> Principal | None:
-    """The caller, or None if they presented nothing valid.
-
-    None is a legitimate answer for the chat endpoints: asking a question has
-    never required identifying yourself and must not start to. It is not a
-    legitimate answer for anything that reads a person's own records.
-    """
+    """The caller, or None if they presented nothing valid."""
     token = _bearer(authorization)
     return _decode(token) if token else None
 
@@ -192,12 +119,7 @@ async def optional_principal(
 async def chat_principal(
     authorization: str | None = Header(default=None),
 ) -> Principal | None:
-    """As above, but tolerant of a token that expired moments ago.
-
-    A session ending mid-reply is our problem to solve silently, not an error to
-    show somebody halfway through an answer. The client refreshes in the
-    background; this keeps the turn alive while it does.
-    """
+    """As above, but tolerant of a token that expired moments ago."""
     token = _bearer(authorization)
     return _decode(token, grace=GRACE) if token else None
 
@@ -213,19 +135,13 @@ async def require_principal(
 
 # ── passwords ────────────────────────────────────────────────────────────────
 
-#: bcrypt truncates silently at 72 bytes, which would make two different long
-#: passwords equivalent. Rejected rather than truncated.
+#: bcrypt truncates silently at 72 bytes, which would make two different long passwords equivalent.
 MAX_PASSWORD_BYTES = 72
 MIN_PASSWORD_LENGTH = 10
 
 
 def password_problem(password: str) -> str | None:
-    """Why this password is not acceptable, or None.
-
-    Length first and length mostly. Composition rules push people towards
-    `Password1!` and away from the long ordinary phrases that are actually hard
-    to guess, so this asks for length and refuses only the genuinely common.
-    """
+    """Why this password is not acceptable, or None."""
     if len(password) < MIN_PASSWORD_LENGTH:
         return f"Use at least {MIN_PASSWORD_LENGTH} characters."
     if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
@@ -256,12 +172,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
-    """Constant-time where it matters, and never short-circuits on a missing hash.
-
-    An account with no password (an anonymous row, or one that only ever signed
-    in another way) must cost the same to probe as a wrong password, or the
-    timing says which addresses exist.
-    """
+    """Constant-time where it matters, and never short-circuits on a missing hash."""
     if not password_hash:
         bcrypt.checkpw(b"x", bcrypt.gensalt())
         return False
@@ -275,12 +186,7 @@ def verify_password(password: str, password_hash: str | None) -> bool:
 
 
 def client_ip(request: Request) -> str:
-    """The caller's address, trusting the proxy only for its last hop.
-
-    `X-Forwarded-For` is client-controlled except for the entry the edge appends,
-    so the rightmost value is the only one worth anything. Getting this wrong
-    makes every per-IP limit trivially evadable by sending a header.
-    """
+    """The caller's address, trusting the proxy only for its last hop."""
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[-1].strip()
@@ -288,10 +194,5 @@ def client_ip(request: Request) -> str:
 
 
 def hash_ip(ip: str) -> str:
-    """A stable, non-reversible label for an address.
-
-    Enough to see that one source opened four hundred sessions; not a record of
-    where a child lives. Keyed with the signing secret so the hashes cannot be
-    reversed with a rainbow table over the whole IPv4 space, which is small.
-    """
+    """A stable, non-reversible label for an address."""
     return hmac.new(_secret().encode("utf-8"), ip.encode("utf-8"), hashlib.sha256).hexdigest()

@@ -1,21 +1,4 @@
-"""Prompt tokens per turn, with the memory window off and on.
-
-Run:  python -m scripts.measure_prompt_tokens
-
-No API key and no database needed: this counts tokens with the same encoder the
-service uses, over a modelled conversation.
-
-The model of the CURRENT behaviour is the important part and is deliberately
-faithful rather than flattering. The checkpointer replays the whole thread, and
-a thread holds more than the visible turns: each one also leaves behind the
-assistant's tool-call message and the ToolMessage carrying that turn's retrieved
-documents, and every one of those is re-sent on every later turn. Leaving them
-out would understate the current cost by roughly a third and make the change
-look better than it is. They are counted.
-
-Turn sizes come from the real corpus: `data/knowledge_base.csv` chunks measure
-38 tokens on average, and retrieval returns `retriever_k` of them.
-"""
+"""Prompt tokens per turn, with the memory window off and on."""
 
 from __future__ import annotations
 
@@ -86,8 +69,7 @@ def windowed_prompt_tokens(turns: int, system_tokens: int, window: int) -> int:
         recent=recent,
         older_turn_count=max(0, turns * 2 - window),
     )
-    # The system prompt is attached by create_agent, outside build_prompt, so it
-    # is added here to keep both columns measuring the same whole.
+    # The system prompt is attached by create_agent, outside build_prompt, so it is added here to keep both columns…
     return build_prompt(_words(QUESTION_TOKENS), context).tokens + system_tokens
 
 

@@ -1,12 +1,4 @@
-"""P1-001: the endpoints that spend model calls are metered and identified.
-
-The regression test in `test_p1_regressions.py` is structural -- it asserts a
-limiter is wired into the handler. This one asserts the behaviour: that the limit
-actually refuses, that it refuses with something a child can read, and that a
-turn is never billed to nobody.
-
-No model calls: every path here is stubbed or rejected before the agent runs.
-"""
+"""P1-001: the endpoints that spend model calls are metered and identified."""
 
 from __future__ import annotations
 
@@ -25,12 +17,7 @@ pytestmark = pytest.mark.slow
 
 @pytest.fixture(autouse=True)
 def _clean_limiter():
-    """Each test gets a fresh window.
-
-    The limiter is process-wide by design (app/limits.py explains why), which
-    makes it shared state between tests exactly as the session cap is -- and that
-    one taught us the lesson the hard way when two suites raced (P11-001).
-    """
+    """Each test gets a fresh window."""
     get_limiter().reset()
     yield
     get_limiter().reset()
@@ -74,20 +61,14 @@ def test_title_is_metered_per_caller(client, monkeypatch):
     assert refused.headers.get("Retry-After"), "a 429 must say when to come back"
 
     detail = refused.json()["detail"]
-    # A child reads this. It should say what happened and what to do, and
-    # nothing about buckets, windows or quotas.
+    # A child reads this.
     assert "wait" in detail.lower() or "moment" in detail.lower()
     for jargon in ("rate", "quota", "bucket", "window", "429"):
         assert jargon not in detail.lower(), f"{jargon!r} leaked into user-facing copy"
 
 
 def test_two_callers_do_not_share_a_window(client, monkeypatch):
-    """One caller exhausting the limit must not lock everyone else out.
-
-    The counter is keyed per identity, so a busy user cannot deny the service to
-    the next person -- which is the failure mode that turns a cost control into
-    an outage.
-    """
+    """One caller exhausting the limit must not lock everyone else out."""
 
     async def _no_model_call(message, answer, language="en"):
         return "Stubbed"
@@ -109,35 +90,16 @@ def test_two_callers_do_not_share_a_window(client, monkeypatch):
 
 
 def test_chat_is_metered_without_requiring_a_session(client):
-    """Anonymous questioning stays supported, and stays counted.
-
-    Asking a question has never required identifying yourself and must not start
-    to. With no graph session token the limit falls back to the caller's address
-    -- which is why it is sized for a school rather than for one child.
-
-    The refusal has to be a REAL 429 and not an `error` event inside a 200
-    stream: `_meter` runs in the route handler, before `StreamingResponse` is
-    constructed, precisely because a status line that has already gone out
-    cannot be taken back. That is what this asserts.
-    """
+    """Anonymous questioning stays supported, and stays counted."""
     limit = get_settings().chat_messages_per_window
     body = {"message": "What is ASPIRE?"}
 
-    # Fill the window. Each of these is refused as `unauthenticated` -- there is
-    # no token -- which is fine: it only has to prove the request got past the
-    # limiter and was counted.
-    #
-    # That refusal is a 401 rather than a 200 carrying an error event, and the
-    # change is deliberate: authentication is settled before the response
-    # starts, so it can be a status code (S2-005). The property THIS test exists
-    # for is unaffected and is asserted below -- `_meter` runs ahead of both, so
-    # the 429 still arrives as a real status and not as a frame inside a 200.
+    # Fill the window.
     for _ in range(limit):
         assert client.post("/v2/chat/stream", json=body).status_code == 401
 
     refused = client.post("/v2/chat/stream", json=body)
     assert refused.status_code == 429
-    # And the 429 outranks the 401: the limiter is consulted first, so a
-    # throttled caller is told they are throttled rather than told to sign in.
+    # And the 429 outranks the 401: the limiter is consulted first, so a throttled caller is told they are throttle…
     assert refused.status_code != 401
     assert "Retry-After" in refused.headers

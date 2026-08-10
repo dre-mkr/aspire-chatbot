@@ -1,12 +1,4 @@
-"""True or false.
-
-Two things get checked here that the scramble tests cannot: that a game may
-decline a capability the protocol offers, and that a verdict — worth far more to
-a guesser than a word is — never reaches the model or the browser early.
-
-Gameplay runs against a fixture set, because the set that ships is a draft with
-placeholder copy and is deliberately unservable.
-"""
+"""True or false."""
 
 from __future__ import annotations
 
@@ -139,10 +131,7 @@ def test_false_parses(typed):
 
 @pytest.mark.parametrize("typed", ["yes", "no", "Y", "n", "yeah", "nope", "nah", "yup"])
 def test_yes_and_no_are_refused_not_guessed(typed):
-    """On a negatively-framed statement, "no" genuinely does not say which way.
-
-    Guessing would mark honest reasoning wrong, so the item stays open.
-    """
+    """On a negatively-framed statement, "no" genuinely does not say which way."""
     assert parse_verdict(typed) is None
     assert looks_like_yes_no(typed) is True
 
@@ -411,12 +400,7 @@ def shipped_sets(settings: GameSettings):
 
 
 def test_the_eccb_set_stays_a_draft_until_its_content_lands(settings: GameSettings):
-    """Placeholder copy must not be servable.
-
-    `truefalse-01` carries the 18 ECCB verdicts with TODO explanations. Flipping
-    `draft: false` is the deliberate act that ships it, and this test is what
-    makes it deliberate rather than accidental.
-    """
+    """Placeholder copy must not be servable."""
     eccb = [s for s in shipped_sets(settings) if s.id == "truefalse-01"]
     assert eccb, "the ECCB true/false seed file did not load at all"
     assert all(s.draft for s in eccb), (
@@ -481,12 +465,7 @@ def test_the_volatile_rate_item_is_gated(settings: GameSettings):
     assert rate.servable_on(date.today(), review_days=180) is False
 
 
-# --- the verdict never leaves early ----------------------------------------
-#
-# This matters more here than on the scramble. A fifty-fifty guess is worth a
-# great deal to a child who has worked out that the interface will confirm it,
-# so the check is not "did we remember to filter" but "is there anywhere it
-# could have gone".
+# --- the verdict never leaves early ---------------------------------------- This matters more here than on th…
 
 
 @pytest.fixture

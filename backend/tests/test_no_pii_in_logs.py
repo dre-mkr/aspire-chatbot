@@ -1,20 +1,4 @@
-"""Children's questions must not reach the system journal.
-
-This is the highest-consequence property in the service and it was being
-violated at the DEFAULT log level. Two separate leaks:
-
-  * `qa/nodes.py` logged `query[:60]` at INFO, so every question a child typed
-    went into the journal verbatim — and children volunteer names, addresses,
-    schools and a parent's email without being asked.
-  * The OpenAI SDK logs the entire request at DEBUG, message array included, so
-    an operator raising LOG_LEVEL to investigate anything at all turned on a
-    data-protection breach as a side effect.
-
-Both are closed: the app logs a sha and a length, and third-party HTTP loggers
-are capped at INFO however loud this service is told to be.
-
-Marked `slow` because it runs real turns.
-"""
+"""Children's questions must not reach the system journal."""
 
 from __future__ import annotations
 
@@ -26,8 +10,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.slow
 
-#: Distinctive enough that a match cannot be a coincidence, and shaped like what
-#: a child actually types into a chat box.
+#: Distinctive enough that a match cannot be a coincidence, and shaped like what a child actually types into a c…
 NAME = "Zephaniah Quillfeather"
 ADDRESS = "17 Marigold Crescent, Basseterre"
 SCHOOL = "Saint Ambrose Preparatory"
@@ -43,14 +26,7 @@ MESSAGE = (
 
 @pytest.fixture(scope="module")
 def client():
-    """ONE app lifespan for the whole module.
-
-    Not a style preference. Entering the lifespan repeatedly in one process
-    leaves the `@lru_cache`d Valkey client holding a connection the previous
-    shutdown disposed, so the third turn logs "Valkey did not respond to PING"
-    and takes a degraded path that never reaches `hybrid_retrieve` -- which
-    looked exactly like the log line under test having disappeared.
-    """
+    """ONE app lifespan for the whole module."""
     from app.main import app
 
     with TestClient(app, raise_server_exceptions=False) as test_client:
@@ -104,14 +80,8 @@ def test_a_childs_message_never_reaches_the_log(client, level, label):
 
 
 def test_the_retrieval_line_still_says_something_useful(client):
-    """De-identifying must not mean logging nothing.
-
-    The counts are what the line was for, and a sha is what replaces the text --
-    enough to tie two lines to the same question without recording it.
-    """
-    # A question no previous run can have cached. A cache hit skips retrieval
-    # entirely, so any reusable phrasing makes this assert against a turn that
-    # never ran the node under test -- which is exactly how it failed first.
+    """De-identifying must not mean logging nothing."""
+    # A question no previous run can have cached.
     import uuid
 
     logs = _turn_capturing_logs(

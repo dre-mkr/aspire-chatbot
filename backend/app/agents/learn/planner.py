@@ -1,33 +1,4 @@
-"""Which move this turn makes. Pure Python, no model, no exceptions.
-
-    TEACH     explain the concept
-    CHECK     ask a question from the bank
-    EVALUATE  grade the answer that just arrived
-    HINT      one rung up the ladder
-    ADVANCE   they have it; move to what it unlocks
-    GAME      four turns on one idea is enough; play instead
-    RECAP     they have met it and are not due a check; say it a different way
-
-The renderer is told WHICH move and renders it. It never chooses between
-teaching and quizzing, and that separation is the reason a hint ladder means
-anything: a rung count is only a ladder if "wrong" is decided the same way on
-Tuesday as on Monday, and a model asked to decide whether to hint or reteach
-gives a different answer each time it is asked.
-
-## Why this is a function and not a graph
-
-The lesson machine in `graph.py` already routes between nodes on `phase`. This
-plans the move WITHIN a resolved concept, which is a different question: phase
-says "we are mid-check", move says "and therefore evaluate". Keeping them
-separate means the graph's routing stays about turn structure and this stays
-about pedagogy, and each is testable without the other.
-
-## Exhaustively unit-tested, and there is no excuse not to be
-
-Every input is a small enum or a bounded integer. `tests/learning/test_planner.py`
-walks the whole cross-product. A pure function with a state space this small that
-still has an untested branch is a choice.
-"""
+"""Which move this turn makes."""
 
 from __future__ import annotations
 
@@ -39,13 +10,7 @@ from app.learning.concepts import TeachingConcept
 
 
 class Move(str, Enum):
-    """What the renderer is asked to produce.
-
-    `str` mixin so a move serialises into a checkpoint and a log line as its own
-    name rather than as `Move.TEACH`, and so a value read back out of a
-    checkpoint compares equal to the enum without a conversion nobody would
-    remember to write.
-    """
+    """What the renderer is asked to produce."""
 
     TEACH = "TEACH"
     CHECK = "CHECK"
@@ -60,21 +25,15 @@ class Move(str, Enum):
 MASTERED = 3
 
 #: How many turns on one concept before a game is offered instead of more prose.
-#:
-#: Four. Below that the lesson has not finished; above it, a learner who is still
-#: on the same idea is not being helped by a fifth explanation of it.
 TURNS_BEFORE_GAME = 4
 
 #: How many turns may pass without a check before one is due.
 TURNS_BEFORE_CHECK = 2
 
-#: Bands that get games. Not 16-18 or adult: the game seeds are written for
-#: children, and offering a sixteen-year-old a matching game in place of the
-#: explanation they asked for reads as being talked down to.
+#: Bands that get games.
 GAME_BANDS: frozenset[str] = frozenset({"5-8", "9-12", "13-15"})
 
-#: The highest hint rung. Rung 3 gives the METHOD, never the bare answer -- see
-#: `nodes/hint_ladder.py`. Past it the concept is retaught rather than looped.
+#: The highest hint rung.
 MAX_HINT_LEVEL = 3
 
 
@@ -84,15 +43,7 @@ def band_allows_games(band: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class LearnerSnapshot:
-    """Everything `plan_move` is allowed to know.
-
-    A frozen record rather than the live graph state, and deliberately small. A
-    planner that could see the message history would start making editorial
-    judgements about tone, and this is meant to be a decision a reviewer can
-    re-derive from seven numbers.
-
-    Built by `from_state` so the graph's dict shape stays in one place.
-    """
+    """Everything `plan_move` is allowed to know."""
 
     band: str = "9-12"
     #: The concept this snapshot is about. None on a turn with nothing resolved.
@@ -109,9 +60,7 @@ class LearnerSnapshot:
     turns_since_check: int = 0
     #: Whether this learner has ever been taught this concept.
     has_been_taught: bool = False
-    #: Whether a check item is available at all. A concept whose bank is empty
-    #: cannot be checked, and planning CHECK anyway produces a turn that asks
-    #: nothing.
+    #: Whether a check item is available at all.
     has_check_item: bool = True
 
     @classmethod
@@ -141,43 +90,28 @@ class LearnerSnapshot:
 
 
 def plan_move(snapshot: LearnerSnapshot) -> Move:
-    """The one move this turn makes.
-
-    The order of these tests IS the pedagogy, so each is annotated with what it
-    is protecting against rather than with what it does.
-    """
-    # An outstanding question outranks everything. A learner who was asked
-    # something and replied must be answered about their reply -- teaching them
-    # a new idea instead is the single most disorienting thing this machine can
-    # do, and it is what happens if any other test runs first.
+    """The one move this turn makes."""
+    # An outstanding question outranks everything.
     if snapshot.awaiting_check_answer:
         return Move.EVALUATE
 
-    # They have just got one wrong. The ladder, not a fresh explanation: a child
-    # who missed a question needs a smaller step, and re-teaching from the top is
-    # how "I already told you" gets communicated without anybody saying it.
+    # They have just got one wrong.
     if snapshot.consecutive_wrong >= 1:
         return Move.HINT
 
-    # Mastered. Moving on is not optional politeness -- spaced repetition brings
-    # this concept back on its own schedule, and re-teaching it now would displace
-    # the concept they have not met.
+    # Mastered.
     if snapshot.mastery >= MASTERED:
         return Move.ADVANCE
 
-    # Four turns in and still here. A fifth paragraph is not the intervention;
-    # doing something with the idea is.
+    # Four turns in and still here.
     if snapshot.turns_on_concept >= TURNS_BEFORE_GAME and band_allows_games(snapshot.band):
         return Move.GAME
 
-    # Never taught. This is the common case on a resolved question and it is the
-    # one the whole agent exists for.
+    # Never taught.
     if not snapshot.has_been_taught:
         return Move.TEACH
 
-    # Taught, and two turns have gone by without checking. Understanding that is
-    # never checked is understanding nobody has evidence of, and mastery cannot
-    # move without evidence.
+    # Taught, and two turns have gone by without checking.
     if snapshot.turns_since_check >= TURNS_BEFORE_CHECK and snapshot.has_check_item:
         return Move.CHECK
 
@@ -186,12 +120,7 @@ def plan_move(snapshot: LearnerSnapshot) -> Move:
 
 
 def hint_level(snapshot: LearnerSnapshot) -> int:
-    """Which rung of the ladder. Capped, and the cap is not a formality.
-
-    Past rung 3 the ladder has nothing left to offer -- rung 3 already gives the
-    method -- and looping it produces a child being nudged towards an answer they
-    have demonstrably not got. `graph.py` reads the cap and reteaches instead.
-    """
+    """Which rung of the ladder."""
     return max(1, min(snapshot.consecutive_wrong, MAX_HINT_LEVEL))
 
 

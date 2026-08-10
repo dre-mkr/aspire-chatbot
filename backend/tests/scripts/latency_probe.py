@@ -1,45 +1,4 @@
-"""Fire 30 representative questions at `/chat/stream` and report where the time went.
-
-Run:
-    # terminal 1 -- the endpoint is off unless asked for, and one probe run spends
-    # the entire default chat rate-limit window (30 messages / 600s), so a warm run
-    # straight after a cold one is otherwise 30 x HTTP 429.
-    #
-    # The limiter is a FastAPI dependency that runs to completion before the turn
-    # begins, so raising it cannot move any figure this script reports.
-    TIMINGS_ENDPOINT_ENABLED=1 CHAT_MESSAGES_PER_WINDOW=200 \
-        uvicorn app.main:app --port 8001
-
-    # terminal 2 -- cold means "against a process that has served nothing yet",
-    # so restart the server before the cold run and do not restart before the warm.
-    python -m scripts.latency_probe --base-url http://127.0.0.1:8001 --label cold
-    python -m scripts.latency_probe --base-url http://127.0.0.1:8001 --label warm
-
-This SPENDS MODEL CALLS. Thirty turns, each one an agent run with a retrieval
-tool call and a follow-up chip call, against whatever `CHAT_MODEL` points at.
-It is not a unit test and does not belong in CI.
-
-## Why the questions come out of `evals/golden.yaml`
-
-Hardcoding 30 strings here would create a second, unversioned question set that
-drifts from the corpus the moment a row changes. The golden set is already
-verified against `data/knowledge_base.csv` (`python -m evals.run --verify-ids`)
-and already carries the `lang` and `persona` labels this needs, so the probe
-selects from it and asserts its own coverage instead.
-
-Only `grounded` and `exact` cases are used. `refuse` and `ambiguous` turns have a
-different latency *shape*, not merely a different duration -- a turn that never
-calls the retriever is never released early by `app.streaming.TurnBuffer`, so its
-TTFT collapses into its total generation time. Mixing those into a p95 would
-produce a number describing no real population. They deserve their own
-measurement; see docs/latency-baseline.md.
-
-## Sequential on purpose
-
-`--workers 1` is what this service runs, and concurrent probing would measure
-queueing behind the event loop rather than the stages themselves. One at a time
-is slower to run and is the only thing that makes a per-stage share meaningful.
-"""
+"""Fire 30 representative questions at `/chat/stream` and report where the time went."""
 
 from __future__ import annotations
 
@@ -68,9 +27,7 @@ from app.timing import (  # noqa: E402
     percentile,
 )
 
-# The console this runs on is cp1252 by default, and a table full of box-drawing
-# characters killed the first real run *after* all thirty model calls had been
-# paid for. Reconfiguring is cheaper than an ASCII-only table.
+# The console this runs on is cp1252 by default, and a table full of box-drawing characters killed the first re…
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -79,10 +36,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 GOLDEN = Path(__file__).resolve().parent.parent / "evals" / "golden.yaml"
 
-#: Ten per language, and within a language the personas are filled round-robin in
-#: this order. `stella` is scarcest in the golden set, so it leads: a fixed order
-#: starting with the scarce persona is what guarantees all four appear in every
-#: language rather than merely on average.
+#: Ten per language, and within a language the personas are filled round-robin in this order.
 PERSONA_ORDER = ("stella", "orion", "aurora", "nova")
 LANGUAGES = ("en", "es", "fr")
 PER_LANGUAGE = 10
@@ -102,9 +56,7 @@ def load_cases() -> list[dict[str, Any]]:
     for lang in LANGUAGES:
         taken: list[dict] = []
         cursors = {persona: 0 for persona in PERSONA_ORDER}
-        # Round-robin until the quota is met. Stops if every pool is exhausted,
-        # so a shrunken golden set produces a short run and a loud assertion
-        # rather than an infinite loop.
+        # Round-robin until the quota is met.
         while len(taken) < PER_LANGUAGE:
             progressed = False
             for persona in PERSONA_ORDER:
@@ -137,17 +89,7 @@ def graph_session(
     token: str | None = None,
     timeout: float = 20.0,
 ) -> tuple[str, str]:
-    """Mint a graph session token. Returns `(token, session_id)`.
-
-    A turn is two calls now: `/v2/session` derives the claims -- persona, age
-    band, account status -- from the account record, or issues the narrowest
-    identity in the matrix when there is no account. `/v2/chat/stream` then
-    carries that token.
-
-    The probe pays the mint once per turn, which is honest: so does a cold
-    client. It is a local HMAC plus one row read, not a model call, and it is
-    outside the TTFT window measured below.
-    """
+    """Mint a graph session token."""
     body = {"session_id": thread_id or str(uuid.uuid4())}
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}/v2/session",
@@ -163,18 +105,8 @@ def graph_session(
 
 
 def ask(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
-    """One turn. Returns the client's own view of it.
-
-    The client-side TTFT is measured here as well as on the server, and the two
-    are reported side by side. They should agree closely; a gap between them is
-    framing and transport overhead the server cannot see, and is worth knowing
-    about before anybody optimises a stage on the strength of a server number
-    alone.
-    """
-    # A fresh session per case, so every probe turn is an opening turn -- the
-    # turn a first-time reader actually waits through. The persona is NOT sent:
-    # `/v2/session` derives it from the account record, and a probe cannot ask
-    # for one it has no account for.
+    """One turn."""
+    # A fresh session per case, so every probe turn is an opening turn -- the turn a first-time reader actually wai…
     token, _ = graph_session(base_url, timeout=timeout)
 
     payload = json.dumps({"message": case["q"]}).encode()
@@ -194,7 +126,6 @@ def ask(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
     error: str | None = None
 
     # The v2 wire, not AG-UI: `event:` names the kind and `data:` is the body.
-    # A frame is two lines, so the event name has to be remembered across them.
     kind = ""
     with urllib.request.urlopen(request, timeout=timeout) as response:
         for raw in response:
@@ -251,26 +182,10 @@ def _row(name: str, entry: dict[str, Any], ttft: dict[str, Any], budget: bool) -
         return [f"| `{name}` | 0 | n/a | n/a | n/a | — | — | {reason} |"]
 
     def share(key: str) -> str:
-        # Only the duration stages get a share, and only against TTFT. The
-        # cumulative milestones already contain each other, so a percentage
-        # column spanning both is a column somebody will try to add up.
+        # Only the duration stages get a share, and only against TTFT.
         if not budget:
             return "—"
         # And only when the stage covers at least the turns TTFT was measured on.
-        #
-        # `>=` rather than `==`, and the difference matters in both directions.
-        # Most pre-model stages run on all 30 turns while only 24 produce a
-        # visible token, so requiring equality would suppress every share in the
-        # table -- including on the ordinary runs where the figures are sound. A
-        # stage measured over a superset is an approximation, noted in the header.
-        #
-        # What this DOES reject is a stage recorded on fewer turns than TTFT,
-        # which on a mixed run means a different population entirely. Measured on
-        # the cache-hit run: 24 turns hit the cache and have a ~5 ms TTFT with no
-        # model call, while 6 open the eligibility card, are never cached, and have
-        # a ~909 ms concurrent wait and no TTFT at all. Dividing one population's
-        # p50 by the other's produced a share of 15880.6% and a residual of
-        # -874.1 ms.
         if entry.get("count", 0) < ttft.get("count", 0):
             return "n/a"
         total = ttft.get(key)
@@ -317,12 +232,7 @@ def render(summary: dict[str, Any], observed: list[dict[str, Any]], label: str) 
     for name in DURATION_STAGES:
         lines.extend(_row(name, stages.get(name, {}), ttft, budget=True))
 
-    # Whether the budget actually adds up. A decomposition that silently loses a
-    # second is worth catching here rather than in a review of the conclusions.
-    #
-    # Summed over the stages recorded on the SAME turns as TTFT, for the reason
-    # `_row` explains: on a mixed run, adding a stage measured on 6 turns to one
-    # measured on 24 produced a residual of -874.1 ms.
+    # Whether the budget actually adds up.
     comparable = [
         name
         for name in DURATION_STAGES
@@ -348,8 +258,6 @@ def render(summary: dict[str, Any], observed: list[dict[str, Any]], label: str) 
         )
     elif ttft.get("p50"):
         # Nothing shares TTFT's population, so there is no budget to reconcile.
-        # Saying so beats printing a residual of 100% and letting a reader
-        # conclude the instrumentation lost the whole turn.
         lines.append(
             "| *no budget for this run* | | | | | — | — | every duration stage was "
             "recorded on a different set of turns than `t_ttft`, so the shares are "
@@ -409,11 +317,7 @@ def main() -> int:
 
     cases = load_cases()
 
-    # How many turns the server had already recorded. Checked again at the end,
-    # because `/debug/timings?last=30` happily returns the PREVIOUS run's thirty
-    # turns when this run recorded none -- which is exactly what happened the
-    # first time the rate limiter rejected a warm run, and it printed a
-    # confident, entirely stale table.
+    # How many turns the server had already recorded.
     turns_before = fetch_summary(args.base_url, last=1_000_000)["turns"]
 
     print(
@@ -465,9 +369,7 @@ def main() -> int:
 
     summary = fetch_summary(args.base_url, last=len(cases))
 
-    # The label is checked against what the server actually saw. A run called
-    # "cold" against an already-warm process is the easiest way to publish a
-    # baseline that quietly means nothing.
+    # The label is checked against what the server actually saw.
     if args.label == "cold" and summary["cold_starts"] == 0:
         print(
             "WARNING: labelled 'cold' but the server reported no cold-start turn. "
@@ -482,9 +384,7 @@ def main() -> int:
 
     table = render(summary, observed, args.label)
 
-    # Written BEFORE anything is printed. Thirty turns of model calls have already
-    # been paid for by this point, and the first real run of this script threw
-    # them away on a console encoding error raised by `print`.
+    # Written BEFORE anything is printed.
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(table + "\n", encoding="utf-8")

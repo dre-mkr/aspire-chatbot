@@ -1,15 +1,4 @@
-"""HTTP shapes for the games API.
-
-These are the browser-facing types, and they carry the same guarantee the tool
-layer does: there is no field an unrevealed answer could occupy. `RevealOut` is
-the single exception, and the engine only ever produces one for an item it has
-already moved past.
-
-Note what is NOT here: an `answer` on `GameStateOut`, and a "how close were you"
-on `SubmitOut`. Both would be answer keys by a slower route. The second matters
-more on true/false than on the scramble — a fifty-fifty guess is worth a great
-deal to a child who has worked out the interface will confirm it.
-"""
+"""HTTP shapes for the games API."""
 
 from __future__ import annotations
 
@@ -29,12 +18,7 @@ class GameListOut(BaseModel):
 
 
 class PromptOut(BaseModel):
-    """An item as the player sees it.
-
-    `kind` says how to render `text` — scrambled letters to arrange, or a
-    statement to judge. `choices` is empty when the player composes their own
-    answer and populated when it is a pick from a fixed set.
-    """
+    """An item as the player sees it."""
 
     kind: str
     text: str
@@ -91,11 +75,7 @@ class BulletOut(BaseModel):
 
 
 class RevealOut(BaseModel):
-    """The one shape carrying an answer, and only for a resolved item.
-
-    `explanation` is always the whole teaching as flat text. The rest is the
-    same words laid out, for content that has been. A client can render either.
-    """
+    """The one shape carrying an answer, and only for a resolved item."""
 
     answer: str
     explanation: str
@@ -112,12 +92,9 @@ class SubmitOut(BaseModel):
     attempts: int
     # The teaching, once the item has resolved.
     teaching_note: str | None = None
-    # Present only when this answer RESOLVED the item — right, or wrong in a
-    # game that moves on. An unresolved wrong answer carries none, which keeps
-    # a scramble's word secret while it is still being guessed at.
+    # Present only when this answer RESOLVED the item — right, or wrong in a game that moves on.
     reveal: RevealOut | None = None
-    # Set when the answer could not be read as an answer at all. Not wrong: the
-    # item is untouched and the player is asked again.
+    # Set when the answer could not be read as an answer at all.
     unreadable: str | None = None
     finished: bool = False
     game: GameStateOut | None = None
@@ -145,13 +122,7 @@ class SkipOut(BaseModel):
 
 
 class ThreadBody(BaseModel):
-    """Every action names its conversation.
-
-    Same trust model as `/chat`, which already accepts a client-supplied
-    `thread_id`: the id is minted server-side and whoever holds it is treated as
-    that conversation. This endpoint adds no exposure the chat endpoint did not
-    already have.
-    """
+    """Every action names its conversation."""
 
     thread_id: str = Field(min_length=1, max_length=128)
 

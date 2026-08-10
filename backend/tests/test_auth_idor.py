@@ -1,18 +1,4 @@
-"""The IDOR that migration 0006 exists to close, as a test that fails without it.
-
-Until today, authorisation read an `X-Aspire-Device` header and believed it.
-That header is not a secret: the client sends it on every request and keeps it
-in the browser's own storage. Anyone holding somebody else's device id could
-read their conversations.
-
-The rule now is that a device id seeds the creation of an anonymous identity and
-is never accepted as proof of one. Everything below is a way of trying to break
-that rule and failing.
-
-These tests talk to the real app through a TestClient. They need a database, and
-skip cleanly without one, because a security test that silently passes when it
-could not run is worse than no test.
-"""
+"""The IDOR that migration 0006 exists to close, as a test that fails without it."""
 
 from __future__ import annotations
 
@@ -28,8 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import database_enabled  # noqa: E402
 from app.main import app  # noqa: E402
 
-#: P0-010 -- see the `slow` marker note in pyproject.toml. Both markers apply:
-#: this needs a live dependency AND is dominated by wall-clock cost.
+#: P0-010 -- see the `slow` marker note in pyproject.toml.
 pytestmark = [pytest.mark.slow, pytest.mark.skipif(
     not database_enabled(), reason="These are database-backed security tests."
 )]
@@ -49,13 +34,7 @@ def anonymous(client: TestClient, device_id: str | None = None) -> dict:
 
 
 def make_conversation(client: TestClient, token: str, message: str) -> str:
-    """One real turn, so there is something worth stealing.
-
-    Two steps now: `/chat` is gone, so a turn is a graph session token minted
-    from the account token followed by a stream. `turn.open_conversation`
-    records the question and the owner before the graph runs, so the row exists
-    whether or not the stream produces an answer.
-    """
+    """One real turn, so there is something worth stealing."""
     thread_id = str(uuid.uuid4())
     minted = client.post(
         "/v2/session",
@@ -94,13 +73,7 @@ def test_device_header_alone_authorises_nothing(client: TestClient):
 
 
 def test_a_device_id_cannot_be_exchanged_for_its_owners_session(client: TestClient):
-    """Presenting somebody's device id must not mint a session for them.
-
-    This is the subtler shape of the same hole: not reading their data directly,
-    but asking the session endpoint to hand over an identity that already owns
-    it. The endpoint always creates a new row, so the attacker gets a stranger's
-    empty session rather than the victim's full one.
-    """
+    """Presenting somebody's device id must not mint a session for them."""
     device = str(uuid.uuid4())
     victim = anonymous(client, device_id=device)
     make_conversation(client, victim["token"], "How do I start saving?")
@@ -125,8 +98,7 @@ def test_one_identity_cannot_read_anothers_conversation(client: TestClient):
         f"/api/conversations/{thread_id}",
         headers={"Authorization": f"Bearer {attacker['token']}"},
     )
-    # 404, not 403: "not yours" and "does not exist" must be indistinguishable,
-    # or the API becomes an oracle for which conversation ids are real.
+    # 404, not 403: "not yours" and "does not exist" must be indistinguishable, or the API becomes an oracle for wh…
     assert response.status_code == 404
 
 
@@ -143,10 +115,7 @@ def test_one_identity_cannot_rename_anothers_conversation(client: TestClient):
     assert response.status_code == 404
 
 
-# The fourth verb, DELETE, is covered in `test_conversation_delete.py` rather
-# than repeated here: the same 404-not-403 rule applies to it, and that file
-# also asserts the part unique to deleting -- that a refused attempt purges
-# nothing outside the conversations table either.
+# The fourth verb, DELETE, is covered in `test_conversation_delete.py` rather than repeated here: the same 404-…
 
 
 # ── the token itself ─────────────────────────────────────────────────────────
@@ -217,18 +186,22 @@ def test_a_valid_token_reads_only_its_own_conversations(client: TestClient):
 
 
 def test_chat_works_with_no_identity_at_all(client: TestClient):
-    """Part 1: sign-up is never required, and neither is an account.
-
-    A graph session still has to be minted -- the token is what carries the age
-    band, and there is no turn without one -- but minting it requires no
-    account. `/v2/session` with no Authorization header issues the narrowest
-    identity in the matrix, and the conversation is stored unowned.
-    """
+    """Part 1: sign-up is never required, and neither is an account."""
     minted = client.post("/v2/session", json={"session_id": str(uuid.uuid4())})
     assert minted.status_code == 200, minted.text
-    assert minted.json()["age_band"] == "5-8", (
-        "an unauthenticated caller must get the narrowest band, not the widest"
+    assert minted.json()["age_band"] == "adult", (
+        "an anonymous caller with no picked persona reads as the public default"
     )
+    assert minted.json()["persona"] == "aurora"
+
+    # A picked child persona keeps the child band and every child gate.
+    child = client.post(
+        "/v2/session",
+        json={"session_id": str(uuid.uuid4()), "persona": "stella"},
+    )
+    assert child.status_code == 200
+    assert child.json()["persona"] == "stella"
+    assert child.json()["age_band"] == "5-8"
 
     response = client.post(
         "/v2/chat/stream",

@@ -1,14 +1,4 @@
-/**
- * Cards that flip on tap. Question on the front, answer on the back.
- *
- * The cheapest primitive to render and often the right one: it needs no
- * formula, no numbers and no domain checks, so it is what the planner should
- * reach for when the concept is vocabulary rather than arithmetic.
- *
- * The flip is a colour and content change rather than a 3D rotation. A rotation
- * looks better and is a vestibular trigger; the lesson is what is on the back,
- * and it arrives either way.
- */
+/** Cards that flip on tap. */
 import { useState } from "react";
 import type { RevealCardsWidget } from "../../lib/stream/types";
 import { Panel, tone, useReducedMotion, WidgetActions } from "./primitives";

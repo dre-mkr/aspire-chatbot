@@ -65,11 +65,7 @@ def test_an_option_nobody_could_have_tapped_is_refused(engine: EligibilityEngine
 def test_the_progress_indicator_does_not_grow_while_you_answer_it(
     engine: EligibilityEngine,
 ):
-    """`age_exact` is a follow-up to question 1, not a sixth step.
-
-    Counting it made the card read "1 of 5" and then "2 of 6" the moment
-    somebody tapped "Under 5".
-    """
+    """`age_exact` is a follow-up to question 1, not a sixth step."""
     snapshot = engine.start(THREAD)
     assert snapshot.question.total == 5
     snapshot = engine.answer(THREAD, "under5")
@@ -104,8 +100,7 @@ def test_back_from_the_first_question_is_a_no_op_not_an_error(
 def test_going_back_and_changing_the_age_drops_the_stranded_follow_up(
     engine: EligibilityEngine,
 ):
-    """Leaving the under-5 branch must not keep an answer to a question that is
-    no longer being asked."""
+    """Leaving the under-5 branch must not keep an answer to a question that is no longer being asked."""
     engine.start(THREAD)
     engine.answer(THREAD, "under5")
     engine.answer(THREAD, "3")
@@ -162,12 +157,7 @@ def test_state_never_mutates_the_flow(engine: EligibilityEngine):
 def test_finishing_discards_the_answers_in_the_same_call(
     engine: EligibilityEngine, store: InMemorySessionStore
 ):
-    """The result and the answers that produced it never coexist.
-
-    This is the retention guarantee: once the verdict exists there is nothing
-    left on the server to read back, so a later request cannot recover an age
-    band, an island, or anything else the person tapped.
-    """
+    """The result and the answers that produced it never coexist."""
     result = walk(engine, CLEAN)
     assert result.verdict is Verdict.LIKELY_ELIGIBLE
     assert store.get(THREAD) is None
@@ -262,8 +252,7 @@ def test_a_not_yet_on_citizenship_offers_no_checklist_to_gather(
 def test_the_under_five_result_names_a_year_and_says_what_to_do_meanwhile(
     engine: EligibilityEngine,
 ):
-    """The outcome most likely to be handled badly. It must read as a date in
-    the diary, not a door closing."""
+    """The outcome most likely to be handled badly."""
     result = walk(engine, {**CLEAN, "age": "under5", "age_exact": "2"})
     assert result.verdict is Verdict.NOT_YET
     assert result.reminder_year == 2029

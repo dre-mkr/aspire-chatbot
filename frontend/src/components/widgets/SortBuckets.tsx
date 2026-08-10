@@ -1,25 +1,4 @@
-/**
- * Things tapped into categories. Explicitly not drag-and-drop.
- *
- * ## Tap the thing, then tap where it goes
- *
- * Drag-and-drop is excluded product-wide below 13 and is not used above it
- * either, because everything it would do here a two-tap does — and the two-tap
- * works for a child on a phone held one-handed, for a switch user, for a
- * keyboard user, and for anyone whose fine motor control is still developing.
- * Drag works for a mouse on a desk.
- *
- * The interaction is a selection model, which is why it is keyboard-operable
- * for free: every item and every bucket is a `<button>`, and `aria-pressed`
- * says which item is currently picked up.
- *
- * ## Wrong answers are not marked wrong
- *
- * An item in the wrong bucket is shown in `caution`, never in `danger`, and
- * never with an X. The same rule the hint ladder holds: a child who feels
- * stupid closes the app. `Got it` reveals the placements; until then nothing
- * is graded at all.
- */
+/** Things tapped into categories. */
 import { useState } from "react";
 import type { SortBucketsWidget } from "../../lib/stream/types";
 import {
@@ -141,9 +120,7 @@ export function SortBuckets({
 							type="button"
 							disabled={!held}
 							onClick={() => drop(bucket.id)}
-							// Named for what tapping it does right now, so a screen
-							// reader user is not told "Need" nine times with no
-							// indication that one of them is a destination.
+							// Named for what tapping it does right now, so a screen reader user is not told "Need" nine times with no indic…
 							aria-label={held ? `Put it in ${bucket.label}` : bucket.label}
 							style={{
 								minHeight: "5.5rem",
@@ -188,8 +165,7 @@ export function SortBuckets({
 								}}
 							>
 								{inside.map((item) => {
-									// Only after "Got it", and `caution` rather than
-									// `danger`: not-yet-right, never wrong.
+									// Only after "Got it", and `caution` rather than `danger`: not-yet-right, never wrong.
 									const misplaced =
 										revealed &&
 										item.belongs_to !== null &&

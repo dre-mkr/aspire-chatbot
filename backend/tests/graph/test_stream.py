@@ -1,10 +1,4 @@
-"""The wire protocol, end to end, against a real FastAPI app.
-
-The acceptance criterion for A4 is a curl showing tokens arriving incrementally
-with a quick_replies directive as its own event carrying a correct ordinal.
-That is what this asserts, through `TestClient` rather than through curl so it
-runs in CI.
-"""
+"""The wire protocol, end to end, against a real FastAPI app."""
 
 from __future__ import annotations
 
@@ -27,12 +21,7 @@ from app.graph.stream_interceptor import StreamInterceptor  # noqa: E402
 
 @pytest.fixture
 def client(monkeypatch):
-    """The v2 router alone, with the model calls stubbed.
-
-    Mounted on a bare app rather than on `app.main:app` so this suite does not
-    need a corpus, a database or a provider key -- the transport is what is
-    under test, and it should be testable without any of them.
-    """
+    """The v2 router alone, with the model calls stubbed."""
     from app.api import stream as stream_module
     from app.graph import main_graph
 
@@ -90,11 +79,7 @@ def post(client, *, auth: str | None, **body):
 
 
 def post_raw(client, *, auth: str | None, **body):
-    """For refusals decided BEFORE the stream opens, which are plain JSON.
-
-    `post` above reads an SSE body; a 401 has no frames to parse, so a separate
-    helper keeps both readable rather than making one of them conditional.
-    """
+    """For refusals decided BEFORE the stream opens, which are plain JSON."""
     headers = {"Authorization": f"Bearer {auth}"} if auth else {}
     response = client.post("/v2/chat/stream", json=body, headers=headers)
     return response.status_code, response.json()
@@ -156,15 +141,7 @@ class TestTheHappyTurn:
 
 class TestFailures:
     def test_no_token_is_a_401_carrying_the_error_shape(self, client):
-        """Authentication is settled BEFORE the response starts, so it is a status.
-
-        This used to be a 200 with the error inside the SSE body. Nothing had
-        been written at that point -- SSE does not force it -- and a 200 carrying
-        a failure is a lie to every monitoring system, which counts it a success.
-
-        The body keeps the same `{code, message}` shape an `error` frame uses, so
-        the client reads one thing whichever way the refusal arrives.
-        """
+        """Authentication is settled BEFORE the response starts, so it is a status."""
         status, body = post_raw(client, auth=None, message="hi")
         assert status == 401
         assert body == {
@@ -178,13 +155,7 @@ class TestFailures:
         assert body["code"] == "unauthenticated"
 
     def test_a_failure_INSIDE_the_turn_is_still_an_error_event(self, client):
-        """The original property, which still has to hold for everything else.
-
-        Once the stream has opened the status is spent, so a failure after that
-        point must arrive as an `error` frame -- a truncated 200 is
-        indistinguishable from a short answer. An empty message is the cheapest
-        case that gets past authentication.
-        """
+        """The original property, which still has to hold for everything else."""
         status, events = post(client, auth=token(), message="   ")
         assert status == 200
         assert events[0]["event"] == "error"
@@ -203,23 +174,7 @@ class TestFailures:
 
 class TestIdentityIsNotClientControlled:
     def test_a_body_claiming_a_persona_does_not_change_the_route(self, client, caplog):
-        """The A2 acceptance case, seen from the transport.
-
-        The body asks for Aurora -- who reaches registration and servicing. The
-        token says Stella at 9-12, whose only agents are learn and escalate.
-
-        This used to assert `usage.agent == "learn_agent"`, which was the
-        classifier's pick for this message under a Stella token and a poor proxy
-        for the property: `learn_agent` is not a registration flow, but it is
-        not a sensible destination for "I want to register" either, and the
-        assertion passed for a reason unrelated to identity.
-
-        Registration intent is now answered before the classifier by
-        `cards._registration_help`, so nothing sets `active_agent` at all and
-        the old proxy reads None. The property is unchanged and is asserted
-        directly here instead: the caller was refused Aurora's treatment and
-        given the one the token earns.
-        """
+        """The A2 acceptance case, seen from the transport."""
         with caplog.at_level("WARNING"):
             _status, events = post(
                 client,
@@ -236,8 +191,7 @@ class TestIdentityIsNotClientControlled:
         agent = events[-1]["data"]["usage"]["agent"]
         assert agent not in ("register_agent", "register_agent_step1", "servicing_agent")
 
-        # What a Stella token earns for this message: told that a parent or
-        # guardian applies, rather than being walked through an application.
+        # What a Stella token earns for this message: told that a parent or guardian applies, rather than being walked…
         prose = "".join(
             event["data"]["t"] for event in events if event["event"] == "token"
         )
@@ -264,8 +218,7 @@ class TestTheEncoding:
             "POST", "/v2/chat/stream", json={"message": "hi"}, headers=headers
         ) as response:
             assert response.headers["content-type"].startswith("text/event-stream")
-            # nginx buffers proxied responses by default; without this the whole
-            # stream lands at once in production and in no other environment.
+            # nginx buffers proxied responses by default; without this the whole stream lands at once in production and in…
             assert response.headers["x-accel-buffering"] == "no"
             raw = "".join(chunk for chunk in response.iter_text())
 
@@ -280,18 +233,7 @@ class TestTheEncoding:
 
 
 class TestCitationMarkers:
-    """`[ASP-001]` is grounding machinery, not copy.
-
-    `generate` is instructed to emit these so `ground_check` can prove the model
-    can point at the row it used -- an answer citing nothing is escalated rather
-    than served. The ids then travel to the client as a `citations` directive,
-    which the transcript renders as a "1 source" disclosure.
-
-    Which leaves the marker itself with nothing to do except sit in the middle
-    of a sentence a six-year-old is reading. It is stripped here rather than at
-    the model, because telling the model not to write them would remove the
-    grounding check's only input.
-    """
+    """`[ASP-001]` is grounding machinery, not copy."""
 
     CASES = {
         "ASPIRE is a savings programme. [ASP-001] It is run by the government [ASP-002].":
@@ -308,12 +250,7 @@ class TestCitationMarkers:
 
     @pytest.mark.parametrize("chunk", [1, 2, 3, 4, 5, 7, 9, 13, 40, 500])
     def test_markers_are_stripped_at_every_chunk_boundary(self, chunk: int):
-        """The whole difficulty is WHERE the boundary falls.
-
-        A marker is nine characters and the model emits a few at a time, so a
-        boundary lands inside one constantly. Feeding whole markers proves
-        nothing -- these feed one character at a time, and every size between.
-        """
+        """The whole difficulty is WHERE the boundary falls."""
         for text, want in self.CASES.items():
             interceptor = StreamInterceptor(widgets_enabled=True)
             for index in range(0, len(text), chunk):
@@ -322,13 +259,7 @@ class TestCitationMarkers:
             assert interceptor.prose == want, f"chunk={chunk} on {text!r}"
 
     def test_the_space_before_a_marker_goes_with_it(self):
-        """Otherwise the sentence keeps a double space and a stranded " .".
-
-        The failure this pins: the space is released in an earlier chunk than
-        the `[`, the regex never sees them together, and the reader gets
-        "programme.  It is run by the government ." -- measured at chunk sizes
-        1, 2, 3, 5 and 9 before the space was held back with the marker.
-        """
+        """Otherwise the sentence keeps a double space and a stranded " ."."""
         interceptor = StreamInterceptor(widgets_enabled=True)
         for char in "done. [ASP-001] next":
             interceptor.feed(char)
@@ -336,11 +267,7 @@ class TestCitationMarkers:
         assert interceptor.prose == "done. next"
 
     def test_a_bracket_too_long_to_be_a_marker_is_released(self):
-        """A hold that never resolves is a stream that stops.
-
-        `[` followed by a long run with no `]` is ordinary prose, and holding it
-        to the end of the turn would freeze the reveal on it.
-        """
+        """A hold that never resolves is a stream that stops."""
         interceptor = StreamInterceptor(widgets_enabled=True)
         events = interceptor.feed("see [this very long bracketed aside that never closes")
         assert events, "the stream stalled on an unclosed bracket"

@@ -1,16 +1,4 @@
-"""The lesson machine, the hint ladder, explain-it-back, and the mastery scale.
-
-The acceptance criteria for C2, C3 and C4 are all here by name:
-
-  * a full lesson runs -- teach, check, correct, mastery bump, next;
-  * a wrong answer runs the hint ladder;
-  * an off-topic question is answered briefly and returns to the lesson;
-  * three consecutive wrong answers produce nudge, narrow, reveal-and-teach,
-    never a fourth attempt;
-  * no negative word appears in any output;
-  * a learner who only plays widgets never exceeds score 1 on any concept;
-  * due concepts reappear on schedule.
-"""
+"""The lesson machine, the hint ladder, explain-it-back, and the mastery scale."""
 
 from __future__ import annotations
 
@@ -86,12 +74,7 @@ async def reply(graph, state, text: str):
 
 class TestMasteryTransitions:
     def test_a_widget_only_learner_never_exceeds_one(self):
-        """The acceptance criterion, and the rule the scale exists to hold.
-
-        A child can move a slider forty times. It is engagement and often the
-        moment the idea lands; it is not evidence they hold it, because moving
-        a slider needs no recall, no articulation and no decision.
-        """
+        """The acceptance criterion, and the rule the scale exists to hold."""
         row = MasteryRow(concept_id="save")
         for _ in range(40):
             row = apply(row, Evidence.WIDGET, now=NOW)
@@ -99,11 +82,7 @@ class TestMasteryTransitions:
         assert row.widget_touches == 40
 
     def test_a_widget_does_not_drag_a_higher_score_back_down(self):
-        """The same bug in the opposite direction.
-
-        Writing the ceiling as `min(score + 1, 1)` would drop a concept already
-        at 2 back to 1 the moment the child touched a widget about it.
-        """
+        """The same bug in the opposite direction."""
         row = MasteryRow(concept_id="save", score=3)
         assert apply(row, Evidence.WIDGET, now=NOW).score == 3
 
@@ -185,11 +164,7 @@ class TestSpacedRepetition:
         assert scheduler.due_concepts(rows, now=NOW) == ["b", "a"]
 
     def test_an_unseen_concept_is_not_folded_in_as_review(self):
-        """It is due in the PLACEMENT sense and `place` handles it.
-
-        Returning it here would fold an unmet concept into a check question as
-        though it were revision.
-        """
+        """It is due in the PLACEMENT sense and `place` handles it."""
         assert scheduler.due_concepts([MasteryRow(concept_id="a")], now=NOW) == []
 
     def test_at_most_two_reviews_per_lesson(self):
@@ -217,11 +192,7 @@ class TestPlacement:
         assert placement.lesson.id == "l02_spending_is_fine"
 
     def test_placement_follows_course_order_not_the_lowest_score(self, curriculum):
-        """Curriculum order encodes prerequisites.
-
-        Jumping to whichever concept scored worst would teach "budget" to a
-        child who has not met "goal".
-        """
+        """Curriculum order encodes prerequisites."""
         placement = scheduler.place(
             curriculum,
             "9-12",
@@ -243,8 +214,7 @@ class TestPlacement:
         assert placement.lesson.id == "l03_a_goal"
 
     def test_it_does_not_resume_after_the_window(self, curriculum):
-        """Outside 48 hours the setup is forgotten, and being dropped into the
-        middle of an explanation is worse than starting again."""
+        """Outside 48 hours the setup is forgotten, and being dropped into the middle of an explanation is worse than st…"""
         placement = scheduler.place(
             curriculum,
             "9-12",
@@ -375,8 +345,7 @@ class TestHintLadder:
         ],
     )
     def test_an_ordinary_sentence_with_a_negation_in_it_is_not_a_verdict(self, text):
-        """Banning "no" outright would flag real sentences and `sanitise` would
-        then delete the word, leaving the opposite of what was written."""
+        """Banning "no" outright would flag real sentences and `sanitise` would then delete the word, leaving the opposi…"""
         assert not hl.contains_negative(text)
 
     def test_sanitising_leaves_a_readable_sentence(self):
@@ -415,11 +384,7 @@ class TestExplainBack:
         assert eb.grade("um, i think, um, you keep it?", self.ACCEPT).accepted
 
     def test_one_concept_word_is_enough(self):
-        """The threshold is low on purpose.
-
-        Accepting a thin answer costs a follow-up question. Rejecting a real one
-        costs a child who tried and was told they were wrong.
-        """
+        """The threshold is low on purpose."""
         assert eb.grade("save", self.ACCEPT).accepted
 
     def test_a_thin_answer_is_built_on_rather_than_graded(self):
@@ -470,9 +435,7 @@ class TestGradeAnswer:
         assert not grade_answer(question, "   ")
 
     def test_grading_is_deterministic_not_a_model_call(self, curriculum):
-        """A rung count only means something if "wrong" is decided identically
-        every time. A lenient model on Tuesday gives two nudges for the answer
-        that got a reveal on Monday."""
+        """A rung count only means something if "wrong" is decided identically every time."""
         question = curriculum.lessons["l01_what_is_saving"].check_questions[0]
         assert all(grade_answer(question, "Saving") for _ in range(20))
 
@@ -518,9 +481,7 @@ class TestTheLessonRuns:
         assert state["learning"]["hint_rung"] == hl.NARROW
 
         state = await reply(lesson_graph, state, "Spending")
-        # The reveal ENDS the question. The ladder hands to `reteach`, which
-        # explains it, and the session MOVES ON -- there is no fourth attempt
-        # at the same question and no fourth teaching of the same lesson.
+        # The reveal ENDS the question.
         assert state["learning"]["lesson_id"] != first_lesson
         assert state["learning"]["attempts"] == 0
 

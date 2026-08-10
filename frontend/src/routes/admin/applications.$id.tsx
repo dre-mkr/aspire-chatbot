@@ -1,25 +1,4 @@
-/**
- * One application: fields on the left, documents on the right, side by side.
- *
- * The reviewer's job IS the comparison — reading a name off a birth certificate
- * and checking it against the name that was typed. Making them switch tabs to
- * do it is the single biggest waste of a reviewer's day, and it is also how
- * mismatches get missed.
- *
- * ## Info-requested is the feature, not a status
- *
- * Flagging specific fields reopens exactly those in the parent's chat. They do
- * not refill the form. The transition endpoint refuses `info_requested` with no
- * slots, because a reviewer who wants corrections without saying which ones is
- * asking the parent to guess.
- *
- * ## Documents are fetched one at a time, on demand
- *
- * Each `documentUrl` call mints a short-lived signed URL and writes its own
- * audit row. Pre-fetching a thumbnail grid would put nine live URLs in a page a
- * reviewer may leave open, and would make the audit trail say they looked at
- * nine documents when they looked at one.
- */
+/** One application: fields on the left, documents on the right, side by side. */
 import {
 	createFileRoute,
 	useNavigate,
@@ -123,8 +102,7 @@ function Detail() {
 				· consent {data.consent_version ?? "not recorded"}
 			</p>
 
-			{/* Side by side. Stacks below 60rem so it is usable on a laptop with
-			    a document open beside it. */}
+			{/* Side by side. */}
 			<div
 				style={{
 					display: "grid",
@@ -237,8 +215,7 @@ function Detail() {
 											</>
 										) : null}
 									</div>
-									{/* doc_check's note, shown as ADVICE. It never rejected
-									    anything and the wording should not imply it did. */}
+									{/* doc_check's note, shown as ADVICE. */}
 									{document.check_notes ? (
 										<div
 											style={{ fontSize: "0.8rem", color: "var(--warn-ink)" }}
@@ -371,8 +348,7 @@ function Detail() {
 						fontSize: "0.85rem",
 					}}
 				>
-					{/* Keyed on the transition itself. An audit trail is append-only,
-					    so timestamp plus target status is unique and stable. */}
+					{/* Keyed on the transition itself. */}
 					{data.history.map((event) => (
 						<li
 							key={`${event.at}-${event.to}`}

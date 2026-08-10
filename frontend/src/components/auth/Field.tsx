@@ -1,13 +1,6 @@
 import { useId, useState } from "react";
 
-/**
- * One labelled input, with its icon, its hint and its error.
- *
- * The error lives with the field rather than in a banner at the top of the
- * form. A message about the password belongs beside the password: a summary at
- * the top makes somebody scan back down to work out which box it means, and on
- * a phone it is usually off screen by the time they are typing.
- */
+/** One labelled input, with its icon, its hint and its error. */
 
 export type FieldIcon =
 	| "mail"
@@ -124,9 +117,7 @@ export function Field({
 					inputMode={inputMode}
 					data-reveal={revealable || undefined}
 					data-error={error ? "" : undefined}
-					// The error is announced with the field rather than separately,
-					// so a screen reader hears the problem while on the input it
-					// belongs to.
+					// The error is announced with the field rather than separately, so a screen reader hears the problem while on t…
 					aria-invalid={error ? true : undefined}
 					aria-describedby={hint || error ? describedBy : undefined}
 					onChange={(event) => onChange(event.currentTarget.value)}

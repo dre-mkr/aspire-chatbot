@@ -1,12 +1,4 @@
-/**
- * Signing up, signing in, and getting back in.
- *
- * Every call that establishes an account sends the current anonymous token
- * alongside the credentials, which is what makes the claim run: the questions
- * somebody asked before signing up follow them into the account. The service
- * does the reassignment transactionally; this only has to remember to offer the
- * token, and to store whatever comes back.
- */
+/** Signing up, signing in, and getting back in. */
 
 import {
 	authHeaders,
@@ -32,13 +24,7 @@ export interface AuthResult extends Session {
 	claim: ClaimOutcome;
 }
 
-/**
- * A failure worth showing next to a field.
- *
- * `field` is what the page uses to put the message under the input it belongs
- * to rather than in a banner at the top — a message about the password should
- * be beside the password.
- */
+/** A failure worth showing next to a field. */
 export class AuthError extends Error {
 	readonly field: "email" | "password" | "form";
 	readonly status: number;
@@ -71,9 +57,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 			signal: AbortSignal.timeout(20000),
 		});
 	} catch {
-		// Offline, DNS, a dropped connection. Named as itself rather than as a
-		// credentials problem, because telling somebody their password is wrong
-		// when their wifi is off sends them to reset a password that is fine.
+		// Offline, DNS, a dropped connection.
 		throw new AuthError(
 			"Could not reach ASPIRE. Check your connection and try again.",
 		);
@@ -128,13 +112,9 @@ function adopt(wire: WireSession): AuthResult {
 		avatarUrl: wire.avatar_url ?? null,
 		role: wire.role,
 		// Left undefined rather than defaulted when the service does not send it.
-		// "Not told" and "Stella" are different facts, and defaulting here would
-		// make an older service look like it had chosen the youngest persona for
-		// everybody.
 		persona: wire.persona,
 	};
-	// Stored before returning, so every surface is already agreed about who is
-	// signed in by the time the page reacts.
+	// Stored before returning, so every surface is already agreed about who is signed in by the time the page react…
 	storeSession(session);
 	return {
 		...session,
@@ -143,14 +123,7 @@ function adopt(wire: WireSession): AuthResult {
 }
 
 export interface SignUpFields {
-	/**
-	 * Who the account is for.
-	 *
-	 * The service defaults this to `participant` when it is absent, which is
-	 * what every account created before the role step already was. It is sent
-	 * explicitly regardless: a guardian account with the wrong date of birth on
-	 * it cannot be repaired from inside the product.
-	 */
+	/** Who the account is for. */
 	role: "participant" | "guardian" | "educator";
 	email: string;
 	password: string;
@@ -213,35 +186,16 @@ export async function redeemSignInLink(token: string): Promise<AuthResult> {
 	);
 }
 
-/**
- * How close to expiry is close enough to renew.
- *
- * Generous on purpose. A session that renews with days to spare costs one
- * request; one that renews with seconds to spare is a race against whatever the
- * person is in the middle of.
- */
+/** How close to expiry is close enough to renew. */
 const RENEW_WITHIN_MS = 3 * 24 * 60 * 60 * 1000;
 
 let renewing: Promise<void> | null = null;
 
-/**
- * Quietly take a fresh token when the current one is getting old.
- *
- * Deliberately fire-and-forget and deliberately not awaited by anything on the
- * critical path. A reply that is mid-stream keeps using the token it opened
- * with — the service tolerates one that expired in the last few minutes for
- * exactly this reason — and the replacement lands beside it without touching
- * the connection.
- *
- * Failure is silent. If renewal cannot happen the existing token still works
- * until it genuinely expires, and by then there will have been many more
- * chances to try.
- */
+/** Quietly take a fresh token when the current one is getting old. */
 export function renewSessionIfStale(): void {
 	const session = currentSession();
 	if (!session || renewing) return;
-	// Unknown expiry means a session stored before expiry was recorded. Left
-	// alone rather than renewed on a guess.
+	// Unknown expiry means a session stored before expiry was recorded.
 	if (!session.expiresAt || session.expiresAt - Date.now() > RENEW_WITHIN_MS)
 		return;
 
@@ -255,29 +209,18 @@ export function renewSessionIfStale(): void {
 		});
 }
 
-/**
- * Sign out, and come back as somebody new.
- *
- * The service retires the token; the client then takes a brand-new anonymous
- * identity rather than resurrecting the one from before signing in. On a shared
- * device, signing out should not leave a thread back to who was there.
- */
+/** Sign out, and come back as somebody new. */
 export async function signOut(afterCleared?: () => void): Promise<void> {
 	try {
 		// While the token is still in hand, so the service can retire it.
 		await post<void>("/api/auth/logout", {});
 	} catch {
-		// The local session is cleared either way. A token the server has not
-		// heard about is still useless once this browser has forgotten it.
+		// The local session is cleared either way.
 	}
 
 	clearSession();
 
-	// Dropped here, in the gap where this browser has no identity at all, and
-	// the ordering is the whole point. Removing a mounted query makes it
-	// refetch immediately: doing that before the token was cleared re-fetched
-	// the person who had just signed out, and put their conversation titles
-	// straight back into the rail.
+	// Dropped here, in the gap where this browser has no identity at all, and the ordering is the whole point.
 	afterCleared?.();
 
 	await resetToFreshAnonymous();

@@ -1,39 +1,4 @@
-"""The shape of a lesson, and the loader that refuses to start without one.
-
-Curriculum content is AUTHORED. The learning agent does not retrieve its way
-into a lesson and does not generate one at runtime, and that is the single most
-important decision in Track C.
-
-The reason is not caution about hallucination -- though that matters. It is
-that a curriculum has a *sequence*: concepts have prerequisites, examples build
-on each other, and a child who met "goal" last week should meet it again this
-week in the same words. A generated lesson has no memory of last week and no
-obligation to next week. It produces a plausible lesson about saving; it cannot
-produce lesson four of a course.
-
-So lessons are YAML, reviewed by a person, validated at startup, and versioned
-in git.
-
-## Band-keyed everything
-
-`teach_points` and `examples` are dicts keyed by age band, not single strings.
-A five-year-old and a fifteen-year-old learning the same concept need different
-sentences and different examples -- snow cones and a bicycle for one, a phone
-and a first pay packet for the other -- and one lesson serving both is one
-lesson that fits neither.
-
-`for_band` resolves downward: a band with no entry of its own inherits the
-nearest younger one. That direction is deliberate. Inheriting *upward* would
-hand a nine-year-old the thirteen-year-old's text, which is the failure the
-whole vocabulary system exists to prevent; inheriting downward is at worst
-babyish.
-
-## Validation fails loudly at startup
-
-A malformed lesson must not be discovered by a child mid-sentence. `load_all`
-raises, the process refuses to start, and the message names the file and the
-field.
-"""
+"""The shape of a lesson, and the loader that refuses to start without one."""
 
 from __future__ import annotations
 
@@ -50,8 +15,7 @@ logger = logging.getLogger(__name__)
 
 Band = Literal["5-8", "9-12", "13-15", "16-18", "adult"]
 
-#: Bands youngest first. Duplicated rather than imported from `graph.state` so
-#: the curriculum package can be loaded by a content tool that has no graph.
+#: Bands youngest first.
 BANDS: tuple[Band, ...] = ("5-8", "9-12", "13-15", "16-18", "adult")
 
 CONTENT_DIR = Path(__file__).resolve().parent / "content"
@@ -65,13 +29,7 @@ def band_index(band: str) -> int:
 
 
 def for_band(mapping: dict[str, Any], band: str) -> Any | None:
-    """The entry for `band`, falling back to the nearest YOUNGER band.
-
-    Downward only. See the module docstring: upward inheritance would serve a
-    nine-year-old the thirteen-year-old's wording, which is exactly what the
-    vocabulary gate exists to stop -- and it would do it from authored content,
-    where the gate would then reject material a human approved.
-    """
+    """The entry for `band`, falling back to the nearest YOUNGER band."""
     index = band_index(band)
     if index < 0:
         return None
@@ -93,8 +51,7 @@ class Concept(_Node):
     band_min: Band
     band_max: Band = "adult"
     prerequisites: list[str] = Field(default_factory=list)
-    #: The words this concept teaches. Checked against `safety/vocab.py`: a
-    #: concept cannot introduce a term its own band is forbidden to hear.
+    #: The words this concept teaches.
     vocabulary: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -105,13 +62,7 @@ class Concept(_Node):
 
     @model_validator(mode="after")
     def _vocabulary_is_permitted_at_band_min(self) -> "Concept":
-        """A concept may not teach a word its youngest band cannot hear.
-
-        This is where an authoring mistake surfaces: writing a 9-12 concept
-        whose vocabulary includes "compound" is a content error, and catching it
-        at load time is far better than catching it in `safety_out` on a live
-        turn -- where the fix is a re-prompt of a lesson a human wrote.
-        """
+        """A concept may not teach a word its youngest band cannot hear."""
         for word in self.vocabulary:
             if vocab.check(word, self.band_min):
                 raise ValueError(
@@ -121,16 +72,7 @@ class Concept(_Node):
 
 
 class CheckQuestion(_Node):
-    """One check-for-understanding question.
-
-    `options` and `answer` together make this gradeable in Python, which is what
-    keeps the hint ladder deterministic: a wrong answer must be recognised the
-    same way every time, or the ladder's rung counting means nothing.
-
-    `accept` is for free-text and open questions -- the concept words that count
-    as understanding. `explain_back` questions have no right answer at all and
-    set `graded=False`.
-    """
+    """One check-for-understanding question."""
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_]{1,63}$")
     prompt: dict[str, str]
@@ -140,8 +82,7 @@ class CheckQuestion(_Node):
     #: Concept words that count as a correct free-text answer, lowercase.
     accept: list[str] = Field(default_factory=list)
     graded: bool = True
-    #: The three rungs, band-keyed. Authored rather than generated so a child
-    #: who fails twice gets the same careful wording every time.
+    #: The three rungs, band-keyed.
     hints: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -164,8 +105,7 @@ class Lesson(_Node):
     objective: str = Field(max_length=200)
     #: Band-keyed. Each entry is the ordered sequence of things to say.
     teach_points: dict[str, list[str]]
-    #: Band-keyed. Local and concrete -- patties, snow cones, a bicycle, a
-    #: Carnival costume -- never an abstract percentage below 13.
+    #: Band-keyed.
     examples: dict[str, list[str]]
     check_questions: list[CheckQuestion] = Field(min_length=1)
     suggested_widget_kind: str | None = None
@@ -214,10 +154,7 @@ class Module(_Node):
 
         for concept in self.concepts:
             for prerequisite in concept.prerequisites:
-                # Only intra-module prerequisites are checked here. A concept may
-                # legitimately depend on one from an earlier module, and
-                # `Curriculum.validate_prerequisites` checks those once every
-                # module is loaded.
+                # Only intra-module prerequisites are checked here.
                 if prerequisite in known and prerequisite == concept.id:
                     raise ValueError(f"{concept.id}: depends on itself")
         return self
@@ -227,12 +164,7 @@ class Module(_Node):
 
 
 class Curriculum:
-    """Every module, loaded and cross-checked.
-
-    Built once at startup. `load_all` raises rather than skipping a bad file:
-    a curriculum missing a module is a course with a hole in it, and a hole in
-    a course is a child who never meets a concept the next lesson assumes.
-    """
+    """Every module, loaded and cross-checked."""
 
     def __init__(self, modules: list[Module]) -> None:
         self.modules = sorted(modules, key=lambda module: module.order)
@@ -246,13 +178,7 @@ class Curriculum:
         self.validate_prerequisites()
 
     def validate_prerequisites(self) -> None:
-        """Every prerequisite exists and is not above the band that needs it.
-
-        The second half is the one that bites: a 9-12 concept whose prerequisite
-        is a 13-15 concept is a lesson no nine-year-old can ever legitimately
-        reach, and nothing at runtime would report it -- the placement step
-        would simply never select it.
-        """
+        """Every prerequisite exists and is not above the band that needs it."""
         for concept in self.concepts.values():
             for prerequisite in concept.prerequisites:
                 required = self.concepts.get(prerequisite)
@@ -292,12 +218,7 @@ class Curriculum:
 
 
 def load_module(path: Path) -> Module:
-    """One YAML file into a validated `Module`.
-
-    The error message names the file. A pydantic validation error alone says
-    "lessons.2.check_questions.0.answer", which is precise and useless when
-    twelve modules are being loaded.
-    """
+    """One YAML file into a validated `Module`."""
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as error:
@@ -314,12 +235,7 @@ _cache: Curriculum | None = None
 
 
 def load_all(directory: Path | None = None, *, refresh: bool = False) -> Curriculum:
-    """Every module in the content directory, validated together.
-
-    Cached, because this is read on the placement path of every lesson turn and
-    the files do not change while the process runs. `refresh=True` is for the
-    tests and for a content tool.
-    """
+    """Every module in the content directory, validated together."""
     global _cache
     if _cache is not None and not refresh and directory is None:
         return _cache

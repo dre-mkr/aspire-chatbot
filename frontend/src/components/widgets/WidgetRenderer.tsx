@@ -1,28 +1,4 @@
-/**
- * `kind` and `v` to a component. Unknown renders NOTHING and logs.
- *
- * ## Never an error to a child
- *
- * A widget that cannot be rendered is a widget the child never knew was coming.
- * They asked a question, they got prose, and the bonus did not arrive. An error
- * box in its place would tell them something is broken with a product they are
- * being asked to trust with their savings.
- *
- * So: nothing on screen, one console warning, and the prose either side reads
- * as a complete answer -- because it is one.
- *
- * ## Versioned, and the version is checked
- *
- * A `v: 2` widget from a newer backend has fields this build does not know
- * about. Rendering it half-right is worse than not rendering it: a growth stack
- * missing its `earned` semantics is a growth stack teaching the wrong lesson.
- *
- * ## An error inside a widget does not take the transcript with it
- *
- * `WidgetBoundary` is a real error boundary. Without one, a single malformed
- * payload that slipped every server-side gate would unmount the whole chat --
- * turning a cosmetic failure into a lost conversation.
- */
+/** `kind` and `v` to a component. */
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import type { ConceptWidget, WidgetInteraction } from "../../lib/stream/types";
 import { Allocator } from "./Allocator";
@@ -40,13 +16,7 @@ const SUPPORTED_VERSIONS = new Set([1]);
 
 export interface WidgetProps {
 	widget: ConceptWidget;
-	/**
-	 * Called when the interaction settles, not on every tick.
-	 *
-	 * The debounce lives inside each widget because "settled" means something
-	 * different per primitive: a slider settles when it stops moving, a card
-	 * flip settles immediately.
-	 */
+	/** Called when the interaction settles, not on every tick. */
 	onInteraction: (interaction: WidgetInteraction) => void;
 	/** The child skipped it. The agent continues WITHOUT COMMENT. */
 	onSkip: () => void;
@@ -171,20 +141,13 @@ function renderBody(
 					onSkip={onSkip}
 				/>
 			);
-		// Anything else renders NOTHING and logs. A kind this build has never
-		// heard of is a newer backend, which is the normal state between two
-		// deploys -- not a failure to show a child.
+		// Anything else renders NOTHING and logs.
 		default:
 			return null;
 	}
 }
 
-/**
- * Contains a render failure to the widget.
- *
- * A class component because that is still the only way to implement
- * `componentDidCatch`. Everything else in this tree is a function component.
- */
+/** Contains a render failure to the widget. */
 class WidgetBoundary extends Component<
 	{ kind: string; children: ReactNode },
 	{ failed: boolean }

@@ -1,15 +1,4 @@
-"""The router cannot fetch a person any more.
-
-E.2. `escalate_agent` was one of the options `classify` chose between, described
-as "they asked for one, they are upset or in difficulty, or the question is
-outside what this assistant can answer" -- three situations in one line, the
-third a catch-all. A small model handed a catch-all beside five topic-shaped
-agents uses it as one.
-
-What replaces it is three explicit paths, each tested elsewhere: the safety edge
-(`test_safety_path.py`), the deterministic request matcher (below), and an
-agent's tool call with a stated reason (`test_contract.py`).
-"""
+"""The router cannot fetch a person any more."""
 
 from __future__ import annotations
 
@@ -52,24 +41,23 @@ class TestNoRouterPathTerminatesAtEscalation:
         assert "escalate_agent" not in ROUTABLE_AGENTS
 
     async def test_the_router_is_never_shown_it(self):
-        """Filtered from `allowed`, not merely omitted from the menu -- omitting
-        it would still leave `_coerce` rung 1 able to accept it."""
+        """Filtered from `allowed`, not merely omitted from the menu -- omitting it would still leave `_coerce` rung 1 a…"""
         assert "escalate_agent" not in AGENT_DESCRIPTIONS
         assert "escalate_agent" in UNROUTABLE
 
     @pytest.mark.parametrize(("persona", "band", "status"), SIGNED_IN)
     async def test_filtering_never_empties_a_permitted_row(self, persona, band, status):
-        """If `routable()` emptied a granted row, a permitted caller would take
-        the `access_denied` branch in `classify` -- a grant silently becoming a
-        403."""
+        """If `routable()` emptied a granted row, a permitted caller would take the `access_denied` branch in `classify`…"""
         granted = allowed_agents(persona, band, status, user_id="u")
         if not granted:
             return
         assert routable(granted), f"{persona}/{band}/{status} has no routable agent"
 
     async def test_stella_keeps_teaching_and_nova_keeps_qa(self):
+        # QA leads every row now; Stella keeps the lesson machine right behind it.
         assert routable(allowed_agents("stella", "9-12", "prospect", user_id="u")) == [
-            "learn_agent"
+            "qa_agent_limited",
+            "learn_agent",
         ]
         assert routable(allowed_agents("nova", "adult", "prospect", user_id="u")) == [
             "qa_agent"
@@ -109,8 +97,7 @@ class TestAskingForAPerson:
         ],
     )
     async def test_these_are_questions_and_stay_with_the_knowledge_base(self, message):
-        """A false positive here hands somebody to a support queue they did not
-        ask for -- the exact failure this track reduces."""
+        """A false positive here hands somebody to a support queue they did not ask for -- the exact failure this track…"""
         assert wants_human(message) is False
 
     async def test_a_request_escalates_on_turn_one(self):
@@ -134,9 +121,7 @@ class TestAskingForAPerson:
     async def test_every_persona_can_ask_including_the_one_with_no_tools(
         self, persona, band
     ):
-        """Stella's only routable agent is `learn_agent`, and the lesson machine
-        makes no model calls at all -- so a tool-only design would leave a child
-        unable to ask for a person. This is the floor under the tools."""
+        """Stella's only routable agent is `learn_agent`, and the lesson machine makes no model calls at all -- so a too…"""
         gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
         update = await gate(_state("i want to talk to a real person", persona, band))
 
@@ -151,21 +136,10 @@ class TestAskingForAPerson:
 
 
 class TestUnbuiltAgentsAreNotDestinations:
-    """`UNBUILT` must match what is actually registered.
-
-    The constant exists because reading the live registry is unsafe -- see
-    `classify.UNBUILT`. The cost of declaring a fact instead of deriving it is
-    that it can drift, so this holds it against the real thing.
-    """
+    """`UNBUILT` must match what is actually registered."""
 
     async def test_the_declaration_matches_the_registry(self):
-        """Whatever has no builder after `register_all()` must be in `UNBUILT`.
-
-        Fails in both directions on purpose. An agent that gains an
-        implementation and stays listed here is silently unroutable, which is the
-        quieter and more expensive half: nobody notices an agent that is never
-        chosen.
-        """
+        """Whatever has no builder after `register_all()` must be in `UNBUILT`."""
         import app.graph.main_graph as main_graph
         from app.graph.nodes.classify import UNBUILT
 
@@ -191,13 +165,7 @@ class TestUnbuiltAgentsAreNotDestinations:
         assert routable(granted), "the row must keep something to route to"
 
     async def test_filtering_is_independent_of_registration_order(self):
-        """`routable` must not change with what has been imported so far.
-
-        The first version of this filter read `AGENT_BUILDERS` at call time. A
-        partially populated registry -- one failed import, or another test having
-        replaced it -- then stripped agents that were built, emptying Stella's row
-        to `[]` and turning a permitted grant into nothing to route to.
-        """
+        """`routable` must not change with what has been imported so far."""
         import app.graph.main_graph as main_graph
         from app.graph.nodes.classify import routable
 
@@ -214,4 +182,4 @@ class TestUnbuiltAgentsAreNotDestinations:
             main_graph.AGENT_BUILDERS.clear()
             main_graph.AGENT_BUILDERS.update(saved)
 
-        assert expected == ["learn_agent"]
+        assert expected == ["qa_agent_limited", "learn_agent"]

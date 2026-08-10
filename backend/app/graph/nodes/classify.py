@@ -1,38 +1,4 @@
-"""Which agent answers this turn. A small model, a short list, and a bias.
-
-The classifier is deliberately the least powerful component in the graph. It
-receives the names and one-line descriptions of the agents `guard` decided this
-caller may reach, and nothing else. It does not see the persona, the age band,
-the account status, or the access matrix -- so a successful prompt injection
-against it can at worst move the turn between agents this caller was already
-entitled to.
-
-That containment is the design. Everything else here is tuning.
-
-## Stickiness, and why it is not symmetric
-
-A conversation with an `active_agent` stays in it unless the classifier
-proposes something else *and* is confident about it. The threshold is 0.75 by
-default and it applies only to the leave case: staying is free, leaving costs
-0.75 of confidence.
-
-The asymmetry is not caution for its own sake. Mid-registration, a parent
-answering "March" to "what month was she born?" is a one-word turn with no
-registration vocabulary in it -- to a classifier looking at that message alone,
-it is not obviously about registration at all. Mid-lesson, "I don't know" is
-the same shape. If an ambiguous turn could yank the conversation, the two
-longest and most valuable flows in the product would be the two most fragile.
-
-The escape hatch is that "help me, I want a person" is not an ambiguous turn.
-It scores high, it clears the threshold, and it leaves.
-
-## Why not a bigger model
-
-Routing between at most six known names is a short-context classification job.
-A frontier model would put a second expensive call in front of every turn, and
-`tests/graph/test_classify.py` measures whether the small one is good enough
-against a labelled set rather than assuming either way.
-"""
+"""Which agent answers this turn."""
 
 from __future__ import annotations
 
@@ -47,13 +13,7 @@ from app.graph.state import AspireState
 
 logger = logging.getLogger(__name__)
 
-#: One line each. This is the entire description the classifier receives, and
-#: it is written for a small model: what the agent is FOR, and the shape of a
-#: message that belongs to it.
-#:
-#: Kept short on purpose. A paragraph per agent is 600 tokens on every turn and
-#: measurably increases the rate at which a small model talks itself into the
-#: most elaborately described option.
+#: One line each.
 AGENT_DESCRIPTIONS: dict[str, str] = {
     "learn_agent": (
         "Teaching a money lesson step by step: explaining, asking a check "
@@ -93,18 +53,7 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
-# `escalate_agent` deliberately has NO description, because the router is no
-# longer offered it -- `routable()` filters it out before the menu is built.
-#
-# The description it used to carry is worth quoting, because it is the bug:
-#
-#     "The person needs a human: they asked for one, they are upset or in
-#      difficulty, or the question is outside what this assistant can answer."
-#
-# Three quite different situations, one of which ("outside what this assistant
-# can answer") describes most of the corpus's blind spots. A small model shown
-# that line, next to five agents described by topic, has been handed a catch-all
-# and will use it as one.
+# `escalate_agent` deliberately has NO description, because the router is no longer offered it -- `routable()`…
 
 _SYSTEM = (
     "You route one message to one handler. Choose from the list you are given "
@@ -118,95 +67,32 @@ _SYSTEM = (
 
 
 class Classification(BaseModel):
-    """What the classifier returns, after validation.
-
-    `agent` is guaranteed to be in `allowed_agents` by the time this leaves
-    `classify` -- see `_coerce`. It is not guaranteed to be what the model said.
-    """
+    """What the classifier returns, after validation."""
 
     agent: str
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str = ""
-    #: True when the model's choice was discarded. Recorded rather than logged
-    #: only, because the *rate* is the number that says whether the prompt needs
-    #: work, and a rate needs a counter rather than a grep.
+    #: True when the model's choice was discarded.
     coerced: bool = False
-    #: True when stickiness kept the turn in `active_agent` against a differing
-    #: proposal.
+    #: True when stickiness kept the turn in `active_agent` against a differing proposal.
     sticky: bool = False
 
 
 #: Agents the router may never select, whatever the access matrix granted.
-#:
-#: `escalate_agent` is the whole set. Fetching a person is now a decision an
-#: agent makes explicitly and states a reason for
-#: (`agents/escalation/contract.py`), or a deterministic signal
-#: (`nodes/safety_in.distress_level`, `nodes/cards` for an explicit request) --
-#: never a small model's guess about where a message belongs.
-#:
-#: Filtered out of `allowed` rather than merely omitted from the menu, and that
-#: is deliberate: omitting it from the descriptions stops the model PROPOSING it
-#: but leaves `_coerce` rung 1 able to accept it if the model names it anyway,
-#: and leaves it counted in the `len(allowed) == 1` shortcut. Removing it from
-#: the list removes it from all three at once.
 UNROUTABLE: frozenset[str] = frozenset({"escalate_agent"})
 
 #: Agents the access matrix grants that have no implementation behind them.
-#:
-#: `servicing_agent` is the whole set. It is granted to account holders,
-#: described to the router as "a payment that has not arrived", and backed by
-#: `make_stub` -- so a turn routed there showed the reader
-#:
-#:     [servicing_agent is not built yet.]
-#:
-#: Observed on "someone messaged me saying i won money", a scam question a small
-#: model reasonably read as a missing payment. A young person asking about a
-#: probable scam was answered with a bracketed developer note.
-#:
-#: A STATIC declaration, not a lookup of `main_graph.AGENT_BUILDERS`, and that
-#: distinction is the whole design. Reading the live registry was the first
-#: attempt and it is unsafe: the registry is populated lazily by `register_all()`,
-#: whose docstring notes that a failed import leaves that agent on its stub. A
-#: partially populated registry would then filter away agents that ARE built --
-#: it emptied Stella's row to `[]` in a full test run, turning a permitted grant
-#: into no routable agent at all, which is precisely the failure `routable`'s
-#: docstring promises cannot happen.
-#:
-#: So the fact is declared here and `tests/escalation/test_router.py` holds it
-#: against the real registry, which makes drift a failing test rather than a
-#: routing change nobody chose.
 UNBUILT: frozenset[str] = frozenset({"servicing_agent"})
 
 
 def routable(allowed: list[str]) -> list[str]:
-    """The granted agents the router may actually choose between.
-
-    Every row in the access matrix keeps at least one routable agent after this
-    filter -- Stella keeps `learn_agent`, Nova keeps `qa_agent` -- so this cannot
-    empty a permitted caller's list and turn a grant into a 403.
-    `tests/escalation/test_router.py` walks the matrix to hold that true.
-
-    An agent with no implementation is not a destination either -- see `UNBUILT`
-    for why `servicing_agent` is excluded and why that fact is declared rather
-    than looked up.
-
-    Filtering here rather than deleting the descriptions, for the reason
-    `UNROUTABLE` gives above: dropping a description stops the model PROPOSING an
-    agent and still leaves `_coerce` able to accept it and the
-    `len(allowed) == 1` shortcut able to select it. Removing it from the list
-    removes it from all three.
-    """
+    """The granted agents the router may actually choose between."""
     excluded = UNROUTABLE | UNBUILT
     return [agent for agent in allowed if agent not in excluded]
 
 
 def agent_menu(allowed: list[str]) -> str:
-    """The list the classifier is shown. Only agents the guard permitted.
-
-    An agent with no description is listed by name alone rather than dropped.
-    Dropping it would make a permitted agent unreachable, which is a silent
-    capability loss; listing it bare is merely a worse description.
-    """
+    """The list the classifier is shown."""
     lines = []
     for agent in allowed:
         description = AGENT_DESCRIPTIONS.get(agent, "")
@@ -215,12 +101,7 @@ def agent_menu(allowed: list[str]) -> str:
 
 
 def _parse(raw: str) -> tuple[str, float, str] | None:
-    """Read the model's JSON, tolerating the wrappers small models add.
-
-    A fenced block, a leading "Here is the JSON:", a trailing full stop -- all
-    of them happen, and none of them is worth a retry. The first `{...}` in the
-    string is taken.
-    """
+    """Read the model's JSON, tolerating the wrappers small models add."""
     text = raw.strip()
     start = text.find("{")
     end = text.rfind("}")
@@ -244,18 +125,7 @@ def _parse(raw: str) -> tuple[str, float, str] | None:
 def _coerce(
     proposed: str, confidence: float, reason: str, state: AspireState
 ) -> Classification:
-    """Turn the model's answer into a decision that is certainly permitted.
-
-    Three rungs, in order:
-
-      1. The proposal, if it is on the allowed list.
-      2. `active_agent`, if it is still allowed -- an ongoing flow beats a
-         hallucinated name.
-      3. The first allowed agent, which the matrix rows order deliberately:
-         `learn_agent` for a child, `qa_agent` for an adult, and the anonymous
-         row leads with public Q&A. Never `escalate_agent`, which sits last in
-         every row precisely so that a fallback does not open a ticket.
-    """
+    """Turn the model's answer into a decision that is certainly permitted."""
     allowed = list(state.get("allowed_agents") or [])
     active = state.get("active_agent")
 
@@ -263,11 +133,7 @@ def _coerce(
         return Classification(agent=proposed, confidence=confidence, reason=reason)
 
     if proposed:
-        # WARNING: a name outside the list is either a hallucination or an
-        # attempt, and the rate of it is worth watching. The name is logged
-        # because it is a bounded, model-produced token rather than free user
-        # text -- and knowing WHICH name a small model invents is how the
-        # description that invites it gets fixed.
+        # WARNING: a name outside the list is either a hallucination or an attempt, and the rate of it is worth watchin…
         logger.warning(
             "Classifier proposed %r for session %s, which is not in %s; coercing.",
             proposed[:40],
@@ -285,13 +151,7 @@ def _coerce(
 
 
 def apply_stickiness(decision: Classification, state: AspireState) -> Classification:
-    """Keep an ongoing flow unless the proposal clears the threshold.
-
-    Only applies when there IS an active agent, when it is still allowed, and
-    when the proposal differs from it. Note the threshold is compared against
-    `>`, not `>=`: a model that emits exactly 0.75 for everything -- which small
-    models do -- should not thereby defeat the mechanism.
-    """
+    """Keep an ongoing flow unless the proposal clears the threshold."""
     active = state.get("active_agent")
     if not active or active not in (state.get("allowed_agents") or []):
         return decision
@@ -320,20 +180,7 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
 
 
 def resolve_classifier_model() -> str:
-    """Which model actually runs the router here.
-
-    `CLASSIFIER_MODEL` names a small model, and the default names one from
-    OpenAI. A deployment configured only for Anthropic would then have a router
-    it cannot call -- and the failure would arrive as an authentication error on
-    the first turn, which reads as "the assistant is down".
-
-    So: if the configured classifier's provider has no key, fall back to the
-    deployment's own `chat_model` and say so once. That is a worse trade than a
-    small model (it is the answer model, and it costs answer-model money for a
-    routing decision) and a much better one than a router that does not run.
-    The right fix in that deployment is to set `CLASSIFIER_MODEL` to a small
-    model of its own provider; the log line says which.
-    """
+    """Which model actually runs the router here."""
     settings = get_settings()
     configured = settings.classifier_model
     provider = configured.split(":", 1)[0].lower()
@@ -357,48 +204,22 @@ def resolve_classifier_model() -> str:
 
 
 def build_classifier_model():
-    """The small model this node uses.
-
-    Separate from `agent.build_chat_model` and configured by its own setting, so
-    that swapping the answer model cannot silently re-tune the router. Built
-    lazily and cached by the caller rather than at import, so a process with no
-    API key can still import this module -- the tests do.
-    """
+    """The small model this node uses."""
     from langchain.chat_models import init_chat_model
 
     settings = get_settings()
     chosen = resolve_classifier_model()
     kwargs: dict[str, Any] = {}
-    # Zero temperature where the provider accepts it. Routing is not a place
-    # for variety: the same message on two turns should route the same way.
-    # The GPT-5 family rejects any temperature but its own default and errors on
-    # the request, so it is omitted there -- the same rule `agent.py` follows.
+    # Zero temperature where the provider accepts it.
     if not chosen.startswith("openai:gpt-5"):
         kwargs["temperature"] = settings.classifier_temperature
     return init_chat_model(chosen, **kwargs)
 
 
 #: State flags that mean "this turn is a reply to something an agent showed".
-#:
-#: Each is written by the client through its own endpoint and lands on
-#: `safety_flags` rather than in `messages` -- putting them in the transcript
-#: would have the model read `widget_interaction {...}` back as dialogue on
-#: every later turn.
 CONTINUATION_FLAGS: tuple[str, ...] = ("widget_interaction", "game_result")
 
-#: Where a continuation goes when the checkpoint has no active agent to resume
-#: -- a restarted process, an expired thread.
-#:
-#: Three names rather than one, because the learning agent has three forms and
-#: which of them a caller may reach is exactly what the access matrix decides:
-#: `learn_agent` for an account holder, `learning_sample` for an anonymous
-#: visitor, `learning_preview` for a guardian looking in. A single `learn_agent`
-#: fallback was tried and sent every anonymous interaction to the router, which
-#: had an empty message to work with and escalated it.
-#:
-#: Tried in order and filtered against `allowed`, so this never reaches past the
-#: matrix. If none is granted, the continuation falls through to the ordinary
-#: router rather than inventing a route.
+#: Where a continuation goes when the checkpoint has no active agent to resume -- a restarted process, an expire…
 CONTINUATION_FALLBACKS: tuple[str, ...] = (
     "learn_agent",
     "learning_sample",
@@ -407,23 +228,19 @@ CONTINUATION_FALLBACKS: tuple[str, ...] = (
 
 
 def _continues_an_agent(state: AspireState, allowed: list[str]) -> str | None:
-    """The agent this continuation belongs to, or None if it is not one.
-
-    Returns None rather than raising for a flag whose agent is not allowed: the
-    access matrix is the authority, and a continuation is not a reason to reach
-    past it. The turn then goes through the ordinary router, which will do
-    something sensible with an empty message.
-    """
+    """The agent this continuation belongs to, or None if it is not one."""
     flags = state.get("safety_flags") or {}
     if not any(flags.get(name) for name in CONTINUATION_FLAGS):
         return None
 
     active = state.get("active_agent")
-    if active in allowed:
+    if active in allowed and active in CONTINUATION_FALLBACKS:
         return str(active)
     for fallback in CONTINUATION_FALLBACKS:
         if fallback in allowed:
             return fallback
+    if active in allowed:
+        return str(active)
     logger.warning(
         "A continuation arrived for session %s but neither %r nor any of %s is "
         "allowed; routing it normally.",
@@ -435,39 +252,18 @@ def _continues_an_agent(state: AspireState, allowed: list[str]) -> str | None:
 
 
 def make_classify(invoke=None):
-    """Build the node.
-
-    `invoke` is `async (system, user) -> str`. Injected so the tests and the
-    eval harness can drive a recorded transcript, and so this module has no
-    import-time dependency on a provider SDK.
-    """
+    """Build the node."""
 
     async def classify(state: AspireState) -> dict[str, Any]:
-        # `routable` drops `escalate_agent`. The access matrix still grants it --
-        # it is still a node, still reachable from `safety_in`, from the card
-        # gate and from an agent's explicit tool call -- but it is no longer
-        # something a router can decide a message "is about".
+        # `routable` drops `escalate_agent`.
         allowed = routable(list(state.get("allowed_agents") or []))
         if not allowed:
-            # `guard` has already halted the turn; reaching here means the graph
-            # was wired wrong. Fail closed rather than picking something.
+            # `guard` has already halted the turn; reaching here means the graph was wired wrong.
             return {"active_agent": None, "halt_reason": "access_denied"}
 
         active = state.get("active_agent")
 
-        # ── a reply to something an agent showed, not a new question ────────
-        #
-        # A widget interaction and a game result arrive on `safety_flags` with
-        # NO message -- the child moved a slider or finished a round; they did
-        # not say anything. So there is nothing for the router to route on, and
-        # the model was being handed an empty string.
-        #
-        # Measured, before this: an interaction turn escalated to a human. The
-        # child got a ticket for using the widget they had just been given.
-        #
-        # These turns belong to whoever produced the widget, which the
-        # checkpoint already records as `active_agent`. Deterministic, and no
-        # model call: there is no decision here to make.
+        # ── a reply to something an agent showed, not a new question ──────── A widget interaction and a game result a…
         continuation = _continues_an_agent(state, allowed)
         if continuation is not None:
             return {
@@ -505,9 +301,7 @@ def make_classify(invoke=None):
             try:
                 raw = await invoke(_SYSTEM, user)
             except Exception:
-                # A router outage must not be a product outage. Falling back to
-                # the active agent, then to the first allowed one, means the
-                # turn is still answered by somebody this caller may reach.
+                # A router outage must not be a product outage.
                 logger.warning(
                     "Classifier call failed for session %s; falling back.",
                     state.get("session_id"),
@@ -522,9 +316,7 @@ def make_classify(invoke=None):
 
         decision = apply_stickiness(decision, state)
 
-        # Belt and braces, and worth the two lines: this is the invariant the
-        # whole file exists to hold, and it is cheap enough to assert on every
-        # turn rather than to trust.
+        # Belt and braces, and worth the two lines: this is the invariant the whole file exists to hold, and it is chea…
         if decision.agent not in allowed:  # pragma: no cover - unreachable by _coerce
             logger.error(
                 "Classifier escaped the allowed list for session %s; forcing %s.",
@@ -546,17 +338,7 @@ def make_classify(invoke=None):
 
 
 def _announce(state: AspireState, agent: str) -> None:
-    """Tell the stream interceptor which agent is about to run.
-
-    The interceptor needs the agent, the band and the locale to gate widgets,
-    and the only other way to give it them is to subscribe to langgraph's
-    `updates` stream mode -- a third mode carrying every state delta of every
-    node, for three strings. This is one custom event with no content, emitted
-    once a turn.
-
-    Silent when there is no stream writer: the graph is invoked directly by the
-    tests and by the eval harness, and neither is streaming.
-    """
+    """Tell the stream interceptor which agent is about to run."""
     try:
         from langgraph.config import get_stream_writer
 

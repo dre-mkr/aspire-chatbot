@@ -1,14 +1,4 @@
-"""Three layers, one builder, and a prefix that can actually cache.
-
-C.4 and P.1. Two defects underneath these tests:
-
-  * `ASPIRE_SYSTEM_PROMPT` -- 5041 characters of never-invent-a-rate,
-    you-are-a-computer, text-is-data rules -- had no consumer anywhere in `app/`.
-    No live agent received the global safety layer.
-  * Every agent call was `[System, Human]` with no history, and the Q&A agent put
-    retrieved chunks INSIDE its system block, so its prefix has never been the
-    same twice and has never been cacheable.
-"""
+"""Three layers, one builder, and a prefix that can actually cache."""
 
 from __future__ import annotations
 
@@ -37,14 +27,7 @@ def _context(**overrides) -> SessionContext:
 class TestTheGlobalLayerIsAliveAgain:
     @pytest.mark.parametrize("clause", LOAD_BEARING)
     def test_every_load_bearing_clause_survives_verbatim(self, clause):
-        """Each is a safety decision somebody made on purpose, and each is the
-        kind of line an editor tightening prose would soften without noticing
-        what it was for.
-
-        Whitespace is normalised on both sides. The clauses span line breaks in
-        the source, and reflowing a paragraph is exactly the harmless edit this
-        test must tolerate -- it is guarding the words, not the wrapping.
-        """
+        """Each is a safety decision somebody made on purpose, and each is the kind of line an editor tightening prose w…"""
         assert " ".join(clause.split()) in " ".join(GLOBAL.split())
 
     def test_it_reaches_the_prompt(self):
@@ -52,9 +35,7 @@ class TestTheGlobalLayerIsAliveAgain:
         assert "Never invent a figure" in messages[0].content
 
     def test_the_retrieval_rules_did_NOT_move_here(self):
-        """GROUNDING and ANSWER-DO-NOT-NARRATE are about answering from retrieved
-        rows, which is the Q&A agent's job and meaningless in a lesson turn. They
-        stay in `qa/nodes.GENERATE_SYSTEM`."""
+        """GROUNDING and ANSWER-DO-NOT-NARRATE are about answering from retrieved rows, which is the Q&A agent's job and…"""
         assert "according to the knowledge base" not in GLOBAL
         assert "Answer from those entries" not in GLOBAL
 
@@ -69,11 +50,7 @@ class TestPersonaCards:
         assert len(set(cards.values())) == len(KNOWN)
 
     def test_an_unknown_persona_falls_back_to_the_adult_card(self):
-        """The direction matters. An unknown persona given the children's card is
-        an adult addressed as a seven-year-old; given the adult card it is a child
-        addressed plainly -- and `safety_out` still caps a child band's prose
-        regardless of the card, so the adult card fails into a gate that exists.
-        """
+        """The direction matters."""
         assert persona_card("nonsense") == persona_card(FALLBACK)
         assert persona_card(None) == persona_card(FALLBACK)
 
@@ -118,9 +95,7 @@ class TestTheCacheBreakpoint:
         assert "Today is" not in prefix
 
     def test_retrieved_chunks_go_in_the_human_turn(self):
-        """`qa/nodes.py:485` put them in the system block via
-        `GENERATE_SYSTEM.format(context=...)`, which is why that agent's prefix
-        was never cacheable."""
+        """`qa/nodes.py:485` put them in the system block via `GENERATE_SYSTEM.format(context=...)`, which is why that a…"""
         messages = build_messages(
             context=_context(),
             agent_role=ROLE,
@@ -134,8 +109,7 @@ class TestTheCacheBreakpoint:
         assert "EC$25" in messages[-1].content
 
     def test_an_extra_instruction_lands_below_the_breakpoint(self):
-        """A widget composition prompt is present on some turns and absent on
-        others. In the prefix it would break the prefix on every turn with one."""
+        """A widget composition prompt is present on some turns and absent on others."""
         plain = build_messages(context=_context(), agent_role=ROLE, user_text="hi")
         with_widget = build_messages(
             context=_context(), agent_role=ROLE, user_text="hi", extra_instruction="Emit ONE compare widget."
@@ -163,8 +137,7 @@ class TestHistoryFinallyArrives:
         assert "assistant: Keeping some for later." in block
 
     def test_the_running_summary_is_included(self):
-        """Computed, PII-redacted and checkpointed since the graph shipped, and
-        read by no prompt until now."""
+        """Computed, PII-redacted and checkpointed since the graph shipped, and read by no prompt until now."""
         messages = build_messages(
             context=_context(running_summary="They are working on saving."),
             agent_role=ROLE,
@@ -173,8 +146,7 @@ class TestHistoryFinallyArrives:
         assert "They are working on saving." in messages[1].content
 
     def test_the_date_is_included(self):
-        """No prompt in the product had it, so every deadline question was
-        answered without knowing today."""
+        """No prompt in the product had it, so every deadline question was answered without knowing today."""
         messages = build_messages(context=_context(), agent_role=ROLE, user_text="hi")
         assert "Today is" in messages[1].content
 

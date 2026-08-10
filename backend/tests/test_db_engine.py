@@ -1,16 +1,11 @@
-"""URL handling for Neon.
-
-Both of these fail on the connection string the Neon dashboard hands you, with
-an error that does not mention the real cause.
-"""
+"""URL handling for Neon."""
 
 from app.db.engine import POOLED_HOST_MARKER, _normalise, _strip_libpq_only_params
 
 
 class TestDriverNormalisation:
     def test_postgres_scheme_becomes_asyncpg(self):
-        # psql accepts `postgres://`; SQLAlchemy would reach for psycopg2 and
-        # fail on an async engine with a message that never says "driver".
+        # psql accepts `postgres://`; SQLAlchemy would reach for psycopg2 and fail on an async engine with a message th…
         assert _normalise("postgres://u:p@host/db").startswith("postgresql+asyncpg://")
 
     def test_postgresql_scheme_becomes_asyncpg(self):
@@ -26,8 +21,7 @@ class TestDriverNormalisation:
 
 class TestLibpqParameters:
     def test_sslmode_is_stripped(self):
-        # Neon's copy-paste string ends in `?sslmode=require`, a libpq
-        # parameter. asyncpg rejects it outright as an invalid DSN.
+        # Neon's copy-paste string ends in `?sslmode=require`, a libpq parameter.
         assert "sslmode" not in _strip_libpq_only_params(
             "postgresql://u:p@host/db?sslmode=require"
         )
@@ -56,8 +50,7 @@ class TestLibpqParameters:
 
 
 def test_the_pooled_marker_is_what_we_check_for():
-    # The direct endpoint is one Postgres backend per connection and will be
-    # exhausted by a per-request pool. Startup warns when this is missing.
+    # The direct endpoint is one Postgres backend per connection and will be exhausted by a per-request pool.
     assert POOLED_HOST_MARKER in "ep-cool-name-123456-pooler.us-east-2.aws.neon.tech"
     assert POOLED_HOST_MARKER not in "ep-cool-name-123456.us-east-2.aws.neon.tech"
 
@@ -80,18 +73,12 @@ def test_no_database_url_means_no_engine(monkeypatch):
 
 
 class TestEmbeddingDimensions:
-    """The column width and the embedding model must agree.
-
-    They live in different files and nothing else connects them, so the mismatch
-    is invisible until the first INSERT into `documents` -- which then fails for
-    every row, with an error about vector dimensions rather than configuration.
-    """
+    """The column width and the embedding model must agree."""
 
     def test_the_known_models_carry_their_real_widths(self):
         from app.db.models import dimensions_for
 
-        # 1536 is `small` and ada. Assuming it for `large` is the classic way to
-        # build a column that rejects every insert.
+        # 1536 is `small` and ada.
         assert dimensions_for("text-embedding-3-large") == 3072
         assert dimensions_for("text-embedding-3-small") == 1536
         assert dimensions_for("text-embedding-ada-002") == 1536

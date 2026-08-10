@@ -1,20 +1,4 @@
-"""Which turns may be replayed to somebody else, and the one that may not.
-
-`turn.cacheable` had no tests. That is how a lesson turn came to be cacheable:
-the rule was written when every agent produced answers, and it kept saying yes
-after one of them started producing state transitions instead.
-
-The reported symptom was repetition -- "i get this same response when i want to
-learn something" -- across separate conversations. The cache key is
-`(question, language, persona, account_status, age_band)` with no learner in
-it, so one child asking "teach me about saving" filled the key for every child
-in that band for six hours.
-
-The symptom understated it. A cache hit returns before the graph is built, so
-the replay serves lesson prose and performs none of the lesson: no placement,
-no phase transition to `checking`, no mastery row. The reader gets taught and
-the machine does not move.
-"""
+"""Which turns may be replayed to somebody else, and the one that may not."""
 
 from __future__ import annotations
 
@@ -43,12 +27,7 @@ class TestALessonIsNeverCached:
         assert cacheable(record(agent=agent)) is False
 
     def test_chips_do_not_make_a_lesson_cacheable(self):
-        """The exact shape that slipped through.
-
-        A teaching turn emits prose and quick replies and nothing else, and
-        `quick_replies` is on the allowed-directive list -- so every gate in the
-        old rule said yes.
-        """
+        """The exact shape that slipped through."""
         assert (
             cacheable(
                 record(
@@ -60,12 +39,7 @@ class TestALessonIsNeverCached:
         )
 
     def test_the_three_names_match_the_rest_of_the_system(self):
-        """One subgraph, three registrations, four places that name the set.
-
-        A fourth name added to the graph and not here would be cacheable, and
-        the failure would look like flaky repetition rather than a missing
-        exclusion.
-        """
+        """One subgraph, three registrations, four places that name the set."""
         from app.graph.nodes.safety_out import LEARNING_AGENTS
         from app.graph.stream_interceptor import WIDGET_AGENTS
 
@@ -85,12 +59,7 @@ class TestTheOtherExclusions:
 
 class TestWhatStillIs:
     def test_a_plain_qa_answer_is_cacheable(self):
-        """The case the cache exists for, and it must keep working.
-
-        The four landing starter chips are the highest-collision strings in the
-        product; a fix that made everything uncacheable would be a regression
-        wearing a bug fix's clothes.
-        """
+        """The case the cache exists for, and it must keep working."""
         assert cacheable(record(agent="qa_agent")) is True
 
     def test_citations_and_chips_are_still_allowed(self):
@@ -105,7 +74,5 @@ class TestWhatStillIs:
         )
 
     def test_an_unknown_agent_is_cacheable(self):
-        """Permissive by default, because the exclusion list is the thing that
-        gets updated when an agent gains state -- and a new answering agent
-        should not silently lose caching on the day it is added."""
+        """Permissive by default, because the exclusion list is the thing that gets updated when an agent gains state --…"""
         assert cacheable(record(agent="servicing_agent")) is True

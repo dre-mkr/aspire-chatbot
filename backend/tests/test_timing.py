@@ -1,10 +1,4 @@
-"""The instrumentation has to be right, or every later phase optimises a lie.
-
-These are about the measurement, not the latency: that a stage which never ran
-is reported as absent rather than as zero, that the derived durations are
-subtractions of the right things, that a repeated retrieval is visible, and that
-`/debug/timings` stays shut unless it is asked for.
-"""
+"""The instrumentation has to be right, or every later phase optimises a lie."""
 
 from __future__ import annotations
 
@@ -73,11 +67,7 @@ def test_percentile_rejects_an_empty_sample():
 
 
 def test_a_stage_that_never_ran_is_absent_not_zero():
-    """The whole point: `t_lang` must never appear as 0.0 ms.
-
-    A stage reported as zero is a stage a later phase might try to optimise, or
-    worse, count as evidence that language detection is already fast.
-    """
+    """The whole point: `t_lang` must never appear as 0.0 ms."""
     payload = _turn(**{T_TTFT: 1000.0}).payload()
     assert T_LANG not in payload
     assert payload["t_ttft"] == 1000.0
@@ -106,9 +96,7 @@ def test_the_model_call_excludes_every_pre_model_stage():
     payload = _turn(
         **{
             T_RETRIEVE_KICKOFF: 0.2,
-            # The owner lookup and the window read, overlapped (P13-007). They
-            # were two budget lines of 10 and 700; the pair is now one line worth
-            # the slower of them, which is what the reader actually waits.
+            # The owner lookup and the window read, overlapped (P13-007).
             T_SESSION_WAIT: 710.0,
             T_CONCURRENT_WAIT: 850.0,
             T_PROMPT_BUILD: 1.0,
@@ -120,13 +108,7 @@ def test_the_model_call_excludes_every_pre_model_stage():
 
 
 def test_the_model_call_does_not_subtract_the_concurrent_session_reads():
-    """The owner lookup and the window read overlap, so only the WAIT is on the path.
-
-    Same rule as the retrieval stages below, one layer earlier and for the same
-    reason: subtracting `t_identity` and `t_history` on top of `t_session_wait`
-    would deduct time twice that was only ever spent once, and flatter the model
-    figure by the overlap.
-    """
+    """The owner lookup and the window read overlap, so only the WAIT is on the path."""
     payload = _turn(
         **{
             T_SESSION_WAIT: 700.0,
@@ -135,17 +117,12 @@ def test_the_model_call_does_not_subtract_the_concurrent_session_reads():
             T_AGENT_FIRST_DELTA: 2000.0,
         }
     ).payload()
-    # 2000 - 700 = 1300. Neither the 300 lookup nor the 690 read is deducted
-    # again: both are inside the 700 of session wait.
+    # 2000 - 700 = 1300.
     assert payload[D_MODEL_CALL] == pytest.approx(1300.0)
 
 
 def test_the_model_call_does_not_subtract_concurrent_retrieval():
-    """Retrieval overlaps the database work, so only the WAIT is off the path.
-
-    Subtracting `t_retrieve_total` as well would remove a second of time that
-    nothing actually spent, and flatter the model figure by exactly that much.
-    """
+    """Retrieval overlaps the database work, so only the WAIT is off the path."""
     payload = _turn(
         **{
             T_CONCURRENT_WAIT: 820.0,
@@ -157,8 +134,7 @@ def test_the_model_call_does_not_subtract_concurrent_retrieval():
             T_AGENT_FIRST_DELTA: 2000.0,
         }
     ).payload()
-    # 2000 - 820 = 1180. Neither the 800 write nor the 950 search is deducted
-    # again: both are inside the 820 of concurrent wait.
+    # 2000 - 820 = 1180.
     assert payload[D_MODEL_CALL] == pytest.approx(1180.0)
 
 
@@ -201,11 +177,7 @@ def test_derivation_is_skipped_when_its_inputs_are_missing():
 
 
 def test_a_card_turn_derives_no_model_call():
-    """A card turn produces no text, so there is no first delta to measure to.
-
-    Reporting a model-call figure for it would mean inventing one, and card turns
-    are exactly the population whose `t_ttft` is legitimately absent.
-    """
+    """A card turn produces no text, so there is no first delta to measure to."""
     payload = _turn(
         **{T_OPEN_CONVERSATION: 800.0, T_AGENT_FIRST_TOOL: 1500.0, T_TOTAL: 3000.0}
     ).payload()
@@ -214,12 +186,7 @@ def test_a_card_turn_derives_no_model_call():
 
 
 def test_the_ttft_budget_reconstructs_ttft():
-    """The durations must account for TTFT, or the table misleads.
-
-    Retrieval is present but concurrent, so it is deliberately NOT part of the sum:
-    only `t_retrieve_wait` is. If a future change puts embed or retrieve back into
-    DURATION_STAGES this test fails, which is the point.
-    """
+    """The durations must account for TTFT, or the table misleads."""
     turn = _turn(
         **{
             T_RETRIEVE_KICKOFF: 0.2,
@@ -247,8 +214,7 @@ def test_concurrent_retrieval_is_not_in_the_ttft_budget():
     assert T_EMBED in AUXILIARY_STAGES
     assert T_RETRIEVE in AUXILIARY_STAGES
     assert T_CONCURRENT_WAIT in DURATION_STAGES
-    # The write and the search overlap each other, so neither is a budget line;
-    # the single `t_concurrent_wait` that contains both is.
+    # The write and the search overlap each other, so neither is a budget line; the single `t_concurrent_wait` that…
     assert T_OPEN_CONVERSATION in AUXILIARY_STAGES
     assert T_RETRIEVE_WAIT in AUXILIARY_STAGES
 
@@ -300,17 +266,7 @@ def test_a_bound_turn_is_visible_to_code_that_did_not_receive_it():
 
 
 def test_a_turn_is_visible_inside_langchains_worker_thread():
-    """The turn must survive the hop into the thread the retriever runs in.
-
-    This is the property that makes `t_embed` and `t_retrieve` measurable at all:
-    Chroma's retriever is synchronous, so LangChain runs it off the event loop.
-
-    Deliberately exercises `langchain_core`'s own `run_in_executor` rather than
-    the bare `loop.run_in_executor`. They differ in exactly the way that matters
-    -- LangChain copies the context, asyncio's does not -- and a test written
-    against the bare one fails while the production path works, which is a test
-    asserting something nothing depends on.
-    """
+    """The turn must survive the hop into the thread the retriever runs in."""
     from langchain_core.runnables.config import run_in_executor
 
     async def scenario() -> TurnTimings:

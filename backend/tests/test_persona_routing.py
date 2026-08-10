@@ -1,14 +1,4 @@
-"""Per-persona model routing and output caps (P14-A).
-
-The mechanism is a config dict and two resolvers; these tests pin the three
-properties that make it safe to tune from the environment:
-
-  * empty config means EXACTLY today's behaviour, for every persona;
-  * personas sharing a resolved configuration share one agent, so routing four
-    personas to one model cannot quadruple the process's agents;
-  * the "" cap entry is the fallback for everyone, so `{"": 4096}` guards every
-    persona and per-persona entries exist only to differ from it.
-"""
+"""Per-persona model routing and output caps (P14-A)."""
 
 from __future__ import annotations
 
@@ -37,13 +27,7 @@ class TestModelRouting:
         assert resolve_model_for(None) == settings.chat_model
 
     def test_the_auxiliary_calls_cannot_be_routed(self, monkeypatch):
-        """Titles and summaries always use the default model.
-
-        `build_chat_model()` with no explicit model is what those calls do; a
-        persona mapping must never reach them, because a title written by a
-        different model than yesterday's is a visible behaviour change nobody
-        asked for.
-        """
+        """Titles and summaries always use the default model."""
         import inspect
 
         from app import agent
@@ -76,16 +60,9 @@ class TestMaxTokens:
         assert resolve_max_tokens_for("orion") == 4096
 
     def test_zero_means_uncapped_not_zero_output(self, monkeypatch):
-        """A 0 in config must read as "no cap", never as max_tokens=0 -- a cap
-        of zero would reject every request at the provider."""
+        """A 0 in config must read as "no cap", never as max_tokens=0 -- a cap of zero would reject every request at the…"""
         monkeypatch.setattr(get_settings(), "max_tokens_by_persona", {"": 0})
         assert resolve_max_tokens_for("stella") is None
 
 
-# `TestAgentSharing` stood here. It asserted that four personas mapped to one
-# model shared one cached `create_agent` instance -- a property of `get_agent`,
-# which is gone with `/chat`. The graph is compiled per request (see
-# `build_main_graph`'s docstring for why: `hydrate` closes over the token, so a
-# process-wide graph would have to carry a bearer token in `configurable`), and
-# the two `resolve_*_for` lookups above are the whole of what persona routing
-# still decides.
+# `TestAgentSharing` stood here.

@@ -1,8 +1,4 @@
-"""ASPIRE voice layer: ElevenLabs speech-to-text and text-to-speech.
-
-Self-contained on purpose. `VOICE_ENABLED=false` unmounts the routes and skips
-registry validation, leaving text chat completely untouched.
-"""
+"""ASPIRE voice layer: ElevenLabs speech-to-text and text-to-speech."""
 
 from app.voice.config import VoiceSettings, get_voice_settings
 from app.voice.registry import (
@@ -12,9 +8,7 @@ from app.voice.registry import (
     VoiceRegistryError,
     validate_registry,
 )
-# Exported as `voice_router`, not `router`: re-exporting the name `router` here
-# would shadow the `app.voice.router` submodule, so `from app.voice import
-# router` would hand back the APIRouter object instead of the module.
+# Exported as `voice_router`, not `router`: re-exporting the name `router` here would shadow the `app.voice.rou…
 from app.voice.router import router as voice_router
 from app.voice.speakable import speakable
 

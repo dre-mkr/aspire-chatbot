@@ -6,19 +6,7 @@ import { keys } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Avatar } from "./Avatar";
 
-/**
- * The way in and out of an account, in both of the places it appears.
- *
- * One component, two placements. On the landing screen it floats top-right
- * opposite the hamburger; in the chat sidebar it is the block at the foot. They
- * are the same control and the same menu, and the only thing that differs is
- * how much of it is drawn — so this is `variant`, not two components.
- *
- * Which one shows is decided by whether the sidebar is visible, not by the
- * route. Both states are reachable on both routes: the sidebar can be collapsed
- * on a conversation, and opened as a drawer on the landing screen. Keying off
- * the sidebar covers all four combinations without a special case for each.
- */
+/** The way in and out of an account, in both of the places it appears. */
 
 interface AccountControlProps {
 	/** "corner" floats over the page; "rail" is the block at the sidebar foot. */
@@ -37,8 +25,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 	const wrapper = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
 
-	// Escape closes, and a click outside closes. A menu that can only be
-	// dismissed by choosing something from it is a trap.
+	// Escape closes, and a click outside closes.
 	useEffect(() => {
 		if (!open) return;
 		const onKey = (event: KeyboardEvent) => {
@@ -64,14 +51,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 
 	const signedIn = session?.accountType === "registered";
 
-	/**
-	 * Nothing committal until the session is known.
-	 *
-	 * Rendering "Sign in" and then swapping it for an avatar a moment later is
-	 * the auth equivalent of the completion flash: a control that changes what
-	 * it says after you have started reading it. So the slot holds its size and
-	 * stays quiet until the answer is in.
-	 */
+	/** Nothing committal until the session is known. */
 	if (!resolved) {
 		return (
 			<div
@@ -87,19 +67,14 @@ export function AccountControl({ variant }: AccountControlProps) {
 	}
 
 	function goToSignIn() {
-		// Carried so that signing in returns you to whatever you were reading
-		// rather than to a generic landing screen.
+		// Carried so that signing in returns you to whatever you were reading rather than to a generic landing screen.
 		void navigate({ to: "/signin", search: { next: pathname } });
 	}
 
 	async function handleSignOut() {
 		setOpen(false);
 		setConfirming(false);
-		// Handed to `signOut` rather than run here, so the caches are dropped in
-		// the moment between the old session being cleared and a new one being
-		// issued. Removed rather than invalidated: invalidating leaves the
-		// previous person's titles readable while the refetch runs, and the rail
-		// showing them for even one frame is the thing to avoid.
+		// Handed to `signOut` rather than run here, so the caches are dropped in the moment between the old session bei…
 		await signOut(() => {
 			queryClient.removeQueries({ queryKey: keys.allConversations() });
 			queryClient.removeQueries({ queryKey: keys.allGames() });
@@ -122,11 +97,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 				</div>
 			);
 		}
-		// The sidebar's signed-out state keeps the shape it has always had: the
-		// icon slot, the name line, the note. Only the note changed, because
-		// chats are no longer kept on the device — they belong to a session on
-		// the server now, and saying otherwise would be untrue about a child's
-		// data.
+		// The sidebar's signed-out state keeps the shape it has always had: the icon slot, the name line, the note.
 		return (
 			<div className="account account--rail">
 				<button type="button" className="account__block" onClick={goToSignIn}>
@@ -170,8 +141,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 					url={session?.avatarUrl}
 					size={variant === "corner" ? 36 : 36}
 				/>
-				{/* The corner is the avatar and nothing else: a name beside it
-				    would compete with the centred hero for attention. */}
+				{/* The corner is the avatar and nothing else: a name beside it would compete with the centred hero for attention. */}
 				{variant === "rail" ? (
 					<span className="rail__identity rail__fold">
 						<span className="rail__name">{name}</span>
@@ -219,9 +189,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 							type="button"
 							className="account__item"
 							role="menuitem"
-							// Confirmed rather than immediate: from here it is not
-							// obvious what happens to the conversations in the rail,
-							// and the answer is worth one sentence.
+							// Confirmed rather than immediate: from here it is not obvious what happens to the conversations in the rail, a…
 							onClick={() => setConfirming(true)}
 						>
 							Sign out

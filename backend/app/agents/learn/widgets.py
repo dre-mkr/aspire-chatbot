@@ -1,52 +1,4 @@
-"""The widget, built on its own path and unable to touch the lesson.
-
-    prose_task  ─────────────────────────► validated prose ─► emitted
-    widget_task ─► plan ─► compose ─► 9 gates ─► cache ─────► emitted AFTER
-
-Both tasks start at the same instant. The prose is emitted the moment it is
-validated; the widget is awaited afterwards, with a timeout, inside a catch-all
-that can only ever produce `None`.
-
-## What this replaces, and why the replacement is the fix
-
-The widget used to be composed by the SAME model call that wrote the lesson, as
-JSON between `⟦widget⟧` markers inline in the prose. Three things followed, and
-each of them destroys a lesson on its own:
-
-  * the widget's few hundred characters of JSON and the lesson's word budget came
-    out of one generation, so the model traded prose away to fit the widget;
-  * the transport stopped forwarding tokens at the opening marker
-    (`graph/stream_interceptor.py`), so a widget opened early meant almost no
-    lesson reached the reader before the stream went quiet;
-  * an unterminated marker caused the buffer to be DISCARDED, taking every token
-    after it with it -- a malformed widget silently truncated the lesson.
-
-None of that is reachable from here. `build_widget` returns a validated config or
-None, the prose was already emitted before it is awaited, and there is no path by
-which a widget failure can subtract a word from a lesson. `tests/learning/
-test_prose_survives_widgets.py` is the regression test and it fails if that ever
-stops being true.
-
-## `none` is a good plan
-
-The planner is pushed hard towards returning no widget. Most lessons do not need
-one, an unnecessary widget is an interruption, and a *bad* widget is worse than
-none -- a child who moves a slider and learns the wrong relationship has been
-taught something false by a thing that looked authoritative.
-
-## Two gates beyond the seven
-
-`widgets/validate.py` runs seven gates that check the widget against the band and
-the formula registry. Two more belong here rather than there, because they are
-about the TURN rather than about the widget:
-
-  LOCALE      every user-visible string is in this turn's language. A Spanish
-              lesson with English slider labels is two products in one message.
-  PROVENANCE  the emitting agent is a learning agent, the concept id is present,
-              and the kind is one the concept actually permits. A widget arriving
-              from anywhere else is dropped unconditionally -- the widget system
-              is a teaching device with a curriculum behind it.
-"""
+"""The widget, built on its own path and unable to touch the lesson."""
 
 from __future__ import annotations
 
@@ -62,9 +14,7 @@ from app.learning.concepts import TeachingConcept
 
 logger = logging.getLogger(__name__)
 
-#: Agents whose turns may carry a widget. Mirrors
-#: `stream_interceptor.WIDGET_AGENTS` -- one list, two enforcement points, and
-#: the transport keeps its copy because it is the last line before the wire.
+#: Agents whose turns may carry a widget.
 WIDGET_AGENTS: frozenset[str] = frozenset(
     {"learn_agent", "learning_preview", "learning_sample"}
 )
@@ -72,12 +22,7 @@ WIDGET_AGENTS: frozenset[str] = frozenset(
 
 @dataclass(slots=True)
 class WidgetRequest:
-    """Everything the widget path may know. Deliberately no message history.
-
-    A widget is composed from a concept, a band and a set of numbers. Handing the
-    composer the conversation would let it compose about something the lesson did
-    not teach, and the reader would have no way to tell.
-    """
+    """Everything the widget path may know."""
 
     concept: TeachingConcept | None
     band: str
@@ -91,11 +36,7 @@ class WidgetRequest:
 
 @dataclass(slots=True)
 class WidgetOutcome:
-    """What the widget path produced, and how. Every field is logged.
-
-    `gate` naming the failing gate is the whole feedback loop: "gate copy fired
-    40 times this week" is something to fix, and "the widget was dropped" is not.
-    """
+    """What the widget path produced, and how."""
 
     payload: dict[str, Any] | None = None
     kind: str | None = None
@@ -126,15 +67,7 @@ Choose from the allowed kinds and nothing else."""
 
 
 async def plan_widget(request: WidgetRequest, invoke: Any) -> str | None:
-    """Which primitive, or None. One cheap structured call over a short menu.
-
-    The menu is the intersection of what the concept's author permitted
-    (`widget_hints`) and what the band is allowed to receive (`BAND_KINDS`).
-    Intersecting BEFORE the call rather than validating after it is what stops
-    the planner proposing a simulator for a six-year-old and the band gate
-    rejecting it a second later -- two calls' worth of latency for a decision
-    that was knowable up front.
-    """
+    """Which primitive, or None."""
     if invoke is None or request.concept is None:
         return None
 
@@ -144,8 +77,7 @@ async def plan_widget(request: WidgetRequest, invoke: Any) -> str | None:
     hints = set(request.concept.widget_hints) or set(permitted)
     allowed = sorted((hints & permitted) - set(request.recent_kinds))
     if not allowed:
-        # Everything this concept offers has just been shown, or the band permits
-        # none of it. Not a failure: the lesson is complete without one.
+        # Everything this concept offers has just been shown, or the band permits none of it.
         return None
 
     try:
@@ -172,14 +104,7 @@ async def plan_widget(request: WidgetRequest, invoke: Any) -> str | None:
 
 
 def plan_hash(request: WidgetRequest, kind: str) -> str:
-    """The cache key's variable part.
-
-    Over the inputs a composition actually depends on -- concept, kind, band,
-    locale and the numbers -- and NOT over the utterance. Two children asking
-    "how does saving grow?" and "why does my money get bigger?" about the same
-    concept want the same growth stack, and keying on their words would compose
-    it twice and cache neither usefully.
-    """
+    """The cache key's variable part."""
     anchors = json.dumps(
         (request.concept.numeric_anchors if request.concept else {}), sort_keys=True
     )
@@ -191,12 +116,7 @@ def plan_hash(request: WidgetRequest, kind: str) -> str:
 
 
 async def compose_widget(request: WidgetRequest, kind: str, invoke: Any) -> str | None:
-    """The chosen primitive's JSON. One schema in the prompt, never nine.
-
-    Reuses `widgets/planner.composition_prompt`, minus the sentinel instruction --
-    the composer now returns JSON as its whole reply rather than embedding it in
-    prose, which is the change that decouples it from the lesson.
-    """
+    """The chosen primitive's JSON."""
     if invoke is None or request.concept is None:
         return None
 
@@ -227,10 +147,6 @@ async def compose_widget(request: WidgetRequest, kind: str, invoke: Any) -> str 
 
 
 #: The old inline instruction, removed from the composition prompt.
-#:
-#: `composition_prompt` still carries it because the prompt is shared with the
-#: legacy path during the transition. Stripped here rather than edited there so
-#: that turning the legacy path off is a deletion rather than a rewrite.
 _SENTINEL_LINE = re.compile(
     r"Emit ONE (\w+) widget as JSON inside .*?, inline in\s*your reply, at the point it helps\.",
     re.DOTALL,
@@ -247,12 +163,6 @@ def _strip_sentinel_instruction(prompt: str) -> str:
 # ── gates 8 and 9 ────────────────────────────────────────────────────────────
 
 #: Characters that betray the wrong language when the alphabet is shared.
-#:
-#: Locale detection on a slider label is not the stopword problem `safety_out`
-#: solves -- there are three words and no function words among them. So the test
-#: is the one signal that IS available at that length: a Spanish or French
-#: config with no accented character and an English function word in it was
-#: composed in English.
 _ENGLISH_TELLS = re.compile(
     r"\b(?:the|your|you|and|of|with|save|saving|money|week|year|total|each|per)\b",
     re.IGNORECASE,
@@ -261,14 +171,7 @@ _ACCENTED = re.compile(r"[áéíóúñüàâçèêëîïôûùœ]", re.IGNORECAS
 
 
 def gate_locale(widget: Any, locale: str) -> tuple[bool, str]:
-    """Every user-visible string is in this turn's language.
-
-    English is not checked -- an English label in an English turn is the base
-    case, and there is no negative signal to test for. Spanish and French are
-    checked by their own accented characters and by the absence of English
-    function words, which is crude and is correct at the length of a widget
-    label.
-    """
+    """Every user-visible string is in this turn's language."""
     if locale == "en":
         return True, ""
 
@@ -290,13 +193,7 @@ def gate_locale(widget: Any, locale: str) -> tuple[bool, str]:
 def gate_provenance(
     widget: Any, *, concept: TeachingConcept | None, agent: str
 ) -> tuple[bool, str]:
-    """This widget came from the learning agent, about this concept, in a permitted form.
-
-    Three checks and the third is the one that catches a real mistake rather than
-    an attack: a composer given `growth_stack` that returns a `simulator` has
-    produced something the concept's author never approved for it, and the band
-    gate would pass it because the band permits both.
-    """
+    """This widget came from the learning agent, about this concept, in a permitted form."""
     if agent not in WIDGET_AGENTS:
         return False, f"{agent!r} may not emit widgets"
     if concept is None:
@@ -320,14 +217,7 @@ async def build_widget(
     compose: Any = None,
     cache: Any = None,
 ) -> WidgetOutcome:
-    """Plan, compose, gate, cache. Returns an outcome; never raises.
-
-    The catch-all is not defensive habit. This coroutine is awaited by the turn
-    that has already emitted a complete lesson, and an exception escaping it
-    would propagate into the streaming generator and end the turn with an error
-    event -- turning a missing bonus into a broken answer, which is precisely the
-    inversion this module exists to prevent.
-    """
+    """Plan, compose, gate, cache."""
     import time
 
     started = time.monotonic()
@@ -340,8 +230,7 @@ async def build_widget(
         outcome.latency_ms = elapsed()
         return outcome
     except asyncio.CancelledError:
-        # The prose path timed out waiting and cancelled this task. Not an error
-        # and not logged as one -- the lesson is already on screen.
+        # The prose path timed out waiting and cancelled this task.
         raise
     except Exception:
         logger.warning(
@@ -366,11 +255,7 @@ async def _build(
 
     key = plan_hash(request, kind)
 
-    # ── cache ───────────────────────────────────────────────────────────────
-    #
-    # Before composition, so a hit skips BOTH model calls. Most learning turns
-    # are about the same few dozen concepts, so this is the common path rather
-    # than an optimisation for a rare one.
+    # ── cache ─────────────────────────────────────────────────────────────── Before composition, so a hit skips B…
     if cache is not None:
         try:
             hit = await cache.get(request.concept.id, request.band, request.locale, key)
@@ -394,12 +279,7 @@ async def _build(
 
 
 def validate(raw: str, *, request: WidgetRequest, kind: str | None = None) -> WidgetOutcome:
-    """Nine gates. First failure wins and names itself.
-
-    Separated from `_build` so the tests can run the gates over a fixture without
-    a planner, a composer or a cache -- which is the only way to prove a gate
-    rejects what it claims to reject.
-    """
+    """Nine gates."""
     from app.widgets.validate import validate_widget
     from app.schemas.directives import WidgetDirective, directive_payload
 
@@ -431,14 +311,7 @@ _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 
 
 def _unfence(raw: str) -> str:
-    """Strip a code fence the composer wrapped its JSON in.
-
-    Not a repair of the widget -- gate 1 still parses the JSON and rejects it if
-    it is malformed. This removes a wrapper the model added around a correct
-    object, which is a formatting habit rather than a composition failure, and
-    rejecting it would drop good widgets for a reason no reviewer would guess
-    from "invalid JSON".
-    """
+    """Strip a code fence the composer wrapped its JSON in."""
     match = _FENCE.match(raw or "")
     return (match.group(1) if match else (raw or "")).strip()
 
@@ -447,12 +320,7 @@ def _unfence(raw: str) -> str:
 
 
 class WidgetCache:
-    """Valkey, keyed by concept, band, locale and the plan hash.
-
-    Every failure is swallowed and reported as a miss. A cache that can break a
-    turn is worse than no cache, and the only thing a miss costs is two model
-    calls on a path that is already allowed to produce nothing.
-    """
+    """Valkey, keyed by concept, band, locale and the plan hash."""
 
     def __init__(self, ttl_days: int | None = None) -> None:
         self._ttl_days = ttl_days
@@ -491,12 +359,7 @@ class WidgetCache:
 
 
 async def _valkey() -> Any:
-    """The shared Valkey client, or None when the cache is not configured.
-
-    `async` despite `get_client` being synchronous, so that the call sites stay
-    awaits and a future backend that needs a round trip to connect does not
-    require touching every one of them.
-    """
+    """The shared Valkey client, or None when the cache is not configured."""
     try:
         from app.cache import get_client
 

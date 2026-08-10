@@ -1,21 +1,4 @@
-"""The rules that hold for every agent, in one constant.
-
-Extracted from `prompts.ASPIRE_SYSTEM_PROMPT`, which had no consumer. Two
-sections were deliberately NOT brought across because they are about answering
-from retrieved rows and are therefore the Q&A agent's role, not everyone's:
-
-  * **GROUNDING** -- "the knowledge base entries are supplied above, answer from
-    those and nothing else". Meaningless in a lesson turn, which teaches from an
-    authored curriculum, and in a registration turn, which asks a canned
-    question. Left in `qa/nodes.GENERATE_SYSTEM`.
-  * **ANSWER, DO NOT NARRATE** -- "never say where the answer came from". A rule
-    about not narrating a search, in an agent that searches.
-
-Everything below is true of every agent that speaks to a reader, and is copied
-rather than reworded. `test_prompt_layers.py` asserts the safety clauses survive
-verbatim, because a paraphrase of "you are a computer, say so plainly" is a new
-policy decision wearing an edit's clothes.
-"""
+"""The rules that hold for every agent, in one constant."""
 
 from __future__ import annotations
 
@@ -75,10 +58,6 @@ redirect back to money. Do not lecture about why you cannot help."""
 
 
 #: Clauses that must survive verbatim in `GLOBAL`.
-#:
-#: Named so a test can hold them rather than trusting review. Each one is a
-#: safety decision somebody made on purpose, and each is the kind of line an
-#: editor tightening prose would soften without noticing what it was for.
 LOAD_BEARING: Final[tuple[str, ...]] = (
     "Never invent a figure, rate, date or contact detail",
     "never tell anyone what to do with theirs",

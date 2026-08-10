@@ -1,35 +1,4 @@
-"""The role sign-up asks for, and the one combination it must never create.
-
-## The account that could not be repaired
-
-Sign-up used to collect one date of birth in the second person and derive
-everything after it, including the persona. That has exactly one correct
-reading -- a participant entering their own date -- and the form never said so.
-A parent filling it in for a child entered the child's date, which is the
-obvious reading of a page headed "Let us start with you" when the reason you
-are on it is your daughter.
-
-The account then landed in a child band, and `register_agent` is granted to
-`aurora` alone. Aurora is WIDER than a teen band's persona, so `_narrowing`
-refuses a request to switch:
-
-    WARNING app.api.stream: Refused a request for persona 'aurora'
-    on a 16-18 band session.
-
-Nothing in the product could fix that account. Not the picker, not the
-assistant, not a settings page -- only registering a second one.
-
-So the combination is refused at the single moment it is cheap to correct, and
-these tests are the pin on that. The alternative considered and rejected was to
-let a self-declared role override the band, which hands a flow that collects a
-national ID to anybody who ticks a box.
-
-## Why these are fast
-
-`_role_problem` is pure. The endpoint tests around it in
-`test_accounts_claim.py` need Postgres and bcrypt and take minutes; this is the
-rule itself, and the rule is what has to be right.
-"""
+"""The role sign-up asks for, and the one combination it must never create."""
 
 from __future__ import annotations
 
@@ -88,20 +57,7 @@ def test_an_unknown_role_is_refused_rather_than_defaulted() -> None:
 def test_the_refusal_boundary_is_the_band_table_and_not_a_local_constant(
     role: str,
 ) -> None:
-    """Sign-up must refuse exactly what the derivation would judge non-adult.
-
-    A separate `ADULT_AGE = 18` here would have been off by one against
-    `band_for`, which puts an eighteen-year-old in `16-18` -- so sign-up would
-    have accepted an account the persona derivation then refused to give the
-    guardian persona to. That is this whole bug, rebuilt one layer up.
-
-    Walked over a range of ages rather than asserted at a threshold, so the two
-    cannot drift apart silently.
-
-    The real current date, not a fixed one: `_role_problem` calls `band_for`
-    without a `today`, so a pinned date here would agree with it until the year
-    rolled over and then fail for a reason that has nothing to do with the rule.
-    """
+    """Sign-up must refuse exactly what the derivation would judge non-adult."""
     today = date.today()
     for age in range(5, 40):
         born = date(today.year - age, 1, 1)

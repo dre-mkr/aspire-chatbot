@@ -1,33 +1,4 @@
-"""What the learning agent did over the last 24 hours, and whether it is well.
-
-Six numbers and four thresholds. The thresholds are the point: a metric with no
-threshold is a number somebody looks at once, and a threshold with no metric is a
-promise nobody checks.
-
-    teach_fallback_rate      > 2%    the generation path is failing systematically
-    widget_gate_failed_rate  > 15%   the composer is producing invalid widgets
-    resolution_none_rate     > 8%    the concept table has a hole learners are finding
-    zero_prose_turns         > 0     ANY turn with no lesson is a P0
-
-The last one has no percentage because there is no acceptable rate. A learning
-turn that emitted no prose is the defect this whole workstream closed, and one
-occurrence is a regression rather than a statistic.
-
-## Counters in Valkey, not rows in Postgres
-
-A learning turn already writes a structured log line with every one of these
-fields (`agents/learn/tutor._log_turn`), and that line is the audit record. This
-is the *aggregate*, and it exists because "what is the fallback rate this week"
-should not require a log search on a machine somebody has to have access to.
-
-Hash per metric per hour, expiring after 48. Cheap to write on a turn a child is
-waiting through -- one `HINCRBY` per counter, fire and forget -- and cheap to
-read. The 48-hour expiry is deliberate: this is an alerting surface, not a
-warehouse, and a question about last month belongs to the logs.
-
-Every function here swallows its own failures. A metrics write that can break a
-lesson is worse than no metrics.
-"""
+"""What the learning agent did over the last 24 hours, and whether it is well."""
 
 from __future__ import annotations
 
@@ -43,8 +14,7 @@ TEACH_FALLBACK_MAX = 0.02
 WIDGET_GATE_FAILED_MAX = 0.15
 RESOLUTION_NONE_MAX = 0.08
 
-#: How many hours of counters are kept. Two days, so a 24-hour window is always
-#: fully covered even when a read lands at the start of an hour.
+#: How many hours of counters are kept.
 RETENTION_HOURS = 48
 
 _PREFIX = "learn:health"
@@ -57,12 +27,7 @@ def _hour_key(moment: datetime | None = None) -> str:
 
 @dataclass(slots=True)
 class TurnMetrics:
-    """One learning turn, as numbers. Mirrors the structured log line exactly.
-
-    Mirroring matters: when the aggregate says the fallback rate is 4% and
-    somebody goes to the logs to find out which turns, the field names have to be
-    the same or they are searching for something that is not written down.
-    """
+    """One learning turn, as numbers."""
 
     concept_id: str | None = None
     resolution_source: str = "none"
@@ -84,12 +49,7 @@ class TurnMetrics:
     escalated: bool = False
 
     def counters(self) -> dict[str, int]:
-        """The increments this turn contributes.
-
-        Written as a dict of increments rather than as individual calls so the
-        write is one pipeline and one round trip -- this runs on a turn a child
-        is waiting through.
-        """
+        """The increments this turn contributes."""
         counts: dict[str, int] = {"turns": 1}
         if self.teach_fallback == "template":
             counts["teach_fallback"] = 1
@@ -115,10 +75,7 @@ class TurnMetrics:
         counts[f"move:{self.move}"] = 1
         if self.concept_id:
             counts[f"concept:{self.concept_id}"] = 1
-        # Latency is summed and divided rather than sampled into buckets. A mean
-        # is not a p95 and this does not pretend to be one -- the percentiles come
-        # from the log line, which carries every turn's figure. What a mean is
-        # good for is noticing that something doubled.
+        # Latency is summed and divided rather than sampled into buckets.
         counts["ttft_ms_total"] = self.ttft_ms
         counts["total_ms_total"] = self.total_ms
         return counts
@@ -247,9 +204,7 @@ async def snapshot(hours: int = 24) -> Health:
         },
     )
 
-    # Breaches are only meaningful with turns behind them. A single fallback in a
-    # window of three turns is a 33% rate and says nothing, and an alerting
-    # surface that fires on a quiet hour is one somebody turns off.
+    # Breaches are only meaningful with turns behind them.
     if turns >= 20:
         if health.teach_fallback_rate > TEACH_FALLBACK_MAX:
             health.breaches.append(

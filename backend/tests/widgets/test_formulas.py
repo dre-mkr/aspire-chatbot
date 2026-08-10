@@ -1,13 +1,4 @@
-"""Golden values, hand-verified, plus the edges every one of them has.
-
-Every expected number below was computed independently and written down; none
-was produced by running the code and pasting the output. That distinction is
-the whole value of a golden test -- a test that records what the code does
-proves the code is deterministic, not that it is right.
-
-The arithmetic each case rests on is given in its docstring so a reader can
-re-derive it without trusting this file either.
-"""
+"""Golden values, hand-verified, plus the edges every one of them has."""
 
 from __future__ import annotations
 
@@ -51,12 +42,7 @@ class TestSimpleInterest:
         assert reg.simple_interest(10_000, 0.10, 0).value == 10_000
 
     def test_rounding_is_half_up_not_bankers(self):
-        """EC$1.00 at 2.5% for one year is 2.5 cents.
-
-        Python's default rounding would give 2 (round-half-to-even); a bank
-        gives 3. The child comparing our number to their passbook must find
-        them equal.
-        """
+        """EC$1.00 at 2.5% for one year is 2.5 cents."""
         assert reg.simple_interest(100, 0.025, 1).breakdown["earned"] == 3
 
 
@@ -68,13 +54,7 @@ class TestCompoundInterest:
         assert result.breakdown["earned"] == 1_025
 
     def test_contributions_are_an_ordinary_annuity(self):
-        """No principal, EC$100 a year for 3 years at 10%.
-
-        Paid at the END of each period: 100(1.1^2) + 100(1.1) + 100
-        = 121 + 110 + 100 = 331. Paying at the start would give 364.10, and
-        overstating every projection by one period of growth is exactly the
-        error a savings product must not make.
-        """
+        """No principal, EC$100 a year for 3 years at 10%."""
         result = reg.compound_interest(0, 10_000, 0.10, 3, 1)
         assert result.value == 33_100
         assert result.breakdown["contributed"] == 30_000
@@ -87,10 +67,7 @@ class TestCompoundInterest:
         assert result.breakdown["earned"] == 0
 
     def test_monthly_compounding(self):
-        """EC$1,000 at 12% compounded monthly for one year.
-
-        1000 x (1.01)^12 = 1126.825..., so 112_683 cents at half-up.
-        """
+        """EC$1,000 at 12% compounded monthly for one year."""
         result = reg.compound_interest(100_000, 0, 0.12, 1, 12)
         assert result.value == 112_683
 
@@ -132,11 +109,7 @@ class TestSavingsGoalAmount:
         assert reg.savings_goal_amount(10_000, 10, 0.0).value == 1_000
 
     def test_it_rounds_up_so_the_goal_is_actually_reached(self):
-        """EC$10 over 3 periods is 333.33 cents; 334 is the answer that works.
-
-        Rounding to nearest gives 333, and 333 x 3 = 999 -- one cent short of
-        the bicycle.
-        """
+        """EC$10 over 3 periods is 333.33 cents; 334 is the answer that works."""
         assert reg.savings_goal_amount(1_000, 3, 0.0).value == 334
 
     def test_interest_reduces_the_amount_needed(self):
@@ -156,11 +129,7 @@ class TestBudgetSplit:
         assert sum(parts.values()) == 10_000
 
     def test_largest_remainder_is_deterministic(self):
-        """An odd cent must go to the same bucket on every run.
-
-        Dict iteration order is stable in Python but the *fractional parts* can
-        tie, and a tie broken by hash order would move the cent between runs.
-        """
+        """An odd cent must go to the same bucket on every run."""
         first = reg.budget_split(10_001, {"a": 50, "b": 50}).breakdown["parts"]
         second = reg.budget_split(10_001, {"a": 50, "b": 50}).breakdown["parts"]
         assert first == second
@@ -213,10 +182,7 @@ class TestCurrencyConvert:
 
 class TestLoanPayment:
     def test_a_thousand_over_twelve_months_at_twelve_percent(self):
-        """i = 0.01, n = 12. P x i x 1.01^12 / (1.01^12 - 1) = 88.8488...
-
-        So 8_885 cents at half-up, and EC$106.62 repaid in total.
-        """
+        """i = 0.01, n = 12."""
         result = reg.loan_payment(100_000, 0.12, 12)
         assert result.value == 8_885
         assert result.breakdown["total_repaid"] == 8_885 * 12
@@ -267,11 +233,7 @@ class TestTheRegistryItself:
             assert spec.band_min in AGE_BANDS, spec.name
 
     def test_every_specs_parameters_match_its_function(self):
-        """A spec that lists the wrong parameters passes gate 5 and then fails.
-
-        The mismatch surfaces at call time, in production, inside a widget --
-        which is the least legible place available.
-        """
+        """A spec that lists the wrong parameters passes gate 5 and then fails."""
         import inspect
 
         for spec in reg.REGISTRY.values():
@@ -367,12 +329,7 @@ class TestExpressionDomain:
         assert expr.check("ceil(weekly / 7) + floor(weeks / 2)", CONTROLS) is None
 
     def test_a_division_that_only_fails_at_one_corner_is_caught(self):
-        """The whole reason the domain is swept rather than spot-checked.
-
-        `weekly / share` is finite and positive across the entire range except
-        at `share = 0` -- the left end of the slider, which is the first place a
-        child puts it. A spot check at the defaults would pass this expression.
-        """
+        """The whole reason the domain is swept rather than spot-checked."""
         controls = {"weekly": _Control(100, 2_000), "share": _Control(0, 10)}
         problem = expr.check("weekly / share", controls)
         assert problem is not None and "zero" in problem

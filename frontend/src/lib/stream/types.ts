@@ -1,16 +1,4 @@
-/**
- * The v2 wire protocol, as types.
- *
- * Mirrors `backend/app/schemas/directives.py` and `stream_interceptor.py`. The
- * two are kept in step by hand, and the thing that makes that safe is the
- * fallback rule rather than the discipline: an unknown `t` renders nothing (see
- * `DirectiveRegistry`), so a backend that ships a new directive before the
- * frontend knows about it degrades to prose instead of crashing.
- *
- * That property is why `Directive` has an open member. Modelling the union as
- * closed would make TypeScript insist every case is handled, which is exactly
- * the assumption that breaks the moment the two deploy separately.
- */
+/** The v2 wire protocol, as types. */
 
 /** Every event the server can send. */
 export type WireEventName = "token" | "directive" | "done" | "error";
@@ -30,13 +18,7 @@ export interface DoneEvent {
 	data: { i: number; usage: TurnUsage };
 }
 
-/**
- * Note it carries no ordinal.
- *
- * The ordinal sequence describes the answer's content; an error is the reason
- * there is no more of it. A client positioning by ordinal must not have to
- * reason about a gap where an error was.
- */
+/** Note it carries no ordinal. */
 export interface ErrorEvent {
 	event: "error";
 	data: { code: string; message: string };
@@ -73,30 +55,14 @@ export interface GameDirective {
 	difficulty: 1 | 2 | 3;
 }
 
-/**
- * Open the guided eligibility check.
- *
- * Carries no rule and no verdict — the card holds the audited rules and asks
- * its own questions. This is the whole turn: an eligibility directive arrives
- * with no prose beside it, because the server never asked a model to write any.
- */
+/** Open the guided eligibility check. */
 export interface EligibilityDirective {
 	t: "eligibility";
 	check: "aspire_eligibility";
 	language: "en" | "es" | "fr";
 }
 
-/**
- * Open the account sign-up wizard.
- *
- * An account is not an application: applying through the assistant happens on a
- * parent or guardian's own account, and this is how somebody who has not got one
- * is offered the step that comes first.
- *
- * `role` is which branch the wizard opens on, derived server-side from the
- * reader's own claims rather than from anything they typed. `null` means "no
- * suggestion" and lands on the ordinary participant branch.
- */
+/** Open the account sign-up wizard. */
 export interface SignupDirective {
 	t: "signup";
 	role: "participant" | "guardian" | "educator" | null;
@@ -109,15 +75,7 @@ export interface UploadDirective {
 	accepts: Array<string>;
 	max_mb: number;
 	help: string;
-	/**
-	 * Which application this document belongs to.
-	 *
-	 * Sent on to `/v2/documents/presign`, which scopes the signed PUT to it. A
-	 * missing one makes the endpoint fall back to the caller's SESSION id, and
-	 * the row the graph writes afterwards names the APPLICATION id — so the
-	 * object lands at a key nothing ever reads back. Optional because an older
-	 * server does not send it; the card then omits it and gets the old default.
-	 */
+	/** Which application this document belongs to. */
 	application_id?: string;
 }
 
@@ -166,14 +124,7 @@ export interface WidgetDirective {
 	payload: ConceptWidget;
 }
 
-/**
- * The open member.
- *
- * A directive from a newer backend arrives here rather than as a type error,
- * and the registry renders nothing for it. Deleting this member would make the
- * union closed, which reads as safer and is the opposite: it would move a
- * runtime degradation into a compile-time refusal to build.
- */
+/** The open member. */
 export interface UnknownDirective {
 	t: string;
 	[key: string]: unknown;
@@ -365,15 +316,7 @@ export interface WidgetInteraction {
 	completed: boolean;
 }
 
-/**
- * What continues a registration that is paused on a document.
- *
- * Deliberately only the few fields the server allows through: the bytes went
- * browser-to-bucket and this is the receipt, not the file. `document_id` is the
- * one that must be present -- without it the paused node has nothing to record
- * and treats the slot as skipped. Keys outside this set are dropped server-side
- * with a warning (see `ALLOWED_RESUME_KEYS` in `nodes/upload.py`).
- */
+/** What continues a registration that is paused on a document. */
 export interface UploadResult {
 	document_id: string;
 	mime?: string;
@@ -381,4 +324,14 @@ export interface UploadResult {
 	checksum?: string;
 	storage_key?: string;
 	skipped?: boolean;
+}
+
+/** A finished game's score, sent as its own turn (`POST /v2/game/result`). */
+export interface GameResultPayload {
+	game: string;
+	concept_id: string;
+	score: number;
+	max_score: number;
+	duration_s: number;
+	completed: boolean;
 }

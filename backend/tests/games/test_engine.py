@@ -1,8 +1,4 @@
-"""The engine: state, scoring, and the hint ladder.
-
-No model anywhere in this file. That is the point of the architecture — the
-rules are testable on their own, and they give the same verdict every time.
-"""
+"""The engine: state, scoring, and the hint ladder."""
 
 from __future__ import annotations
 
@@ -84,11 +80,7 @@ def test_non_holders_are_declined(engine, persona):
 
 
 def test_unknown_persona_may_play(engine):
-    """Unknown is not the same as ineligible.
-
-    No client sends a persona yet. If "we do not know" meant "no", the feature
-    would be unreachable for everyone the day it shipped.
-    """
+    """Unknown is not the same as ineligible."""
     assert engine.start(SESSION, persona=None).prompt.total == 4
 
 
@@ -189,11 +181,7 @@ def test_skip_reveals_teaches_and_moves_on(engine):
 
 
 def test_a_revealed_word_is_no_longer_scorable(engine):
-    """The cursor moves in the same call that reveals.
-
-    So there is never a moment where the answer is known and the question it
-    answers is still open.
-    """
+    """The cursor moves in the same call that reveals."""
     engine.start(SESSION)
     revealed = engine.skip(SESSION).reveal.answer
     # Submitting the word we were just given now grades against the NEXT word.
@@ -284,15 +272,7 @@ def test_events_carry_what_gamification_will_need(engine, sink):
 
 
 def test_events_record_no_answer_value(engine, sink, all_words):
-    """Events reference a word by id, never by value.
-
-    `entry_id` is readable on purpose — `warmup-01-money` is what the ECCB team
-    edits and what an analyst reads — so it does contain the word, and that is a
-    content reference, not an answer key. What must never appear is the answer
-    as a value: no `word` field, no `answer`, no `definition`. A log file gets
-    shipped to places the service never goes, and a key sitting in one is the
-    same leak by a slower route.
-    """
+    """Events reference a word by id, never by value."""
     engine.start(SESSION)
     engine.hint(SESSION)
     engine.submit(SESSION, "money")

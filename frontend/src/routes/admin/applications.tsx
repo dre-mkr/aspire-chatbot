@@ -1,15 +1,4 @@
-/**
- * The review queue. Oldest first, because that is the fair order.
- *
- * A family who applied in March is seen before one who applied last week,
- * whatever else is true about the rows. Sorting by anything else needs a
- * reason, and "newest first" is not one — it is the default that makes the
- * longest-waiting applicant wait longest.
- *
- * Flags are shown and are NOT a sort key by default. `doc_check` is advisory;
- * letting its confidence reorder the queue would make an automated opinion
- * decide who is seen first, which is one step from letting it decide anything.
- */
+/** The review queue. */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { type ApplicationStatus, type QueueRow, queue } from "#/lib/admin/api";
@@ -173,8 +162,7 @@ function Queue() {
 									</Link>
 								</td>
 								<td style={cell}>{row.status.replace(/_/g, " ")}</td>
-								{/* Parish is not sensitive: it is a queue filter and it identifies
-								    nobody. Every other field on this row would be. */}
+								{/* Parish is not sensitive: it is a queue filter and it identifies nobody. */}
 								<td style={cell}>{row.parish ?? "—"}</td>
 								<td style={cell}>{row.children}</td>
 								<td style={cell}>

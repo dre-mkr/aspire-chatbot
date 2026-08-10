@@ -1,13 +1,4 @@
-"""What a lesson must BE, as a predicate rather than as an adjective in a prompt.
-
-The test that matters most in this file is `test_the_two_cap_tables_agree`. A
-prompt that asks for more words than the outbound gate permits produces a
-re-prompt on every single turn -- a second model call, forever, caused by two
-constants drifting apart. It has happened in this repository before
-(`teach._cap` returned the 13-15 allowance for a band every other site treated as
-9-12), which is why the two tables are pinned to each other in code rather than
-kept in sync by intention.
-"""
+"""What a lesson must BE, as a predicate rather than as an adjective in a prompt."""
 
 from __future__ import annotations
 
@@ -44,11 +35,7 @@ class TestTheTablesAgree:
             assert contract.min_words < contract.max_words, band
 
     def test_a_lesson_cap_is_never_below_a_chat_cap(self):
-        """Teaching is allowed more room than chatting, never less.
-
-        The reason the lesson caps exist: 35 words is right for "good question --
-        back to our snow cone money" and below the FLOOR of an explanation.
-        """
+        """Teaching is allowed more room than chatting, never less."""
         for band in CONTRACTS:
             chat = WORD_CAPS[band]
             lesson = LESSON_WORD_CAPS[band]
@@ -56,19 +43,18 @@ class TestTheTablesAgree:
                 assert lesson >= chat, band
 
     def test_the_lesson_floor_exceeds_the_old_chat_ceiling_at_5_8(self):
-        """The specific number this workstream changed, pinned so it cannot revert.
-
-        A concept explained to a six-year-old in 35 words is a definition read
-        aloud, which is the reported symptom stated as a specification.
-        """
+        """The specific number this workstream changed, pinned so it cannot revert."""
         assert CONTRACTS["5-8"].min_words > WORD_CAPS["5-8"]
 
     def test_cap_for_selects_by_agent(self):
+        from app.graph.nodes.safety_out import QA_WORD_CAPS
+
         assert cap_for("5-8", "learn_agent") == LESSON_WORD_CAPS["5-8"]
-        assert cap_for("5-8", "qa_agent") == WORD_CAPS["5-8"]
+        # A factual answer gets its own, roomier table: a cited answer cut mid-rule is wrong, not short.
+        assert cap_for("5-8", "qa_agent") == QA_WORD_CAPS["5-8"]
+        assert cap_for("adult", "qa_agent") is None
         assert cap_for("5-8", None) == WORD_CAPS["5-8"]
-        # All three learning names, not just the one. A guardian preview and a
-        # signed-out sample run the identical machine.
+        # All three learning names, not just the one.
         for name in ("learn_agent", "learning_preview", "learning_sample"):
             assert cap_for("9-12", name) == LESSON_WORD_CAPS["9-12"]
 
@@ -122,14 +108,7 @@ class TestTheCheck:
         assert any(v.code == "TOO_MANY_QUESTIONS" for v in result.violations)
 
     def test_an_over_long_sentence_is_advisory_not_blocking(self):
-        """The split is a cost decision, made deliberately.
-
-        A regeneration is a second frontier call on a turn a learner is waiting
-        through. It is worth paying when the lesson is absent, thin, ungrounded or
-        unanswerable. It is not worth paying because one sentence ran three words
-        long -- the lesson is correct, complete and on-topic, and a fresh
-        generation is as likely to introduce a different blemish as to fix this.
-        """
+        """The split is a cost decision, made deliberately."""
         result = check_lesson(a_lesson(80, sentence_words=30), band="9-12")
         assert not result.ok
         assert result.servable
@@ -211,12 +190,7 @@ class TestTTS:
         assert tts_safe(written) == spoken
 
     def test_it_is_a_rendering_not_a_regeneration(self):
-        """The screen and the audio are one lesson said two ways.
-
-        A second generation for the voice channel would drift from the first, and
-        a child listening while a parent reads would be hearing a different
-        lesson.
-        """
+        """The screen and the audio are one lesson said two ways."""
         text = "Put EC$100 in at 3% and you have EC$103."
         assert tts_safe(text) != text
         assert "103" in tts_safe(text)

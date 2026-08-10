@@ -1,19 +1,4 @@
-"""The Q&A agent's tools. Every one of them is deterministic Python.
-
-The rule this file enforces, stated once: **the model never computes a figure a
-user reads.** Not eligibility, not interest, not a document list, not a date. It
-decides *which* tool to call and it phrases the result; the number itself comes
-from here.
-
-That is not a style preference. A language model asked "is a 17-year-old
-non-resident eligible?" produces a confident sentence roughly as often as it
-produces a correct one, and on a government programme the difference between
-those two outcomes is a family arriving at a branch with the wrong papers.
-
-Each tool returns a typed result, and several of them also return a directive
-for the client to render -- a chart, a checklist -- so the numbers reach the
-screen without passing through a sentence the model wrote.
-"""
+"""The Q&A agent's tools."""
 
 from __future__ import annotations
 
@@ -33,8 +18,7 @@ logger = logging.getLogger(__name__)
 
 # ── eligibility ──────────────────────────────────────────────────────────────
 
-#: The programme's age window. Named constants rather than inline numbers
-#: because they appear in the knowledge base too, and the two must not drift.
+#: The programme's age window.
 MIN_AGE = 5
 MAX_AGE = 18
 
@@ -42,8 +26,7 @@ MAX_AGE = 18
 @dataclass(frozen=True, slots=True)
 class EligibilityResult:
     eligible: bool
-    #: Every criterion, with its verdict. A bare yes/no is unusable at a branch
-    #: counter -- "which part failed?" is the only useful next question.
+    #: Every criterion, with its verdict.
     criteria: dict[str, bool]
     reasons: list[str]
     age: int | None = None
@@ -61,17 +44,7 @@ def check_eligibility(
     *,
     on: date | None = None,
 ) -> EligibilityResult:
-    """Whether this child qualifies. Arithmetic, not judgement.
-
-    `on` exists so the result is reproducible: an eligibility check that reads
-    `date.today()` gives a different answer on a different day for the same
-    inputs, which makes it untestable and makes a support conversation about a
-    past check impossible.
-
-    A child under `MIN_AGE` is reported as "not yet" rather than as a plain
-    refusal, and the distinction is real: they become eligible, and the family
-    should be told when rather than told no.
-    """
+    """Whether this child qualifies."""
     today = on or date.today()
     age = _age_on(dob, today)
 
@@ -113,8 +86,7 @@ class Projection:
     contributed_cents: int
     earned_cents: int
     display: str
-    #: Year-end balances, in cents. The client plots these; it does not compute
-    #: them, and there is no second implementation of this arithmetic anywhere.
+    #: Year-end balances, in cents.
     series: list[int]
     directive: dict[str, Any]
 
@@ -122,16 +94,7 @@ class Projection:
 def project_savings(
     principal: int, monthly: int, rate: float, years: int
 ) -> Projection:
-    """What regular saving becomes, year by year.
-
-    Delegates every number to `formulas.registry.compound_interest`, which is
-    the only compound-interest implementation in the codebase. Duplicating it
-    here "for the chart" is exactly how a chart comes to disagree with the
-    sentence above it.
-
-    Monthly contributions, compounded monthly. Values are integer cents
-    throughout.
-    """
+    """What regular saving becomes, year by year."""
     series: list[int] = []
     for year in range(1, max(1, years) + 1):
         step = registry.compound_interest(principal, monthly, rate, year, 12)
@@ -170,10 +133,7 @@ class Document:
     note: str = ""
 
 
-#: What each application type needs. A table rather than prose in a prompt,
-#: because a checklist a parent packs a bag from must be identical every time it
-#: is asked for -- and a model asked twice gives two orderings and occasionally
-#: two contents.
+#: What each application type needs.
 _CHECKLISTS: dict[str, tuple[Document, ...]] = {
     "new_child_account": (
         Document("guardian.id_document", "Guardian's photo ID"),
@@ -208,13 +168,7 @@ _CHECKLISTS: dict[str, tuple[Document, ...]] = {
 
 
 def document_checklist(application_type: str) -> list[Document]:
-    """The documents this application needs.
-
-    An unknown type returns the new-account list rather than an empty one, and
-    logs. A parent given an empty checklist arrives at a branch with nothing;
-    a parent given the standard list arrives with too much, which is
-    recoverable.
-    """
+    """The documents this application needs."""
     checklist = _CHECKLISTS.get(application_type)
     if checklist is None:
         logger.warning(
@@ -237,10 +191,7 @@ class Branch:
     phone: str = ""
 
 
-#: The branch table. Static data, in code, deliberately: a branch list that
-#: comes back differently depending on how the question was phrased is worse
-#: than one that is occasionally a week out of date, and this is the kind of
-#: table that changes twice a year and is reviewed when it does.
+#: The branch table.
 _BRANCHES: tuple[Branch, ...] = (
     Branch(
         "Basseterre Main",
@@ -276,13 +227,7 @@ _BRANCHES: tuple[Branch, ...] = (
 
 
 def find_branch(parish: str) -> list[Branch]:
-    """Branches in or near a parish.
-
-    Matches loosely -- "Cayon" finds "Saint Mary Cayon" -- because a person
-    types the name they use rather than the administrative one. An unmatched
-    parish returns every branch, since "here is the whole list" is a useful
-    answer and "no branches found" is not.
-    """
+    """Branches in or near a parish."""
     needle = parish.strip().lower()
     if not needle:
         return list(_BRANCHES)
@@ -298,13 +243,7 @@ def find_branch(parish: str) -> list[Branch]:
 
 
 def handoff_to_registration() -> Command:
-    """Move this conversation to the registration agent.
-
-    A `Command` rather than a state flag: the handoff is a value the graph acts
-    on, so it is visible in a trace and cannot be half-applied. `update` carries
-    the agent name so `classify`'s stickiness holds the conversation there on
-    the next turn rather than re-deciding it.
-    """
+    """Move this conversation to the registration agent."""
     return Command(goto="register_agent", update={"active_agent": "register_agent"})
 
 
@@ -320,13 +259,7 @@ class Ticket:
 
 
 def escalate_to_human(reason: str, summary: str) -> Command:
-    """Hand the question to a person, with a redacted summary.
-
-    The summary is redacted HERE rather than by the caller, so there is no path
-    to a ticket that skips it. A ticket is read by staff, exported, and joined
-    to a case record -- it is the last place a national ID should end up, and
-    the easiest place for one to arrive unnoticed.
-    """
+    """Hand the question to a person, with a redacted summary."""
     from app.safety import pii
 
     ticket = Ticket(

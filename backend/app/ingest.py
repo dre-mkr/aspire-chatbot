@@ -1,24 +1,4 @@
-"""CSV knowledge base -> embeddings -> the `documents` table in Neon.
-
-Run directly to (re)build the corpus:
-
-    python -m app.ingest
-    python -m app.ingest --csv path/to/other.csv
-
-Postgres is the source of truth (P13-002). Ingestion is idempotent: the table is
-emptied and rewritten from the CSV inside ONE transaction, so re-running never
-duplicates rows, deleted rows really disappear, and a failure part-way through
-leaves the previous corpus intact rather than a half-written one. There is no
-window in which retrieval sees an empty or partial table.
-
-## What must not drift
-
-`row_to_document` produces the string that gets embedded, and it is unchanged
-from the Chroma implementation this replaces -- deliberately, and it must stay
-that way. The text is the input to the embedding model, so editing how a row is
-formatted silently re-ranks the entire corpus. `tests/test_retriever_equivalence.py`
-pins the consequence: the same top-5 as Chroma returned, for the probe questions.
-"""
+"""CSV knowledge base -> embeddings -> the `documents` table in Neon."""
 
 from __future__ import annotations
 
@@ -41,45 +21,28 @@ from app.rag import build_embeddings
 
 logger = logging.getLogger(__name__)
 
-# Recognised QA-style column names, lowercased. If a CSV has these we format the
-# row nicely; otherwise we fall back to joining every column. Edit these sets to
-# teach ingestion about new column names.
+# Recognised QA-style column names, lowercased.
 QUESTION_COLUMNS = {"question", "q", "prompt", "query", "title"}
 ANSWER_COLUMNS = {"answer", "a", "response", "content", "body", "text"}
 CATEGORY_COLUMNS = {"category", "topic", "section", "tag", "tags"}
 
-#: CSV columns read into real table columns. Everything is preserved in the
-#: metadata JSONB regardless; these are the ones a WHERE clause can reach.
+#: CSV columns read into real table columns.
 ID_COLUMNS = {"id", "kb_id", "ref", "code"}
 AUDIENCE_COLUMNS = {"audience", "persona", "audiences", "for"}
 SOURCE_URL_COLUMNS = {"source_url", "url", "source", "link"}
 LANGUAGE_COLUMNS = {"language", "lang", "locale"}
 
-#: Used when the CSV names no language. The corpus is English-only today, and
-#: `evals/golden.yaml` is built around exactly that: every Spanish and French
-#: probe question has to match an English chunk. Retrieval is therefore
-#: cross-lingual by design and does NOT filter on this column -- see
-#: `app/rag.py`. Storing it keeps the option open without pretending it is used.
+#: Used when the CSV names no language.
 DEFAULT_LANGUAGE = "en"
 
-#: An advisory lock key, so two processes booting at once cannot both decide the
-#: table is empty and both rewrite it. Arbitrary but fixed; it only has to be
-#: unique within this database.
+#: An advisory lock key, so two processes booting at once cannot both decide the table is empty and both rewrite…
 _INGEST_LOCK_KEY = 0x4153503133  # "ASP13"
 
 
 def row_to_document(
     row: dict[str, str], row_number: int, source: str
 ) -> LangchainDocument | None:
-    """Turn one CSV row into one Document.
-
-    page_content is what gets embedded and shown to the model, so it is written to
-    read as prose. Every original column is preserved verbatim in metadata.
-
-    This is the only column-mapping logic in the codebase -- change it here. And
-    see the module docstring before changing it at all: the output is embedding
-    input, so a formatting edit re-ranks the corpus.
-    """
+    """Turn one CSV row into one Document."""
     # Drop empty cells and normalise keys so lookup is case/whitespace insensitive.
     values = {
         (key or "").strip(): (value or "").strip()
@@ -102,8 +65,7 @@ def row_to_document(
     category_key = first_match(CATEGORY_COLUMNS)
 
     if question_key and answer_key:
-        # QA-shaped row: lead with the question so semantic search matches on it,
-        # then any extra columns that aren't already represented.
+        # QA-shaped row: lead with the question so semantic search matches on it, then any extra columns that aren't al…
         lines = []
         if category_key:
             lines.append(f"Category: {values[category_key]}")
@@ -119,9 +81,7 @@ def row_to_document(
         page_content = "\n".join(f"{key}: {value}" for key, value in values.items())
 
     metadata: dict[str, str | int] = {
-        # Scalars only, exactly as the Chroma implementation stored them: this
-        # dict is handed back to the client as a source's `metadata`, so its
-        # shape is part of the API.
+        # Scalars only, exactly as the Chroma implementation stored them: this dict is handed back to the client as a s…
         **values,
         "source": source,
         "row": row_number,
@@ -181,8 +141,7 @@ def _rows_for(chunks: list[LangchainDocument], vectors: list[list[float]]) -> li
             f"Embedded {len(vectors)} vectors for {len(chunks)} chunks; refusing to write."
         )
 
-    # Per source row, so a long row's chunks are numbered 0, 1, 2 rather than all
-    # carrying the splitter's character offset.
+    # Per source row, so a long row's chunks are numbered 0, 1, 2 rather than all carrying the splitter's character…
     seen: dict[str, int] = {}
     rows: list[Document] = []
 
@@ -201,10 +160,7 @@ def _rows_for(chunks: list[LangchainDocument], vectors: list[list[float]]) -> li
                 content=chunk.page_content,
                 embedding=vector,
                 language=_pick(metadata, LANGUAGE_COLUMNS) or DEFAULT_LANGUAGE,
-                # The CSV's `audience` vocabulary -- general | parent | student |
-                # teacher. NOT the four voice personas (stella/orion/aurora/nova),
-                # despite the column name, which comes from migration 0001.
-                # Nothing filters on it yet; it is stored so that it can.
+                # The CSV's `audience` vocabulary -- general | parent | student | teacher.
                 persona_tags=[audience] if audience else [],
                 account_status_tags=[],
                 source_url=_pick(metadata, SOURCE_URL_COLUMNS),
@@ -218,12 +174,7 @@ def _rows_for(chunks: list[LangchainDocument], vectors: list[list[float]]) -> li
 
 
 def _check_dimensions(settings: Settings, vectors: list[list[float]]) -> None:
-    """Refuse to write vectors the column cannot hold.
-
-    The failure this avoids is the nastiest one in the schema: a mismatch does
-    not surface at configuration time or at embedding time, only on the INSERT,
-    per row, forever. Checking here turns it into one message naming both numbers.
-    """
+    """Refuse to write vectors the column cannot hold."""
     expected = dimensions_for(settings.embeddings_model)
     if expected is not None and expected != EMBEDDING_DIMENSIONS:
         raise ValueError(
@@ -249,9 +200,7 @@ async def ingest(settings: Settings | None = None) -> int:
 
     chunks = chunk_documents(documents, settings)
 
-    # Embedded before the transaction opens. This is the slow part -- a network
-    # round trip per batch -- and holding a write transaction open across it
-    # would keep the table locked for the duration for no reason.
+    # Embedded before the transaction opens.
     logger.info("Embedding %d chunks with %s...", len(chunks), settings.embeddings_model)
     vectors = build_embeddings(settings).embed_documents([c.page_content for c in chunks])
     _check_dimensions(settings, vectors)
@@ -264,8 +213,7 @@ async def ingest(settings: Settings | None = None) -> int:
                 "No database configured. Postgres is the source of truth for the "
                 "knowledge base -- set DATABASE_URL and run `alembic upgrade head`."
             )
-        # Empty-and-rewrite in one transaction: readers see the old corpus until
-        # commit, then the new one. Never a partial corpus, and never an empty one.
+        # Empty-and-rewrite in one transaction: readers see the old corpus until commit, then the new one.
         await db.execute(delete(Document))
         db.add_all(rows)
 
@@ -276,12 +224,7 @@ async def ingest(settings: Settings | None = None) -> int:
         len(rows),
     )
 
-    # A reloaded knowledge base must never be served from cache (P14-B). The
-    # corpus fingerprint inside every cache key already guarantees that -- the
-    # old keys simply stop matching -- so this flush is reclamation, not the
-    # safety mechanism. Best effort by design: an unreachable Valkey must not
-    # fail an ingest that already committed, and the fingerprint carries the
-    # correctness either way.
+    # A reloaded knowledge base must never be served from cache (P14-B).
     try:
         from app.cache import flush_answers
 
@@ -303,13 +246,7 @@ async def count_corpus() -> int:
 
 
 async def ingest_if_empty(settings: Settings | None = None) -> int:
-    """Ingest only when the corpus is empty. Returns rows written (0 if skipped).
-
-    Takes a transaction-scoped advisory lock around the check-then-write. Two
-    workers booting together would otherwise both read zero and both rewrite the
-    table; the second one to arrive now waits, re-reads, and finds the corpus
-    already there.
-    """
+    """Ingest only when the corpus is empty."""
     settings = settings or get_settings()
 
     async with session() as db:

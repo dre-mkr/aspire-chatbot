@@ -1,7 +1,4 @@
-"""Endpoint tests against a mocked ElevenLabs client.
-
-No test in this file touches the network or the real API.
-"""
+"""Endpoint tests against a mocked ElevenLabs client."""
 
 from __future__ import annotations
 
@@ -64,7 +61,6 @@ def settings(tmp_path) -> VoiceSettings:
     return VoiceSettings(
         _env_file=None,
         # The fixture mounts the router, so this app is in the enabled state.
-        # The default is False; see config.py for why.
         voice_enabled=True,
         elevenlabs_api_key="test-key",
         voice_stella="v-stella",
@@ -73,8 +69,7 @@ def settings(tmp_path) -> VoiceSettings:
         voice_nova="v-nova",
         voice_cache_dir=tmp_path / "voice_cache",
         max_transcriptions_per_window=3,
-        # Deliberately above breaker_failure_threshold (3) so the breaker test
-        # exercises the breaker rather than tripping the rate limit first.
+        # Deliberately above breaker_failure_threshold (3) so the breaker test exercises the breaker rather than trippi…
         max_speech_per_window=10,
     )
 
@@ -166,14 +161,7 @@ def test_bad_mime_is_rejected_before_the_api(client, sdk):
     ],
 )
 def test_recorder_mime_with_codec_parameter_is_accepted(client, sdk, mime):
-    """What browsers actually send.
-
-    `MediaRecorder.mimeType` carries the codec parameter, and that string
-    becomes the blob type and then the upload's Content-Type. Matching the whole
-    string against the allowlist rejected every recording Chrome produced, which
-    is a 415 on the real path while every test here passed on a bare
-    `audio/webm`.
-    """
+    """What browsers actually send."""
     response = client.post("/api/voice/transcribe", **upload(mime=mime))
     assert response.status_code == 200, response.text
     assert len(sdk.stt_calls) == 1

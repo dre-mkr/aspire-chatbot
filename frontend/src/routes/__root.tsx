@@ -30,23 +30,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		],
 		links: [
 			{ rel: "stylesheet", href: appCss },
-			/*
-			 * The two families in the first paint, fetched alongside the CSS
-			 * rather than after it.
-			 *
-			 * A `@font-face` is only discovered once the stylesheet has been
-			 * downloaded and parsed, which puts the font one hop behind the thing
-			 * that names it. Preloading collapses that: Sora carries every word of
-			 * chrome and prose, Instrument Serif carries the hero, and both are
-			 * wanted at the same moment the CSS is.
-			 *
-			 * JetBrains Mono is deliberately NOT preloaded -- it appears in code
-			 * spans inside answers, which do not exist yet at first paint, and
-			 * preloading it would compete for bandwidth with the two that do.
-			 *
-			 * `crossOrigin` is required even same-origin: fonts are fetched in
-			 * CORS mode, and a preload without it is a second, unused download.
-			 */
+			/* The two families in the first paint, fetched alongside the CSS rather than after it. */
 			{
 				rel: "preload",
 				as: "font",
@@ -85,24 +69,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 	shellComponent: RootDocument,
 });
 
-/**
- * The document's language, from the address.
- *
- * `<html lang="en">` was hardcoded. Confirmed at runtime during the audit: after
- * switching to ES or FR and reloading, `document.documentElement.lang` was still
- * `"en"` — so a screen reader pronounced Spanish and French answers with English
- * phonetics. WCAG 3.1.1 (A) and 3.1.2 (AA), and combined with the missing live
- * regions it made the assistive-technology experience in ES and FR broken twice
- * over.
- *
- * Read from the router's location rather than from the voice hook, because this
- * renders above every provider and must work during SSR — which is the whole
- * reason `lang` is a search param (P3-004) rather than device state.
- *
- * Read defensively: this is the document shell, and it renders for the
- * not-found and error routes too, where the search may not have been validated
- * by `_shell` at all.
- */
+/** The document's language, from the address. */
 const LANGUAGES = new Set(["en", "es", "fr"]);
 
 function useDocumentLanguage() {

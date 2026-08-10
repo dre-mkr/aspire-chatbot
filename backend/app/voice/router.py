@@ -1,9 +1,4 @@
-"""HTTP surface for the voice layer.
-
-Every response body here is safe to show a user: no upstream messages, no keys,
-no stack traces. Audio bytes live in a local variable for the duration of the
-request and are never written to disk or a log.
-"""
+"""HTTP surface for the voice layer."""
 
 from __future__ import annotations
 
@@ -44,14 +39,7 @@ def _session_key(request: Request, thread_id: str | None) -> str:
 
 
 def _base_mime(raw: str | None) -> str:
-    """The bare media type, without its RFC 2045 parameters.
-
-    A browser recorder reports the container *and* the codec: Chrome and Edge
-    hand us `audio/webm;codecs=opus`, Firefox `audio/ogg;codecs=opus`. The
-    parameter is a legitimate part of a well-formed media type, so the allowlist
-    has to be checked against the type alone — comparing the whole string
-    rejects every recording Chrome has ever made.
-    """
+    """The bare media type, without its RFC 2045 parameters."""
     return (raw or "").split(";", 1)[0].strip().lower()
 
 
@@ -103,8 +91,7 @@ async def transcribe(
 ) -> TranscriptionResponse:
     settings = get_voice_settings()
 
-    # Consent first: Stella's audience starts at five years old, so a recording
-    # without explicit consent is not something to even validate, let alone send.
+    # Consent first: Stella's audience starts at five years old, so a recording without explicit consent is not som…
     if not voice_consent:
         raise HTTPException(
             status_code=403,
@@ -130,8 +117,7 @@ async def transcribe(
             status_code=413,
             detail=f"Audio exceeds the {settings.max_upload_bytes // 1_048_576} MB limit.",
         )
-    # Byte proxy for the duration cap. WebM/Opus rarely carries a duration in
-    # its header, so the real figure only arrives with the transcript below.
+    # Byte proxy for the duration cap.
     if size > settings.duration_guard_bytes:
         raise HTTPException(
             status_code=413,
@@ -176,9 +162,7 @@ async def transcribe(
             detail=f"Audio is longer than the {settings.max_duration_seconds:.0f} second limit.",
         )
 
-    # The transcript is a user message and nothing more. It is returned to the
-    # client, which submits it to /chat through exactly the same validation a
-    # typed message gets. It is never routed into a prompt or tool from here.
+    # The transcript is a user message and nothing more.
     return TranscriptionResponse(
         text=transcript.text,
         language_code=transcript.language_code,
@@ -189,15 +173,7 @@ async def transcribe(
 
 @router.post("/speak")
 async def speak(request: Request, body: SpeakRequest) -> Response:
-    """Text to audio.
-
-    Wrapped in its own measured turn because it *is* its own request: the client
-    asks for audio after the answer text has arrived, so this never appears in a
-    `/chat/stream` timing line and `t_tts_first_byte` would otherwise have no
-    turn to attach to. `t_total` here is what the reader waits for before hearing
-    anything, and a cache hit skips the vendor entirely -- which is why the hit
-    is annotated rather than returned before the clock starts.
-    """
+    """Text to audio."""
     with timed_turn(
         endpoint="/voice/speak",
         persona=body.persona.value,
@@ -219,18 +195,14 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
         raise HTTPException(status_code=400, detail="Nothing to say once the text was cleaned.")
 
     profile = resolve_profile(body.persona, body.language)
-    # Figure-heavy lines go to the higher-quality model, which reads numbers
-    # better. Measured on the ORIGINAL text: speakable() has already spelled the
-    # digits out, so the sanitised string never contains any to count.
+    # Figure-heavy lines go to the higher-quality model, which reads numbers better.
     model_id = (
         settings.tts_model_quality if has_many_numbers(body.text) else profile.model_id
     )
 
     key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
     cache = get_cache()
-    # `aget`/`aput`, not `get`/`put`: this is an async handler, and reading or
-    # writing a whole MP3 on the event loop stalls every other request behind
-    # it. Under `--workers 1` that includes live chat turns.
+    # `aget`/`aput`, not `get`/`put`: this is an async handler, and reading or writing a whole MP3 on the event loo…
     if (cached := await cache.aget(key)) is not None:
         annotate_timings(cache_hit=True)
         return Response(
@@ -273,19 +245,7 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
 
 @router.post("/speak-stream")
 async def speak_stream(request: Request, body: SpeakRequest) -> Response:
-    """Text to audio, first byte before the last is synthesised (P14-C).
-
-    `/speak` joins the whole MP3 before returning, so first audio lands at
-    (full synthesis + full download). This passes each vendor chunk through the
-    moment it exists: first audio lands at the vendor's own first byte, and the
-    tail of a long answer is still being written while its opening plays.
-
-    Same validation, same profile resolution, same rate limit and same cache as
-    `/speak` -- a hit streams from memory in one chunk, and a clean miss is
-    recorded whole so the NEXT asker hits. A mid-stream vendor failure ends the
-    body early; the client's player stops at the last full frame, the text on
-    screen is a different request entirely, and nothing here can touch it.
-    """
+    """Text to audio, first byte before the last is synthesised (P14-C)."""
     with timed_turn(
         endpoint="/voice/speak-stream",
         persona=body.persona.value,
@@ -313,8 +273,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
 
         headers = {
             "Cache-Control": "private, max-age=86400",
-            # nginx buffers proxied responses by default, which would turn this
-            # back into exactly the wait it exists to remove.
+            # nginx buffers proxied responses by default, which would turn this back into exactly the wait it exists to rem…
             "X-Accel-Buffering": "no",
         }
 
@@ -336,10 +295,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
                 headers={"Retry-After": str(decision.retry_after_seconds)},
             )
 
-        # The first chunk is awaited HERE, before the response object exists,
-        # because a StreamingResponse has already committed a 200 by the time
-        # its generator runs -- a vendor that fails immediately must surface as
-        # the same 503 the buffered path gives, not as an empty 200.
+        # The first chunk is awaited HERE, before the response object exists, because a StreamingResponse has already c…
         stream = get_client().synthesise_stream(
             spoken, profile.voice_id, model_id, profile.settings
         )
@@ -351,9 +307,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
             raise HTTPException(status_code=503, detail=_FALLBACK) from None
 
         async def body_and_cache():
-            # Teed as it flows: the reader hears chunks now, the cache gets the
-            # whole file after -- but only when the stream ended cleanly, since
-            # caching a truncated MP3 would replay the truncation forever.
+            # Teed as it flows: the reader hears chunks now, the cache gets the whole file after -- but only when the strea…
             collected = [first]
             clean = False
             try:
@@ -384,12 +338,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
 
 @router.post("/realtime-token")
 async def realtime_token() -> Response:
-    """Stretch goal, disabled by default.
-
-    Intended to mint a short-TTL single-use token so a browser can open a
-    scribe_v2_realtime socket without ever seeing the API key. Returns 501 until
-    the batch path has proven itself and the flag is turned on.
-    """
+    """Stretch goal, disabled by default."""
     if not get_voice_settings().voice_realtime_enabled:
         raise HTTPException(
             status_code=501,

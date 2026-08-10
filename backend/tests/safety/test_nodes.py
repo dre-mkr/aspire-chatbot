@@ -1,8 +1,4 @@
-"""The four main-path nodes, each against the properties it exists to hold.
-
-Every acceptance criterion the specification names for A2 appears here as a
-test with the criterion in its name.
-"""
+"""The four main-path nodes, each against the properties it exists to hold."""
 
 from __future__ import annotations
 
@@ -52,11 +48,7 @@ class TestHydrate:
             make_hydrate(token)(state_for())
 
     def test_an_account_token_cannot_stand_in_for_a_session_token(self, state_for):
-        """`auth.mint_token` signs with the same key and carries no age band.
-
-        Accepting it would mean inventing a band, which is the single worst
-        thing this node could do.
-        """
+        """`auth.mint_token` signs with the same key and carries no age band."""
         import uuid
 
         from app.auth import mint_token
@@ -67,12 +59,7 @@ class TestHydrate:
     def test_a_body_setting_persona_on_a_stella_token_is_ignored(
         self, token_for, state_for, caplog
     ):
-        """The acceptance case, stated exactly.
-
-        The body claims Aurora -- the guardian persona, which reaches
-        registration and servicing. The token says Stella. Stella wins, and the
-        attempt is logged.
-        """
+        """The acceptance case, stated exactly."""
         token = token_for(persona="stella", age_band="5-8")
         body = {"message": "hello", "persona": "aurora", "age_band": "adult"}
         with caplog.at_level("WARNING"):
@@ -87,11 +74,7 @@ class TestHydrate:
         ]
 
     def test_the_attempted_value_is_never_logged(self, token_for, state_for, caplog):
-        """Attacker-chosen text must not reach the log.
-
-        Logs are read by tooling, and tooling that renders a log line is one
-        more thing an attacker can write into.
-        """
+        """Attacker-chosen text must not reach the log."""
         token = token_for()
         body = {"persona": "<script>alert(1)</script>"}
         with caplog.at_level("WARNING"):
@@ -109,11 +92,7 @@ class TestHydrate:
         assert spoof_attempt({"message": "hi", "locale": "en"}) == []
 
     def test_per_turn_fields_are_cleared(self, token_for, state_for):
-        """A checkpoint restores last turn's outputs; they must not be reused.
-
-        Without this, last turn's chips render under this turn's answer and
-        last turn's citations are attributed to it.
-        """
+        """A checkpoint restores last turn's outputs; they must not be reused."""
         update = make_hydrate(token_for())(state_for())
         assert update["quick_replies"] == []
         assert update["ui_directives"] == RESET
@@ -226,10 +205,7 @@ class TestSafetyIn:
         assert "869" not in str(flags)
 
     def test_inbound_pii_does_not_block(self, state_for):
-        """A child volunteering their address is not misbehaving.
-
-        Refusing would teach them the assistant breaks when you tell it things.
-        """
+        """A child volunteering their address is not misbehaving."""
         state = state_for(messages=[HumanMessage(content="I live at 12 Main Street")])
         assert si.safety_in(state).get("halt_reason") is None
 
@@ -491,8 +467,7 @@ class TestSafetyOutQuickReplies:
         assert len(recorder.calls) == 1
         assert "tappable options" in recorder.calls[0][0]
         assert update["quick_replies"] == ["Saving", "Spending"]
-        # The chips are lifted OUT of the prose. Leaving them would render the
-        # same two options twice: once as text, once as buttons.
+        # The chips are lifted OUT of the prose.
         assert update["messages"][0].content == "Which one grows more?"
 
     async def test_a_second_failure_falls_back_to_one_chip_not_a_dead_end(
@@ -613,11 +588,7 @@ class TestSafetyOutLocale:
 @pytest.mark.asyncio
 class TestSafetyOutGeneral:
     async def test_the_rewritten_message_keeps_its_id(self, state_for):
-        """`add_messages` replaces on a matching id and appends without one.
-
-        Without the id the transcript carries both the unsafe original and its
-        correction -- and the model reads the unsafe one back next turn.
-        """
+        """`add_messages` replaces on a matching id and appends without one."""
         node = so.make_safety_out(None)
         original = AIMessage(content="Your ID is A12345678.", id="msg-1")
         update = await node(

@@ -1,19 +1,4 @@
-"""The planner: what it offers, what it refuses, and how often it is right.
-
-Three numbers the specification names, and each is a test:
-
-    selection accuracy      > 80%
-    over-trigger rate       < 15%
-    band violations         = 0
-
-The third is asserted structurally as well as measured. A band violation should
-be IMPOSSIBLE rather than rare: `kinds_for` filters the menu before the model
-sees it, so an excluded primitive is not something the model can pick badly --
-it is something it was never shown.
-
-The accuracy and over-trigger numbers run against a real model and skip without
-a key. The structural properties run always.
-"""
+"""The planner: what it offers, what it refuses, and how often it is right."""
 
 from __future__ import annotations
 
@@ -64,11 +49,7 @@ class TestTheEvalSetIsWellFormed:
         assert {case["locale"] for case in CASES} == {"en", "es", "fr"}
 
     def test_a_third_of_it_is_null(self):
-        """A set with no nulls cannot measure over-triggering at all.
-
-        Over-triggering is the failure that degrades silently -- a widget on
-        every turn is wallpaper, and nothing about it looks broken.
-        """
+        """A set with no nulls cannot measure over-triggering at all."""
         nulls = sum(1 for case in CASES if case["ideal"] is None)
         assert 0.25 <= nulls / len(CASES) <= 0.45
 
@@ -102,8 +83,7 @@ class TestTheMenu:
         assert "simulator" not in planner.kinds_for("9-12", "save", [])
 
     def test_a_concept_off_the_ladder_offers_nothing(self):
-        """A widget about a concept they are not being taught is a widget about
-        something else."""
+        """A widget about a concept they are not being taught is a widget about something else."""
         assert planner.kinds_for("5-8", "compound_interest", []) == []
         assert planner.kinds_for("9-12", "inflation", []) == []
 
@@ -140,12 +120,7 @@ class TestTheBandTable:
         assert fixed and kind is None and about == "save"
 
     def test_a_nine_to_twelve_gets_a_widget_about_interest_not_compounding(self):
-        """The concept it is ABOUT is not the concept that was asked about.
-
-        Without this the growth stack the band table just chose would be
-        rejected by gate 3, because `compound_interest` is not on the 9-12
-        ladder.
-        """
+        """The concept it is ABOUT is not the concept that was asked about."""
         _fixed, _kind, about = planner.forced_kind("compound_interest", "9-12")
         assert about == "interest"
         assert vocab.is_allowed_concept(about, "9-12")
@@ -219,11 +194,7 @@ class TestContainment:
 
 class TestTheCompositionPrompt:
     def test_it_carries_one_schema_and_not_nine(self):
-        """The token saving the split exists for.
-
-        Nine schemas is roughly 4,000 tokens per turn, and a model shown nine
-        elaborate options picks one whether or not it should.
-        """
+        """The token saving the split exists for."""
         prompt = planner.composition_prompt("growth_stack", "9-12", "en", "interest")
         assert "growth_stack" in prompt
         for other in ("sort_buckets", "flow_diagram", "reveal_cards", "allocator"):
@@ -253,17 +224,12 @@ class TestTheCompositionPrompt:
         assert "reveal_line" in prompt
 
     def test_examples_fall_back_downward_not_upward(self):
-        """An older reader shown a younger example is fine. The reverse puts
-        words in a prompt that gate 6 then rejects."""
+        """An older reader shown a younger example is fine."""
         assert planner.fewshots("compare", "13-15")  # inherits 9-12
         assert planner.fewshots("growth_stack", "16-18")  # inherits 9-12
 
     def test_the_null_examples_are_shown_on_every_planning_call(self):
-        """Showing a model what "no" looks like beats telling it "no" is allowed.
-
-        An instruction competes with nine attractive options; an example does
-        not.
-        """
+        """Showing a model what "no" looks like beats telling it "no" is allowed."""
         assert "-> null" in planner.null_examples()
 
 
@@ -288,11 +254,7 @@ def _model_available() -> bool:
 @pytest.mark.asyncio
 @pytest.mark.skipif(not _model_available(), reason="no API key for the planner model")
 async def test_planner_accuracy_and_over_trigger(capsys):
-    """Reports selection accuracy, over-trigger rate and band violations.
-
-    Reported as well as asserted: 81% and 96% both pass, and only one of them
-    means the prompt can be left alone.
-    """
+    """Reports selection accuracy, over-trigger rate and band violations."""
     from app.graph.nodes.classify import default_invoke
 
     plan = planner.make_planner(default_invoke)

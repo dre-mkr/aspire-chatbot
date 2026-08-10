@@ -1,11 +1,4 @@
-"""Phase 1 smoke checks.
-
-Deliberately small: these cover the pieces that break silently (CSV mapping,
-source extraction) plus /health. They do not call the LLM, so they run without
-an API key.
-
-    uv run pytest
-"""
+"""Phase 1 smoke checks."""
 
 from fastapi.testclient import TestClient
 
@@ -14,17 +7,13 @@ from app.main import app
 
 
 def test_health_returns_ok():
-    # Used outside a context manager, TestClient skips the lifespan, so this
-    # touches neither the embedding model nor the chat model.
+    # Used outside a context manager, TestClient skips the lifespan, so this touches neither the embedding model no…
     response = TestClient(app).get("/health")
     assert response.status_code == 200
 
     body = response.json()
     assert body["status"] == "ok"
-    # The probe also reports whether the data layer connected, so a deployment
-    # that fell back to in-process memory is visible rather than merely slower.
-    # Asserted by key rather than whole-dict equality: this payload is expected
-    # to grow, and a probe should not break because it learned to say more.
+    # The probe also reports whether the data layer connected, so a deployment that fell back to in-process memory…
     assert set(body) >= {"status", "database", "cache", "cache_stats"}
 
 
@@ -53,19 +42,4 @@ def test_row_to_document_skips_empty_rows():
     assert row_to_document({"question": "", "answer": "   "}, 9, "kb.csv") is None
 
 
-# `_extract_sources` and `_extract_reply` were tested here. Both were `/chat`
-# helpers -- one read a ContextVar the retriever tool filled, the other pulled
-# the last AIMessage's text out of an agent result -- and both are gone with the
-# endpoint.
-#
-# What replaced them, and where each is tested:
-#
-#   citations   `agents/qa/nodes.py::ground_check`, which does far more than
-#               deduplicate: an answer citing a row that was not retrieved is an
-#               `invented_citation` escalation rather than a source list.
-#               -> tests/agents/test_qa_grounding.py
-#   the reply   `StreamInterceptor.prose`, accumulated as tokens cross the wire,
-#               so the persisted reply is what the READER received and not what
-#               the model produced -- the two differ whenever a widget block is
-#               stripped.
-#               -> tests/graph/test_stream.py
+# `_extract_sources` and `_extract_reply` were tested here.

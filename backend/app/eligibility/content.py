@@ -1,34 +1,10 @@
-"""Every word this flow says, in English, Spanish and French.
-
-Copy lives apart from `rules.py` on purpose. The rules decide *which* verdict;
-this decides how it reads. That split is what lets the wording be reviewed by
-someone who is not reading Python, and it is why adding a language is this file
-only.
-
-Three constraints hold across all three languages, and the tests check them:
-
-1. **Nothing here decides anything.** No string asserts a criterion that
-   `rules.py` does not hold, and `rules.py` cites a knowledge-base row for every
-   one it holds.
-2. **No approval language.** "You are approved", "accepted", "you qualify" flat
-   — none of these appear in any language. The strongest available phrasing is
-   "based on what you have told me, you will likely qualify".
-3. **The hedges survive translation.** Where the source says "confirm the
-   current document list at aspire.gov.kn", every language says it too. A
-   document list that reads as settled in French and provisional in English is
-   the same defect as inventing one.
-
-French and Spanish run roughly 20-30% longer than English. The card is built to
-absorb that; the copy is still kept as tight as it can be without losing the
-hedge, because the hedge is the part that must not be cut to fit.
-"""
+"""Every word this flow says, in English, Spanish and French."""
 
 from __future__ import annotations
 
 from app.eligibility.models import Language
 
 # Contact details, identical in every language because they are not words.
-# ASP-208, ASP-209, ASP-328.
 EMAIL = "aspire@gov.kn"
 PHONES = ("+1 (869) 667-5566", "+1 (869) 762-1947")
 HOTLINE = "465-2588"
@@ -36,16 +12,11 @@ PORTAL_URL = "https://portal.aspire.gov.kn/register"
 SITE_URL = "https://aspire.gov.kn"
 
 # The one on-screen walk-in centre the knowledge base names, and its hours.
-# ASP-299, ASP-300 -- both `as_of` 2025-07-08, which is why the copy tells
-# people to confirm before travelling rather than presenting the hours as fact.
 CABLE_OFFICE = "The Cable Office, Cayon Street, Basseterre"
 CABLE_HOURS = "Mon-Fri, 9:00 AM - 3:00 PM"
 
 
-# --- Questions ------------------------------------------------------------
-#
-# Keyed by question id, then language. Option labels are keyed by the token the
-# engine stores; the token is never shown and never translated.
+# --- Questions ------------------------------------------------------------ Keyed by question id, then languag…
 
 QUESTIONS: dict[str, dict[Language, dict[str, str]]] = {
     "age": {
@@ -77,8 +48,7 @@ QUESTIONS: dict[str, dict[Language, dict[str, str]]] = {
             "unsure": "Je ne sais pas",
         },
     },
-    # Asked only on the under-5 branch, and only so the result can name a year
-    # instead of saying "later". Discarded with the session like everything else.
+    # Asked only on the under-5 branch, and only so the result can name a year instead of saying "later".
     "age_exact": {
         Language.EN: {
             "text": "How old are they right now?",
@@ -270,10 +240,7 @@ UI: dict[Language, dict[str, str]] = {
 }
 
 
-# --- Results --------------------------------------------------------------
-#
-# `headline` never states a decision. `body` is a tuple of short paragraphs.
-# `{year}` is substituted only on the under-5 branch.
+# --- Results -------------------------------------------------------------- `headline` never states a decision.
 
 RESULTS: dict[str, dict[Language, dict[str, object]]] = {
     "likely_eligible": {
@@ -305,8 +272,7 @@ RESULTS: dict[str, dict[Language, dict[str, object]]] = {
             ),
         },
     },
-    # The under-5 branch. The single most important piece of copy in the flow:
-    # it is a "not yet" that has to read as a date in the diary, not a refusal.
+    # The under-5 branch.
     "age_minimum": {
         Language.EN: {
             "headline": "Not yet — but there is a date to put in the diary",
@@ -348,8 +314,7 @@ RESULTS: dict[str, dict[Language, dict[str, object]]] = {
             ),
         },
     },
-    # Citizenship is the one firm "no" in the source (ASP-039). It still never
-    # reads as a rejection of the person.
+    # Citizenship is the one firm "no" in the source (ASP-039).
     "citizenship": {
         Language.EN: {
             "headline": "ASPIRE is only open to citizens of Saint Kitts and Nevis",
@@ -394,9 +359,7 @@ RESULTS: dict[str, dict[Language, dict[str, object]]] = {
             ),
         },
     },
-    # 22+. Outside both the 5-18 band and, on any ordinary birthdate, the
-    # 13 December 2023 cohort clause. The clause is still surfaced, because we
-    # asked for a band and not a date.
+    # 22+.
     "age_cohort_past": {
         Language.EN: {
             "headline": "ASPIRE's initial seeding is for a defined group of young people",
@@ -475,8 +438,7 @@ RESULTS: dict[str, dict[Language, dict[str, object]]] = {
 }
 
 
-# The pre-check disclaimer, repeated under the verdict where it cannot be
-# missed. Distinct from the running banner, and deliberately not softer.
+# The pre-check disclaimer, repeated under the verdict where it cannot be missed.
 DISCLAIMER: dict[Language, str] = {
     Language.EN: (
         "This is a pre-check based only on what you told me. It is not an "
@@ -496,8 +458,7 @@ DISCLAIMER: dict[Language, str] = {
 }
 
 
-# Pre-framed questions for the mentor, one per unresolvable criterion. Written
-# so the person can read them out or paste them into an email unchanged.
+# Pre-framed questions for the mentor, one per unresolvable criterion.
 MENTOR_QUESTIONS: dict[str, dict[Language, str]] = {
     "age_cohort": {
         Language.EN: (
@@ -602,10 +563,7 @@ UNRESOLVED_LABELS: dict[str, dict[Language, str]] = {
 }
 
 
-# --- Documents ------------------------------------------------------------
-#
-# `where` never claims a civil-registry address: the knowledge base does not
-# carry one, so it routes to the support channels it DOES carry. See the audit.
+# --- Documents ------------------------------------------------------------ `where` never claims a civil-regis…
 
 DOCUMENTS: dict[str, dict[Language, dict[str, str]]] = {
     # ASP-035, ASP-036. Firm.
@@ -659,8 +617,7 @@ DOCUMENTS: dict[str, dict[Language, dict[str, str]]] = {
             ),
         },
     },
-    # ASP-250 says a passport showing a St. Kitts or Nevis birthplace qualifies;
-    # ASP-037 hedges the same point. Offered as an alternative, never alone.
+    # ASP-250 says a passport showing a St.
     "passport": {
         Language.EN: {
             "title": "Or a valid passport showing a St. Kitts or Nevis birthplace",
@@ -705,9 +662,7 @@ DOCUMENTS: dict[str, dict[Language, dict[str, str]]] = {
             "caveat": f"Confirme la liste actuelle des documents sur {SITE_URL}.",
         },
     },
-    # ASP-251. The weakest item in the source -- "registration MAY also ask".
-    # Carried because turning up without it is the avoidable trip, but never
-    # presented as required.
+    # ASP-251.
     "proof_of_address": {
         Language.EN: {
             "title": "Proof of address, dated within about three months",
@@ -818,8 +773,7 @@ STEPS: dict[str, dict[Language, dict[str, str]]] = {
             ),
         },
     },
-    # ASP-293, ASP-297, ASP-053, ASP-216. Used for Nevis, abroad, and unsure,
-    # because the knowledge base names no walk-in centre outside Basseterre.
+    # ASP-293, ASP-297, ASP-053, ASP-216.
     "in_person_events": {
         Language.EN: {
             "title": "Or get help in person",
@@ -903,9 +857,7 @@ STEPS: dict[str, dict[Language, dict[str, str]]] = {
 }
 
 
-# Surfaced prominently on every positive or conditional result. There is no
-# deadline in the source (ASP-056, ASP-047, ASP-048), and "have I missed it" is
-# the anxiety this answers.
+# Surfaced prominently on every positive or conditional result.
 NOTICES: dict[str, dict[Language, str]] = {
     "no_deadline": {
         Language.EN: (

@@ -1,31 +1,4 @@
-"""Reading a person's own conversations back.
-
-Transcripts have been written to Postgres since 0003 and never read. The rail
-listed chats out of the browser's localStorage instead, which made history a
-property of a device rather than of a person, and made "the same conversation"
-something the server could store but never show.
-
-This is the read half. Four routes, all scoped by principal:
-
-    GET    /api/conversations           the rail's list
-    GET    /api/conversations/{id}      one transcript, whole
-    PATCH  /api/conversations/{id}      rename
-    DELETE /api/conversations/{id}      delete, and mean it
-
-and one write that exists only for the changeover:
-
-    POST  /api/conversations/claim      adopt rows this browser wrote before
-                                        ownership was recorded
-
-Every route answers 404 rather than 403 for a conversation that is not yours.
-"Not yours" and "does not exist" must be indistinguishable, or the API becomes
-an oracle for which conversation ids are real.
-
-Shapes here mirror what the client already stores, deliberately. The point of
-the change is that the transcript comes from the server; it is not an
-opportunity to renegotiate what a message looks like, and a client that has to
-be rewritten to read its own history is a migration nobody finishes.
-"""
+"""Reading a person's own conversations back."""
 
 from __future__ import annotations
 
@@ -62,12 +35,7 @@ class ConversationList(BaseModel):
 
 
 class TranscriptMessage(BaseModel):
-    """One turn, in the shape the client already renders.
-
-    `text` carries the assistant's prose unparsed. Turning it into blocks is the
-    client's job and already exists there -- sending pre-parsed blocks would put
-    a second markdown implementation on the server and let the two drift.
-    """
+    """One turn, in the shape the client already renders."""
 
     role: str
     text: str = ""
@@ -79,15 +47,8 @@ class TranscriptMessage(BaseModel):
 class ConversationDetail(ConversationSummary):
     messages: list[TranscriptMessage] = Field(default_factory=list)
     #: The language the conversation was held in.
-    #:
-    #: Stored on the row since the schema was written and never sent, so the
-    #: client had no way to reopen a French conversation in French -- it
-    #: reopened in whatever the device happened to be set to. Only on the
-    #: detail, not the summary: the rail lists titles and does not need it, and
-    #: the list is the hot path.
     language: str = "en"
-    #: Who it was being answered for, on the same reasoning. Null means the
-    #: conversation was held before anybody chose, which is a real state.
+    #: Who it was being answered for, on the same reasoning.
     persona: str | None = None
 
 
@@ -107,13 +68,7 @@ class ClaimResult(BaseModel):
 
 
 async def _owner(principal: Principal) -> uuid.UUID:
-    """The verified caller's user id, or 401.
-
-    `require_principal` has already checked the signature and expiry; this also
-    confirms the session has not been retired — claiming an anonymous identity
-    and signing out both bump its epoch, and a token minted before that must
-    stop working immediately rather than at expiry.
-    """
+    """The verified caller's user id, or 401."""
     owner = await owner_id_for(principal)
     if owner is None:
         raise HTTPException(status_code=401, detail="This session is no longer valid.")
@@ -176,9 +131,7 @@ async def get_conversation(
             messages.append(TranscriptMessage(role="user", text=turn.content))
             continue
 
-        # A game or eligibility turn is the card and nothing else. The prose
-        # stored beside it is a history line for the model, never for the
-        # screen, so it is deliberately not sent.
+        # A game or eligibility turn is the card and nothing else.
         if event == "game_started":
             messages.append(
                 TranscriptMessage(role="game", game_type=extra.get("game_type") or "")
@@ -221,8 +174,7 @@ async def rename_conversation(
     async with session() as db:
         if db is None:
             raise _unavailable()
-        # Ownership in the WHERE clause, so a rename cannot be aimed at somebody
-        # else's conversation by guessing its id.
+        # Ownership in the WHERE clause, so a rename cannot be aimed at somebody else's conversation by guessing its id.
         result = await db.execute(
             update(Conversation)
             .where(Conversation.id == conversation_id, Conversation.owner_id == owner)
@@ -233,29 +185,7 @@ async def rename_conversation(
 
 
 async def _purge_thread_state(conversation_id: str) -> None:
-    """Everything else filed under this thread id, once the row itself is gone.
-
-    The transcript is not the only copy of a conversation. Three other things
-    are keyed on the same id and none of them are reachable from the
-    `conversations` table, so none of them go with it:
-
-    * the **checkpoint**, which holds the thread's whole message list and is
-      what the model actually reads back — see `graph.checkpointer.delete_thread`;
-    * a **game session**, if one was left half-played;
-    * an **eligibility session**, which holds a minor's answers and is the one
-      here that would be worst to keep.
-
-    Called only after the owner-scoped DELETE has actually removed a row, which
-    is what makes it safe: none of these three stores knows who owns anything,
-    so the ownership question has to be settled before we get here.
-
-    Best effort, and that is a decision rather than laziness. By this point the
-    conversation is gone and cannot be deleted again — a 500 would tell the
-    reader the delete failed when the part they can see succeeded, and leave
-    them no way to retry. So a failure is logged loudly and the delete still
-    reports success. The log line is the thing to alert on: it means a
-    transcript was removed while a second copy of it survived.
-    """
+    """Everything else filed under this thread id, once the row itself is gone."""
     from app.eligibility.store import get_store as eligibility_sessions
     from app.games.store import get_store as game_sessions
     from app.graph.checkpointer import delete_thread
@@ -283,19 +213,7 @@ async def _purge_thread_state(conversation_id: str) -> None:
 async def delete_conversation(
     conversation_id: str, principal: Principal = Depends(require_principal)
 ) -> None:
-    """Delete one conversation, permanently.
-
-    There is no archive, no soft-delete flag and no undo. A product that offers
-    to delete a child's questions and then keeps them somewhere has not deleted
-    them, and the honest version of that is the one that is easy to reason
-    about: the row goes, `messages` goes with it by ON DELETE CASCADE, and
-    `_purge_thread_state` takes the copies that live outside the table.
-
-    Ownership is in the WHERE clause rather than checked first, for the same
-    reason the rename has it there: a delete must not be aimable at somebody
-    else's conversation by guessing its id. A miss is 404 whether the row
-    belongs to another account or never existed at all.
-    """
+    """Delete one conversation, permanently."""
     owner = await _owner(principal)
     if not database_enabled():
         raise _unavailable()
@@ -312,8 +230,7 @@ async def delete_conversation(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="No such conversation.")
 
-    # Outside the transaction: the row is committed gone, and none of these
-    # three stores can participate in it anyway.
+    # Outside the transaction: the row is committed gone, and none of these three stores can participate in it anyw…
     await _purge_thread_state(conversation_id)
 
 
@@ -321,18 +238,7 @@ async def delete_conversation(
 async def claim_conversations(
     body: ClaimRequest, principal: Principal = Depends(require_principal)
 ) -> ClaimResult:
-    """Adopt conversations this browser wrote before ownership was recorded.
-
-    Every transcript written before ownership existed has `owner_id = NULL` and is
-    readable by nobody. The browser that created them still has their ids in
-    localStorage, and presenting an id it could only have if it made the
-    conversation is the strongest claim available in a product with no accounts.
-
-    Narrow on purpose, and the `IS NULL` is the whole of the safety argument:
-    an owned conversation can never be re-owned, so a client replaying somebody
-    else's ids takes nothing. It is also why this cannot be reused as a
-    "transfer" route later -- that would need a real one.
-    """
+    """Adopt conversations this browser wrote before ownership was recorded."""
     owner = await _owner(principal)
     if not database_enabled():
         raise _unavailable()

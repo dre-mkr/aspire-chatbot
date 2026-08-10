@@ -1,16 +1,4 @@
-/**
- * Two or three panels, each hiding its answer until tapped.
- *
- * A prediction device. The child is asked which panel wins before anything is
- * revealed, and the reveal lands because they committed first. Showing both
- * answers immediately would make it a table.
- *
- * Keyboard-operable by construction: each panel is a `<button>` with
- * `aria-expanded`, so tab and space work without a single key handler. That is
- * not a shortcut -- it is the reason to use a button rather than a div with an
- * onClick, which is the version that silently excludes anyone not using a
- * mouse.
- */
+/** Two or three panels, each hiding its answer until tapped. */
 import { useState } from "react";
 import type { CompareWidget } from "../../lib/stream/types";
 import { Panel, tone, useReducedMotion, WidgetActions } from "./primitives";
@@ -112,9 +100,7 @@ export function Compare({
 									{panel.detail}
 								</span>
 							) : (
-								// Not "Tap to reveal" as a separate element: the whole
-								// panel is the control, and a second affordance inside a
-								// button is a target inside a target.
+								// Not "Tap to reveal" as a separate element: the whole panel is the control, and a second affordance inside a b…
 								<span
 									aria-hidden="true"
 									style={{

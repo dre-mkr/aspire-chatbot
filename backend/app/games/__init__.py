@@ -1,12 +1,4 @@
-"""Learning games inside the chat.
-
-The whole feature sits behind `games_enabled()`. Nothing outside this package
-reaches past `GAME_TOOLS` — the agent gets tools, and the engine keeps the state,
-the scoring and the answers.
-
-Import is cheap: seed files are read on first use, not at import, so a service
-with games switched off never touches them.
-"""
+"""Learning games inside the chat."""
 
 from app.games.config import GameSettings, get_game_settings
 from app.games.models import PLAYING_PERSONAS, Language, Persona

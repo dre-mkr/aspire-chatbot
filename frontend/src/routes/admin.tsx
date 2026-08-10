@@ -1,24 +1,4 @@
-/**
- * The admin route tree. A separate tree, a separate realm, one backend.
- *
- * Mounted at `/admin`, outside `_shell` — so it inherits none of the chat's
- * layout, none of its providers, and none of its session handling. That
- * separation is structural rather than cosmetic: a component that cannot reach
- * the chat's auth context cannot accidentally send its token.
- *
- * ## The password gate is a gate
- *
- * A seeded account arrives with `must_change_password` and this shell renders
- * the change form INSTEAD of the portal until it clears. Not a banner, not a
- * reminder — the queue is not reachable. A temporary password that can be used
- * indefinitely is a permanent password that several people know.
- *
- * ## Sign-in is an email and a password, never a pasted token
- *
- * The token exists and a human should never handle one. Pasting a bearer token
- * into a form trains people to move bearer tokens around, which is the habit
- * that eventually puts one in a chat message.
- */
+/** The admin route tree. */
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -37,10 +17,7 @@ export const Route = createFileRoute("/admin")({
 type Session = { role: Role; email: string; mustChange: boolean } | null;
 
 function AdminShell() {
-	// Restored from the tab, but WITHOUT a role read back from storage — a role
-	// the client remembered is a role the client chose. Every request is
-	// authorised by the server from the token regardless, so this only ever
-	// decides what to draw.
+	// Restored from the tab, but WITHOUT a role read back from storage — a role the client remembered is a role the…
 	const [session, setSession] = useState<Session>(() =>
 		token() ? { role: "reviewer", email: "", mustChange: false } : null,
 	);
@@ -155,9 +132,7 @@ function SignInForm({
 							mustChange: result.must_change_password,
 						});
 					} catch (error) {
-						// The server says the same thing for a wrong password and a
-						// missing account. This must not add a distinction it
-						// deliberately did not make.
+						// The server says the same thing for a wrong password and a missing account.
 						setProblem((error as Error).message);
 					} finally {
 						setBusy(false);
@@ -218,9 +193,7 @@ function ChangePasswordForm({ onChanged }: { onChanged: () => void }) {
 					setProblem(null);
 					try {
 						const { token: replacement } = await changePassword(current, next);
-						// The old token died with the password. Swapping it here is
-						// what stops the person who just did the right thing from
-						// being signed out for it.
+						// The old token died with the password.
 						setToken(replacement);
 						onChanged();
 					} catch (error) {

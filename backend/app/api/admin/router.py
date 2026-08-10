@@ -1,40 +1,4 @@
-"""The admin API: the queue, one application, the status machine, the widget queue.
-
-Mounted at `/api/admin`, on the same FastAPI app as the chat but behind its own
-auth realm (`admin/auth.py`). Same process, same database, different door.
-
-The `/api` prefix is load-bearing, not decoration. The portal's own pages are
-TanStack routes at `/admin`, `/admin/applications` and `/admin/widgets`, and in
-production nginx serves the app and this API from ONE hostname. While this
-router sat at `/admin`, `GET /admin/applications` was two different things --
-the HTML page and this JSON list -- and nginx had no way to tell them apart.
-Whichever upstream won, the other broke. Keep the API under `/api/`, where the
-single proxy rule in deploy/nginx-aspire.conf already sends it to uvicorn.
-
-## F2's status machine is the highest-value thing here
-
-    submitted → under_review → info_requested → under_review → approved
-                                                             → rejected
-
-Two rules, and both are enforced in this file and in the schema:
-
-  1. **Every transition needs a reason note.** `review_events.reason` is NOT
-     NULL with a non-empty check. A queue whose transitions can be unexplained
-     is a queue nobody can audit three months later when a family asks why.
-
-  2. **`info_requested` names the SPECIFIC slots.** Those slot paths go onto
-     `applications.pending_corrections`, the parent's chat reopens exactly
-     those, collects them, and resubmits. The parent does not refill the form.
-
-That second rule is what turns a rejection into a conversation. The alternative
--- "some details were incorrect, please start again" -- is how applications die.
-
-## Nothing here returns an unmasked PII value in a list
-
-The queue returns masked display values. The detail view returns the real ones,
-and it writes an audit row before it does. That asymmetry is deliberate: a list
-is glanced at by many people many times, and a detail view is opened on purpose.
-"""
+"""The admin API: the queue, one application, the status machine, the widget queue."""
 
 from __future__ import annotations
 
@@ -61,19 +25,13 @@ Status = Literal[
     "submitted", "under_review", "info_requested", "approved", "rejected"
 ]
 
-#: The only moves the machine allows. A dict of sets rather than a chain of
-#: conditionals, because "can this go from X to Y?" is the question people ask
-#: of this file and a table answers it by being read.
+#: The only moves the machine allows.
 TRANSITIONS: dict[str, frozenset[str]] = {
     "submitted": frozenset({"under_review"}),
     "under_review": frozenset({"info_requested", "approved", "rejected"}),
-    # Back to review only. An application whose corrections have landed is
-    # re-reviewed; it does not jump straight to approved, because the point of
-    # asking was to look again.
+    # Back to review only.
     "info_requested": frozenset({"under_review"}),
-    # Terminal. Reopening an approved or rejected application is a new
-    # application, not a transition -- otherwise the audit trail of a decision
-    # can be rewritten after the fact.
+    # Terminal.
     "approved": frozenset(),
     "rejected": frozenset(),
 }
@@ -92,8 +50,7 @@ class QueueRow(BaseModel):
     parish: str | None = None
     children: int = 0
     created_at: str
-    #: How many documents `doc_check` flagged. The queue sorts can use it; the
-    #: flag itself is advisory and never decides anything.
+    #: How many documents `doc_check` flagged.
     flags: int = 0
 
 
@@ -107,13 +64,7 @@ async def queue(
     staff: Staff = Depends(current_staff),
     request: Request = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
-    """The review queue. Oldest first, because that is the fair order.
-
-    Default sort is age of application ascending -- a family who applied in
-    March is seen before one who applied last week, whatever else is true about
-    the rows. A queue sorted by anything else needs a reason, and "newest
-    first" is not one.
-    """
+    """The review queue."""
     from sqlalchemy import text as sql
 
     from app.db import session
@@ -190,16 +141,7 @@ async def detail(
     request: Request,
     staff: Staff = Depends(current_staff),
 ) -> dict[str, Any]:
-    """Fields on the left, documents on the right. One call, both halves.
-
-    One call rather than two, because the reviewer's job IS the comparison --
-    making them fetch the documents separately means a tab switch, and F1 exists
-    to remove exactly that.
-
-    Decrypts the PII, and writes the audit row BEFORE returning it. Auditing
-    afterwards would miss the case where the response fails to serialise, which
-    is the one time it matters that somebody's decrypt happened.
-    """
+    """Fields on the left, documents on the right."""
     from sqlalchemy import text as sql
 
     from app.agents.register.store import decrypt
@@ -320,12 +262,7 @@ async def document_url(
     request: Request,
     staff: Staff = Depends(current_staff),
 ) -> dict[str, Any]:
-    """A short-lived signed URL, and an audit row for having asked.
-
-    The audit row is written before the URL is minted. A download that is
-    audited afterwards is a download that is not audited if anything between
-    fails -- and this is the one access where that matters most.
-    """
+    """A short-lived signed URL, and an audit row for having asked."""
     from sqlalchemy import text as sql
 
     from app.db import session
@@ -373,12 +310,7 @@ async def transition(
     request: Request,
     staff: Staff = Depends(requires("reviewer")),
 ) -> dict[str, Any]:
-    """Move an application, with a reason, and reopen slots if asked.
-
-    `info_requested` with no slots is refused. A reviewer who wants corrections
-    without saying which ones is asking the parent to guess, which is the
-    behaviour this whole loop exists to replace.
-    """
+    """Move an application, with a reason, and reopen slots if asked."""
     from sqlalchemy import text as sql
 
     from app.agents.register.schema import slot_for
@@ -431,8 +363,7 @@ async def transition(
             {
                 "id": application_id,
                 "to": body.to,
-                # Cleared on every transition that is not info_requested, so a
-                # corrected application does not carry its old flags forward.
+                # Cleared on every transition that is not info_requested, so a corrected application does not carry its old fla…
                 "slots": body.slots if body.to == "info_requested" else [],
             },
         )
@@ -487,8 +418,7 @@ def _base_path(key: str) -> str:
 
 class WidgetReview(BaseModel):
     decision: Literal["approved", "rejected"]
-    #: An edited payload. Approving with one writes an override, which is how a
-    #: staff member fixes a caption without an engineer touching a prompt.
+    #: An edited payload.
     payload: dict[str, Any] | None = None
     note: str = Field(default="", max_length=1000)
 
@@ -497,14 +427,7 @@ class WidgetReview(BaseModel):
 async def widget_queue(
     limit: int = 50, staff: Staff = Depends(current_staff)
 ) -> dict[str, Any]:
-    """Candidates, most-served first.
-
-    Sorted by `serve_count` so the widget a thousand children saw is reviewed
-    before the one that ran twice. Returns the PAYLOAD, and the admin UI renders
-    it with the real components -- raw JSON is a debugging surface, not a review
-    surface, and asking a non-technical reviewer to approve JSON is asking them
-    to approve something they cannot read.
-    """
+    """Candidates, most-served first."""
     from sqlalchemy import text as sql
 
     from app.db import session
@@ -555,13 +478,7 @@ async def review_widget(
     request: Request,
     staff: Staff = Depends(current_staff),
 ) -> dict[str, Any]:
-    """Approve, edit-and-approve, or reject.
-
-    An edited payload is re-validated before it is stored. A reviewer fixing a
-    caption cannot accidentally introduce a banned word for the band, or a
-    control that breaks gate 4 -- the same seven gates run, and a failure is
-    reported to them rather than saved.
-    """
+    """Approve, edit-and-approve, or reject."""
     from app.widgets.cache import CACHE, CacheKey
 
     payload = body.payload
@@ -611,18 +528,7 @@ class PasswordChange(BaseModel):
 
 @router.post("/auth/session")
 async def sign_in(body: Credentials, request: Request) -> dict[str, Any]:
-    """Exchange a staff credential for a staff token.
-
-    One failure message for every cause -- wrong email, wrong password,
-    disabled account. Distinguishing them tells anybody probing which addresses
-    are real staff accounts, which is the first half of a targeted attack on a
-    queue of children's documents.
-
-    The failure is NOT audited with the attempted email. An audit table that
-    records every string somebody typed into a login box is an audit table full
-    of attacker-controlled text, and the useful signal (the rate) is in the
-    application log where it belongs.
-    """
+    """Exchange a staff credential for a staff token."""
     from app.api.admin.staff import sign_in as verify
 
     result = await verify(body.email, body.password)
@@ -641,8 +547,7 @@ async def sign_in(body: Credentials, request: Request) -> dict[str, Any]:
         "token": result.token,
         "role": result.staff.role,
         "email": result.staff.email,
-        # The portal refuses to show the queue until this is cleared, so a
-        # seeded temporary password cannot become a permanent one.
+        # The portal refuses to show the queue until this is cleared, so a seeded temporary password cannot become a pe…
         "must_change_password": result.must_change_password,
     }
 
@@ -653,11 +558,7 @@ async def change_password(
     request: Request,
     staff: Staff = Depends(current_staff),
 ) -> dict[str, Any]:
-    """Rotate a password. The current one is required even when signed in.
-
-    A staff token on a shared desk is exactly the case this guards: holding the
-    token must not be enough to lock its owner out of their own account.
-    """
+    """Rotate a password."""
     from app.api.admin.staff import change_password as rotate
 
     problem = await rotate(staff.staff_id, body.current, body.new)
@@ -671,9 +572,7 @@ async def change_password(
         subject_id=staff.staff_id,
         ip=client_ip(request),
     )
-    # Every token issued under the old password is now dead, including this
-    # one. Returning a fresh one means the person who just changed their
-    # password is not signed out for having done the right thing.
+    # Every token issued under the old password is now dead, including this one.
     from app.api.admin.auth import mint_staff_token
 
     return {
@@ -690,18 +589,7 @@ async def change_password(
 async def learning_health(
     hours: int = 24, staff: Staff = Depends(current_staff)
 ) -> dict[str, Any]:
-    """Six rates, four thresholds, and what breached them.
-
-    `breaches` is computed server-side rather than left to whoever reads the
-    numbers. A dashboard where the thresholds live in somebody's head is a
-    dashboard that agrees with everybody, and the four thresholds here came from
-    the Track L brief for reasons that are written down next to them in
-    `app/learning/health.py`.
-
-    `zero_prose_turns` has no rate and no tolerance. A learning turn that emitted
-    no lesson is the defect this workstream closed; one occurrence is a
-    regression rather than a statistic.
-    """
+    """Six rates, four thresholds, and what breached them."""
     from dataclasses import asdict
 
     from app.learning import health as learning

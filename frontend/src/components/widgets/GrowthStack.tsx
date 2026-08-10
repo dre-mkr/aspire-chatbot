@@ -1,24 +1,4 @@
-/**
- * Two coin stacks and a "Next year" button. The compound-interest widget for 9-12.
- *
- * The child taps, coins drop into both stacks, and the `earned` stack -- in the
- * accent token -- grows faster than the one they are putting money into. That
- * difference IS the lesson, and it is delivered without a percentage, a
- * formula, or the word "compound" appearing anywhere.
- *
- * ## No percentages for band 9-12
- *
- * "5%" is a second abstraction stacked on the first. The rate is in the widget
- * payload because the arithmetic needs it; it is never rendered. `reveal_line`
- * appears only after the final period, so the sentence that names what happened
- * lands after the child has watched it happen rather than before.
- *
- * ## Coins are capped, and the cap is the reason the widget works
- *
- * Fifty periods of contributions is thousands of coins, which is a grey smear.
- * Above `MAX_COINS` each coin represents several, and the caption says so. A
- * stack whose height is unreadable teaches nothing.
- */
+/** Two coin stacks and a "Next year" button. */
 import { useState } from "react";
 import type { GrowthStackWidget } from "../../lib/stream/types";
 import { compoundInterest, moneyDisplay } from "../../lib/widgets/formulas";
@@ -149,8 +129,7 @@ export function GrowthStack({
 			</p>
 
 			{finished && widget.reveal_line ? (
-				// Only after the final period. The sentence that names what
-				// happened has to land after they have watched it happen.
+				// Only after the final period.
 				<p
 					style={{
 						marginBlockStart: "0.5rem",
@@ -231,10 +210,7 @@ function Stack({
 					justifyContent: "flex-start",
 				}}
 			>
-				{/* Keyed by a minted id rather than by the loop index. The coins
-				    are indistinguishable, so the key is arbitrary -- but an index
-				    key on a list that grows is the shape React warns about, and a
-				    stable string costs nothing. */}
+				{/* Keyed by a minted id rather than by the loop index. */}
 				{coinIds(shown).map((id, index) => (
 					<Coin
 						key={id}

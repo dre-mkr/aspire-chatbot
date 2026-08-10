@@ -1,15 +1,4 @@
-"""Response models for the eligibility HTTP surface.
-
-Closed models rather than free dicts, for the same reason the games schemas are:
-this is the shape a minor's answers would have to travel in if they ever
-escaped, and there is no field here they could occupy. `tests/eligibility/
-test_no_answer_leak.py` proves it by walking the rendered JSON.
-
-Note what a question carries and what it does not. `answered_with` is the token
-for the option currently selected — needed so going back re-selects it — and it
-is the only place an answer appears at all. It is scoped to the one question
-being shown, never the set.
-"""
+"""Response models for the eligibility HTTP surface."""
 
 from __future__ import annotations
 
@@ -25,8 +14,7 @@ class StartBody(ThreadBody):
 
 
 class AnswerBody(ThreadBody):
-    # One of the option tokens on the question being shown. Anything else is a
-    # 422; the engine will not coerce it.
+    # One of the option tokens on the question being shown.
     value: str = Field(min_length=1, max_length=32)
 
 
@@ -46,8 +34,7 @@ class QuestionOut(BaseModel):
     options: list[OptionOut]
     position: int
     total: int
-    # The token already chosen here, when the person has been back. Null on a
-    # question being seen for the first time.
+    # The token already chosen here, when the person has been back.
     answered_with: str | None = None
     can_go_back: bool = False
 
@@ -87,12 +74,7 @@ class ResultOut(BaseModel):
 
 
 class StateOut(BaseModel):
-    """The card's whole world: a question, or a result, never both.
-
-    `active` is false once the flow is finished, because the server-side session
-    is gone by then — the result in this same response is the last the service
-    will ever say about it, and the client is what keeps it.
-    """
+    """The card's whole world: a question, or a result, never both."""
 
     active: bool
     language: str
@@ -103,13 +85,7 @@ class StateOut(BaseModel):
 
 
 class LabelsOut(BaseModel):
-    """The card's own chrome, in the flow's language.
-
-    Served rather than duplicated in the client so the copy has one home. The
-    frontend has no i18n framework, and giving it one for six labels would be
-    the wrong trade — but hardcoding English button text beside French questions
-    would be worse.
-    """
+    """The card's own chrome, in the flow's language."""
 
     title: str
     subtitle: str

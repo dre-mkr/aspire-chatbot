@@ -1,49 +1,4 @@
-"""One learning turn, from "what did they ask?" to "here is the lesson".
-
-    resolve  ─►  plan_move  ─►  tutor  ─►  turn_end
-                                 │
-                                 ├─ prose   validated, then emitted
-                                 └─ widget  concurrent, timed out, dropped freely
-
-This is the node the reported defect lives in, and the shape above is the fix.
-The two properties it exists to guarantee are both testable and both tested:
-
-  1. A learning turn ALWAYS emits a substantive, grounded, persona-appropriate
-     explanation. `render.render_teach` has three tiers and the third is
-     deterministic Python, so there is no configuration -- including no provider
-     key at all -- in which this node produces an empty or trivial turn.
-
-  2. The widget is an enhancement layered on prose that already exists and has
-     already been emitted. The widget task is created at the same instant as the
-     prose task, is awaited only after the prose is on the wire, and cannot
-     return anything but a validated config or None.
-
-The reverse of (2) -- a widget with no lesson -- is a P0 bug, and
-`tests/learning/test_prose_survives_widgets.py` fails if it ever becomes
-reachable.
-
-## Why the prose is written to the custom channel
-
-`stream_mode="messages"` forwards a model's tokens as it produces them, which
-means anything the model writes reaches the reader before anything can check it.
-That is not compatible with the tier-2 guarantee, and it is how an unterminated
-widget marker used to truncate a lesson mid-sentence.
-
-So this node is on `INTERNAL_NODES` -- its raw model tokens are suppressed -- and
-it emits the VALIDATED lesson explicitly, as a `prose` payload on the graph's own
-custom channel. The invariant that buys is worth stating: no token a model
-produced reaches a child without having passed the band contract first.
-
-## Ordering on the wire
-
-    token…token   the lesson, as one or more token events
-    directive     the widget, at the NEXT ordinal, or absent
-
-Ordinals come from the interceptor and are monotonic over events, so the client's
-settled-block parser sees the widget as its own block arriving after the prose
-block. A turn with no widget closes with no directive and the parser handles it,
-because "no directive" is the common case rather than an error path.
-"""
+"""One learning turn, from "what did they ask?" to "here is the lesson"."""
 
 from __future__ import annotations
 
@@ -70,15 +25,7 @@ logger = logging.getLogger(__name__)
 def select_check(
     concept: TeachingConcept | None, *, band: str, seen: list[str]
 ) -> CheckItem | None:
-    """Which question to ask. Unseen first, then round-robin.
-
-    Chosen in Python and handed to the renderer, never picked by the model. Two
-    reasons and the second is the load-bearing one: a model picking from a bank
-    picks the first item every time, and -- more importantly -- the ANSWER has to
-    be known to the grader before the question is asked. A question the model
-    invented has no accept list, so the grader has nothing to compare against and
-    the hint ladder has no rungs.
-    """
+    """Which question to ask."""
     if concept is None:
         return None
     items = concept.checks_for(band)
@@ -109,13 +56,7 @@ def make_tutor(
     mastery: Any = None,
     cache: Any = None,
 ):
-    """Build the tutor node.
-
-    Every collaborator is injected and every one is optional. With all of them
-    None the node still teaches -- from the concept store, through the template
-    floor -- which is what makes the guarantee in the module docstring
-    unconditional rather than dependent on a healthy deployment.
-    """
+    """Build the tutor node."""
 
     async def tutor(state: Any) -> dict[str, Any]:
         started = time.monotonic()
@@ -143,8 +84,7 @@ def make_tutor(
         )
 
         if resolution.source in ("rag", "none"):
-            # Fire and forget: the authoring backlog must never be the thing that
-            # delays a child's lesson.
+            # Fire and forget: the authoring backlog must never be the thing that delays a child's lesson.
             asyncio.create_task(
                 enqueue_candidate(utterance, band=band, locale=locale, resolution=resolution)
             )
@@ -190,10 +130,7 @@ def make_tutor(
             recent_openings=tuple(learning.get("recent_openings") or ()),
         )
 
-        # Created BEFORE the prose is awaited, which is the whole contract. The
-        # widget's two model calls overlap the teaching call entirely, so the
-        # widget costs the turn nothing but the tail it is given after the prose
-        # has already been emitted.
+        # Created BEFORE the prose is awaited, which is the whole contract.
         widget_task = asyncio.create_task(
             build_widget(
                 WidgetRequest(
@@ -215,8 +152,7 @@ def make_tutor(
                 context, invoke=invoke, session_context=state.get("context")
             )
         except Exception:
-            # `render_teach` does not raise. This exists so that if it ever does,
-            # the widget task is not left orphaned holding a connection.
+            # `render_teach` does not raise.
             widget_task.cancel()
             raise
 
@@ -224,25 +160,6 @@ def make_tutor(
         _emit_prose(lesson.spoken or lesson.text)
 
         # And this is what makes that sentence true rather than merely intended.
-        #
-        # It used to be a comment describing an ordering, which is not the same
-        # as a guarantee: the prose had been streamed, so anything raising below
-        # could not unsend it, but it COULD take down the node -- and then
-        # `api/stream.py` catches, emits `error: upstream`, and returns without
-        # persisting. The reader watches a complete lesson appear and then be
-        # told the assistant is unavailable, and nothing is written to the
-        # transcript. That is worse than either outcome on its own.
-        #
-        # It happened. `_state_after` dereferenced a null check item on the
-        # RAG-teach path and destroyed a turn whose 140 words of prose had
-        # already been generated, validated and sent.
-        #
-        # So the three steps below are wrapped as a group. Each is a bookkeeping
-        # step -- a widget, a log line, the state a checkpoint keeps -- and not
-        # one of them is worth a lesson. On failure the turn still returns the
-        # message and its chips, so the transcript is written and the
-        # conversation continues; what is lost is the mastery bookkeeping for one
-        # turn, which spaced repetition will revisit anyway.
         try:
             widget = await _await_widget(widget_task)
             if widget.emitted:
@@ -279,12 +196,7 @@ def make_tutor(
                 band,
             )
             widget_task.cancel()
-            # The minimum that keeps the turn coherent: what was said, and a way
-            # to reply. Deliberately NOT a partial `merge` of the learning state
-            # -- the failure is in computing that state, so writing half of it
-            # would leave the machine in a phase whose invariants nobody checked.
-            # An untouched `learning` resumes exactly where the last good turn
-            # left it.
+            # The minimum that keeps the turn coherent: what was said, and a way to reply.
             return {
                 "messages": [AIMessage(content=lesson.text)],
                 "quick_replies": _chips(band, _chip_options(move, band)),
@@ -297,12 +209,7 @@ def make_tutor(
 
 
 def _writer() -> Any:
-    """The custom-channel writer, or None outside a streaming run.
-
-    None when a unit test invokes the node directly, and that must not be an
-    error: the node's return value carries the same message, so a non-streaming
-    caller loses the wire event and keeps the lesson.
-    """
+    """The custom-channel writer, or None outside a streaming run."""
     try:
         from langgraph.config import get_stream_writer
 
@@ -312,13 +219,7 @@ def _writer() -> Any:
 
 
 def _emit_prose(text: str) -> None:
-    """The validated lesson, as prose the transport will tokenise.
-
-    Explicit rather than left to `stream_mode="messages"`, because this node is
-    on `INTERNAL_NODES` -- its raw model output is suppressed precisely so that
-    nothing unvalidated can reach a reader. This is the only prose this node
-    emits and it has passed the band contract.
-    """
+    """The validated lesson, as prose the transport will tokenise."""
     writer = _writer()
     if writer is not None and text.strip():
         writer({"prose": text})
@@ -331,14 +232,7 @@ def _emit_directive(payload: dict[str, Any] | None) -> None:
 
 
 async def _await_widget(task: "asyncio.Task[WidgetOutcome]") -> WidgetOutcome:
-    """Wait for the widget, briefly, and never let it matter.
-
-    Timeout, cancellation and every exception collapse to the same outcome: no
-    widget, one log line, and a lesson the reader already has. The timeout is
-    measured from HERE rather than from the task's creation, so the widget gets
-    its full allowance after prose generation rather than competing with it --
-    in practice it has usually finished already.
-    """
+    """Wait for the widget, briefly, and never let it matter."""
     from app.config import get_settings
 
     try:
@@ -362,13 +256,7 @@ def _decline(
     band: str,
     started: float,
 ) -> dict[str, Any]:
-    """Nothing resolved. Say so in persona, offer two things, do not escalate.
-
-    Explicitly NOT an escalation and explicitly not an improvisation. A child
-    asking about cryptocurrency has done nothing that warrants fetching a human,
-    and a lesson invented on the spot about a topic nobody authored is the exact
-    failure the concept table exists to prevent.
-    """
+    """Nothing resolved."""
     text = decline_text(band, resolution.alternatives)
     _emit_prose(text)
     logger.info(
@@ -418,11 +306,7 @@ def _state_after(
     asked = move in (Move.TEACH, Move.CHECK, Move.RECAP, Move.ADVANCE, Move.HINT)
 
     return {
-        # The message is returned as well as emitted. The wire event is what the
-        # reader sees; this is what the checkpoint keeps, what the next turn's
-        # history contains, and what `safety_out` gates. Both must be the same
-        # string, which is why `lesson.text` is used here rather than `spoken` --
-        # the transcript is written, not read aloud.
+        # The message is returned as well as emitted.
         "messages": [AIMessage(content=lesson.text)],
         "quick_replies": _chips(band, _chip_options(move, band)),
         "learning": merge(
@@ -433,30 +317,16 @@ def _state_after(
             resolution_similarity=resolution.similarity,
             move=move.value,
             concepts_touched=touched(learning, concept_id) if concept_id else learning.get("concepts_touched"),
-            # A check was asked, so the next message is its answer. This single
-            # bit is what makes a bare "20" reach EVALUATE instead of being read
-            # as a new knowledge query.
+            # A check was asked, so the next message is its answer.
             awaiting_check_answer=bool(check_item) and asked,
             pending_check_id=check_item.id if (check_item and asked) else None,
-            # `check_item and asked`, matching the three lines around it. Guarding
-            # on `asked` alone crashed the whole turn on the RAG-teach path, which
-            # is the one path where a lesson asks a question that no check item
-            # backs: there is no concept, so there is no check bank, so
-            # `select_check` returns None -- while `asked` is still True, because
-            # the lesson genuinely does end with a question invented from the
-            # retrieved rows.
-            #
-            # `seen_check` already accepts None and returns the list unchanged.
-            # Nothing needed to be taught how to handle this; the attribute access
-            # simply happened before it could.
+            # `check_item and asked`, matching the three lines around it.
             seen_check_ids=seen_check(
                 learning, check_item.id if (check_item and asked) else None
             ),
             turns_on_concept=on_concept(learning, concept_id),
             turns_since_check=0 if (check_item and asked) else int(learning.get("turns_since_check") or 0) + 1,
-            # Cleared on any move that is not a hint. The ladder counts
-            # CONSECUTIVE misses, and a turn that taught rather than graded has
-            # not added one.
+            # Cleared on any move that is not a hint.
             consecutive_wrong=snapshot.consecutive_wrong if move is Move.HINT else 0,
             recent_openings=remember_opening(learning, lesson.text),
             last_widget_kinds=_remember_kind(learning, widget.kind if widget.emitted else None),
@@ -465,13 +335,7 @@ def _state_after(
 
 
 def _remember_kind(learning: dict[str, Any], kind: str | None, *, keep: int = 3) -> list[str]:
-    """Widget kinds recently SHOWN. Only a kind that reached the reader counts.
-
-    The distinction matters because this list is what the planner reads to avoid
-    repeating itself. Recording a kind that was planned but dropped at a gate
-    would suppress the primitive a concept is best served by, on the grounds that
-    the child had seen it -- when they had not.
-    """
+    """Widget kinds recently SHOWN."""
     kinds = [item for item in (learning.get("last_widget_kinds") or []) if item]
     if kind:
         kinds.append(kind)
@@ -489,22 +353,12 @@ def _chip_options(move: Move, band: str) -> list[str]:
 
 
 def _chips(band: str, options: list[str]) -> list[str]:
-    """Chips, capped at four and at four words each.
-
-    Trimmed here rather than left to `safety_out`, because a chip that arrives too
-    long triggers a re-prompt -- a model call to fix something the author could
-    have written shorter.
-    """
+    """Chips, capped at four and at four words each."""
     return [" ".join(option.split()[:4]) for option in options[:4]][:4]
 
 
 async def _mastery_of(mastery: Any, state: Any, concept: TeachingConcept | None) -> int:
-    """This learner's score for this concept, or 0.
-
-    Zero on every failure, and that is the safe direction: an unreadable mastery
-    row means the concept is taught rather than skipped, and being taught
-    something you already know is a smaller harm than never being taught it.
-    """
+    """This learner's score for this concept, or 0."""
     if mastery is None or concept is None:
         return 0
     try:
@@ -530,12 +384,7 @@ def _log_turn(
     score: int,
     started: float,
 ) -> None:
-    """One structured line per learning turn. Every field the health surface reads.
-
-    A single line rather than several, because the questions being asked of it are
-    joint -- "what is the fallback rate for 5-8 turns that resolved semantically?"
-    cannot be answered from two lines that have to be correlated by timestamp.
-    """
+    """One structured line per learning turn."""
     from app.learning.health import TurnMetrics
 
     metrics = TurnMetrics(
@@ -579,9 +428,7 @@ def _log_turn(
         metrics.total_ms,
     )
 
-    # Fire and forget. The aggregate is an alerting surface and the log line
-    # above is the record -- a counter write that could delay or break a lesson
-    # would be a worse trade than losing a data point.
+    # Fire and forget.
     from app.learning.health import record
 
     asyncio.create_task(record(metrics))

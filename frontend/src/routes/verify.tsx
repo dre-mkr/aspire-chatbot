@@ -3,23 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { AuthSurface } from "#/components/auth/AuthSurface";
 import { AuthError, redeemSignInLink } from "#/lib/aspire/auth";
 
-/**
- * Where the confirm-your-email and sign-in links land, at `/verify?token=…`.
- *
- * Both kinds of link arrive here and both are spent immediately — there is
- * nothing to ask, so there is nothing to show but the outcome. The redemption
- * runs once even under React's double-invoked effects in development, because
- * the token is single-use and spending it twice would turn a working link into
- * an expired one on the first visit.
- */
+/** Where the confirm-your-email and sign-in links land, at `/verify?token=…`. */
 
 export const Route = createFileRoute("/verify")({
-	// Full-document SSR, stated rather than inherited. This form is entirely
-	// client-interactive, but it is also the first paint a signed-out visitor
-	// gets, so the shell should arrive as HTML rather than after the bundle.
-	// It was rendering this way already -- by inheriting `defaultSsr` from a
-	// declaration that lived in a generated file. Saying so here means the mode
-	// is a decision on the record and survives the next regeneration.
+	// Full-document SSR, stated rather than inherited.
 	ssr: true,
 	validateSearch: (search: Record<string, unknown>) => ({
 		token: typeof search.token === "string" ? search.token : "",

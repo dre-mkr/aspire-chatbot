@@ -1,14 +1,4 @@
-"""The anonymous session cap, asserted rather than assumed.
-
-Anonymous access removes the usual lever — there is no address to ban — so the
-per-IP cap is the lever. It is worth a test for two reasons: it is the only
-thing standing between this endpoint and a script minting identities all day,
-and it is easy to disable by accident, since every other suite spends its quota
-and would rather it were not there.
-
-The counter is cleared between tests by the autouse fixture in `conftest.py`,
-which is exactly why this file has to turn it off for its own case.
-"""
+"""The anonymous session cap, asserted rather than assumed."""
 
 from __future__ import annotations
 
@@ -26,8 +16,7 @@ from app.config import get_settings  # noqa: E402
 from app.db import database_enabled  # noqa: E402
 from app.main import app  # noqa: E402
 
-#: P0-010 -- see the `slow` marker note in pyproject.toml. Both markers apply:
-#: this needs a live dependency AND is dominated by wall-clock cost.
+#: P0-010 -- see the `slow` marker note in pyproject.toml.
 pytestmark = [pytest.mark.slow, pytest.mark.skipif(
     not database_enabled(), reason="These are database-backed session tests."
 )]
@@ -61,13 +50,7 @@ def test_the_cap_eventually_refuses(client: TestClient):
 
 
 def test_the_cap_fails_open_without_a_cache(client: TestClient, monkeypatch):
-    """A cache outage must not lock everybody out.
-
-    The whole point of this product is being open to a child who has never
-    signed up. Missing some scripted abuse for an hour costs far less than
-    refusing everybody, so the limiter is deliberately permissive when it cannot
-    count.
-    """
+    """A cache outage must not lock everybody out."""
     monkeypatch.setattr(cache, "get_client", lambda: None)
     response = client.post("/api/auth/anonymous", json={"device_id": str(uuid.uuid4())})
     assert response.status_code == 200

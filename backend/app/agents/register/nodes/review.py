@@ -1,32 +1,4 @@
-"""Review, edit one field, attest, submit.
-
-## Editing item 4 edits item 4
-
-`jump_to_slot` puts exactly one slot back into the walk and marks the flow as
-returning to review afterwards. It does not clear anything else, does not
-restart the section, and does not re-ask the slots around it.
-
-This is the behaviour the whole review card exists for. A form that restarts on
-a correction is a form parents abandon -- and the correction they were making
-was almost always a spelling, which means the abandonment is caused entirely by
-the interface rather than by anything about the application.
-
-## The consent VERSION is stored, not the consent text
-
-The text will change. When it does, every application already submitted was
-agreed to under the old wording, and "what did they actually agree to?" has to
-remain answerable. `CONSENT_TEXT` here is what is rendered; `CONSENT_VERSION` is
-what is recorded, and the database's check constraint refuses an attested
-application without one.
-
-## Attestation cannot be implied
-
-Not by proceeding, not by tapping submit, not by having read the card. The
-review card's submit button is disabled until the box is ticked, `submit`
-refuses without the flag, and the schema refuses without the version. Three
-layers for one property, because a submitted application with no consent behind
-it is not a thing that can be fixed afterwards.
-"""
+"""Review, edit one field, attest, submit."""
 
 from __future__ import annotations
 
@@ -62,12 +34,7 @@ CONSENT_TEXT: dict[str, str] = {
 
 @dataclass(frozen=True, slots=True)
 class Attestation:
-    """What is recorded when a guardian confirms.
-
-    All four, together. A timestamp with no version is unattributable; a
-    version with no timestamp cannot be placed against a wording change; an IP
-    with neither is surveillance rather than a record.
-    """
+    """What is recorded when a guardian confirms."""
 
     consent_version: str
     at: datetime
@@ -87,13 +54,7 @@ def attestation_for(
 
 
 def jump_to_slot(registration: dict[str, Any], slot_path: str) -> dict[str, Any]:
-    """Reopen ONE slot and remember to come straight back to review.
-
-    Returns a registration update. It clears the value for that slot and
-    nothing else, which is the entire behaviour: `return_to_review` is what
-    stops the walk continuing forward through the rest of the form after the
-    single answer lands.
-    """
+    """Reopen ONE slot and remember to come straight back to review."""
     slot = slot_for(_base_path(slot_path))
     if slot is None:
         logger.info("Ignoring an edit request for unknown slot %r.", slot_path)
@@ -108,8 +69,7 @@ def jump_to_slot(registration: dict[str, Any], slot_path: str) -> dict[str, Any]
         **registration,
         "values": values,
         "phase": "editing",
-        # The flag the router reads after the answer lands. Without it, an edit
-        # would drop the parent back into the middle of the form.
+        # The flag the router reads after the answer lands.
         "return_to_review": True,
         "editing_key": slot_path,
     }
@@ -124,21 +84,12 @@ def _base_path(key: str) -> str:
 
 
 def after_edit(registration: dict[str, Any]) -> str:
-    """Where to go once an edited slot has been answered.
-
-    Straight back to review, always. The parent asked to change one thing; the
-    only correct next screen is the one showing that it changed.
-    """
+    """Where to go once an edited slot has been answered."""
     return "review" if registration.get("return_to_review") else "ask"
 
 
 def summarise_for_reviewer(registration: dict[str, Any]) -> dict[str, Any]:
-    """What goes into the admin queue row. MASKED values only.
-
-    The queue is a list view read by several people; the full values live in
-    `application_pii` and reading them is a separate, audited act. A queue that
-    showed them would make every glance at the list a disclosure.
-    """
+    """What goes into the admin queue row."""
     values = registration.get("values") or {}
     fields: list[tuple[str, str, str]] = []
     for key, value in values.items():
@@ -152,13 +103,7 @@ def summarise_for_reviewer(registration: dict[str, Any]) -> dict[str, Any]:
 
 
 def make_confirm(notifier=None):
-    """Tell the parent it is in, in the chat and by email or SMS.
-
-    `notifier` is `async (application_id, contact) -> None`, injected so a
-    deployment without mail configured still completes a submission. A failure
-    to notify is logged and does not fail the submission -- the application is
-    already recorded, and telling somebody about it is the less important half.
-    """
+    """Tell the parent it is in, in the chat and by email or SMS."""
 
     async def confirm(state: Any) -> dict[str, Any]:
         from langchain_core.messages import AIMessage

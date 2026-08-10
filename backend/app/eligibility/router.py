@@ -1,14 +1,4 @@
-"""HTTP surface for the eligibility pre-check.
-
-Why this exists alongside the agent tool, and it is the same reason the games
-card has one: this is direct manipulation. Someone taps an option and the next
-question has to appear now, not after a model round trip — for a decision the
-model is deliberately not allowed to make.
-
-The agent's only route in is `start_eligibility_check`. Everything after the
-first question happens here, which is also what keeps the answers away from the
-model entirely: an age band tapped into this card never enters a prompt.
-"""
+"""HTTP surface for the eligibility pre-check."""
 
 from __future__ import annotations
 
@@ -61,12 +51,7 @@ def _fail(error: EligibilityError) -> HTTPException:
 
 
 def _language(raw: str | None) -> Language:
-    """Unknown languages fall back to English rather than 400.
-
-    A flow that refuses to start because a client sent a locale we do not author
-    is worse than one that starts in English. The three we do author are the
-    three the rest of the product speaks.
-    """
+    """Unknown languages fall back to English rather than 400."""
     if not raw:
         return Language.EN
     try:
@@ -139,8 +124,7 @@ def _envelope(snapshot: Snapshot | None, language: Language) -> StateEnvelope:
         )
 
     return StateEnvelope(
-        # A finished flow has no session left, so it is not "active" -- but the
-        # result travels in this same response and the client keeps it.
+        # A finished flow has no session left, so it is not "active" -- but the result travels in this same response an…
         active=snapshot.question is not None,
         language=snapshot.language.value,
         question=question,
@@ -152,13 +136,7 @@ def _envelope(snapshot: Snapshot | None, language: Language) -> StateEnvelope:
 
 
 async def _record(snapshot: Snapshot) -> None:
-    """Write the anonymised outcome, exactly once, when a flow completes.
-
-    Once because `_finish` deletes the session in the same call that produces
-    the result, so no later request can produce a second one for the same flow.
-    Awaited rather than backgrounded only because it is a single INSERT that
-    swallows its own failures; nothing here can delay or break the response.
-    """
+    """Write the anonymised outcome, exactly once, when a flow completes."""
     if snapshot.result is None:
         return
     await outcomes.record(
@@ -171,16 +149,7 @@ def check_state(
     thread_id: str = Query(min_length=1, max_length=128),
     language: str = Query(default="en"),
 ) -> StateEnvelope:
-    """The flow in progress, if any.
-
-    Called on load, which is what makes a refresh mid-flow a non-event. Returns
-    `active: false` with no result for a flow that has finished: the result
-    lives in the client's own storage from then on, the same place the
-    transcript does.
-
-    `language` is only used to label an inactive envelope; a running flow
-    answers in the language it was started in.
-    """
+    """The flow in progress, if any."""
     snapshot = get_engine().state(thread_id)
     return _envelope(snapshot, _language(language))
 
@@ -228,10 +197,6 @@ def restart(body: RestartBody) -> StateEnvelope:
 
 @router.post("/quit", response_model=StateEnvelope)
 def quit_check(body: ThreadBody) -> StateEnvelope:
-    """Leave without finishing.
-
-    Always succeeds, including when nothing is running: "stop this" must never
-    be able to fail. No outcome is recorded — an abandoned flow has no verdict.
-    """
+    """Leave without finishing."""
     get_engine().quit(body.thread_id)
     return _envelope(None, Language.EN)

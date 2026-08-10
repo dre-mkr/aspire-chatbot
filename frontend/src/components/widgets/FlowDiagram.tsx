@@ -1,23 +1,4 @@
-/**
- * Where money goes, as a short sequence of steps.
- *
- * Linear, and that is the whole design. A general graph would need edge routing
- * and a layout engine, and a seven-year-old reading "you get money → some in
- * the tin → some to the shop" needs a line, not a diagram.
- *
- * ## It is a list, and it is marked up as one
- *
- * `<ol>` rather than a row of divs with arrows between them. A screen reader
- * then announces "list, 3 items, item 1 of 3", which is exactly the sequence
- * information the arrows carry visually. The arrows themselves are
- * `aria-hidden` — they are the same fact twice.
- *
- * ## Tap to expand, never to proceed
- *
- * Each step's detail is behind a tap because putting all three on screen at
- * once is more text than the primitive is for. Nothing has to be tapped: the
- * labels alone carry the sequence, which is the lesson.
- */
+/** Where money goes, as a short sequence of steps. */
 import { useState } from "react";
 import type { FlowDiagramWidget } from "../../lib/stream/types";
 import { Panel, tone, useReducedMotion, WidgetActions } from "./primitives";

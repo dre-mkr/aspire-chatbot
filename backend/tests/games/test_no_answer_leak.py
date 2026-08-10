@@ -1,13 +1,4 @@
-"""The integrity property, asserted directly.
-
-The answer never leaves the server until it is revealed — not in what the
-browser receives, and not in what the agent sees. The second is the one that
-matters: because the model is never handed an answer, no amount of "please just
-tell me" gets one out of it. There is no prompt defence here to bypass, because
-there is no code path that gives the model the key in the first place.
-
-These tests drive the real tools, with the real seeds.
-"""
+"""The integrity property, asserted directly."""
 
 from __future__ import annotations
 
@@ -60,8 +51,7 @@ def test_a_wrong_answer_reveals_nothing(all_words):
     payload = tools_module.submit_answer.invoke({"answer": "banana"}, config=cfg())
 
     assert payload["correct"] is False
-    # No answer, and no "close!" either: a near-miss signal is a side channel
-    # that narrows the word for anyone probing it.
+    # No answer, and no "close!" either: a near-miss signal is a side channel that narrows the word for anyone prob…
     assert "teaching_note" not in payload
     assert_no_answers(payload, all_words, where="submit_answer(wrong)")
 
@@ -72,8 +62,7 @@ def test_a_correct_answer_returns_the_meaning_not_the_key(all_words):
 
     assert payload["correct"] is True
     assert payload["teaching_note"] == "what we use to buy the things we need"
-    # The word just solved is now known to the user anyway; what must not appear
-    # is any *unsolved* answer, including the next one.
+    # The word just solved is now known to the user anyway; what must not appear is any *unsolved* answer, includin…
     assert "INTEREST" not in json.dumps(payload).upper()
     assert payload["next_text"] == "STERINTE"
 
@@ -120,9 +109,7 @@ def test_an_entire_played_game_leaks_nothing_outside_a_reveal(all_words):
     seen.append(("quit_game", tools_module.quit_game.invoke({}, config=cfg())))
 
     for name, payload in seen:
-        # A reveal is the sanctioned exception, and only ever for the item the
-        # engine has already moved past. `revealed_answer` on a resolved submit,
-        # `answer` on a hint that gave up or a skip.
+        # A reveal is the sanctioned exception, and only ever for the item the engine has already moved past.
         if payload.get("revealed") or "revealed_answer" in payload:
             assert payload.get("answer") or payload.get("revealed_answer")
             continue
@@ -133,11 +120,7 @@ def test_an_entire_played_game_leaks_nothing_outside_a_reveal(all_words):
 
 
 def test_the_session_is_not_a_tool_argument():
-    """LangChain keeps the injected config out of the schema the model sees.
-
-    So the model cannot name a session, cannot reach another child's game, and
-    cannot fabricate one. This is structural, not prompt-defended.
-    """
+    """LangChain keeps the injected config out of the schema the model sees."""
     for tool in tools_module.GAME_TOOLS:
         visible = set(tool.args.keys())
         assert "config" not in visible, f"{tool.name} exposes config to the model"
@@ -161,12 +144,7 @@ def test_two_conversations_do_not_share_a_game():
 
 
 def test_chat_response_schema_cannot_carry_an_answer():
-    """The browser is never sent one, because there is no field for it.
-
-    Asserted as an exact set on purpose: this test failing because someone added
-    a field is the point of it. Widen it only after checking the new field
-    cannot carry an answer -- which is why the nested models are checked too.
-    """
+    """The browser is never sent one, because there is no field for it."""
     from app.schemas import ChatResponse, StartedEligibilityCheck, StartedGame
 
     assert set(ChatResponse.model_fields) == {
@@ -178,9 +156,7 @@ def test_chat_response_schema_cannot_carry_an_answer():
         "eligibility_started",
     }
 
-    # The nested objects, because a closed model is only a guarantee while its
-    # own fields are checked. Every one of these is already on the player's
-    # screen.
+    # The nested objects, because a closed model is only a guarantee while its own fields are checked.
     assert set(StartedGame.model_fields) == {
         "game_type",
         "display_name",
@@ -188,25 +164,12 @@ def test_chat_response_schema_cannot_carry_an_answer():
         "total",
     }
 
-    # The eligibility card fetches its own question from its own endpoint, so
-    # nothing about the flow rides here -- and because nothing does, there is no
-    # field a game answer or a person's eligibility answers could travel in.
+    # The eligibility card fetches its own question from its own endpoint, so nothing about the flow rides here --…
     assert set(StartedEligibilityCheck.model_fields) == {"check", "language"}
 
 
 def test_a_game_directive_has_no_field_a_puzzle_could_travel_in():
-    """The property `_extract_sources` used to be asked to guarantee.
-
-    That test built a `ToolMessage` carrying `{"word": "MONEY"}` in its
-    `artifact` and asserted `/chat`'s source extractor ignored it -- a check
-    that the leak path was not TAKEN.
-
-    There is no such path now. `/chat` is gone, sources come from
-    `ground_check`'s citation set (kb ids and titles, nothing else), and a game
-    is launched by a `GameDirective` whose schema is closed with
-    `extra="forbid"`. The guarantee moved from "the extractor filters it out"
-    to "there is no field it could be in", which is the stronger form.
-    """
+    """The property `_extract_sources` used to be asked to guarantee."""
     from app.schemas.directives import GameDirective
 
     assert set(GameDirective.model_fields) == {"t", "game", "concept", "difficulty"}

@@ -1,25 +1,4 @@
-/**
- * Directive type to component, with a fallback that renders nothing.
- *
- * ## Forward compatibility is the point, not a nicety
- *
- * The backend and the frontend deploy separately. A backend that ships a new
- * directive type before this file knows about it is not a failure mode to
- * handle gracefully -- it is the NORMAL sequence of a deploy, and it happens
- * every time. So an unrecognised `t` renders nothing, logs once, and the prose
- * around it is unaffected.
- *
- * The failure this prevents is specific and severe: a `switch` with no default,
- * or a lookup that throws on a miss, would take down the whole transcript for
- * the ten minutes between the two deploys.
- *
- * ## Nothing here parses prose
- *
- * Directives arrive as their own SSE events with their own ordinals. No
- * component in this file reads the token stream, and none should: the moment a
- * directive can be produced by matching text, a model explaining the syntax
- * renders a control by accident.
- */
+/** Directive type to component, with a fallback that renders nothing. */
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -48,12 +27,7 @@ import { QuickReplies } from "./QuickReplies";
 import { ReviewCard } from "./ReviewCard";
 import { UploadCard } from "./UploadCard";
 
-/*
- * Lazy for the same reason `Transcript` loads them lazily: the three cards are
- * ~31KB raw between them and most conversations never open one. Splitting them
- * here as well means the v2 directive path does not quietly undo the saving
- * that path made.
- */
+/* Lazy for the same reason `Transcript` loads them lazily: the three cards are ~31KB raw between them and most… */
 const EligibilityCheck = lazy(() =>
 	import("./EligibilityCheck").then((m) => ({ default: m.EligibilityCheck })),
 );
@@ -65,14 +39,7 @@ const WordScramble = lazy(() =>
 );
 
 export interface DirectiveContext {
-	/**
-	 * The conversation this directive belongs to.
-	 *
-	 * The game and eligibility engines are keyed on it server-side, so a card
-	 * cannot start without one. Absent means the cards render an explanation
-	 * rather than throwing — a directive that arrived before the thread settled
-	 * must not take the transcript down with it.
-	 */
+	/** The conversation this directive belongs to. */
 	threadId?: string;
 	/** Send a message as the user. Chips and games both use it. */
 	send: (value: string) => void;
@@ -153,8 +120,7 @@ export function DirectiveView({
 				<WidgetRenderer
 					widget={(directive as WidgetDirective).payload}
 					onInteraction={context.onWidgetInteraction}
-					// Skipping is silent by design: the agent continues without
-					// comment. No guilt, no nagging.
+					// Skipping is silent by design: the agent continues without comment.
 					onSkip={() => undefined}
 				/>
 			);
@@ -176,9 +142,7 @@ export function DirectiveView({
 				<GameLaunch
 					directive={directive as GameDirective}
 					context={context}
-					// Remounts when the directive names a different game, so a
-					// second "play true or false" in one conversation starts a
-					// second session rather than reusing the finished one.
+					// Remounts when the directive names a different game, so a second "play true or false" in one conversation star…
 					key={`${(directive as GameDirective).game}:${(directive as GameDirective).concept}`}
 				/>
 			);
@@ -198,8 +162,7 @@ export function DirectiveView({
 			return (
 				<UploadCard
 					directive={directive as UploadDirective}
-					// The presign call is authenticated with this thread's graph
-					// session token, so the card needs the thread, not just the slot.
+					// The presign call is authenticated with this thread's graph session token, so the card needs the thread, not j…
 					threadId={context.threadId}
 					onUploaded={(result) =>
 						context.onUpload?.((directive as UploadDirective).slot, result)
@@ -223,19 +186,7 @@ export function DirectiveView({
 
 /* ── the small ones, inline ─────────────────────────────────────────────── */
 
-/**
- * The account sign-up card.
- *
- * A LINK, not an automatic navigation, and that is the whole design of it. Every
- * other card in this file renders where it stands; this one sends the reader to
- * another route, and a directive that navigated on arrival would throw away a
- * conversation somebody was in the middle of because a sentence they typed
- * matched a pattern. They tap it, or they carry on talking.
- *
- * `next` brings them back to the conversation they left. Sign-up already
- * validates that param as a same-site path (`safeNext`), so this cannot become a
- * way to bounce somebody off ASPIRE.
- */
+/** The account sign-up card. */
 function SignupCard({ directive }: { directive: SignupDirective }) {
 	const label =
 		directive.role === "guardian"
@@ -348,11 +299,7 @@ function Progress({ directive }: { directive: ProgressDirective }) {
 					? `${directive.streak} days in a row!`
 					: "Nice work today"}
 			</p>
-			{/*
-			 * `mastery_delta` is rendered as a count of ideas worked on, never as
-			 * a score. A child who sees a number against a concept is a child
-			 * being graded, and this is a lesson.
-			 */}
+			{/* `mastery_delta` is rendered as a count of ideas worked on, never as a score. */}
 			{directive.mastery_delta > 0 ? (
 				<p
 					style={{
@@ -395,11 +342,7 @@ function Escalated({ directive }: { directive: EscalatedDirective }) {
 			<p style={{ margin: 0, fontSize: "var(--band-type, 16px)" }}>
 				A person has this now.
 			</p>
-			{/*
-			 * The reference is rendered as its own element rather than left in
-			 * prose. A number somebody has to copy out of a sentence is a number
-			 * they will get wrong on the phone.
-			 */}
+			{/* The reference is rendered as its own element rather than left in prose. */}
 			{directive.ticket_id ? (
 				<p
 					style={{
@@ -472,19 +415,7 @@ function Chart({ directive }: { directive: ChartDirective }) {
 	);
 }
 
-/**
- * The game card.
- *
- * The directive says WHICH game and nothing else — no puzzle text, no answer,
- * no choices. That is the property `tests/games/test_no_answer_leak.py` exists
- * to protect, and it is why this component fetches the item from the games API
- * itself rather than reading it out of the chat stream.
- *
- * ## The engine's names and the directive's names are different
- *
- * `scramble` here, `word_scramble` there. One mapping, at the boundary, so the
- * two spellings never drift into a third place.
- */
+/** The game card. */
 const ENGINE_NAME: Record<GameDirective["game"], string> = {
 	scramble: "word_scramble",
 	true_false: "true_false",
@@ -501,11 +432,13 @@ function GameLaunch({
 	const { threadId, onGameResult } = context;
 	const [state, setState] = useState<GameState | null>(null);
 	const [failure, setFailure] = useState<string | null>(null);
-	/** What the set was worth, captured before the last item clears the state. */
-	const scored = useRef<{ solved: number; total: number }>({
-		solved: 0,
-		total: 0,
-	});
+	/** What the set was worth. */
+	const scored = useRef<{
+		solved: number;
+		total: number;
+		duration_s: number;
+		completed: boolean;
+	}>({ solved: 0, total: 0, duration_s: 0, completed: false });
 
 	useEffect(() => {
 		if (!threadId) return;
@@ -514,7 +447,13 @@ function GameLaunch({
 			.then((game) => {
 				if (!live) return;
 				setState(game);
-				if (game) scored.current = { solved: 0, total: game.prompt.total };
+				if (game)
+					scored.current = {
+						solved: 0,
+						total: game.prompt.total,
+						duration_s: 0,
+						completed: false,
+					};
 			})
 			.catch((error: Error) => {
 				if (live) setFailure(error.message);
@@ -531,15 +470,29 @@ function GameLaunch({
 	}
 	if (!state) return <CardLoading />;
 
-	/**
-	 * The set finished. Reported once, with the real score, because the agent's
-	 * next turn is required to reference the actual numbers — "well done" after
-	 * a game a child scored 2/8 on is the same nothing as no reply at all.
-	 */
+	/** The set's final numbers, straight from the server's summary. */
+	const summarised = (summary: {
+		solved: number;
+		total: number;
+		duration_seconds: number;
+	}) => {
+		scored.current = {
+			solved: summary.solved,
+			total: Math.max(1, summary.total),
+			duration_s: Math.max(0, Math.round(summary.duration_seconds)),
+			completed: true,
+		};
+	};
+
+	/** The card closed. */
 	const finished = (final: GameState | null) => {
 		setState(final);
 		if (final) {
-			scored.current = { solved: final.solved, total: final.prompt.total };
+			scored.current = {
+				...scored.current,
+				solved: final.solved,
+				total: final.prompt.total,
+			};
 			return;
 		}
 		onGameResult?.({
@@ -547,31 +500,33 @@ function GameLaunch({
 			concept_id: directive.concept,
 			score: scored.current.solved,
 			max_score: Math.max(1, scored.current.total),
-			duration_s: 0,
-			completed: true,
+			duration_s: scored.current.duration_s,
+			completed: scored.current.completed,
 		});
 	};
 
 	return (
 		<Suspense fallback={<CardLoading />}>
 			{state.prompt.kind === "statement" ? (
-				<TrueFalse threadId={threadId} state={state} onChanged={finished} />
+				<TrueFalse
+					threadId={threadId}
+					state={state}
+					onChanged={finished}
+					onSummary={summarised}
+				/>
 			) : (
-				<WordScramble threadId={threadId} state={state} onChanged={finished} />
+				<WordScramble
+					threadId={threadId}
+					state={state}
+					onChanged={finished}
+					onSummary={summarised}
+				/>
 			)}
 		</Suspense>
 	);
 }
 
-/**
- * The eligibility card.
- *
- * The server has already opened the check by the time this directive arrives —
- * `app/graph/nodes/cards.py` calls the engine before emitting it — so this
- * fetches the state rather than starting a second one. `startEligibility` is
- * idempotent on an open check and returns the current question, which is what
- * makes a page refresh mid-flow a non-event.
- */
+/** The eligibility card. */
 function EligibilityLaunch({
 	directive,
 	context,
@@ -635,10 +590,7 @@ function Card({ children }: { children: ReactNode }) {
 	);
 }
 
-/*
- * A card is a large block, and a spinner where one is about to appear reads as
- * broken. A quiet placeholder of roughly the right height does not.
- */
+/* A card is a large block, and a spinner where one is about to appear reads as broken. */
 function CardLoading() {
 	return (
 		<div

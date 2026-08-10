@@ -1,23 +1,4 @@
-/**
- * The admin API client, and its own token storage.
- *
- * ## A separate realm means a separate everything
- *
- * Different storage key, different header, different login. The public chat's
- * session token is never read here and this token is never sent there --
- * `app/api/admin/auth.py` refuses each at the other's door, and this file makes
- * sure the two never even get the chance.
- *
- * The risk being closed is not a child guessing an admin password. It is that
- * one XSS on the chat surface, or one bearer token left on a shared school
- * tablet, would otherwise reach a queue of children's identity documents.
- *
- * ## `sessionStorage`, not `localStorage`
- *
- * A staff token dies with the tab. Reviewers work on shared desks, and a token
- * that survives closing the browser is a token the next person at that desk
- * inherits.
- */
+/** The admin API client, and its own token storage — a separate realm from the chat's. */
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -93,13 +74,7 @@ export interface SignIn {
 	must_change_password: boolean;
 }
 
-/**
- * Exchange an email and password for a staff token.
- *
- * Deliberately NOT routed through `call()`: that requires a token, and this is
- * the call that produces one. A sign-in that could reuse a stale token would
- * be a sign-in that never actually verified anything.
- */
+/** Exchange an email and password for a staff token. */
 export async function signIn(email: string, password: string): Promise<SignIn> {
 	const response = await fetch(`${API_URL}/api/admin/auth/session`, {
 		method: "POST",
@@ -154,10 +129,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const bearer = token();
 	if (!bearer) throw new AdminError("Sign in to continue.", 401);
 
-	// `/api/admin`, not `/admin`: the portal's own pages live at `/admin/*` and
-	// production serves both from one hostname, so an API under `/admin` would
-	// be indistinguishable from the page of the same name. See the module
-	// docstring in backend/app/api/admin/router.py.
+	// `/api/admin`, not `/admin`: production serves the portal pages and the API from one hostname.
 	const response = await fetch(`${API_URL}/api/admin${path}`, {
 		...init,
 		headers: {
@@ -203,14 +175,7 @@ export function application(id: string): Promise<ApplicationDetail> {
 	return call(`/applications/${id}`);
 }
 
-/**
- * A short-lived signed URL for a document.
- *
- * Fetched on demand, per document, per view -- never pre-fetched for a grid.
- * Every call writes its own audit row, so "who looked at this child's papers?"
- * is answerable; pre-fetching nine thumbnails would make that question
- * meaningless.
- */
+/** A short-lived signed URL for a document; every call writes its own audit row. */
 export function documentUrl(
 	id: string,
 ): Promise<{ url: string; expires_in: number }> {

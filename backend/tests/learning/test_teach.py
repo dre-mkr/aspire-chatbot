@@ -1,18 +1,4 @@
-"""The teaching turn: what the model is given, and what happens when it is not.
-
-Two halves, and the second is the one that matters more.
-
-The first half is that a model writes the lesson now, grounded in the knowledge
-base, sometimes with a widget attached. The second is that every one of those
-three capabilities can be absent -- no provider key, an empty corpus, a planner
-outage -- and a child still gets taught. Each test below that ends in "not the
-turn" is asserting that a dependency failed and the lesson survived it.
-
-`invoke` is recorded rather than mocked at the module level, so the assertions
-are about what reached the PROMPT. A test that only checked the return value
-would pass just as happily if the knowledge base, the word cap and the
-repetition history were all silently dropped on the way in.
-"""
+"""The teaching turn: what the model is given, and what happens when it is not."""
 
 from __future__ import annotations
 
@@ -81,13 +67,7 @@ def chunks(*texts: str) -> list[KBChunk]:
 
 
 async def run_teach(*, retrieve=None, plan=None, invoke=None, curriculum=None, **state_kwargs):
-    """Both nodes, in order, as the graph runs them.
-
-    `plan_widget` grounds and plans into state; `teach` reads that state and
-    writes. Driving them together is what the tests are about -- driving
-    `teach` alone would let a change that stopped `plan_widget` handing
-    anything over pass every assertion below.
-    """
+    """Both nodes, in order, as the graph runs them."""
     state = state_for(**state_kwargs)
     prepared = await teaching.make_plan_widget(
         curriculum, retrieve=retrieve, plan=plan
@@ -122,20 +102,14 @@ class TestTheModelWritesTheLesson:
             assert point in model.system
 
     async def test_the_prompt_states_the_bands_own_word_cap(self, curriculum):
-        """A prompt asking for a different number than the gate enforces means a
-        re-prompt on every single turn, forever."""
+        """A prompt asking for a different number than the gate enforces means a re-prompt on every single turn, forever."""
         for band in ("5-8", "9-12", "13-15"):
             model = Recorder()
             await run_teach(invoke=model, curriculum=curriculum, band=band)
             assert str(WORD_CAPS[band]) in model.system
 
     async def test_the_band_vocabulary_ladder_reaches_the_prompt(self, curriculum):
-        """Both halves of it: what this band may say, and what it may not.
-
-        The banned list matters more than the allowed one. `safety_out` strips
-        a banned term after the fact, so a prompt that omits it buys a rewrite
-        and a re-prompt on every turn that would have used the word.
-        """
+        """Both halves of it: what this band may say, and what it may not."""
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum, band="5-8")
 
@@ -143,8 +117,7 @@ class TestTheModelWritesTheLesson:
         assert "coin" in model.system  # on the 5-8 ladder
 
     async def test_it_is_told_not_to_ask_its_own_question(self, curriculum):
-        """`check` asks the check question on the next node. Two questions in a
-        row is the lesson talking over itself."""
+        """`check` asks the check question on the next node."""
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum)
         flat = " ".join(model.system.split())
@@ -190,11 +163,7 @@ class TestKnowledgeBaseGrounding:
     async def test_the_corpus_slice_follows_the_agent_name(
         self, agent, audience, curriculum
     ):
-        """One graph, three names, three audiences -- the same shape as Q&A.
-
-        A signed-out sample must not be grounded in rows written for enrolled
-        families, and a guardian preview is an adult reading adult material.
-        """
+        """One graph, three names, three audiences -- the same shape as Q&A."""
         seen: list[str] = []
 
         async def retrieve(query, k, aud):
@@ -244,23 +213,7 @@ class TestKnowledgeBaseGrounding:
 
 class TestTheWidget:
     async def test_a_planned_kind_no_longer_reaches_the_teaching_prompt(self, curriculum):
-        """The inline sentinel path is hard-disabled. See `teach._widget_prompt`.
-
-        One model call used to produce the lesson AND the widget's JSON, between
-        `⟦widget⟧` markers inline in the prose. Three things followed: the widget's
-        JSON competed with the lesson for the word budget, the transport stopped
-        forwarding at the opening marker, and an UNTERMINATED marker caused the
-        buffer to be discarded -- silently truncating the lesson mid-sentence.
-
-        That last one is the reported defect's mechanism, and it is not fixable by
-        prompting: a client shown half a JSON object has no correct move, so
-        buffering is right and inline composition is what has to go. Widgets now
-        come from `agents/learn/widgets.py`, on a separate task, from a separate
-        call, emitted as their own directive AFTER validated prose.
-
-        The planner still RUNS -- its accuracy stays measurable by
-        `evals/widgets.jsonl` -- and its choice no longer reaches this prompt.
-        """
+        """The inline sentinel path is hard-disabled."""
         async def plan(**kwargs):
             return Plan(kind="compare", rationale="asked what it is")
 
@@ -315,12 +268,7 @@ class TestTheWidget:
     async def test_a_kind_asked_for_but_not_written_is_not_remembered(
         self, curriculum
     ):
-        """The model can be handed a composition prompt and write prose anyway.
-
-        Recording the kind on the strength of having ASKED means the planner
-        then avoids a primitive this child has never seen -- and the more often
-        the model declines, the more primitives get struck off.
-        """
+        """The model can be handed a composition prompt and write prose anyway."""
         async def plan(**kwargs):
             return Plan(kind="compare")
 
@@ -333,19 +281,7 @@ class TestTheWidget:
         assert update["learning"]["last_widget_kinds"] == []
 
     async def test_this_node_records_no_widget_at_all_now(self, curriculum):
-        """`last_widget_kinds` stays empty on the authored-lesson path.
-
-        The rule it protects is unchanged and still right: only a kind that
-        actually REACHED the reader may suppress that primitive next time, or the
-        "do not repeat" rule starts excluding primitives a child has never seen.
-        This node no longer emits any, so it records none -- even when the model
-        writes something that looks like a widget block, which is now just
-        characters in prose that `sentinel.split` will lift out.
-
-        KNOWN GAP, recorded rather than hidden: curriculum lessons carry no widget
-        until this node moves onto `widgets.build_widget`. A lesson with no widget
-        is a complete lesson, which is the premise of the whole workstream.
-        """
+        """`last_widget_kinds` stays empty on the authored-lesson path."""
         async def plan(**kwargs):
             return Plan(kind="compare")
 
@@ -358,11 +294,7 @@ class TestTheWidget:
         assert update["learning"]["last_widget_kinds"] == []
 
     async def test_the_authored_fallback_claims_no_widget_was_shown(self, curriculum):
-        """A widget planned but never composed must not count as seen.
-
-        Otherwise the "do not repeat a primitive" rule starts excluding
-        primitives this child has never actually been shown.
-        """
+        """A widget planned but never composed must not count as seen."""
         async def plan(**kwargs):
             return Plan(kind="compare")
 
@@ -404,15 +336,7 @@ class TestItDoesNotRepeatItself:
     async def test_a_learner_returning_on_another_day_still_gets_a_new_angle(
         self, curriculum
     ):
-        """The case `recent_openings` cannot see, and the one that was reported.
-
-        Learning state is checkpointed per thread, so a learner who comes back
-        tomorrow and opens a new chat has an empty openings list. Spaced
-        repetition then brings the concept round again, the prompt is identical
-        to yesterday's, and the model writes close to the same words.
-        `concept_seen_before` comes off the mastery row, which is the only thing
-        about a learner that outlives the conversation.
-        """
+        """The case `recent_openings` cannot see, and the one that was reported."""
         model = Recorder()
         await run_teach(
             invoke=model,
@@ -432,8 +356,7 @@ class TestItDoesNotRepeatItself:
     async def test_the_in_conversation_signal_wins_when_both_are_present(
         self, curriculum
     ):
-        """Exact openings beat "seen it sometime". Sending both would ask the
-        model to avoid two things at once and get a worse answer than either."""
+        """Exact openings beat "seen it sometime"."""
         model = Recorder()
         await run_teach(
             invoke=model,
@@ -451,14 +374,7 @@ class TestItDoesNotRepeatItself:
         assert "on another day" not in model.system
 
     async def test_it_is_told_not_to_narrate_what_it_is_doing(self, curriculum):
-        """A live session produced: "Now hand the idea back in your own words:
-        saving means keeping money instead of using it now."
-
-        That is the model reading the instruction "end by handing the
-        conversation back" as a line of dialogue. The instruction is now phrased
-        as a stopping condition rather than an action, and the prohibition is
-        explicit.
-        """
+        """A live session produced: "Now hand the idea back in your own words: saving means keeping money instead of usi…"""
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum)
 
@@ -466,8 +382,7 @@ class TestItDoesNotRepeatItself:
         assert "hand" not in model.system.lower().split("HOW TO SAY IT")[-1]
 
     async def test_a_first_teaching_is_not_told_to_avoid_anything(self, curriculum):
-        """There is nothing to differ from yet, and saying so invites the model
-        to be different from the plainest correct way of putting it."""
+        """There is nothing to differ from yet, and saying so invites the model to be different from the plainest correc…"""
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum)
         assert "begin differently" not in model.system
@@ -495,8 +410,7 @@ class TestWithoutAModel:
     async def test_no_model_serves_the_authored_lesson_unchanged(
         self, curriculum, lesson
     ):
-        """The floor. This is byte-for-byte what the node produced before there
-        was a model call in it, which is what lets a keyless deployment teach."""
+        """The floor."""
         update = await run_teach(invoke=None, curriculum=curriculum)
         assert said(update) == teaching.authored_body(lesson, "9-12")
 
@@ -510,8 +424,7 @@ class TestWithoutAModel:
         assert said(update) == teaching.authored_body(lesson, "9-12")
 
     async def test_an_empty_reply_falls_back_too(self, curriculum, lesson):
-        """A model that returns "" has not written a lesson. Serving it would
-        show a child an empty message with two chips under it."""
+        """A model that returns "" has not written a lesson."""
         update = await run_teach(invoke=Recorder("   "), curriculum=curriculum)
         assert said(update) == teaching.authored_body(lesson, "9-12")
 
@@ -541,9 +454,7 @@ class TestReteach:
         assert "not say anything about their attempt" in model.system
 
     async def test_it_plans_no_widget(self, curriculum):
-        """A child who has just been shown an answer needs a sentence, not a
-        slider. `make_reteach` takes no planner at all -- asserted because the
-        obvious "improvement" is to give it one."""
+        """A child who has just been shown an answer needs a sentence, not a slider."""
         import inspect
 
         assert "plan" not in inspect.signature(teaching.make_reteach).parameters
@@ -554,8 +465,7 @@ class TestReteach:
         assert said(update) == lesson.teach_for("9-12")[-1]
 
     async def test_it_still_records_the_wrong_outcome(self, curriculum):
-        """The reveal path must reach `mastery_update` carrying a wrong answer,
-        model or no model."""
+        """The reveal path must reach `mastery_update` carrying a wrong answer, model or no model."""
         node = teaching.make_reteach(curriculum, invoke=Recorder())
         update = await node(state_for())
 
@@ -567,14 +477,7 @@ class TestReteach:
 
 
 class TestAskingForADifferentLesson:
-    """Reported live: "teach me something else" -> "Good question! Now, back to
-    what we were doing."
-
-    `is_off_topic` asks whether the message contains a money word. It does not,
-    so the most on-topic thing a learner can say inside a lesson was routed to
-    the digression handler and steered back into the lesson they had just asked
-    to leave.
-    """
+    """Reported live: "teach me something else" -> "Good question!"""
 
     @pytest.mark.parametrize(
         "text",
@@ -602,27 +505,19 @@ class TestAskingForADifferentLesson:
             "you keep the money for later",
             "why is the sky blue",
             # All three contain "something else" / "new" and are lesson answers.
-            # These are why the phrase must be attached to a teaching verb.
             "i want to buy something else with my money",
             "i saved something else last week",
             "my goal is a new bike",
         ],
     )
     async def test_these_do_not(self, text):
-        """A false positive abandons a lesson somebody was halfway through,
-        which is worse than the digression it replaces.
-
-        Bare "next" matters most: it is a chip on the wrap-up and reteach turns
-        where it means continue, and capturing it would turn a tap meaning
-        "carry on" into a discarded lesson.
-        """
+        """A false positive abandons a lesson somebody was halfway through, which is worse than the digression it replac…"""
         from app.agents.learn.graph import wants_a_different_lesson
 
         assert wants_a_different_lesson(text) is False
 
     async def test_it_places_a_new_lesson_in_the_same_turn(self, curriculum):
-        """Not next turn. A learner who asks for something else and gets nothing
-        back has been ignored."""
+        """Not next turn."""
         from langchain_core.messages import HumanMessage
 
         graph = build_learn_graph(curriculum=curriculum)
@@ -650,8 +545,7 @@ class TestAskingForADifferentLesson:
         assert "back to" not in second["messages"][-2].content.lower()
 
     async def test_a_real_digression_is_still_steered_back(self, curriculum):
-        """The move-on check runs first and must not swallow the case the
-        digression handler exists for."""
+        """The move-on check runs first and must not swallow the case the digression handler exists for."""
         from langchain_core.messages import HumanMessage
 
         graph = build_learn_graph(curriculum=curriculum)
@@ -680,11 +574,7 @@ class TestAskingForADifferentLesson:
     async def test_every_band_names_what_it_is_steering_back_to(
         self, band, curriculum
     ):
-        """"Back to what we were doing" is the reprimand `_digress` exists to
-        avoid, and it was what `16-18` and `adult` got -- they were missing from
-        the table and fell to a fallback that named nothing. `adult` is the band
-        a guardian previews in, which is where it was seen.
-        """
+        """"Back to what we were doing" is the reprimand `_digress` exists to avoid, and it was what `16-18` and `adult`…"""
         from app.agents.learn.graph import _digress
 
         lesson = curriculum.lessons[LESSON]
@@ -714,9 +604,7 @@ class TestWhoGetsScored:
         assert _learner(state_for(agent="learn_agent")) == "u-teach"
 
     async def test_a_guardian_still_gets_the_whole_lesson(self, curriculum):
-        """Non-scoring is not read-only. The parent sees what the child sees --
-        the teaching, the widget, the check question -- or the preview is not
-        showing them what their child is being taught."""
+        """Non-scoring is not read-only."""
         graph = build_learn_graph(curriculum=curriculum, invoke=Recorder())
         state = initial_state(
             session_id="s",
@@ -739,9 +627,7 @@ class TestTheGraphStillHoldsItsShape:
     async def test_a_model_backed_lesson_still_reaches_the_check_question(
         self, curriculum
     ):
-        """The end-to-end property: generated prose changes the words and
-        nothing else. Teach still hands to check, and check still asks the
-        authored question with its authored options."""
+        """The end-to-end property: generated prose changes the words and nothing else."""
         graph = build_learn_graph(curriculum=curriculum, invoke=Recorder())
         state = initial_state(
             session_id="s",
@@ -760,18 +646,7 @@ class TestTheGraphStillHoldsItsShape:
         assert len(result["quick_replies"]) >= 2
 
     async def test_a_widget_travels_the_whole_way_to_a_directive(self, curriculum):
-        """teach -> safety_out -> transport, in one test, because every seam
-        between them was written before anything crossed it.
-
-        The three failures this would have caught, each of which was live:
-        `safety_out` counting the JSON against the band cap and re-prompting it
-        away; `WIDGET_AGENTS` naming one of the three learning agents; and the
-        composed widget never being reachable at all because the node it comes
-        from did not call a model.
-
-        Fed to the transport in seven-character chunks so the markers split
-        across boundaries, which is the case the interceptor's buffer exists for.
-        """
+        """teach -> safety_out -> transport, in one test, because every seam between them was written before anything cr…"""
         import json
 
         from app.graph.nodes.safety_out import make_safety_out
@@ -819,20 +694,7 @@ class TestTheGraphStillHoldsItsShape:
         assert prose.strip().startswith("Money you keep")
 
     async def test_the_planner_runs_in_a_node_the_transport_suppresses(self):
-        """The planner's JSON must never reach a child, and the ONLY thing
-        stopping it is the node's name.
-
-        `stream_mode="messages"` streams tokens from every model call in the
-        graph and the transport suppresses them by `langgraph_node`. Planning
-        inside `teach` -- which is where it naturally wants to live, next to the
-        thing it plans for -- puts `{"kind": "compare", "rationale": "..."}` in
-        front of the lesson, exactly as the classifier's routing JSON once
-        arrived in front of an answer.
-
-        So: the node is named `plan_widget`, that name is in `INTERNAL_NODES`,
-        and `teach` makes no planning call of its own. All three are asserted,
-        because any one of them alone is a rename away from being false.
-        """
+        """The planner's JSON must never reach a child, and the ONLY thing stopping it is the node's name."""
         import inspect
 
         from app.graph.stream_interceptor import INTERNAL_NODES
@@ -844,12 +706,7 @@ class TestTheGraphStillHoldsItsShape:
         assert "plan" not in inspect.signature(teaching.make_teach).parameters
 
     async def test_a_resumed_teaching_turn_still_grounds_and_plans(self, curriculum):
-        """Entry from a `teaching` phase must land on `plan_widget`.
-
-        A lesson spans turns and the entry point IS the resumption logic. Going
-        straight to `teach` would leave `retrieved` and `pending_widget` unset,
-        so a resumed lesson would quietly be the ungrounded, widgetless one.
-        """
+        """Entry from a `teaching` phase must land on `plan_widget`."""
         from app.agents.learn.graph import _entry
 
         state = state_for()
@@ -865,8 +722,7 @@ class TestTheGraphStillHoldsItsShape:
         assert update["learning"]["pending_widget"] is None
 
     async def test_grading_is_untouched_by_any_of_this(self):
-        """Named here because this file is about adding a model to the lesson,
-        and this is the thing that must not acquire one."""
+        """Named here because this file is about adding a model to the lesson, and this is the thing that must not acqui…"""
         from app.agents.learn.graph import grade_answer
         from app.curriculum.schema import CheckQuestion
 

@@ -1,17 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MenuIcon } from "#/components/icons";
 
-/**
- * The chat's title bar.
- *
- * Deliberately not a revival of the old model-pill bar: it carries the title
- * and, on small screens, the drawer trigger. Voice settings and Save chat stay
- * where they were moved to.
- *
- * Translucent and blurred rather than solid, so the transcript scrolls under it
- * and the thread's existing top fade still has something to dissolve into —
- * a fade sitting under an opaque bar would be doing nothing.
- */
+/** The chat's title bar. */
 
 export interface ChatTitleBarProps {
 	title: string;
@@ -31,26 +21,11 @@ export function ChatTitleBar({
 }: ChatTitleBarProps) {
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(title);
-	/**
-	 * The title as it stood when the editor opened.
-	 *
-	 * `commit` used to diff the draft against the *current* title -- which moves
-	 * when the generated name lands. Opening the box during generation and then
-	 * pressing Enter without typing therefore looked like an edit, wrote the
-	 * stale truncated question back, and locked it `manual` so regeneration
-	 * could never fix it. Diffing against the value the user actually saw makes
-	 * "changed nothing" a no-op however the title moved underneath.
-	 */
+	/** The title as it stood when the editor opened. */
 	const openedWith = useRef(title);
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	/**
-	 * The title being replaced, kept only for as long as the crossfade runs.
-	 *
-	 * The first message stands in until the generated title lands, and the swap
-	 * has to dissolve rather than pop. Both sit in the same grid cell so the
-	 * outgoing one cannot change the bar's height on its way out.
-	 */
+	/** The title being replaced, kept only for as long as the crossfade runs. */
 	const [outgoing, setOutgoing] = useState<string | null>(null);
 	const shown = useRef(title);
 
@@ -120,8 +95,7 @@ export function ChatTitleBar({
 						setEditing(true);
 					}}
 				>
-					{/* Both layers occupy one grid cell, so the crossfade cannot
-					    shift the bar or the thread beneath it. */}
+					{/* Both layers occupy one grid cell, so the crossfade cannot shift the bar or the thread beneath it. */}
 					<span className="titlebar__text">{title}</span>
 					{outgoing ? (
 						<span

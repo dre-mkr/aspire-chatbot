@@ -1,39 +1,4 @@
-"""The v2 turn, as server-sent events.
-
-    event: token      data: {"i": 3, "t": "Saving means"}
-    event: directive  data: {"i": 4, "d": {"t": "quick_replies", ...}}
-    event: done       data: {"i": 9, "usage": {...}}
-    event: error      data: {"code": "unauthenticated", "message": "..."}
-
-Mounted at `/v2/chat/stream`, and it is the chat. `/chat` and `/chat/stream`
-are gone: they were one agent behind one system prompt, with no age band, no
-access matrix, no outbound gate and no router, and keeping them beside this
-would have left a second door into the same product with none of those.
-
-Everything they did that a reader depends on lives somewhere specific now --
-persistence and the response cache in `app/turn.py`, card turns in
-`app/graph/nodes/cards.py`, chips in the agents that emit them.
-
-## Prose streams. Directives do not wait for it, and it does not wait for them.
-
-`graph.astream(stream_mode=["messages", "custom"])` gives two interleaved
-channels: model tokens, and structured payloads a node wrote deliberately. The
-interceptor turns both into wire events sharing one ordinal counter, so the
-client can place a directive between two specific tokens without depending on
-packet timing.
-
-Nothing is buffered to the end. The first token leaves this process the moment
-the model produces it -- which is the property `/chat/stream` was built for and
-the reason it is not being replaced by something that assembles a JSON object.
-
-## Errors
-
-An error event is sent and the stream closes. It is never a retry: the graph
-records the question before it answers it, so retrying would ask the model
-twice and append a second turn. `error` carries a code the client can branch on
-and a message safe to show a child -- which means the message names no
-component, no provider and no rule.
-"""
+"""The v2 turn, as server-sent events."""
 
 from __future__ import annotations
 
@@ -69,29 +34,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v2", tags=["graph"])
 
 #: SSE headers.
-#:
-#: `X-Accel-Buffering: no` is the one that is easy to forget and impossible to
-#: debug from the client: nginx buffers proxied responses by default, so without
-#: it the whole stream arrives at once after the turn completes and every
-#: latency property this transport exists for is silently gone in production
-#: and present in development.
 SSE_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
 
-#: A turn that produces nothing for this long is a turn something has gone
-#: wrong with. The client's own timeout is shorter; this is the backstop that
-#: stops a hung provider holding a connection open indefinitely.
+#: A turn that produces nothing for this long is a turn something has gone wrong with.
 TURN_TIMEOUT_SECONDS = 120.0
 
 #: The longest question this transport will read.
-#:
-#: Matches the cap the v1 pydantic schema enforced. v2 reads a raw dict so that
-#: `hydrate` can see -- and log -- a client trying to set its own persona, and
-#: the cost of that choice is that every bound the model gave for free has to be
-#: written down here instead.
 MAX_MESSAGE_CHARS = 8_000
 
 
@@ -105,29 +57,7 @@ def _bearer(authorization: str | None) -> str | None:
 
 
 async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]:
-    """The turn, as encoded SSE frames.
-
-    Everything is inside one generator and one try/except on purpose: a
-    `StreamingResponse` that raises mid-body produces a truncated response with
-    a 200 status, which the client cannot distinguish from a successful short
-    answer. Catching here means every failure arrives as an `error` event.
-
-    ## The order of the bookkeeping around the graph
-
-        cache lookup ─┐
-        open the conversation (in flight)
-                      └─► graph.astream ─► directives ─► done
-                                                          │
-                                     persist ─ cache ─ summarise
-
-    Nothing after `done` can take the answer away, which is why persistence,
-    caching and summarisation all sit there. Nothing before the graph may block
-    on a database round trip that the reader would feel, which is why the
-    conversation write is started and not awaited: `open_conversation`'s
-    guarantee is that a turn whose answer fails still leaves the question
-    behind, and a task created before the graph runs delivers that whether or
-    not the graph raises.
-    """
+    """The turn, as encoded SSE frames."""
     interceptor = StreamInterceptor(widgets_enabled=get_settings().widgets_enabled)
     started = time.monotonic()
 
@@ -142,24 +72,15 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     interceptor.locale = claims.locale
 
     interaction = body.get("__widget_interaction")
+    game_score = body.get("__game_result")
+    resume = body.get("__upload_result")
     message = str(body.get("message") or "").strip()
-    if not message and not interaction:
+    # A widget interaction, a game result and an upload resume are all real turns with no prose in them; only a tur…
+    if not message and not interaction and not game_score and not resume:
         yield interceptor.error("empty_message", "There was nothing to answer.").encode()
         return
 
     # An upper bound on what one turn may cost.
-    #
-    # This transport reads a raw dict rather than a pydantic model -- deliberately,
-    # so `hydrate` can SEE a client's attempt to set `persona` and log it -- and
-    # the consequence was that nothing bounded `message` at all. A 2MB body was
-    # accepted and answered, which is a model bill an unauthenticated caller can
-    # write: an anonymous session is free, and the rate limiter counts REQUESTS,
-    # not bytes, so 30 requests a minute at 2MB each is the ceiling it enforces.
-    #
-    # 8,000 characters is the cap the v1 schema carried and nothing about the
-    # graph needs more; the longest legitimate turn measured here is a few
-    # hundred. Refused rather than truncated: silently answering half a question
-    # is worse than saying it was too long.
     if len(message) > MAX_MESSAGE_CHARS:
         logger.warning(
             "Refused a %d-character message (cap %d).", len(message), MAX_MESSAGE_CHARS
@@ -173,9 +94,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     thread_id = claims.session_id
     owner_id = await turn_service.resolve_owner(claims.user_id)
     if not await turn_service.owns_thread(thread_id, owner_id):
-        # Someone else's conversation. Refused rather than answered into,
-        # because a graph session token carries a persona and an age band and
-        # continuing a stranger's thread would carry them into it.
+        # Someone else's conversation.
         logger.warning(
             "Refusing a turn on conversation %s: it belongs to somebody else.",
             thread_id,
@@ -196,22 +115,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         owner_id=owner_id,
     )
 
-    # ── layer 1: this exact question, from this exact audience ──────────────
-    #
-    # Consulted before anything is embedded and before the graph is built. A
-    # hit skips the whole turn -- which is the point: the four landing starter
-    # chips are the highest-collision strings in the product.
-    #
-    # Skipped for two kinds of turn:
-    #
-    #   * a widget interaction -- a reply to something this child did, with no
-    #     question to key on;
-    #   * anything that wants a CARD. `turn.cacheable` already refuses to write
-    #     one, but the lookup has to refuse to read one too, and for a reason
-    #     the write side cannot cover: an entry stored before the card matcher
-    #     existed, or before it recognised a phrasing, is prose sitting under a
-    #     key a card turn now hashes to. Observed live -- "can we play true or
-    #     false" replayed a cached lesson instead of opening a game.
+    # ── layer 1: this exact question, from this exact audience ────────────── Consulted before anything is embedde…
     if message and not interaction and not _wants_card(message):
         cached = await turn_service.cached_answer(
             message,
@@ -239,27 +143,12 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     )
     config = thread_config(thread_id)
 
-    # Just the message. An interaction is NOT passed in the initial state --
-    # `hydrate` reads it off the request body, because `hydrate` clears
-    # `safety_flags` to drop the previous turn's outputs and would wipe anything
-    # placed here before `classify` could route on it. See
-    # `hydrate.CONTINUATION_FIELDS`.
+    # Just the message.
     payload: dict[str, Any] = {
         "messages": [HumanMessage(content=message)] if message else []
     }
 
     # A document the parent has just uploaded, resuming a paused registration.
-    #
-    # `register/nodes/upload.py` calls `interrupt()` and waits for the id inside
-    # the same stack frame, so the resumption is not a new turn with a message in
-    # it -- it is `Command(resume=...)` handed back to the paused node. Passing an
-    # ordinary payload here would restart the graph from START, re-run
-    # `resume_or_start`, and ask for the document again, forever.
-    #
-    # This is what made registration unfinishable. The interrupt was correct and
-    # the client had nothing to answer it with: nothing emitted the request and
-    # nothing accepted the reply, so a parent who answered every typed question
-    # reached the ID photo and the assistant simply went silent.
     upload_result = body.get("__upload_result")
     graph_input: Any = payload
     if isinstance(upload_result, dict) and upload_result.get("document_id"):
@@ -292,8 +181,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
                 await _settle(opening)
                 return
 
-        # Anything the sentinel machine was still holding. Held prose was only
-        # held in case it became a sentinel; the turn is over, so it did not.
+        # Anything the sentinel machine was still holding.
         for event in interceptor.flush():
             yield event.encode()
     except Unauthenticated:
@@ -303,9 +191,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         ).encode()
         return
     except Exception:
-        # The traceback goes to the log; the reader gets a sentence with no
-        # component names, no provider names and no rule descriptions in it.
-        # The question is still recorded -- that is what `opening` is for.
+        # The traceback goes to the log; the reader gets a sentence with no component names, no provider names and no r…
         logger.exception("v2 turn failed for session %s", thread_id)
         await _settle(opening)
         yield interceptor.error(
@@ -313,31 +199,11 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         ).encode()
         return
 
-    # ── the turn's directives ───────────────────────────────────────────────
-    #
-    # Emitted AFTER the prose, from the settled state, rather than during it.
-    # Quick replies and citations are both properties of the finished answer:
-    # `safety_out` can rewrite the chips, and the grounding check can drop a
-    # citation, so sending either early would mean sending one the turn then
-    # changed its mind about.
+    # ── the turn's directives ─────────────────────────────────────────────── Emitted AFTER the prose, from the se…
     turn = interceptor.turn or {}
     directives = _closing_directives(turn)
 
-    # A graph paused on `interrupt()` is asking the reader for something, and the
-    # payload it paused with IS the directive that asks. Nothing read it before,
-    # so the registration agent's upload request -- correctly built, correctly
-    # shaped, carrying `t: "upload"` for `DirectiveRegistry` to render -- was
-    # constructed on every document slot and thrown away on every document slot.
-    #
-    # Read from the checkpoint rather than the stream: `__interrupt__` is
-    # published on the "updates" and "values" stream modes, and this transport
-    # subscribes to "messages" and "custom" deliberately (see the interceptor).
-    # `aget_state` is one read against a checkpointer that is already open.
-    #
-    # Appended to the closing directives rather than emitted separately so it
-    # passes through the same ordinal counter as everything else -- the client
-    # positions by ordinal, and a directive outside that sequence is a directive
-    # it cannot place.
+    # A graph paused on `interrupt()` is asking the reader for something, and the payload it paused with IS the dir…
     directives.extend(await _pending_interrupts(graph, config))
 
     for directive in directives:
@@ -353,10 +219,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         }
     ).encode()
 
-    # ── after the answer ────────────────────────────────────────────────────
-    #
-    # The reader has everything. Nothing below this line may raise into the
-    # stream, and each of these three swallows its own failures.
+    # ── after the answer ──────────────────────────────────────────────────── The reader has everything.
     record.reply = interceptor.prose
     record.directives = directives
     record.citations = list(turn.get("citations") or [])
@@ -367,24 +230,12 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     await _settle(opening)
     await turn_service.persist_turn(record)
     await turn_service.cache_answer(record)
-    # Compression is a model call and it is deliberately out here, past `done`,
-    # so the reader never waits through it. See `turn.summarise_thread`.
+    # Compression is a model call and it is deliberately out here, past `done`, so the reader never waits through i…
     await turn_service.summarise_thread(graph, config)
 
 
 async def _pending_interrupts(graph: Any, config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Directives for whatever the graph is paused waiting for. Usually none.
-
-    An interrupt value is only a directive if it looks like one -- it must carry
-    `t`, the discriminator `DirectiveRegistry` switches on. Anything else is an
-    interrupt some other node raised for its own reasons, and forwarding an
-    unrecognised object to the client would render nothing and log a warning at
-    best.
-
-    Never raises into the turn. This runs after `done` is prepared and the reader
-    already has the prose; a checkpointer blip must cost the upload card, not the
-    answer.
-    """
+    """Directives for whatever the graph is paused waiting for."""
     try:
         snapshot = await graph.aget_state(config)
     except Exception:
@@ -396,9 +247,7 @@ async def _pending_interrupts(graph: Any, config: dict[str, Any]) -> list[dict[s
         for interrupt in getattr(task, "interrupts", ()) or ():
             value = getattr(interrupt, "value", None)
             if isinstance(value, dict) and value.get("t"):
-                # `type` is the node's own name for it and means nothing on the
-                # wire; `t` is the directive discriminator. Both are present in
-                # the payload `upload.py` builds, and only one belongs here.
+                # `type` is the node's own name for it and means nothing on the wire; `t` is the directive discriminator.
                 found.append({key: item for key, item in value.items() if key != "type"})
             elif value is not None:
                 logger.warning(
@@ -410,12 +259,7 @@ async def _pending_interrupts(graph: Any, config: dict[str, Any]) -> list[dict[s
 
 
 def _wants_card(message: str) -> bool:
-    """Whether the card node will claim this turn.
-
-    The same two matchers the node itself uses, so the cache and the graph
-    cannot disagree about what a card turn is. Cheap enough to run twice: two
-    regex sweeps over one sentence, against a cache round trip and a graph.
-    """
+    """Whether the card node will claim this turn."""
     from app.graph.nodes.intents import wants_eligibility, wants_game
 
     return wants_eligibility(message) or wants_game(message)
@@ -443,19 +287,7 @@ async def _replay(
     cached: "turn_service.CachedTurn",
     started: float,
 ) -> AsyncIterator[str]:
-    """Serve a cached answer over the same wire shape as a live one.
-
-    Sent as ONE token event rather than retimed into fake deltas. A cached
-    answer that pretends to be typed is a cached answer that gives up the whole
-    latency win it exists for, and the client's reveal handles a single large
-    delta correctly -- see `settled.ts`, which paces from its own buffer rather
-    than from packet arrival.
-
-    The conversation is still opened and the turn is still persisted. v1's
-    `/chat` cache hit returned without recording anything, which left a
-    question in the rail with no reply behind it whenever the hit was the first
-    turn of a thread; this does not repeat that.
-    """
+    """Serve a cached answer over the same wire shape as a live one."""
     yield interceptor.token(cached.reply).encode()
 
     directives = list(_closing_directives(
@@ -484,12 +316,7 @@ async def _replay(
 
 
 def _closing_directives(turn: dict[str, Any]) -> list[dict[str, Any]]:
-    """The directives derivable from the finished turn, in render order.
-
-    Node-emitted directives first, then chips, then citations. That is reading
-    order under an answer, and it is the order the client renders them in
-    without having to sort.
-    """
+    """The directives derivable from the finished turn, in render order."""
     out: list[dict[str, Any]] = list(turn.get("ui_directives") or [])
 
     chips = turn.get("quick_replies") or []
@@ -526,12 +353,7 @@ def _closing_directives(turn: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def _reprompt(instruction: str, text: str) -> str:
-    """`safety_out`'s one retry.
-
-    Uses the answer model rather than the classifier's: this is a rewrite of
-    prose a reader will see, and a smaller model rewriting a mascot's voice
-    produces something that no longer sounds like the mascot.
-    """
+    """`safety_out`'s one retry."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
     from app.agent import build_chat_model
@@ -562,15 +384,7 @@ async def _classifier_invoke(system: str, user: str) -> str:
 
 
 def _meter(request: Request, token: str | None) -> None:
-    """Rate-limit before the response is opened, not inside it.
-
-    An `HTTPException` raised inside a streaming generator does not become a
-    429 -- the status line has already gone out with a 200, and the client sees
-    a truncated body. So the token is decoded twice on a metered turn: once
-    here to find out who to count, once inside the generator. It is an HMAC
-    verification of a short string; the alternative is a rate limit the client
-    cannot tell apart from a network fault.
-    """
+    """Rate-limit before the response is opened, not inside it."""
     from app.limits import graph_rate_limit
 
     claims = decode_session_token(token)
@@ -585,13 +399,7 @@ def _meter(request: Request, token: str | None) -> None:
 async def chat_stream_v2(
     request: Request, authorization: str | None = Header(default=None)
 ) -> StreamingResponse:
-    """One turn through the graph.
-
-    The body is read as a raw dict rather than a pydantic model, deliberately.
-    `hydrate` has to SEE a client's attempt to set `persona` in order to log it,
-    and a typed model with `extra="ignore"` would silently drop the field before
-    anything could notice -- turning a security signal into no signal at all.
-    """
+    """One turn through the graph."""
     token = _bearer(authorization)
     _meter(request, token)
 
@@ -602,18 +410,7 @@ async def chat_stream_v2(
     if not isinstance(body, dict):
         body = {}
 
-    # Authentication is settled BEFORE the response starts, so it can be a real
-    # status code.
-    #
-    # This used to return 200 with `event: error data: {"code":"unauthenticated"}`
-    # inside the body for an unauthenticated caller. SSE does not force that --
-    # nothing had been written yet at this point -- and a 200 carrying a failure
-    # is a lie to every monitoring system, which counts it as a success.
-    #
-    # The body keeps the same `{code, message}` shape the SSE error frame uses,
-    # so the client has one thing to read whichever way the failure arrives.
-    # `_events` still re-checks: it is reachable from the widget path too, and a
-    # guard that exists in one caller is a guard that goes missing in the next.
+    # Authentication is settled BEFORE the response starts, so it can be a real status code.
     if decode_session_token(token) is None:
         return JSONResponse(
             status_code=401,
@@ -634,18 +431,7 @@ async def chat_stream_v2(
 async def widget_interaction(
     request: Request, authorization: str | None = Header(default=None)
 ) -> StreamingResponse:
-    """A widget interaction, answered as a turn.
-
-    It is a TURN, not telemetry, and that is why it streams back through the
-    same transport: the agent must respond within one turn referencing the
-    child's actual numbers, and a fire-and-forget endpoint would make that
-    impossible to deliver.
-
-    The interaction rides in on `safety_flags` rather than as a message,
-    because it is not something the child said. Putting it in `messages` would
-    mean the model reads "widget_interaction {...}" back as dialogue on every
-    later turn.
-    """
+    """A widget interaction, answered as a turn."""
     token = _bearer(authorization)
     _meter(request, token)
 
@@ -663,17 +449,33 @@ async def widget_interaction(
     )
 
 
+@router.post("/game/result")
+async def game_result(
+    request: Request, authorization: str | None = Header(default=None)
+) -> StreamingResponse:
+    """A finished game's score, answered as a turn."""
+    token = _bearer(authorization)
+    _meter(request, token)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    return StreamingResponse(
+        _events(token, {"message": "", "__game_result": body}),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
 @router.post("/documents/presign")
 async def presign(
     request: Request, authorization: str | None = Header(default=None)
 ) -> dict[str, Any]:
-    """A URL the browser may PUT one document to.
-
-    Returns 503 rather than accepting the upload when storage is unconfigured.
-    A fallback that routed file bytes through this process would mean the safe
-    path silently stops being used the moment a key is missing -- see
-    `storage/presign.py`.
-    """
+    """A URL the browser may PUT one document to."""
     from app.storage.presign import (
         StorageUnavailable,
         owns_application,
@@ -691,20 +493,10 @@ async def presign(
     if not isinstance(body, dict):
         body = {}
 
-    # The application id is a RESOURCE IDENTIFIER supplied by the client, and it
-    # was previously trusted. Anyone could mint an anonymous session at
-    # `/v2/session` and ask for a signed PUT scoped to somebody else's
-    # application -- including their `national_id` slot -- because nothing
-    # compared the id to the caller.
-    #
-    # `owns_application` is the same shape as `turn.owns_thread`, which this API
-    # already applies to conversations one file over. The default is unchanged:
-    # a caller who names no application still gets their own session's.
+    # The application id is a RESOURCE IDENTIFIER supplied by the client, and it was previously trusted.
     requested = str(body.get("application_id") or claims.session_id)
     if not await owns_application(requested, claims):
-        # 404, not 403. Confirming that an application id exists but belongs to
-        # somebody else is itself a disclosure -- the same reasoning
-        # `load_transcript` uses for "not yours" and "not there".
+        # 404, not 403.
         logger.warning(
             "Refused a presign for application %s from session %s.",
             requested,
@@ -738,28 +530,7 @@ async def presign(
 
 @router.post("/session")
 async def mint_session(request: Request) -> dict[str, Any]:
-    """Issue a graph session token for an already-authenticated caller.
-
-    The claims it signs -- persona, age band, account status -- are derived
-    from the caller's own record by `graph/account.py`, never from the request.
-    That is the whole security property of this endpoint: a body field naming
-    an age band is ignored here for exactly the same reason `hydrate` ignores
-    one, and for a much sharper consequence, because the band decides whether
-    `register_agent` (which collects a national ID) is reachable.
-
-    Two fields the client MAY set, and neither grants anything:
-
-      * `locale`, which chooses which copy is shown;
-      * `persona`, which is honoured only when it is *narrower* than the one
-        derived from the account -- an adult may ask for Nova instead of
-        Aurora, a six-year-old may not ask for Aurora instead of Stella. See
-        `account._narrowing`.
-
-    `session_id` is the conversation thread. Continuing an existing one is
-    allowed and normal; whether the caller may actually turn in it is checked
-    per-turn against the conversation's owner (`turn.owns_thread`), because
-    that is the check that has to hold even for a token minted honestly.
-    """
+    """Issue a graph session token for an already-authenticated caller."""
     from app.auth import optional_principal
 
     principal = await optional_principal(request.headers.get("authorization"))
@@ -787,8 +558,7 @@ async def mint_session(request: Request) -> dict[str, Any]:
         requested_persona=str(requested) if requested else None,
     )
     if claims.persona_request_refused:
-        # Worth a line in the log: a client repeatedly asking to widen is
-        # either a bug or a probe, and neither is visible without this.
+        # Worth a line in the log: a client repeatedly asking to widen is either a bug or a probe, and neither is visib…
         logger.warning(
             "Refused a request for persona %r on a %s band session.",
             requested,
@@ -807,25 +577,12 @@ async def mint_session(request: Request) -> dict[str, Any]:
     return {
         "token": token,
         "session_id": session_id,
-        # Echoed so the client can render the right mascot and reading level
-        # without decoding a JWT it must not depend on the shape of.
+        # Echoed so the client can render the right mascot and reading level without decoding a JWT it must not depend…
         "persona": claims.persona,
         "age_band": claims.age_band,
         "account_status": claims.account_status,
         "locale": locale,
         # Whether the persona above is the one that was asked for.
-        #
-        # The refusal was previously server-side only -- a log line and nothing
-        # else -- so a client whose request was rejected went on displaying the
-        # persona it had asked for while every turn ran as the derived one. The
-        # picker read "Aurora", the session was Orion, and the advice the reader
-        # then got was to select Aurora.
-        #
-        # Telling the client is not a permission and does not weaken anything:
-        # the grant is `persona` above, which is already authoritative and
-        # already signed into the token. This says only whether it matched the
-        # request, which the client could work out by comparing the two -- and
-        # frequently forgot to.
         "persona_refused": claims.persona_request_refused,
     }
 
@@ -836,11 +593,7 @@ def sse_lines(payload: list[WireEvent]) -> str:
 
 
 def parse_sse(raw: str) -> list[dict[str, Any]]:
-    """Read an SSE body back into events. The inverse of `WireEvent.encode`.
-
-    Lives here rather than in the tests because the eval harness reads streams
-    too, and two parsers for one format is one parser too many.
-    """
+    """Read an SSE body back into events."""
     events: list[dict[str, Any]] = []
     for block in raw.split("\n\n"):
         if not block.strip():

@@ -1,31 +1,4 @@
-/**
- * Asking for a document, and getting it to storage without touching our server.
- *
- * ## The bytes never pass through FastAPI or the graph
- *
- * The card asks the API for a presigned URL, PUTs the file straight to object
- * storage, and hands the graph a `document_id`. The file itself is never in a
- * request body we parse, never in graph state, never in a log line, and never
- * in an LLM context window.
- *
- * That is not only about cost. A birth certificate that passes through the
- * application server is a birth certificate in a request log, in an APM trace,
- * and in whatever a crash reporter captured -- three places nobody audited for
- * it. The presigned URL removes all three by removing the hop.
- *
- * ## Camera on mobile, picker on desktop
- *
- * `capture="environment"` makes a phone open the rear camera directly rather
- * than the file browser, which is the difference between a parent photographing
- * a certificate in ten seconds and hunting through a gallery. Desktop browsers
- * ignore the attribute and show a picker, which is correct there.
- *
- * ## Preview, then confirm, then retake
- *
- * Never upload on selection. A blurry photo is the normal first attempt, and
- * the moment to notice it is before it goes anywhere -- not in an admin queue
- * three days later.
- */
+/** Asking for a document, and getting it to storage without touching our server. */
 import { useEffect, useRef, useState } from "react";
 import { graphSession } from "../../lib/stream/session";
 import type { UploadDirective } from "../../lib/stream/types";
@@ -43,20 +16,9 @@ export function UploadCard({
 	onUploaded,
 }: {
 	directive: UploadDirective;
-	/**
-	 * The conversation this document belongs to.
-	 *
-	 * Needed for the presign call's credential, not merely for bookkeeping —
-	 * `/v2/documents/presign` authenticates with the GRAPH session token, which
-	 * is minted per thread and held in memory by `lib/stream/session`.
-	 */
+	/** The conversation this document belongs to. */
 	threadId?: string;
-	/**
-	 * The receipt for a document that is already in the bucket.
-	 *
-	 * Carries the mime and size as well as the id because the graph is paused
-	 * waiting for exactly this shape, and records all three against the slot.
-	 */
+	/** The receipt for a document that is already in the bucket. */
 	onUploaded: (result: {
 		document_id: string;
 		mime: string;
@@ -71,8 +33,7 @@ export function UploadCard({
 	const [progress, setProgress] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
 
-	// Object URLs are a leak if they are not revoked, and a parent adding four
-	// children uploads a dozen files in one sitting.
+	// Object URLs are a leak if they are not revoked, and a parent adding four children uploads a dozen files in on…
 	useEffect(() => {
 		return () => {
 			if (preview) URL.revokeObjectURL(preview);
@@ -83,9 +44,7 @@ export function UploadCard({
 		setProblem(null);
 		if (!candidate) return;
 
-		// Both checks are repeated server-side. They are here because a clear
-		// error before a 10MB upload beats a rejection after one, on a phone
-		// connection a parent is paying for by the megabyte.
+		// Both checks are repeated server-side.
 		if (!directive.accepts.includes(candidate.type)) {
 			setProblem(
 				`That is a ${describeType(candidate.type)}. Please send a photo or a PDF.`,
@@ -111,8 +70,7 @@ export function UploadCard({
 	const upload = async () => {
 		if (!file) return;
 		if (!threadId) {
-			// The directive arrived before the thread settled. Rare, and better
-			// said than swallowed: there is no session to sign a presign with.
+			// The directive arrived before the thread settled.
 			setPhase("failed");
 			setProblem(
 				"This conversation is still starting. Try that again in a moment.",
@@ -123,15 +81,6 @@ export function UploadCard({
 		setProgress(0);
 		try {
 			// The GRAPH session token, not the account one.
-			// `/v2/documents/presign` decodes it with `decode_session_token` and
-			// authenticates the caller by it, so the thread's own token is the
-			// credential this call needs.
-			//
-			// This card used to send `credentials: "include"` and no Authorization
-			// header at all — the only cookie-auth call in the client, against an
-			// API that has never used cookies. Every upload 401'd before storage
-			// was ever consulted, and the catch below reported it as "that did not
-			// go through", so the failure looked like a flaky network.
 			const session = await graphSession(threadId);
 
 			const presign = await fetch(`${API_URL}/v2/documents/presign`, {
@@ -145,19 +94,6 @@ export function UploadCard({
 					mime: file.type,
 					size: file.size,
 					// WHERE the object goes, and it has to be said out loud.
-					//
-					// The token authenticates the caller; it does not name the
-					// application. Left out, the endpoint scopes the upload to the
-					// caller's SESSION id — but the graph records the document
-					// under the APPLICATION id, and the two are never equal
-					// (`store.new_draft` mints a fresh UUID). Every document ever
-					// uploaded went to a key nothing reads and was recorded at a
-					// key holding nothing, and both halves succeeded, so the 404
-					// waited for an admin to open the file.
-					//
-					// Omitted rather than sent empty when the server did not
-					// supply one: absent restores the session-scoped default,
-					// where `""` would be refused as a malformed id.
 					...(directive.application_id
 						? { application_id: directive.application_id }
 						: {}),
@@ -170,10 +106,7 @@ export function UploadCard({
 			}
 			const { url, document_id: documentId, headers } = await presign.json();
 
-			// Straight to storage. Note there is no `credentials` here and no
-			// Authorization header: the signature IS the authorisation, and
-			// sending our session token to a bucket would be sending it
-			// somewhere it has no business being.
+			// Straight to storage.
 			const put = await fetch(url, {
 				method: "PUT",
 				headers: { "Content-Type": file.type, ...(headers ?? {}) },
@@ -340,19 +273,7 @@ export function UploadCard({
 	);
 }
 
-/**
- * What to tell somebody whose presign was refused.
- *
- * One sentence per reason, because they call for different actions and the card
- * used to give the same one to all of them: "That did not go through. Please try
- * again." A parent whose service has no storage configured, or whose session
- * expired, can retry that card until the battery dies.
- *
- * The 400 reason is the service's own wording (`storage.check_upload`), which
- * names the actual limit — worth showing rather than paraphrasing, since the
- * client's matching check has already passed by the time we are here and the
- * two disagreeing is exactly what the reader needs to see.
- */
+/** What to tell somebody whose presign was refused. */
 async function presignProblem(response: Response): Promise<string> {
 	let detail = "";
 	try {

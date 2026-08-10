@@ -1,9 +1,4 @@
-"""Configuration for the voice layer.
-
-Deliberately a separate settings object from `app.config.Settings`, reading the
-same .env. The whole module can then be reviewed, demoed, or switched off
-without touching the core service.
-"""
+"""Configuration for the voice layer."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -13,8 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config import BASE_DIR
 
-# MIME types a browser recorder actually produces. Anything else is rejected
-# before it can reach a paid API.
+# MIME types a browser recorder actually produces.
 ALLOWED_AUDIO_MIME = frozenset(
     {
         "audio/webm",
@@ -26,9 +20,7 @@ ALLOWED_AUDIO_MIME = frozenset(
     }
 )
 
-# Domain vocabulary passed to the STT model. Short on purpose: the cap is 1000
-# terms, but keyterms add a flat 20% to the cost of every transcription, and
-# more than 100 of them triggers 20-second minimum billing.
+# Domain vocabulary passed to the STT model.
 ASPIRE_KEYTERMS = (
     "ASPIRE",
     "ECCB",
@@ -50,26 +42,17 @@ class VoiceSettings(BaseSettings):
     )
 
     # Switches the whole module off: no routes mounted, no registry validation.
-    #
-    # Off by default, deliberately. Enabling it makes a missing voice id a hard
-    # startup failure (which is what you want before a demo), and this module
-    # needs an API key plus voice ids that a fresh checkout does not have. Left
-    # on by default, merely adding the module would stop the existing text
-    # service from booting. Set VOICE_ENABLED=true once the ids are in .env.
     voice_enabled: bool = False
     elevenlabs_api_key: str | None = None
 
-    # --- Models -----------------------------------------------------------
-    # scribe_v1 and eleven_turbo_v2_5 are both deprecated; do not put them back.
+    # --- Models ----------------------------------------------------------- scribe_v1 and eleven_turbo_v2_5 are bo…
     stt_model: str = "scribe_v2"
     # Live replies: ~75ms, 32 languages, half the per-character cost.
     tts_model_live: str = "eleven_flash_v2_5"
     # Prewarmed and number-heavy text: higher quality, reads figures better.
     tts_model_quality: str = "eleven_multilingual_v2"
 
-    # --- Voice ids --------------------------------------------------------
-    # A persona's base voice covers every language, since the multilingual
-    # models speak all three. Set a per-language variable only to override one.
+    # --- Voice ids -------------------------------------------------------- A persona's base voice covers every la…
     voice_stella: str | None = None
     voice_orion: str | None = None
     voice_aurora: str | None = None
@@ -88,12 +71,7 @@ class VoiceSettings(BaseSettings):
     voice_nova_es: str | None = None
     voice_nova_fr: str | None = None
 
-    # --- Upload limits ----------------------------------------------------
-    # Two gates, both pre-flight and free. The 25 MB cap is the absolute ceiling.
-    # The duration guard is a byte proxy for the 60s limit: WebM/Opus (what
-    # Android Chrome records) usually carries no duration in its header, so the
-    # real duration is only known once scribe_v2 returns it. 4 MB comfortably
-    # holds 60s of any compressed format; a long uncompressed WAV may trip it.
+    # --- Upload limits ---------------------------------------------------- Two gates, both pre-flight and free.
     max_upload_bytes: int = 25 * 1024 * 1024
     duration_guard_bytes: int = 4 * 1024 * 1024
     max_duration_seconds: float = 60.0
@@ -113,23 +91,10 @@ class VoiceSettings(BaseSettings):
     voice_cache_dir: Path = BASE_DIR / "data" / "voice_cache"
     voice_cache_max_bytes: int = 256 * 1024 * 1024
 
-    # Adds 20% to every transcription. Left on because local place names are
-    # otherwise mis-heard; turn it off to price-test.
+    # Adds 20% to every transcription.
     keyterms_enabled: bool = True
 
-    # Stretch goal, off by default. See router.py.
-    #
-    # NAMED `voice_realtime_enabled`, not `realtime_enabled`, and that matters:
-    # this class declares no `env_prefix`, so a field binds to its own uppercased
-    # name. As `realtime_enabled` it read REALTIME_ENABLED while `.env.example`
-    # documented VOICE_REALTIME_ENABLED and the 501 in router.py told operators
-    # to set that too -- so both the documentation and the error message named a
-    # variable that did nothing, and the one that worked was written down
-    # nowhere. Every other field here is already VOICE_*-prefixed by name; this
-    # one was the exception.
-    #
-    # The API response field stays `realtime_enabled` (see voice/schemas.py):
-    # that name is client-facing and is not what was broken.
+    # Stretch goal, off by default.
     voice_realtime_enabled: bool = False
     realtime_token_ttl_seconds: int = 60
 

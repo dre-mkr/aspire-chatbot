@@ -1,14 +1,4 @@
-"""Fill the voice cache before a demo.
-
-    uv run python scripts/prewarm_voice.py            # every persona x language
-    uv run python scripts/prewarm_voice.py --persona stella --language en
-    uv run python scripts/prewarm_voice.py --dry-run  # cost estimate only
-
-Uses eleven_multilingual_v2 rather than Flash: these lines are generated once
-and played thousands of times, so quality beats latency and the model reads
-figures more reliably. Once warmed, the demo does not depend on live API
-latency or on the network being up at all.
-"""
+"""Fill the voice cache before a demo."""
 
 from __future__ import annotations
 

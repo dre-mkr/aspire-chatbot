@@ -1,20 +1,4 @@
-"""Deleting a conversation, and what "deleted" has to actually mean.
-
-Two halves, and the second is the one worth writing down.
-
-The first is the obvious one: the row goes, its messages go with it, the rail
-stops listing it, and nobody else can aim the delete at a conversation of
-yours by guessing its id.
-
-The second is that the transcript is not the only copy. The checkpoint holds
-the same conversation in the form the model reads, and a game or eligibility
-session can be sitting under the same thread id. Removing the copy a reader can
-see and keeping the copies they cannot is the failure this endpoint exists to
-avoid, so the purge is asserted rather than assumed.
-
-Database-backed, and skipped cleanly without one -- a deletion test that
-silently passes when it could not run is worse than no test.
-"""
+"""Deleting a conversation, and what "deleted" has to actually mean."""
 
 from __future__ import annotations
 
@@ -33,8 +17,7 @@ from app.db import database_enabled, session  # noqa: E402
 from app.db.models import Conversation, Message  # noqa: E402
 from app.main import app  # noqa: E402
 
-#: P0-010 -- see the `slow` marker note in pyproject.toml. Both markers apply:
-#: this needs a live dependency AND is dominated by wall-clock cost.
+#: P0-010 -- see the `slow` marker note in pyproject.toml.
 pytestmark = [
     pytest.mark.slow,
     pytest.mark.skipif(
@@ -74,18 +57,7 @@ async def _seed(owner_id: str, thread_id: str, question: str) -> None:
 
 
 def seed(account: dict, question: str = "How do I open a savings account?") -> str:
-    """One conversation with a real transcript, owned by this account.
-
-    Written straight to the tables rather than driven through `/v2/chat/stream`,
-    which is what `test_auth_idor` does: this suite is about what a delete
-    removes, and a real turn would add a model call, a retrieval and several
-    seconds to every case for a row it can write in one statement. The state is
-    the same state a turn leaves behind.
-
-    `asyncio.run` per call is safe here and only here because `conftest` swaps
-    the engine to `NullPool` under pytest -- no connection outlives the loop
-    that opened it.
-    """
+    """One conversation with a real transcript, owned by this account."""
     thread_id = f"t-{uuid.uuid4()}"
     asyncio.run(_seed(account["user_id"], thread_id, question))
     return thread_id
@@ -123,12 +95,7 @@ def test_a_deleted_conversation_is_gone_from_the_list_and_the_transcript(
 
 
 def test_the_messages_go_with_the_conversation(client: TestClient):
-    """ON DELETE CASCADE, asserted rather than trusted.
-
-    The transcript is the whole of what somebody is asking to delete. If the
-    cascade were ever dropped from the schema this endpoint would leave every
-    message behind and the listing would still look right.
-    """
+    """ON DELETE CASCADE, asserted rather than trusted."""
     user = anonymous(client)
     thread_id = seed(user)
     assert asyncio.run(_messages(thread_id)) != []
@@ -182,8 +149,7 @@ def test_one_identity_cannot_delete_anothers_conversation(client: TestClient):
     response = client.delete(
         f"/api/conversations/{thread_id}", headers=auth(attacker)
     )
-    # 404, not 403: "not yours" and "does not exist" must stay indistinguishable,
-    # or the API becomes an oracle for which conversation ids are real.
+    # 404, not 403: "not yours" and "does not exist" must stay indistinguishable, or the API becomes an oracle for…
     assert response.status_code == 404
 
     still_there = client.get(f"/api/conversations/{thread_id}", headers=auth(victim))
@@ -221,13 +187,7 @@ class _RecordingStore:
 def test_deleting_a_conversation_purges_everything_keyed_on_its_thread_id(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):
-    """The game session, the eligibility answers, and the model's own copy.
-
-    None of these are reachable from the `conversations` row, so none of them
-    are removed by deleting it. The eligibility session is the one that matters
-    most: it holds a minor's answers, and a delete that leaves them behind is
-    not a delete.
-    """
+    """The game session, the eligibility answers, and the model's own copy."""
     from app.eligibility import store as eligibility_store
     from app.games import store as game_store
     from app.graph import checkpointer
@@ -261,14 +221,7 @@ def test_deleting_a_conversation_purges_everything_keyed_on_its_thread_id(
 
 
 def test_a_deleted_conversation_is_not_resurrected_by_the_turn_that_was_running():
-    """A delete must survive the answer that was still being written.
-
-    `persist_turn` runs seconds after the reader has their answer, and it used
-    to upsert the conversation row before appending to it. On every ordinary
-    turn that upsert is a no-op, because `open_conversation` created the row
-    before the graph ran -- so the one case where it did anything was the case
-    where the row had been deleted in between, and there it undid the delete.
-    """
+    """A delete must survive the answer that was still being written."""
     from app.turn import TurnRecord, persist_turn
 
     thread_id = f"t-{uuid.uuid4()}"
@@ -292,12 +245,7 @@ def test_a_deleted_conversation_is_not_resurrected_by_the_turn_that_was_running(
 
 
 def test_a_turn_whose_opening_write_failed_still_creates_its_conversation():
-    """The other side of the same gate, so it is not closed too far.
-
-    `open_conversation` swallows its own failures, and when it does the answer
-    must still leave a conversation behind -- otherwise a chat committed on
-    screen has nothing behind it and no route out.
-    """
+    """The other side of the same gate, so it is not closed too far."""
     from app.turn import TurnRecord, persist_turn
 
     thread_id = f"t-{uuid.uuid4()}"
@@ -323,13 +271,7 @@ def test_a_turn_whose_opening_write_failed_still_creates_its_conversation():
 def test_a_refused_delete_purges_nothing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):
-    """The ownership check gates the purge, not just the row.
-
-    None of the three stores below knows who owns anything, so reaching them
-    before the DELETE has actually removed a row would let a stranger wipe a
-    running game -- or a checkpoint -- by guessing a thread id and accepting a
-    404 in return.
-    """
+    """The ownership check gates the purge, not just the row."""
     from app.eligibility import store as eligibility_store
     from app.games import store as game_store
     from app.graph import checkpointer

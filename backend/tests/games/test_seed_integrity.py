@@ -1,10 +1,4 @@
-"""Seed content checks.
-
-The first test here is the one that earns the file. A scramble that is not an
-anagram of its word is an unsolvable puzzle, and the only thing worse than
-shipping one is shipping it to a classroom of children who each try for a minute
-and conclude they are bad at this.
-"""
+"""Seed content checks."""
 
 from __future__ import annotations
 
@@ -16,8 +10,7 @@ from app.games.models import Language, Persona
 from app.games.normalise import letters_of, normalise
 from app.games.scramble import WordScrambleGame
 
-# The ECCB handout, verbatim. If a future edit changes one of these, that is a
-# decision about the client's content and this test is where it gets noticed.
+# The ECCB handout, verbatim.
 CLIENT_HANDOUT = {
     "MONEY": "NOEYM",
     "INTEREST": "STERINTE",

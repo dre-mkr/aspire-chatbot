@@ -1,9 +1,4 @@
-"""Shared setup for the safety suites.
-
-`SESSION_SECRET` is set before any app import because `graph/identity.py`
-signs with it and `auth._secret()` refuses -- correctly -- to fall back to a
-default. The value is long enough to pass the 32-byte strength check.
-"""
+"""Shared setup for the safety suites."""
 
 from __future__ import annotations
 
@@ -21,12 +16,7 @@ from app.graph.state import initial_state  # noqa: E402
 
 @pytest.fixture
 def token_for():
-    """Mint a session token for an arbitrary identity.
-
-    A fixture rather than a helper import so that a test reads as "give me a
-    token for a nine-year-old on Stella" rather than as seven keyword
-    arguments.
-    """
+    """Mint a session token for an arbitrary identity."""
 
     def _mint(
         *,
@@ -73,12 +63,7 @@ def state_for():
 
 @pytest.fixture
 def recorder():
-    """A `reprompt` that records its calls and returns a scripted reply.
-
-    The safety gates take their re-prompt as an injected callable precisely so
-    the tests can do this: assert on the instruction the model would have been
-    given, without a network call and without a model's variability.
-    """
+    """A `reprompt` that records its calls and returns a scripted reply."""
 
     class Recorder:
         def __init__(self) -> None:

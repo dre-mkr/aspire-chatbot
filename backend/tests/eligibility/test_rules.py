@@ -1,11 +1,4 @@
-"""The verdict logic, tested against the audit rather than against itself.
-
-Every assertion here traces to a knowledge-base row named in
-`app.eligibility.rules.SOURCES`. Where a test asserts that something is NOT a
-firm refusal, that is the audit's finding and the reason is in the docstring --
-those are the cases where getting it wrong turns away someone who was entitled
-to the programme, so they are the ones worth pinning.
-"""
+"""The verdict logic, tested against the audit rather than against itself."""
 
 from __future__ import annotations
 
@@ -42,11 +35,7 @@ def test_clean_answers_are_likely_eligible_and_nothing_stronger():
 
 
 def test_non_citizen_is_the_only_firm_refusal():
-    """ASP-039: "Non-citizens and permanent residents are not eligible."
-
-    The one place the source says no outright. Everything else that is not a
-    clean yes is a NEEDS CONFIRMATION -- the tests below are what hold that line.
-    """
+    """ASP-039: "Non-citizens and permanent residents are not eligible." The one place the source says no outright."""
     decision = decide({**CLEAN, "citizenship": "neither"})
     assert decision.verdict is Verdict.NOT_YET
     assert decision.criterion is Criterion.CITIZENSHIP
@@ -61,25 +50,14 @@ def test_under_five_is_not_yet_with_a_year_to_come_back():
 
 
 def test_nineteen_to_twentyone_is_never_a_flat_no():
-    """The audit's headline finding.
-
-    ASP-030 extends eligibility to anyone "18 or under on 13 December 2023" --
-    born on or after 14 December 2004, which today is people aged up to 21.
-    ASP-043 and ASP-242 read the other way. A naive `age > 18 -> no` would refuse
-    people the source may well cover, which is exactly the confidently-wrong
-    rejection this feature exists to avoid.
-    """
+    """The audit's headline finding."""
     decision = decide({**CLEAN, "age": "19to21"})
     assert decision.verdict is Verdict.NEEDS_CONFIRMATION
     assert decision.criterion is Criterion.AGE_COHORT
 
 
 def test_over_twentyone_still_surfaces_the_cohort_clause():
-    """Outside both clauses on any ordinary birthday -- but we asked for a band.
-
-    So the outcome is NOT_YET rather than NEEDS_CONFIRMATION, and the cohort
-    question stays in `unresolved` so the copy can still offer the mentor route.
-    """
+    """Outside both clauses on any ordinary birthday -- but we asked for a band."""
     decision = decide({**CLEAN, "age": "22plus"})
     assert decision.verdict is Verdict.NOT_YET
     assert decision.criterion is Criterion.AGE_COHORT
@@ -87,23 +65,14 @@ def test_over_twentyone_still_surfaces_the_cohort_clause():
 
 
 def test_living_abroad_is_a_question_not_a_refusal():
-    """Audit finding B.
-
-    ASP-032 is firm ("must reside"), but ASP-133 and ASP-243 say a participant
-    who relocates can continue with arrangements, and neither addresses a NEW
-    applicant already abroad. The source does not settle it, so neither do we.
-    """
+    """Audit finding B."""
     decision = decide({**CLEAN, "residence": "abroad"})
     assert decision.verdict is Verdict.NEEDS_CONFIRMATION
     assert decision.criterion is Criterion.RESIDENCE
 
 
 def test_not_in_school_is_a_question_not_a_refusal():
-    """Audit finding C.
-
-    ASP-033 is firm, but silent on a five-year-old who has not started yet and
-    on a school leaver still inside the age band.
-    """
+    """Audit finding C."""
     decision = decide({**CLEAN, "school": "not_in_school"})
     assert decision.verdict is Verdict.NEEDS_CONFIRMATION
     assert decision.criterion is Criterion.SCHOOL
@@ -121,11 +90,7 @@ def test_citizen_by_descent_passes_cleanly():
 
 @pytest.mark.parametrize("island", ["st_kitts", "nevis"])
 def test_island_never_changes_the_verdict(island: str):
-    """ASP-044, ASP-247: both islands are covered identically.
-
-    The question is asked because it carries the residency gate and routes the
-    walkthrough -- never because it decides anything.
-    """
+    """ASP-044, ASP-247: both islands are covered identically."""
     decision = decide({**CLEAN, "residence": island})
     assert decision.verdict is Verdict.LIKELY_ELIGIBLE
     assert decision.criterion is Criterion.NONE
@@ -133,10 +98,7 @@ def test_island_never_changes_the_verdict(island: str):
 
 @pytest.mark.parametrize("who", ["guardian", "self", "unsure"])
 def test_who_registers_never_changes_the_verdict(who: str):
-    """ASP-049, ASP-050, ASP-295 make this paperwork, never a criterion.
-
-    "I am not sure yet" in particular must never cost anyone a verdict.
-    """
+    """ASP-049, ASP-050, ASP-295 make this paperwork, never a criterion."""
     assert decide({**CLEAN, "registrant": who}).verdict is Verdict.LIKELY_ELIGIBLE
 
 
@@ -182,11 +144,7 @@ def _every_combination():
 
 
 def test_every_reachable_answer_set_reaches_one_of_the_three_outcomes():
-    """The no-dead-ends guarantee, checked by exhaustion rather than by sampling.
-
-    The space is small enough to enumerate -- a few thousand combinations -- so
-    there is no reason to trust a spot check for a property this load-bearing.
-    """
+    """The no-dead-ends guarantee, checked by exhaustion rather than by sampling."""
     seen = set()
     for answers in _every_combination():
         decision = decide(answers)
@@ -235,8 +193,7 @@ def test_the_flow_never_exceeds_six_questions():
 
 
 def test_born_here_is_asked_for_a_birth_certificate_not_a_descent_certificate():
-    """ASP-035/036. Handing this family a descent certificate to find is the
-    generic-list failure the personalisation exists to prevent."""
+    """ASP-035/036."""
     documents = documents_for({**CLEAN, "citizenship": "born_skn"})
     assert "birth_certificate" in documents
     assert "descent_certificate" not in documents
@@ -264,11 +221,7 @@ def test_guardian_id_appears_only_when_an_adult_is_filling_the_form():
 
 
 def test_no_document_outside_the_audited_set():
-    """The hard rule, as an assertion.
-
-    A document that is not in this list is not in the knowledge base, and a
-    checklist item nobody audited is exactly what the flow must never invent.
-    """
+    """The hard rule, as an assertion."""
     audited = {
         "birth_certificate",  # ASP-035, ASP-036
         "descent_certificate",  # ASP-028, ASP-035, ASP-038
@@ -284,9 +237,7 @@ def test_no_document_outside_the_audited_set():
 
 
 def test_only_st_kitts_is_sent_to_the_basseterre_walk_in_centre():
-    """ASP-299, ASP-300 name a centre in Basseterre and the knowledge base names
-    no equivalent on Nevis. Sending someone on Nevis there would be inventing a
-    service."""
+    """ASP-299, ASP-300 name a centre in Basseterre and the knowledge base names no equivalent on Nevis."""
     assert "in_person_kitts" in steps_for({**CLEAN, "residence": "st_kitts"})
     for elsewhere in ("nevis", "abroad", "unsure"):
         steps = steps_for({**CLEAN, "residence": elsewhere})

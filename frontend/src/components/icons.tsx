@@ -1,10 +1,6 @@
 import type { SVGProps } from "react";
 
-/**
- * Line icons drawn on a 24px grid, stroked in `currentColor` so they inherit
- * whatever the surrounding chrome is set to. Decorative by default — every
- * caller supplies its own accessible name on the control.
- */
+/** Line icons drawn on a 24px grid, stroked in `currentColor` so they inherit whatever the surrounding chrome is… */
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 function Icon({ size = 18, strokeWidth = 1.9, children, ...rest }: IconProps) {
@@ -190,9 +186,7 @@ export function PencilIcon(props: IconProps) {
 	);
 }
 
-/* Delete, in the rail's row menu. A lidded bin rather than an X or a minus:
-   both of those read as "close" or "remove from this list", and this one is
-   permanent — the glyph should say so before the confirmation does. */
+/* Delete, in the rail's row menu. */
 export function TrashIcon(props: IconProps) {
 	return (
 		<Icon size={16} {...props}>
@@ -205,9 +199,7 @@ export function TrashIcon(props: IconProps) {
 	);
 }
 
-/* The per-conversation overflow trigger in the rail. Filled dots rather than
-   stroked circles: at 17px a 1.8px stroke on a 1.6px radius closes up into a
-   smudge. */
+/* The per-conversation overflow trigger in the rail. */
 export function MoreIcon(props: IconProps) {
 	return (
 		<Icon size={17} {...props}>
@@ -218,10 +210,7 @@ export function MoreIcon(props: IconProps) {
 	);
 }
 
-/* Sliders, deliberately not a mic variant: this opens voice *settings* and it
-   sits two controls away from the actual mic. Two microphone-ish glyphs in one
-   row would leave neither meaning anything. Drawn on the same 24px grid as its
-   neighbours rather than pulled from an icon set. */
+/* Sliders, deliberately not a mic variant: this opens voice *settings* and it sits two controls away from the a… */
 export function SlidersIcon(props: IconProps) {
 	return (
 		<Icon size={17} {...props}>
@@ -235,9 +224,7 @@ export function SlidersIcon(props: IconProps) {
 	);
 }
 
-/* Filled rather than stroked, unlike its neighbours: stop is the one control
-   here that halts something already running, and the solid mark is the
-   universal shape for it. Same 24px grid, same currentColor. */
+/* Filled rather than stroked, unlike its neighbours: stop is the one control here that halts something already… */
 export function StopIcon(props: IconProps) {
 	return (
 		<Icon size={16} {...props}>

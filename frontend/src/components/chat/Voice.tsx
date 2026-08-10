@@ -1,11 +1,7 @@
 import { CloseIcon, MicIcon } from "#/components/icons";
 import { formatSeconds, type VoiceNote as Note } from "#/lib/aspire/use-voice";
 
-/**
- * The listening indicator: ASPIRE's brand star, repeated and rising outward.
- * Opacity tracks the input level, so the shape reacts without pretending to be
- * a real waveform.
- */
+/** The listening indicator: ASPIRE's brand star, repeated and rising outward. */
 const STAR = "M0,-6 L1.6,-1.6 L6,0 L1.6,1.6 L0,6 L-1.6,1.6 L-6,0 L-1.6,-1.6 Z";
 
 /** Rank 0 is the centre; higher ranks light up only at higher levels. */
@@ -82,10 +78,7 @@ interface ConsentProps {
 	onDeny: () => void;
 }
 
-/**
- * Shown before the microphone is ever opened. The three promises are the ones
- * the backend actually keeps, so this panel and the service agree.
- */
+/** Shown before the microphone is ever opened. */
 export function VoiceConsent({ onAllow, onDeny }: ConsentProps) {
 	return (
 		<section className="voice-consent" aria-label="Microphone permission">
@@ -140,8 +133,7 @@ interface NoteProps {
 }
 
 export function VoiceNote({ note, onAction, onDismiss }: NoteProps) {
-	// <output> rather than a div with role="status": it is a live region
-	// announcing the result of the recording the user just made.
+	// <output> rather than a div with role="status": it is a live region announcing the result of the recording the…
 	return (
 		<output className="voice-note" data-tone={note.tone}>
 			<span className="voice-note__icon" aria-hidden="true">

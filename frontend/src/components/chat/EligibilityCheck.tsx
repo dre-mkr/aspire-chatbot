@@ -22,26 +22,7 @@ import {
 	saveEligibilityResult,
 } from "#/lib/aspire/eligibility";
 
-/**
- * The ASPIRE eligibility pre-check, played in the thread.
- *
- * Five tapped questions and then one of three outcomes, with a document list
- * built from the answers rather than printed whole. The card never decides
- * anything: pressing an option asks the server, and the server's rules all cite
- * a knowledge-base row. That is worth more here than on the games card — a
- * confidently wrong "you do not qualify" turns away a young person who was
- * entitled to the programme, and there is no undo for that.
- *
- * Three properties the layout is built around:
- *
- * - **The pre-check banner is chrome, not fine print.** It sits in the header
- *   for the whole flow and again under the verdict. It is never the thing that
- *   gets cut to make something fit.
- * - **"I am not sure" is on every question** and is styled as an ordinary
- *   option, not an escape hatch. It costs a conditional result, never a block.
- * - **Nothing here is a dead end.** Every outcome carries somewhere to go next,
- *   including the two that are not a yes.
- */
+/** The ASPIRE eligibility pre-check, played in the thread. */
 
 interface EligibilityCheckProps {
 	threadId: string;
@@ -81,14 +62,7 @@ export function EligibilityCheck({
 		}
 	}, []);
 
-	/**
-	 * Answering is also where a finished flow is banked.
-	 *
-	 * The server deletes the session in the same call that produces the result,
-	 * so this response is the only time the client will ever see it. Writing it
-	 * to device storage here is what makes a refresh after the verdict show the
-	 * verdict rather than an empty card.
-	 */
+	/** Answering is also where a finished flow is banked. */
 	const choose = (value: string) =>
 		guard(async () => {
 			const next = await answerEligibility(threadId, value);
@@ -114,8 +88,7 @@ export function EligibilityCheck({
 
 	const leave = () =>
 		guard(async () => {
-			// A finished flow has no session left to quit, and asking anyway would
-			// be a 200 that means nothing. Either way the card closes.
+			// A finished flow has no session left to quit, and asking anyway would be a 200 that means nothing.
 			if (state.active) await quitEligibility(threadId).catch(() => undefined);
 			onChanged(null);
 		});
@@ -123,11 +96,7 @@ export function EligibilityCheck({
 	return (
 		<section
 			className="game elig"
-			// The subtitle is the card's accessible description rather than a
-			// second line of chrome. Visually it duplicated the banner below --
-			// and being `flex: 1` with an ellipsis, it lost that fight at every
-			// width where the title was long, rendering "Une vérificati…" in
-			// French. The banner says the same thing, in full, always.
+			// The subtitle is the card's accessible description rather than a second line of chrome.
 			aria-label={`${labels.title}. ${labels.subtitle}`}
 			data-verdict={result?.verdict}
 		>
@@ -138,9 +107,7 @@ export function EligibilityCheck({
 				<span className="game__title">{labels.title}</span>
 
 				{question ? (
-					/* Decorative: the card's own label announces which question this
-					   is, and five unlabelled markers read as noise after it. Same
-					   primitive the games use -- one progress language per product. */
+					/* Decorative: the card's own label announces which question this is, and five unlabelled markers read as noise… */
 					<div className="game__steps" aria-hidden="true">
 						{Array.from({ length: question.total }, (_, i) => {
 							const n = i + 1;
@@ -170,8 +137,7 @@ export function EligibilityCheck({
 				</button>
 			</header>
 
-			{/* Not fine print, and not under a disclosure. This is the one claim the
-			    card has to keep making the whole way through. */}
+			{/* Not fine print, and not under a disclosure. */}
 			<p className="elig__banner">
 				<AlertIcon />
 				<span>{labels.banner}</span>
@@ -232,9 +198,7 @@ function QuestionPanel({
 			<p className="game__eyebrow">
 				<span>{progress}</span>
 				<span className="game__rule" aria-hidden="true" />
-				{/* Reads the question, and only the question. The options are a list
-				    of things to choose between — read aloud they become a wall of
-				    speech that has to be held in memory to be any use. */}
+				{/* Reads the question, and only the question. */}
 				{speakAvailable && onSpeak ? (
 					<button
 						type="button"
@@ -250,16 +214,14 @@ function QuestionPanel({
 			<h3 className="elig__question">{question.text}</h3>
 			{question.help ? <p className="elig__help">{question.help}</p> : null}
 
-			{/* Tappable options, never free text: the answer set is finite on every
-			    question, and typing an age is both slower and more than we need. */}
+			{/* Tappable options, never free text: the answer set is finite on every question, and typing an age is both slow… */}
 			<div className="elig__options">
 				{question.options.map((option) => (
 					<button
 						key={option.value}
 						type="button"
 						className="elig__option"
-						// "I am not sure" is an ordinary option, deliberately not
-						// styled as a way out. It never blocks progress.
+						// "I am not sure" is an ordinary option, deliberately not styled as a way out.
 						data-chosen={option.value === question.answered_with || undefined}
 						onClick={() => onChoose(option.value)}
 						disabled={busy}
@@ -338,8 +300,7 @@ function ResultPanel({
 				</p>
 			))}
 
-			{/* The unresolved criterion, and the question to put to a person about
-			    it. Written to be read out or pasted into an email unchanged. */}
+			{/* The unresolved criterion, and the question to put to a person about it. */}
 			{result.mentor_question ? (
 				<div className="elig__mentor">
 					{result.unresolved.length > 1 ? (
@@ -387,9 +348,7 @@ function ResultPanel({
 				))}
 			</div>
 
-			{/* Repeated under the verdict, where the decision would be read. The
-			    header banner is not enough on its own: this is the moment somebody
-			    screenshots the card and shows it to a relative. */}
+			{/* Repeated under the verdict, where the decision would be read. */}
 			<p className="elig__disclaimer">{result.disclaimer}</p>
 
 			<div className="game__actions">
@@ -406,13 +365,7 @@ function ResultPanel({
 	);
 }
 
-/**
- * The personalised document list.
- *
- * Ticks persist per conversation and survive a reload, because gathering
- * documents happens over days rather than in one sitting. Device-local: a tick
- * is a fact about someone's paperwork and has no business on a server.
- */
+/** The personalised document list. */
 function Checklist({
 	threadId,
 	items,
@@ -450,9 +403,7 @@ function Checklist({
 							data-checked={(!item.alternative && on) || undefined}
 							data-alt={item.alternative || undefined}
 						>
-							{/* An alternative gets no tick box. A passport that stands in
-							    for a birth certificate is not a second thing to find, and
-							    a box beside it says it is. */}
+							{/* An alternative gets no tick box. */}
 							{item.alternative ? (
 								<p className="elig__doc-title elig__doc-title--alt">
 									{item.title}
@@ -477,9 +428,7 @@ function Checklist({
 							<p className="elig__doc-meta">
 								<b>{labels.where_label}:</b> {item.where}
 							</p>
-							{/* The source's own hedge. Never dropped to make the card
-							    shorter — a list that reads as settled when the programme
-							    has not settled it is the defect this avoids. */}
+							{/* The source's own hedge. */}
 							{item.caveat ? (
 								<p className="elig__doc-caveat">{item.caveat}</p>
 							) : null}

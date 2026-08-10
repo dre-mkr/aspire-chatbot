@@ -1,18 +1,4 @@
-"""Uploading into somebody else's application.
-
-`POST /v2/documents/presign` read `application_id` from the request body and
-signed an upload URL scoped to it, with no check. Anyone could mint an anonymous
-session at `/v2/session` and obtain a signed PUT into a stranger's
-`applications/<id>/national_id/` prefix -- on a benefits programme handling
-minors' identity documents.
-
-The same API already got this right one file over (`turn.owns_thread`, applied to
-conversations in `api/stream.py`). These tests pin the rule for applications.
-
-Storage is stubbed rather than real: what is under test is the AUTHORISATION
-decision, which happens before anything is signed. A stub keeps the tests
-hermetic and keeps a bucket out of CI.
-"""
+"""Uploading into somebody else's application."""
 
 from __future__ import annotations
 
@@ -90,12 +76,7 @@ def _session(client, device: str) -> str:
 
 
 def test_presign_refuses_a_foreign_application_id(client, storage):
-    """The original exploit, end to end.
-
-    An unauthenticated caller mints a session and asks for an upload URL scoped
-    to an application id it invented. Before the fix this returned 200 and a
-    signed PUT into `applications/<victim>/national_id/`.
-    """
+    """The original exploit, end to end."""
     token = _session(client, "attacker-device")
     victim = "11111111-1111-1111-1111-111111111111"
 
@@ -112,11 +93,7 @@ def test_presign_refuses_a_foreign_application_id(client, storage):
 
 
 def test_presign_still_works_for_the_callers_own_application(client, storage):
-    """The fix must not close the door on the legitimate path.
-
-    With no `application_id` in the body the endpoint uses the caller's own
-    session id, which is exactly what the register flow relies on.
-    """
+    """The fix must not close the door on the legitimate path."""
     token = _session(client, "honest-device")
 
     response = client.post(

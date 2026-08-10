@@ -1,31 +1,4 @@
-"""Getting a session without having an account.
-
-A first-time visitor must be able to open the app and ask a question. No modal,
-no interstitial, no "create an account to continue". So the very first thing the
-client does is come here for an identity, and that identity is a real row that
-owns real conversations.
-
-## The one rule
-
-`POST /api/auth/anonymous` **always creates a new user**, even when the caller
-sends a `device_id` that already exists in the table.
-
-That is not a missed optimisation. Looking the device up and returning a session
-for whoever owns it would mean "hand me a device id and I will hand you their
-conversations", which is the exact hole this whole change closes. The device id
-is written down for abuse investigation and is never read back to authenticate.
-
-The consequence is worth stating plainly: a browser that loses its token loses
-its anonymous history, even if it still has the device id. That is the honest
-cost of not having a credential, and it is what registering fixes.
-
-## Abuse
-
-Anonymous access removes the usual lever -- there is no address to ban -- so the
-limit is the lever. Sessions are capped per address per hour, counted in Valkey
-where it is available and permitted where it is not: a broken cache must not
-lock everybody out of a product whose whole point is being open.
-"""
+"""Getting a session without having an account."""
 
 from __future__ import annotations
 
@@ -57,15 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _record_cap_bypass() -> None:
-    """Count a session admitted without its cap being checked.
-
-    Written to the same instance whose failure caused the bypass, which sounds
-    circular and is not: the common case is Valkey answering slowly or one
-    command erroring, not the whole instance being gone. When it genuinely is
-    gone this write fails too and the counter simply does not move -- which is
-    why the counter's absence must never be read as "no bypasses", and why
-    `/health` reports it alongside the cache's own reachability.
-    """
+    """Count a session admitted without its cap being checked."""
     client = cache.get_client()
     if client is None:
         return
@@ -79,14 +44,12 @@ async def _record_cap_bypass() -> None:
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-#: A client-minted id: a UUID, or the `t-<base36>-<base36>` fallback used where
-#: `crypto.randomUUID` is unavailable (it needs a secure context).
+#: A client-minted id: a UUID, or the `t-<base36>-<base36>` fallback used where `crypto.randomUUID` is unavailab…
 _DEVICE_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 
 
 class AnonymousRequest(BaseModel):
-    #: Optional. The session does not depend on it and is not keyed by it; it is
-    #: recorded so that a burst of sessions can be attributed to one browser.
+    #: Optional.
     device_id: str | None = Field(default=None, max_length=64)
 
 
@@ -100,33 +63,14 @@ class SessionResponse(BaseModel):
     expires_in: int
     #: Who the account is for, as chosen at sign-up.
     role: str = "participant"
-    #: The persona this account resolves to, so the client can show the right
-    #: one immediately instead of leaving the picker on "Everyone" and waiting
-    #: for somebody to guess.
-    #:
-    #: NOT a grant and not a claim. The authorising copy is minted separately by
-    #: `POST /v2/session` and signed; this is the same derivation run for
-    #: display, and a client that tampered with it would change nothing but its
-    #: own menu. It is sent here because the alternative -- deriving it in the
-    #: browser from a date of birth -- is a second implementation of
-    #: `DEFAULT_PERSONA`, and the last time this product had one of those it
-    #: locked the whole 9-12 band out.
+    #: The persona this account resolves to, so the client can show the right one immediately instead of leaving the…
     persona: str = "stella"
 
 
 def to_session(user: User, token: str) -> SessionResponse:
     from app.graph.account import YOUNGEST_BAND, band_for, persona_for
 
-    # An anonymous row has no date of birth and `is_minor` False, which
-    # `band_for` reads as `adult` -- it cannot distinguish "no date recorded
-    # because nobody signed up" from "an adult". So the account type answers it
-    # here, before the band table is asked.
-    #
-    # Without this the picker would auto-select Aurora for every first-time
-    # visitor, which is both wrong and the most permissive thing it could
-    # display. See the note in `graph/account.claims_for` on the same row: the
-    # ACCESS consequence of that band is a separate and larger problem than this
-    # display one, and is not fixed here.
+    # An anonymous row has no date of birth and `is_minor` False, which `band_for` reads as `adult` -- it cannot di…
     if user.account_type == ACCOUNT_ANONYMOUS:
         band, role = YOUNGEST_BAND, "participant"
     else:
@@ -147,23 +91,13 @@ def to_session(user: User, token: str) -> SessionResponse:
 
 
 async def _within_limit(ip: str) -> bool:
-    """Whether this address may create another anonymous session this hour.
-
-    Fails open. A cache outage must not stop a child opening the app; the cap
-    exists to blunt scripted abuse, and the cost of missing some of it for an
-    hour is far below the cost of refusing everybody.
-    """
+    """Whether this address may create another anonymous session this hour."""
     client = cache.get_client()
     if client is None:
         return True
 
     settings = get_settings()
-    # The namespace is overridable so concurrent test runs cannot count against
-    # each other. Two pytest runs overlapping on the shared Valkey made this
-    # cap's own test fail while passing in isolation (P11-001), and CI now runs
-    # pytest on every push -- so two PRs would flake each other on an abuse
-    # control, which reads as a real regression and is not. Unset in production,
-    # where the plain namespace is what is wanted.
+    # The namespace is overridable so concurrent test runs cannot count against each other.
     prefix = os.environ.get("ASPIRE_CACHE_NAMESPACE", "")
     key = f"aspire:{prefix}anon-sessions:{hash_ip(ip)}"
     try:
@@ -173,25 +107,6 @@ async def _within_limit(ip: str) -> bool:
         return count <= settings.anonymous_sessions_per_ip_per_hour
     except Exception:
         # DECISION (P1-010, 2026-08-04): fail OPEN, and make it visible.
-        #
-        # This is the only control on anonymous identity creation, and it
-        # disappears exactly when Valkey is unreachable -- which is plausibly
-        # during the load an attacker is causing. That is a real tradeoff and it
-        # is taken deliberately rather than by accident:
-        #
-        #   Failing closed means a Valkey outage stops every new visitor from
-        #   using the service at all. This is a government service for children;
-        #   an outage that turns into a total lockout is a worse failure than a
-        #   window in which anonymous sessions are uncapped. The blast radius of
-        #   failing open is bounded -- sessions are cheap rows, and the
-        #   expensive endpoints have their own limiter (P1-001) which fails
-        #   CLOSED precisely because model calls are what cost money.
-        #
-        #   So: the cheap control fails open, the expensive one fails closed.
-        #
-        # What was missing was not the decision, it was the visibility. It is
-        # counted now, so "the cap is not being enforced" is a number somebody
-        # can alert on rather than a log line nobody reads.
         logger.warning("Rate-limit check failed; allowing the session.", exc_info=True)
         await _record_cap_bypass()
         return True
@@ -232,16 +147,7 @@ async def create_anonymous_session(
         db.add(user)
         await db.flush()
         token = mint_token(user.id, user.account_type, user.session_epoch)
-        # Enough to investigate a burst, and no more: which identity, from which
-        # (hashed) source, seeded by which browser. No address, no user agent.
-        #
-        # The device id is hashed with the same treatment as the IP beside it.
-        # It is not a secret and is never accepted as auth, but it IS a stable
-        # per-browser identifier for a child, and it was sitting in plaintext
-        # next to an address that had been carefully pseudonymised -- one line,
-        # two identifiers, two different standards of care. Hashed, it still
-        # correlates two log lines from the same browser, which is the entire
-        # reason it is logged.
+        # Enough to investigate a burst, and no more: which identity, from which (hashed) source, seeded by which brows…
         logger.info(
             "anonymous session created user=%s ip_hash=%s device_hash=%s",
             user.id,
@@ -255,13 +161,7 @@ async def create_anonymous_session(
 async def read_session(
     principal: Principal | None = Depends(optional_principal),
 ) -> SessionResponse | None:
-    """Who the caller is, as the server sees them.
-
-    Returns null rather than 401 for a missing or expired token: "you are nobody
-    yet" is a normal state for this product, not an error. The client uses it to
-    decide whether to ask for an anonymous session, and to settle the auth
-    control's state before first paint so it never renders one state and swaps.
-    """
+    """Who the caller is, as the server sees them."""
     if principal is None or not database_enabled():
         return None
 
@@ -269,21 +169,14 @@ async def read_session(
         if db is None:
             return None
         user = await db.get(User, principal.user_id)
-        # A token whose epoch has been superseded is dead: the identity was
-        # claimed, or signed out. Refused here rather than anywhere else, so
-        # every route that resolves a session gets the check for free.
+        # A token whose epoch has been superseded is dead: the identity was claimed, or signed out.
         if user is None or user.session_epoch != principal.session_epoch:
             return None
         return to_session(user, "")
 
 
 async def resolve(principal: Principal | None) -> User | None:
-    """The live user behind a verified token, or None.
-
-    The epoch check is the revocation mechanism: claiming an anonymous identity
-    and signing out both bump it, which retires every token already issued
-    without a denylist to maintain.
-    """
+    """The live user behind a verified token, or None."""
     if principal is None or not database_enabled():
         return None
     async with session() as db:

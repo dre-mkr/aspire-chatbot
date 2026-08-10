@@ -1,15 +1,4 @@
-"""The slot loop, the schema's authority, and the PII split.
-
-The acceptance criteria for E1 are three sentences and each is a test here:
-
-  * a full guardian + one child application completes;
-  * killing the session mid-way and resuming picks up at the exact next slot;
-  * dumping the rolling summary after completion shows zero DOB, national ID or
-    address.
-
-E2's, E3's and E4's are here too: an upload carries only an id, a blurry photo
-gets exactly one retake, and editing item 4 changes only item 4.
-"""
+"""The slot loop, the schema's authority, and the PII split."""
 
 from __future__ import annotations
 
@@ -58,11 +47,7 @@ async def answer(graph, state, text: str):
 
 class TestTheSchemaIsTheSourceOfTruth:
     def test_the_walk_is_guardian_first_then_child(self):
-        """Order comes from a tuple, not from the conversation.
-
-        A parent who volunteers the child's name during the guardian section
-        has it recorded and is still asked for their own address next.
-        """
+        """Order comes from a tuple, not from the conversation."""
         paths = [slot.path for slot in rs.SLOTS]
         guardian = [index for index, path in enumerate(paths) if path.startswith("guardian.")]
         child = [index for index, path in enumerate(paths) if path.startswith("child.")]
@@ -75,13 +60,7 @@ class TestTheSchemaIsTheSourceOfTruth:
         assert rs.next_missing(filled).path == "guardian.national_id"
 
     def test_an_optional_slot_is_still_asked_for(self):
-        """`optional` decides whether it may be DECLINED, not whether it is asked.
-
-        The walk used to step over optional slots entirely, which is why
-        `guardian.email`, `child.school` and `child.photo` were unreachable.
-        Declining is expressed through `barred` -- see the next test -- so that
-        nothing has to be written into the answers to represent a refusal.
-        """
+        """`optional` decides whether it may be DECLINED, not whether it is asked."""
         filled = {slot.path: "x" for slot in rs.GUARDIAN_SLOTS if not slot.optional}
         assert rs.next_missing(filled).path == "guardian.email"
 
@@ -183,11 +162,7 @@ class TestPIISplit:
         )
 
     def test_a_completed_application_leaves_nothing_in_a_summary(self):
-        """The acceptance criterion, stated directly.
-
-        Every sensitive value a full application collects, run through the
-        summary redactor, must survive nowhere.
-        """
+        """The acceptance criterion, stated directly."""
         collected = {
             "guardian.full_name": "Rachel Providence",
             "guardian.national_id": "A12345678",
@@ -235,11 +210,7 @@ class TestTheSlotLoop:
         assert state["registration"]["awaiting"] == "guardian.national_id"
 
     async def test_resuming_picks_up_at_the_exact_next_slot(self):
-        """The acceptance criterion.
-
-        Simulates the session ending: the draft is reloaded from persistence
-        and the walk continues from the first unfilled slot, not from the top.
-        """
+        """The acceptance criterion."""
         draft = store.Draft(
             application_id="app-1",
             resume_token="token-1",
@@ -261,15 +232,7 @@ class TestTheSlotLoop:
         assert "related" in result["messages"][-1].content.lower()
 
     async def test_an_optional_slot_is_asked_and_offers_a_skip_chip(self):
-        """`optional` means "may be declined", not "is never asked".
-
-        This test used to assert the opposite -- that the walk stepped straight
-        past `guardian.email` to the child section -- which is how three fields
-        with prompts and reask copy authored in all three locales came to be
-        unreachable, and how the skip affordance that already existed
-        (`_skip_chip`, and `extract` recognising "skip"/"saltar"/"passer") became
-        dead code.
-        """
+        """`optional` means "may be declined", not "is never asked"."""
         draft = store.Draft(
             application_id="app-2",
             resume_token="t",
@@ -292,12 +255,7 @@ class TestTheSlotLoop:
         assert result["quick_replies"] == ["Skip"]
 
     async def test_skipping_an_optional_slot_advances_the_walk(self):
-        """And does so without writing an answer for it.
-
-        The skip is recorded as a key in `skipped`, not as a None in `values`.
-        `next_missing` reads None as unfilled, so storing one would ask the same
-        question again on the next turn, and every turn after it.
-        """
+        """And does so without writing an answer for it."""
         draft = store.Draft(
             application_id="app-2b",
             resume_token="t",
@@ -311,9 +269,7 @@ class TestTheSlotLoop:
             return draft
 
         graph = rg.build_register_graph(loader=loader)
-        # `_entry` routes to `extract` on `registration.awaiting`, which is state
-        # rather than the draft -- the draft is only reloaded once the turn knows
-        # which question it is answering.
+        # `_entry` routes to `extract` on `registration.awaiting`, which is state rather than the draft -- the draft is…
         result = await graph.ainvoke(
             state_for(
                 "skip",
@@ -367,8 +323,7 @@ class TestUploads:
         assert payload["max_mb"] == 10
 
     def test_a_resume_payload_carrying_a_preview_is_stripped(self, caplog):
-        """The failure this prevents: a base64 thumbnail written into a
-        checkpoint and replayed into a model prompt."""
+        """The failure this prevents: a base64 thumbnail written into a checkpoint and replayed into a model prompt."""
         with caplog.at_level("WARNING"):
             cleaned = upload._assert_no_bytes(
                 {
@@ -429,12 +384,7 @@ class TestDocCheck:
         assert not verdict.retake_worth_asking
 
     def test_there_is_no_way_to_reject(self):
-        """ADVISORY ONLY, asserted as an absence.
-
-        A future edit that added a `rejected` field or a `block` method would
-        fail here, which is the point -- the rule is easier to state than to
-        remember.
-        """
+        """ADVISORY ONLY, asserted as an absence."""
         assert not hasattr(doc_check, "block_submission")
         assert not any(
             field in doc_check.Verdict.__slots__ for field in ("rejected", "blocked")
@@ -452,11 +402,7 @@ class TestDocCheck:
 
 class TestReview:
     def test_editing_one_field_clears_only_that_field(self):
-        """The acceptance criterion.
-
-        A form that restarts on a correction is a form parents abandon, and the
-        correction was almost always a spelling.
-        """
+        """The acceptance criterion."""
         registration = {
             "values": {
                 "guardian.full_name": "Rachel Providence",

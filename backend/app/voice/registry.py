@@ -1,9 +1,4 @@
-"""Persona x language -> voice configuration.
-
-The one place voices are defined. Every id is overridable by environment
-variable, and all twelve combinations are checked at startup so a missing
-mapping surfaces as a boot failure rather than a 500 during a demo.
-"""
+"""Persona x language -> voice configuration."""
 
 from __future__ import annotations
 
@@ -38,13 +33,7 @@ class VoiceProfile:
     settings: ElevenVoiceSettings
 
 
-# Per-persona delivery. Language changes the voice id (optionally) and the
-# spoken language, never the character.
-#
-# speed accepts 0.7-1.2:
-#   Stella is slowest -- five-year-olds need room between words.
-#   Aurora sits at 1.0 with the highest stability: she is the voice a parent
-#   has to trust, so consistency matters more than expressiveness.
+# Per-persona delivery.
 _DELIVERY: dict[Persona, dict[str, float]] = {
     Persona.STELLA: {"stability": 0.45, "similarity_boost": 0.75, "style": 0.45, "speed": 0.90},
     Persona.ORION: {"stability": 0.55, "similarity_boost": 0.75, "style": 0.30, "speed": 1.0},
@@ -71,11 +60,7 @@ def build_registry(
     *,
     model_id: str | None = None,
 ) -> dict[tuple[Persona, Language], VoiceProfile]:
-    """Build every persona x language profile. Missing ids are left out.
-
-    `model_id` overrides the live model, which is how the prewarm script builds
-    the same registry against the higher-quality model.
-    """
+    """Build every persona x language profile."""
     settings = settings or get_voice_settings()
     chosen_model = model_id or settings.tts_model_live
 
@@ -96,11 +81,7 @@ def build_registry(
 
 
 def validate_registry(settings: VoiceSettings | None = None) -> None:
-    """Fail loudly if any of the twelve combinations is unmapped.
-
-    Called from the application lifespan. The message names the exact variables
-    to set, because the person hitting this is usually mid-setup.
-    """
+    """Fail loudly if any of the twelve combinations is unmapped."""
     settings = settings or get_voice_settings()
     registry = build_registry(settings)
 

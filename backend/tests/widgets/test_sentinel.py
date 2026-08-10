@@ -1,16 +1,4 @@
-"""Splitting a widget out of a message, and the gate that has to do it.
-
-The unit half is `widgets/sentinel.py`. The half that matters is the second
-class: `safety_out` measuring, rewriting and redacting a message that has a
-widget in it, without destroying the widget and without letting the widget
-smuggle anything past a gate.
-
-That combination had never run. The widget pipeline was complete -- nine
-schemas, seven gates, a sentinel machine in the transport, a React registry --
-and nothing in the graph emitted one, so no message with a `⟦widget⟧` in it had
-ever reached the outbound gate. The first one would have been counted as four
-hundred words against a thirty-five word cap.
-"""
+"""Splitting a widget out of a message, and the gate that has to do it."""
 
 from __future__ import annotations
 

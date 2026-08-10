@@ -1,37 +1,4 @@
-"""Drop the unused pgvector `documents` table
-
-Revision ID: 0008_drop_documents
-Revises: 0007_accounts
-Create Date: 2026-08-04
-
-The table has 0 rows and has always had 0 rows. Nothing reads it and nothing
-writes it: retrieval runs on Chroma (`app/rag.py`), which is where the corpus
-actually lives.
-
-What it did carry was cost and a false impression. An HNSW index over
-`(embedding::halfvec(3072))`, two GIN indexes on tag arrays and a language btree
-all existed for a table nobody used, `check_embedding_dimensions()` ran at every
-boot to validate a column nothing writes, and the schema implied a retrieval path
-that does not exist -- which is what made the original audit brief assume this
-service used pgvector in the first place.
-
-Decision (P7-007, owner, 2026-08-04): drop it. The alternative was to finish the
-pgvector migration and delete Chroma, which is a real piece of work and not one
-to do by accident because a table was sitting there.
-
-## This is reversible
-
-`downgrade()` recreates the table and every index exactly as 0001 and 0002 built
-them. There is no data to lose -- that is the entire premise -- so a rollback
-restores the schema completely, and re-adopting pgvector later means writing the
-retrieval code, not recovering anything from here.
-
-## Safety
-
-`DROP TABLE ... CASCADE` is deliberately NOT used. Nothing references this table,
-and if something did, this migration should fail loudly rather than quietly
-delete whatever that was.
-"""
+"""Drop the unused pgvector `documents` table Revision ID: 0008_drop_documents Revises: 0007_accounts Create Dat…"""
 
 from __future__ import annotations
 
@@ -51,8 +18,7 @@ EMBEDDING_DIMENSIONS = 3072
 
 
 def upgrade() -> None:
-    # Indexes first and by name, so a partially-applied earlier state (an index
-    # that exists without its table, or vice versa) does not stop this.
+    # Indexes first and by name, so a partially-applied earlier state (an index that exists without its table, or v…
     op.execute("DROP INDEX IF EXISTS ix_documents_account_status_tags")
     op.execute("DROP INDEX IF EXISTS ix_documents_persona_tags")
     op.execute("DROP INDEX IF EXISTS ix_documents_embedding_en")
@@ -88,10 +54,7 @@ def downgrade() -> None:
     )
     op.create_index("ix_documents_language", "documents", ["language"])
 
-    # The halfvec cast is load-bearing: pgvector indexes `vector` only up to
-    # 2000 dimensions, and this project embeds at 3072. See 0002 for the full
-    # note -- and for why the query must cast identically or the planner
-    # silently falls back to a sequential scan.
+    # The halfvec cast is load-bearing: pgvector indexes `vector` only up to 2000 dimensions, and this project embe…
     op.execute(
         "CREATE INDEX ix_documents_embedding_en ON documents "
         "USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops) "

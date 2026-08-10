@@ -17,11 +17,7 @@ class TestTheLadder:
         assert "compound interest" not in vocab.concepts_for("9-12")
 
     def test_an_unknown_band_has_an_empty_ladder(self):
-        """Nothing is on an unknown band's ladder, so gate 3 refuses.
-
-        The permissive alternative -- treating an unknown band as adult --
-        would make a malformed token the widest permission in the system.
-        """
+        """Nothing is on an unknown band's ladder, so gate 3 refuses."""
         assert vocab.concepts_for("42") == frozenset()
 
     @pytest.mark.parametrize(
@@ -67,12 +63,7 @@ class TestBannedTerms:
         ],
     )
     def test_every_five_to_eight_ban_actually_fires(self, term):
-        """A banned term that matches nothing is a rule that does not exist.
-
-        This is the failure mode a banned list has: a typo, a stem that never
-        occurs, or a `\\b` around a non-word character silently disabling the
-        entry. Each one is checked against a sentence containing it.
-        """
+        """A banned term that matches nothing is a rule that does not exist."""
         assert vocab.check(f"Let us talk about {term} today.", "5-8"), term
 
     def test_percent_sign_is_caught_despite_being_punctuation(self):
@@ -85,12 +76,7 @@ class TestBannedTerms:
         assert vocab.check("This is a guaranteed return, risk-free.", band)
 
     def test_interesting_is_not_interest(self):
-        """The reason this module writes variants out instead of stemming.
-
-        "That's interesting!" is a sentence a mascot says several times a
-        lesson. Flagging it costs a model call and a second of latency, every
-        time.
-        """
+        """The reason this module writes variants out instead of stemming."""
         assert vocab.is_clean("That's interesting! Tell me more.", "5-8")
 
     def test_a_thirteen_to_fifteen_may_say_credit_but_not_derivative(self):

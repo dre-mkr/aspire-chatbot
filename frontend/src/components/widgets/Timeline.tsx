@@ -1,24 +1,4 @@
-/**
- * When things happen, and how far apart.
- *
- * Positions are 0–100 along an abstract line rather than dates. The lesson is
- * "these things happen in this order, this far apart", and a real calendar
- * would add reading load without adding meaning — a nine-year-old saving for a
- * bicycle needs to see the gap, not to compute a date.
- *
- * ## Vertical below 30rem, horizontal above
- *
- * Not for tidiness: four labelled points on a horizontal line at 380px gives
- * each about 90 pixels, which truncates every label. The vertical form is the
- * same information with room to read it, and it is the form most of this
- * product's users will see.
- *
- * ## The line is decoration; the list is the content
- *
- * `<ol>` with the captions in it, and the drawn track marked `aria-hidden`.
- * A screen reader gets the sequence from the list, which is where sequence
- * actually lives.
- */
+/** When things happen, and how far apart. */
 import { useState } from "react";
 import type { TimelineWidget } from "../../lib/stream/types";
 import { Panel, tone, useReducedMotion, WidgetActions } from "./primitives";

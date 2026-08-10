@@ -1,9 +1,4 @@
-"""Session persistence: survives a reload, expires on its own.
-
-The requirement is that a child who refreshes the page finds the game where they
-left it. That works because the browser never held the game in the first place —
-state is server-side, keyed by the conversation's thread id.
-"""
+"""Session persistence: survives a reload, expires on its own."""
 
 from __future__ import annotations
 
@@ -18,11 +13,7 @@ SESSION = "thread-under-test"
 
 
 def test_a_reload_finds_the_game_where_it_was_left(game, store, settings):
-    """A new request object, the same server-side store.
-
-    This is exactly what a page refresh looks like from the backend: nothing
-    about the game came from the client, so nothing about it was lost.
-    """
+    """A new request object, the same server-side store."""
     first = GameEngine(games=[game], store=store, sink=MemoryEventSink(), settings=settings)
     first.start(SESSION)
     first.submit(SESSION, "money")

@@ -1,18 +1,4 @@
-"""Saying hello must not open a support ticket. Disclosing abuse must.
-
-"Ungrounded means escalate, not guess" is the right rule for a question the
-corpus cannot answer, and it was being applied to "hello". Measured against the
-scratch database: eight ordinary conversational turns opened eight rows in
-`tickets` -- and a ticket is read by staff and exported to a case system, so a
-child's greeting cost a person's attention. The child was told "A grown-up who
-helps with ASPIRE is going to look at this. You have not done anything wrong",
-which informs a five-year-old that saying hello might have been wrong.
-
-The fix is a closed, fully anchored allowlist. The whole risk it carries is that
-a greeting PREFIX might swallow the sentence after it, so that is what most of
-these tests are about: `hello` is small talk, `hello, my dad hits me` is not,
-and no amount of punctuation changes that.
-"""
+"""Saying hello must not open a support ticket."""
 
 from __future__ import annotations
 
@@ -53,12 +39,7 @@ def test_ordinary_asides_get_a_conversational_reply(text):
 
 @pytest.mark.parametrize("text", ["hello", "thanks!", "ok", "who are you?", "bye"])
 def test_the_reply_offers_the_thing_this_service_is_for(text):
-    """Every aside except a re-ask should point back at the programme.
-
-    "Ask me again and I'll explain it a different way" is the right answer to
-    "can you say that again?" and does not need to name ASPIRE to be useful,
-    which is why the re-ask category is excluded rather than reworded.
-    """
+    """Every aside except a re-ask should point back at the programme."""
     assert "ASPIRE" in (_reply(text) or "")
 
 

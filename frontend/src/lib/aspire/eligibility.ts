@@ -1,16 +1,4 @@
-/**
- * The eligibility half of the ASPIRE backend client.
- *
- * The card talks to these directly rather than through `/chat`, for the same
- * latency reason the games card does — and for a second one that matters more
- * here. The answers tapped into this card are a minor's, and routing them
- * through the chat endpoint would put an age band into a prompt, a checkpointer
- * and a background summarisation job. This way they reach the engine and stop.
- *
- * Nothing in these types is a decision. `verdict` is one of three outcomes and
- * the strongest of them is "likely" — there is no field here that could carry
- * an approval, because the flow is not allowed to make one.
- */
+/** The eligibility half of the ASPIRE backend client. */
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -19,12 +7,7 @@ const API_URL = (
 /** Every action is a tap away from the next; a slow one reads as broken. */
 const TIMEOUT_MS = 10_000;
 
-/**
- * The three outcomes. Never a bare yes or no.
- *
- * `not_yet` covers both a child who is too young and someone outside the
- * cohort — the copy differs by criterion, the outcome type does not.
- */
+/** The three outcomes. */
 export type Verdict = "likely_eligible" | "not_yet" | "needs_confirmation";
 
 /** What a verdict turned on. `none` is a clean pass, not a null. */
@@ -49,12 +32,7 @@ export interface EligibilityQuestion {
 	options: Array<EligibilityOption>;
 	position: number;
 	total: number;
-	/**
-	 * The option already chosen here, when the reader has been back.
-	 *
-	 * The only place an answer appears at all, and it is scoped to the one
-	 * question on screen — the payload never carries the set.
-	 */
+	/** The option already chosen here, when the reader has been back. */
 	answered_with: string | null;
 	can_go_back: boolean;
 }
@@ -63,23 +41,12 @@ export interface ChecklistItem {
 	id: string;
 	title: string;
 	detail: string;
-	/**
-	 * Where to get help with this document.
-	 *
-	 * Deliberately not a civil-registry address: the knowledge base does not
-	 * carry one, so this routes to the support channels it does carry rather
-	 * than inventing an office.
-	 */
+	/** Where to get help with this document. */
 	where: string;
 	signed_by: string | null;
 	/** The source's own hedge, where the source hedges. Never dropped to fit. */
 	caveat: string | null;
-	/**
-	 * An alternative to the item above it, not another thing to bring.
-	 *
-	 * Rendered without a tick box: given one, a passport that stands in for a
-	 * birth certificate read as a second document to go and find.
-	 */
+	/** An alternative to the item above it, not another thing to bring. */
 	alternative: boolean;
 }
 
@@ -127,13 +94,7 @@ export interface EligibilityLabels {
 	banner: string;
 }
 
-/**
- * The card's whole world: a question, or a result, never both.
- *
- * `active` goes false once the flow finishes, because the server-side session
- * is gone by then. The result in that same response is the last the service
- * will ever say about it — see `EligibilityCheck` for who keeps it afterwards.
- */
+/** The card's whole world: a question, or a result, never both. */
 export interface EligibilityState {
 	active: boolean;
 	language: string;
@@ -192,14 +153,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 	return (await response.json()) as T;
 }
 
-/**
- * The flow in progress, or an inactive envelope.
- *
- * Called on mount and after every assistant turn. The browser holds no
- * in-progress state of its own, which is what makes a refresh mid-flow a
- * non-event — and it is how the card learns the assistant just opened one
- * through its tool.
- */
+/** The flow in progress, or an inactive envelope. */
 export function fetchEligibilityState(threadId: string, language = "en") {
 	return call<EligibilityState>(
 		`/api/eligibility/state?thread_id=${encodeURIComponent(threadId)}&language=${encodeURIComponent(language)}`,
@@ -241,17 +195,7 @@ export function quitEligibility(threadId: string) {
 	});
 }
 
-/**
- * The finished result, kept on this device.
- *
- * The server deletes the session the moment it produces a result, so nothing
- * can be fetched back — which is the point, not a gap. A minor's answers were
- * always meant to stay device-local, and the result is derived from them, so it
- * lives here beside the transcript rather than on a server.
- *
- * Keyed by thread so reopening a past conversation shows the result it reached,
- * and so a refresh mid-read does not lose it.
- */
+/** The finished result, kept on this device. */
 const RESULT_KEY = "aspire.eligibility.results.v1";
 const CHECKED_KEY = "aspire.eligibility.checked.v1";
 
@@ -279,8 +223,7 @@ function writeMap<T>(key: string, value: Record<string, T>) {
 	try {
 		window.localStorage.setItem(key, JSON.stringify(value));
 	} catch {
-		// Private browsing and full quotas both throw. Losing this costs a
-		// re-run of a two-minute flow; it must never interrupt the conversation.
+		// Private browsing and full quotas both throw.
 	}
 }
 
@@ -305,8 +248,7 @@ export function loadEligibilityResult(
 	threadId: string,
 ): StoredEligibility | null {
 	const stored = readMap<StoredEligibility>(RESULT_KEY)[threadId];
-	// Storage is shared with older builds and with hand-editing, so nothing out
-	// of it is trusted structurally.
+	// Storage is shared with older builds and with hand-editing, so nothing out of it is trusted structurally.
 	if (!stored?.result?.verdict || !Array.isArray(stored.result.body))
 		return null;
 	return stored;
@@ -321,13 +263,7 @@ export function clearEligibilityResult(threadId: string) {
 	writeMap(CHECKED_KEY, checked);
 }
 
-/**
- * Which checklist items have been ticked, per conversation.
- *
- * Gathering documents happens over days, not in one sitting, so this survives a
- * reload. Device-local like everything else here: a tick is a fact about
- * someone's paperwork and has no business on a server.
- */
+/** Which checklist items have been ticked, per conversation. */
 export function loadCheckedItems(threadId: string): Array<string> {
 	const stored = readMap<Array<string>>(CHECKED_KEY)[threadId];
 	return Array.isArray(stored) ? stored : [];

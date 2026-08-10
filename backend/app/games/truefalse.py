@@ -1,20 +1,4 @@
-"""True or false: judge a statement, then read why.
-
-From ECCB's own quiz bank. The verdict is the hook; the explanation is the
-reason the game exists, and it is reproduced verbatim rather than written here
-or regenerated at runtime.
-
-Three things this game does differently from the scramble, all of them declared
-through the protocol rather than special-cased by the engine:
-
-- **No hints.** A hint on a binary choice is the answer. `supports_hints` is
-  False and the engine declines the request before this module is reached.
-- **A round, not the bank.** Eighteen statements with multi-paragraph
-  explanations is not a warm-up. Five, shuffled per session.
-- **An answer can be unreadable.** `yes` and `no` are refused rather than
-  guessed at, because on a negatively-framed statement they genuinely do not say
-  which way the player meant.
-"""
+"""True or false: judge a statement, then read why."""
 
 from __future__ import annotations
 
@@ -46,13 +30,10 @@ class TrueFalseGame:
     # A hint here would be the answer. There is no middle rung on a coin flip.
     supports_hints = False
 
-    # Warm-up length. The bank is eighteen and the explanations are long; nobody
-    # sits through that, and the teaching lands better five at a time.
+    # Warm-up length.
     round_size = 5
 
     # Re-asking a true/false is just waiting for the coin to land the other way.
-    # A wrong answer shows ECCB's explanation and the round moves on — the
-    # teaching is the point, not the score.
     advance_on_wrong = True
 
     def __init__(self, settings: GameSettings | None = None) -> None:

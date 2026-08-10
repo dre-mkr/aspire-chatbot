@@ -1,33 +1,4 @@
-"""The P0 test. A widget may fail at any stage; the lesson may never fail.
-
-This is the regression test for the reported bug, and it is written to fail if
-the coupling that caused it is ever reintroduced. The invariant, stated so that a
-future reader can check the tests against it rather than against a memory of a
-design:
-
-    A learning turn ALWAYS emits a substantive, grounded, persona-appropriate
-    explanation. The widget is an enhancement layered on prose that already
-    exists and has already been emitted. A widget may fail silently at any stage.
-    Prose may never fail.
-
-The inverse -- a widget with no lesson -- is a P0 bug, and
-`test_a_widget_never_arrives_without_a_lesson` is the assertion that says so.
-
-## What "fail at any stage" means here
-
-Six stages, each exercised separately, because they fail differently and an
-implementation can easily survive five of them:
-
-    planner raises            no kind chosen
-    planner returns garbage   a kind the band forbids
-    composer raises           no JSON at all
-    composer returns garbage  JSON that fails a gate
-    the whole task hangs      the timeout fires
-    the cache raises          a Valkey blip
-
-For each: the prose is byte-identical to the prose of a run with a healthy widget
-path, and no error reaches the reader.
-"""
+"""The P0 test."""
 
 from __future__ import annotations
 
@@ -140,15 +111,7 @@ def a_request(concept: TeachingConcept | None = None) -> WidgetRequest:
 
 @pytest.fixture(autouse=True)
 def _a_populated_store():
-    """The concept store, loaded, for the whole module.
-
-    Autouse and not optional. Widget gate 3 asks `vocab.is_allowed_concept`
-    whether the band may meet this concept, and that consults the concept store
-    as its second registry -- so a widget test running against an empty store
-    fails at the band gate for a reason that has nothing to do with what it is
-    testing. Failing closed there is correct in production (no concepts means no
-    tutor turn means no widget) and is pure noise here.
-    """
+    """The concept store, loaded, for the whole module."""
     from app.learning.concepts import set_store
 
     store = ConceptStore()
@@ -197,8 +160,7 @@ class TestTheWidgetPathAbsorbsEverything:
 
         outcome = await build_widget(a_request(), plan=plan, compose=rubbish, cache=None)
         assert not outcome.emitted
-        # Named, because "gate parse fired 40 times" is a prompt to fix and "the
-        # widget was rejected" is not.
+        # Named, because "gate parse fired 40 times" is a prompt to fix and "the widget was rejected" is not.
         assert outcome.gate == "parse"
 
     @pytest.mark.asyncio
@@ -223,11 +185,7 @@ class TestTheWidgetPathAbsorbsEverything:
 
     @pytest.mark.asyncio
     async def test_a_widget_from_another_agent_is_dropped_unconditionally(self):
-        """The widget system is a teaching device with a curriculum behind it.
-
-        A widget arriving while `qa_agent` is active means either a prompt leaked
-        between agents or something is being tried. Neither is served.
-        """
+        """The widget system is a teaching device with a curriculum behind it."""
         request = a_request()
         request.agent = "qa_agent"
 
@@ -243,12 +201,7 @@ class TestTheWidgetPathAbsorbsEverything:
 
     @pytest.mark.asyncio
     async def test_a_kind_the_concept_does_not_permit_is_dropped(self):
-        """Gate 9. The band would allow it; the concept's author did not.
-
-        A composer handed `growth_stack` that returns a `simulator` has produced
-        something nobody approved for this concept, and the band gate passes it
-        because the band permits both.
-        """
+        """Gate 9."""
         request = a_request()
         widget = A_VALID_GROWTH_STACK.replace('"growth_stack"', '"proportion"')
         from app.agents.learn.widgets import validate
@@ -263,12 +216,7 @@ class TestTheWidgetPathAbsorbsEverything:
 class TestProseIsIndependent:
     @pytest.mark.asyncio
     async def test_the_lesson_is_byte_identical_whatever_the_widget_does(self):
-        """The regression test for the reported bug.
-
-        Prose used to be produced by the same model call that emitted the widget,
-        inline between sentinels, so a malformed widget truncated the lesson. If
-        that coupling ever returns, these two strings stop matching.
-        """
+        """The regression test for the reported bug."""
         healthy = await render_teach(a_context(), invoke=a_teach_call)
 
         async def explode(**_):
@@ -304,12 +252,7 @@ class TestProseIsIndependent:
 
     @pytest.mark.asyncio
     async def test_no_model_at_all_still_teaches(self):
-        """Tier 3. The floor is a template built in Python from the concept row.
-
-        This is the configuration that makes the reported symptom impossible: with
-        no provider key, no planner and no composer, a learner still receives the
-        concept's body, its local example and its check question.
-        """
+        """Tier 3."""
         result = await render_teach(a_context(), invoke=None)
 
         assert result.tier == 3
@@ -377,12 +320,7 @@ class TestProseIsIndependent:
 class TestTheInvariant:
     @pytest.mark.asyncio
     async def test_a_widget_never_arrives_without_a_lesson(self):
-        """A widget with no lesson is a P0 bug. There must be a test that fails.
-
-        Driven through the node so that the ORDER is asserted too, not merely the
-        presence of both: prose is written to the wire before the widget task is
-        even awaited.
-        """
+        """A widget with no lesson is a P0 bug."""
         emitted: list[tuple[str, object]] = []
 
         class Recorder:
@@ -432,31 +370,11 @@ class TestTheInvariant:
 
 
 class TestNothingAfterTheProseCanTakeItAway:
-    """The other half of the invariant, and the half that shipped broken.
-
-    `test_a_widget_never_arrives_without_a_lesson` proves a widget cannot arrive
-    without prose. It does not prove the converse that matters just as much: that
-    prose already sent cannot be retracted by something failing behind it.
-
-    It could be. `_state_after` dereferenced a null check item and raised, the
-    node died, `api/stream.py` caught it and emitted `error: upstream`, and the
-    reader watched a complete 140-word lesson appear and then be told the
-    assistant was unavailable. Nothing was persisted either, because the except
-    branch returns before `persist_turn`.
-
-    Observed in production on the RAG-teach path, which is the one path where a
-    lesson asks a question that no check item backs -- no concept, so no check
-    bank, so `select_check` returns None while the lesson still ends in a
-    question invented from the retrieved rows.
-    """
+    """The other half of the invariant, and the half that shipped broken."""
 
     @pytest.mark.asyncio
     async def test_a_rag_lesson_with_no_check_item_completes(self):
-        """The exact production failure: `asked` is true and `check_item` is None.
-
-        Asserts the turn returns rather than raising, and that it returns the
-        lesson. Before the fix this raised AttributeError on `check_item.id`.
-        """
+        """The exact production failure: `asked` is true and `check_item` is None."""
         node = tutor_module.make_tutor(
             embed=None,
             invoke=a_teach_call,
@@ -468,8 +386,7 @@ class TestNothingAfterTheProseCanTakeItAway:
 
         from app.learning.concepts import set_store
 
-        # An empty store is what forces the RAG path: nothing to resolve against,
-        # so `concept` is None and `select_check` has no bank to select from.
+        # An empty store is what forces the RAG path: nothing to resolve against, so `concept` is None and `select_chec…
         empty = ConceptStore()
         empty.load([])
         set_store(empty)
@@ -491,13 +408,7 @@ class TestNothingAfterTheProseCanTakeItAway:
 
     @pytest.mark.asyncio
     async def test_bookkeeping_that_raises_still_serves_the_lesson(self):
-        """Break `_state_after` outright. The reader must still get the lesson.
-
-        The general form of the bug rather than the specific one. Whatever fails
-        after the prose is emitted -- a widget, a log line, the state write -- it
-        is bookkeeping, and no bookkeeping is worth a lesson the child has already
-        started reading.
-        """
+        """Break `_state_after` outright."""
         emitted: list[str] = []
 
         class Recorder:
@@ -540,18 +451,7 @@ class TestNothingAfterTheProseCanTakeItAway:
 
     @pytest.mark.asyncio
     async def test_state_after_tolerates_a_null_check_item_directly(self):
-        """`_state_after` itself, below the safety net.
-
-        This test exists because of what the two above CANNOT see. The net that
-        keeps a delivered lesson alive also swallows the exception that would
-        have revealed why it was needed -- reverting the null guard leaves both
-        of them green, because the turn still completes and still serves prose.
-
-        A safety net makes failures behind it survivable, not absent. So the
-        assertion has to go under the net and call the function directly, where a
-        regression surfaces as the AttributeError it is rather than as a log line
-        nobody is grepping for.
-        """
+        """`_state_after` itself, below the safety net."""
         import app.agents.learn.tutor as module
         from app.agents.learn.planner import LearnerSnapshot, Move
         from app.agents.learn.render import RenderResult

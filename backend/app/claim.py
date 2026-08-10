@@ -1,41 +1,4 @@
-"""Carrying an anonymous session's work into the account that claims it.
-
-Somebody arrives, asks four questions, plays a word scramble, and then decides
-to sign up. Everything they just did belongs to an anonymous identity. If
-registering loses it, registering is a punishment.
-
-So this runs on the way into an account, and it is the part of the feature most
-worth getting exactly right.
-
-## What it guarantees
-
-**All or nothing.** The reassignment happens in one transaction. A partial merge
-that moves half the conversations is worse than no merge at all: it looks like
-success and quietly loses work, and nobody discovers it until they go looking
-for a chat that is gone.
-
-**Once, ever.** An anonymous identity records who claimed it. A second attempt
-is refused rather than repeated — otherwise replaying a captured anonymous token
-would let somebody move records into an account of their choosing, which is the
-same shape of hole as the one 0006 closed.
-
-**The old token dies.** Claiming bumps the anonymous identity's `session_epoch`,
-so every token minted for it stops working immediately. A browser holding the
-old one cannot keep writing to an identity that no longer owns anything.
-
-## Signing into an account that already exists
-
-Merge, not discard. Somebody with an account who asks a few questions before
-signing in has done real work in that session, and their existing history is not
-a reason to throw it away — the two sets of conversations are both theirs. The
-alternative is a warning nobody reads followed by silent loss.
-
-The cost is that a shared device can move one person's anonymous chats into
-another person's account: whoever signs in gets what that browser did while
-signed out. That is the same trade the anonymous session itself makes, and it is
-the reason sign-out issues a brand-new anonymous identity rather than resurrect
-the previous one.
-"""
+"""Carrying an anonymous session's work into the account that claims it."""
 
 from __future__ import annotations
 
@@ -59,21 +22,11 @@ class ClaimRefused(Exception):
 async def claim_anonymous(
     db: AsyncSession, *, anonymous_id: uuid.UUID, account_id: uuid.UUID
 ) -> int:
-    """Move everything owned by an anonymous identity onto an account.
-
-    Returns how many conversations moved. Runs inside the caller's transaction
-    so that it commits with the sign-up or sign-in that triggered it: an account
-    created but not given its history, or history moved to an account that then
-    failed to be created, are both worse than the operation not happening.
-
-    Raises `ClaimRefused` rather than returning quietly, because every refusal
-    here is something the caller has to decide about rather than ignore.
-    """
+    """Move everything owned by an anonymous identity onto an account."""
     if anonymous_id == account_id:
         raise ClaimRefused("An identity cannot claim itself.")
 
-    # Locked for the duration. Two tabs finishing sign-up at the same moment
-    # would otherwise both read "unclaimed" and both try to move the rows.
+    # Locked for the duration.
     anonymous = (
         await db.execute(
             select(User).where(User.id == anonymous_id).with_for_update()
@@ -104,8 +57,6 @@ async def claim_anonymous(
     anonymous.claimed_by_user_id = account_id
     anonymous.claimed_at = now
     # Every token already minted for the anonymous identity stops working here.
-    # Without this, the browser that just signed up could keep writing to an
-    # identity that owns nothing.
     anonymous.session_epoch = anonymous.session_epoch + 1
     account.last_seen_at = now
 
@@ -119,11 +70,7 @@ async def claim_anonymous(
 
 
 async def claimable(db: AsyncSession, anonymous_id: uuid.UUID) -> bool:
-    """Whether this identity is an unclaimed anonymous one.
-
-    Used to decide whether to attempt a claim at all, so that a stale token in a
-    browser does not turn an otherwise fine sign-in into an error.
-    """
+    """Whether this identity is an unclaimed anonymous one."""
     row = (
         await db.execute(
             select(User.account_type, User.claimed_by_user_id).where(User.id == anonymous_id)

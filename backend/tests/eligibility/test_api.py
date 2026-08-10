@@ -40,8 +40,7 @@ def test_start_returns_the_first_question_and_its_chrome(client: TestClient):
     assert body["question"]["position"] == 1
     assert body["question"]["total"] == 5
     assert body["result"] is None
-    # The card's own labels ride along, so no button is English beside a French
-    # question.
+    # The card's own labels ride along, so no button is English beside a French question.
     assert body["labels"]["back"] == "Back"
     assert body["labels"]["banner"]
 
@@ -54,8 +53,7 @@ def test_the_labels_come_back_in_the_flow_s_language(client: TestClient):
 
 
 def test_an_unknown_language_falls_back_rather_than_refusing(client: TestClient):
-    """A flow that will not start because a client sent an unfamiliar locale is
-    worse than one that starts in English."""
+    """A flow that will not start because a client sent an unfamiliar locale is worse than one that starts in Englis…"""
     body = start(client, language="pt-BR")
     assert body["active"] is True
     assert body["language"] == "en"
@@ -169,40 +167,14 @@ def test_every_unsure_path_over_http_ends_in_a_conditional_result(client: TestCl
 
 
 def test_the_chat_response_has_no_field_an_answer_could_travel_in():
-    """`StartedEligibilityCheck` is a closed model on purpose.
-
-    A free dict here would satisfy nothing and could carry anything -- the same
-    reasoning `tests/games/test_no_answer_leak.py` applies to game state.
-    """
+    """`StartedEligibilityCheck` is a closed model on purpose."""
     from app.schemas import StartedEligibilityCheck
 
     assert set(StartedEligibilityCheck.model_fields) == {"check", "language"}
 
 
 def test_a_started_check_is_recognised_before_a_model_is_called():
-    """The three tests that stood here read `main._started_eligibility`.
-
-    That function walked a finished agent result for a `start_eligibility_check`
-    ToolMessage: the model decided the turn was a card, and `/chat` found out
-    afterwards by inspecting what it had called.
-
-    The decision is no longer a model's to make. `graph/nodes/intents.py` matches
-    the question deterministically BEFORE anything is embedded, and
-    `graph/nodes/cards.py` opens the check and returns a directive with no
-    `AIMessage` at all -- so there is no prose alongside the card to have to
-    suppress, and nothing to read a tool result out of.
-
-    The three properties they asserted are still asserted, in the place that now
-    owns each:
-
-      "can I join?" opens the card
-          -> tests/agents/test_intent_cards.py::test_the_eligibility_card_is_the_whole_turn
-      a declined start is an ordinary answer
-          -> ::test_a_check_already_open_is_left_alone
-      an earlier turn's check does not keep reporting itself
-          -> structural now: the directive is built fresh per turn from the
-             matcher, so there is no history for a stale one to be found in.
-    """
+    """The three tests that stood here read `main._started_eligibility`."""
     from app.graph.nodes.intents import wants_eligibility
 
     assert wants_eligibility("can I join?")

@@ -1,34 +1,4 @@
-"""Seven gates a generated widget passes before a child sees it.
-
-    1 PARSE          valid JSON, known kind, known version
-    2 SCHEMA         pydantic validation for that kind
-    3 BAND           kind allowed for the band; concept on the ladder; controls
-                     within the band's cap
-    4 NUMERIC        min < default < max; rate, principal and period bounds;
-                     allocator shares reconcile
-    5 FORMULA DOMAIN the formula exists and the band may have it, or the
-                     expression passes the AST allowlist -- evaluated at every
-                     corner and midpoint
-    6 COPY           every label and caption passes the band's vocabulary rules,
-                     within per-field length caps
-    7 BUDGET         at most one widget per turn (two at 16-18), at most one
-                     simulator
-
-An ordered list of predicates rather than one function, and the ordering is
-cheapest-first: a malformed JSON blob should not cost an AST walk. It also
-means the *name* of the failing gate is available to the log line and to the
-counters, which is the whole feedback loop -- "gate 6 fired 40 times this week"
-is a prompt to fix, and "the widget was rejected" is not.
-
-## Failing is the normal case and it is silent
-
-A widget that fails is not an error. The child gets prose, which was always a
-complete answer; the widget was the bonus. Nothing is shown, nothing is
-retried, and one line is logged.
-
-The one thing a gate must never do is *repair*. A gate that clamps a rate from
-0.9 to 0.2 has invented a lesson nobody wrote. Reject and move on.
-"""
+"""Seven gates a generated widget passes before a child sees it."""
 
 from __future__ import annotations
 
@@ -72,12 +42,7 @@ class GateResult:
 
 @dataclass(frozen=True, slots=True)
 class GateContext:
-    """Everything a gate is allowed to know about the reader.
-
-    Deliberately small. A gate that could see the conversation would start
-    making editorial judgements, and these are meant to be mechanical checks
-    that a reviewer can re-derive by reading the widget and the band.
-    """
+    """Everything a gate is allowed to know about the reader."""
 
     age_band: str
     locale: str = "en"
@@ -89,17 +54,6 @@ class GateContext:
 # ── band policy ──────────────────────────────────────────────────────────────
 
 #: Which primitives each band may receive.
-#:
-#: The two consequential entries: 5-8 gets NO simulator (a slider driving a
-#: formula is an abstraction a six-year-old is not being taught yet, and the
-#: planner is instructed to redirect to the saving concept instead), and 9-12
-#: gets `growth_stack` rather than `simulator` for the same reason -- coins you
-#: can count beat a number that changes.
-#:
-#: `timeline` IS offered at 5-8 and that is a considered call: it carries no
-#: arithmetic and no numbers a child has to hold -- "one coin each week until
-#: the football" is a sequence, and sequence is something a six-year-old
-#: already reasons about fluently. What they are not ready for is a rate.
 BAND_KINDS: dict[str, frozenset[str]] = {
     "5-8": frozenset(
         {"compare", "reveal_cards", "proportion", "sort_buckets", "flow_diagram", "timeline"}
@@ -130,9 +84,7 @@ BAND_CONTROL_CAP: dict[str, int] = {
     "adult": 4,
 }
 
-#: How many widgets one turn may emit. Two only from 16-18 upward: below that,
-#: a second widget in one turn is two things to do and a lesson that has stopped
-#: being a conversation.
+#: How many widgets one turn may emit.
 BAND_WIDGET_BUDGET: dict[str, int] = {
     "5-8": 1,
     "9-12": 1,
@@ -158,16 +110,6 @@ BAND_CAPTION_WORDS: dict[str, int] = {
 }
 
 #: `a11y_text` has its own, much larger cap.
-#:
-#: It is NOT on-screen copy. It is the whole lesson in words, for a child using
-#: a screen reader, and it has to convey what the widget conveys visually --
-#: which for a growth stack is two stacks, what each represents, and how they
-#: differ. Holding it to the caption cap was the first thing the eval harness
-#: caught, and it was right to: every shipped example failed, because twelve
-#: words cannot describe a widget.
-#:
-#: The vocabulary rules still apply in full. A screen-reader equivalent that
-#: uses words the band has not met is the same failure with a smaller audience.
 BAND_A11Y_WORDS: dict[str, int] = {
     "5-8": 45,
     "9-12": 60,
@@ -181,13 +123,7 @@ BAND_A11Y_WORDS: dict[str, int] = {
 
 
 def gate_parse(raw: str, context: GateContext) -> GateResult:
-    """Valid JSON, a kind we know, a version we can render.
-
-    Version is checked HERE rather than left to pydantic, because "v2 widget
-    from a newer backend" and "malformed v1 widget" need different log lines and
-    different responses. A v2 widget is a deployment-skew problem; a malformed
-    v1 is a prompt problem.
-    """
+    """Valid JSON, a kind we know, a version we can render."""
     text = raw.strip()
     if not text:
         return GateResult.fail("parse", "empty widget block")
@@ -212,13 +148,7 @@ def gate_parse(raw: str, context: GateContext) -> GateResult:
 
 
 def gate_schema(data: dict[str, Any], context: GateContext) -> GateResult:
-    """Pydantic validation for that kind, including the string safety rules.
-
-    This is where markup, URLs and literal colours are rejected -- see
-    `schemas.SafeText`. Rejected rather than sanitised: a widget that had to be
-    cleaned is a widget whose generation went wrong, and prose is the right
-    answer to that.
-    """
+    """Pydantic validation for that kind, including the string safety rules."""
     if model_for(str(data.get("kind"))) is None:  # pragma: no cover - gate 1 covers it
         return GateResult.fail("schema", "no model for kind")
     try:
@@ -236,8 +166,7 @@ def gate_band(widget: Any, context: GateContext) -> GateResult:
     """The kind, the concept and the control count, against the reader's band."""
     permitted = BAND_KINDS.get(context.age_band)
     if permitted is None:
-        # An unknown band has no permitted kinds. Fail closed: a malformed
-        # identity must not be the widest permission in the system.
+        # An unknown band has no permitted kinds.
         return GateResult.fail("band", f"unknown age band {context.age_band!r}")
     if widget.kind not in permitted:
         return GateResult.fail(
@@ -300,8 +229,7 @@ def gate_numeric(widget: Any, context: GateContext) -> GateResult:
         if widget.principal_cents < 0 or widget.contribution_cents < 0:
             return GateResult.fail("numeric", "money cannot be negative")
         if widget.principal_cents == 0 and widget.contribution_cents == 0:
-            # Not a schema violation and still a broken lesson: two empty stacks
-            # that never grow teach the opposite of the point.
+            # Not a schema violation and still a broken lesson: two empty stacks that never grow teach the opposite of the…
             return GateResult.fail("numeric", "nothing is being saved")
 
     if widget.kind == "allocator":
@@ -335,14 +263,7 @@ def _bounds_problem(unit: str, low: float, high: float) -> str | None:
 
 
 def gate_formula(widget: Any, context: GateContext) -> GateResult:
-    """A simulator's maths must exist, suit the band, and behave on its domain.
-
-    "Behave" is checked by evaluation rather than by inspection: the formula is
-    run at every corner of the control box plus the midpoints, and any NaN,
-    infinity, negative-where-impossible or absurd magnitude drops the widget.
-    An expression that misbehaves only in one corner is exactly the expression a
-    child will find, because a child moves every slider to its end.
-    """
+    """A simulator's maths must exist, suit the band, and behave on its domain."""
     if widget.kind != "simulator":
         return GateResult.pass_(widget)
 
@@ -363,10 +284,7 @@ def gate_formula(widget: Any, context: GateContext) -> GateResult:
                 f"{widget.formula} is for {spec.band_min} and up, not "
                 f"{context.age_band}",
             )
-        # A parameter no control drives is fine IF the registry has an inert
-        # default for it -- `savings_goal_time` takes a rate, and a two-slider
-        # widget that leaves it at zero is a correct and common widget. Only a
-        # parameter with neither a control nor a default is unsatisfiable.
+        # A parameter no control drives is fine IF the registry has an inert default for it -- `savings_goal_time` take…
         missing = set(spec.parameters) - set(variables) - set(registry._DEFAULTS)
         if missing:
             return GateResult.fail(
@@ -387,15 +305,8 @@ def gate_formula(widget: Any, context: GateContext) -> GateResult:
 
 
 def _strings(widget: Any) -> list[tuple[str, str, bool]]:
-    """Every user-visible string, as `(path, text, is_label)`.
-
-    `is_label` selects which word cap applies. Walking the dumped model rather
-    than enumerating fields per kind means a new field added to a schema is
-    checked automatically -- the alternative is a gate that silently stops
-    covering the thing somebody just added.
-    """
-    #: Fields that are identifiers rather than copy. They are pattern-checked by
-    #: the schema and are never rendered, so vocabulary rules do not apply.
+    """Every user-visible string, as `(path, text, is_label)`."""
+    #: Fields that are identifiers rather than copy.
     skip = {"id", "kind", "concept_id", "formula", "expression", "belongs_to", "colour", "icon"}
     found: list[tuple[str, str, bool]] = []
 
@@ -418,12 +329,7 @@ def _strings(widget: Any) -> list[tuple[str, str, bool]]:
 
 
 def gate_copy(widget: Any, context: GateContext) -> GateResult:
-    """Vocabulary and length, on every string a reader sees.
-
-    `a11y_text` is checked like any other copy and that is deliberate: it is the
-    version a blind child receives, and a screen-reader equivalent that uses
-    words the band has not met is the same failure with a smaller audience.
-    """
+    """Vocabulary and length, on every string a reader sees."""
     label_cap = BAND_LABEL_WORDS.get(context.age_band, 12)
     caption_cap = BAND_CAPTION_WORDS.get(context.age_band, 60)
     a11y_cap = BAND_A11Y_WORDS.get(context.age_band, 120)
@@ -468,9 +374,7 @@ def gate_budget(widget: Any, context: GateContext) -> GateResult:
 #: Gates that take the raw string. Only gate 1.
 _PARSE_GATES: tuple[Callable[[str, GateContext], GateResult], ...] = (gate_parse,)
 
-#: Gate 2 takes the parsed dict; the rest take the validated model. Kept as one
-#: ordered tuple so adding a gate is appending to a list and nothing else --
-#: which is exactly how gates 3 through 7 arrived.
+#: Gate 2 takes the parsed dict; the rest take the validated model.
 _MODEL_GATES: tuple[Callable[[Any, GateContext], GateResult], ...] = (
     gate_band,
     gate_numeric,
@@ -479,8 +383,7 @@ _MODEL_GATES: tuple[Callable[[Any, GateContext], GateResult], ...] = (
     gate_budget,
 )
 
-#: Every gate name, in order. For the metrics surface and for the tests that
-#: assert the pipeline has not lost one.
+#: Every gate name, in order.
 GATE_NAMES: tuple[str, ...] = (
     "parse",
     "schema",

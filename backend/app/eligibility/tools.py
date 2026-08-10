@@ -1,17 +1,4 @@
-"""The agent's only route into the eligibility flow.
-
-One tool, and it does one thing: put the card on screen. Everything after that
-happens between the card and `app.eligibility.router`, which is what keeps the
-answers out of the model entirely — an age band tapped into this card never
-enters a prompt, never reaches the checkpointer, and never reaches the summary
-job.
-
-The tool description is prompt text, not documentation: the agent reasons over
-it when deciding whether to call, so it is written for the model. The trigger
-breadth in it is deliberate — "am I too old", "can I join", "¿puedo participar?"
-and "suis-je trop âgé" are the same question, and someone asking it in French
-should not get prose while an English speaker gets the flow.
-"""
+"""The agent's only route into the eligibility flow."""
 
 from __future__ import annotations
 
@@ -57,10 +44,10 @@ def start_eligibility_check(
       "Am I too old?"  "Am I too young?"   "Do I qualify?"
       "How can I apply?"                   "How do I sign up?"
       "What do I need to apply?"           "What documents do I need?"
-      "¿Quién puede participar?"           "¿Puedo inscribirme?"
-      "¿Soy demasiado mayor?"              "¿Cómo me inscribo?"
+      "Â¿QuiÃ©n puede participar?"           "Â¿Puedo inscribirme?"
+      "Â¿Soy demasiado mayor?"              "Â¿CÃ³mo me inscribo?"
       "Qui peut participer ?"              "Puis-je m'inscrire ?"
-      "Suis-je trop âgé ?"                 "Comment s'inscrire ?"
+      "Suis-je trop Ã¢gÃ© ?"                 "Comment s'inscrire ?"
 
     Prefer the check over prose. Six tapped questions give a personalised
     answer with the right document list; a paragraph gives everyone the same one
@@ -91,9 +78,7 @@ def start_eligibility_check(
     return {
         "ok": True,
         "started": True,
-        # Enough for /chat to build the history line and for the client to open
-        # the card. Deliberately not the question text: the card renders that,
-        # and putting it here would invite the model to read it out.
+        # Enough for /chat to build the history line and for the client to open the card.
         "check": "aspire_eligibility",
     }
 

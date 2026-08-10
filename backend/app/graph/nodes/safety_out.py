@@ -1,60 +1,4 @@
-"""The last thing that touches an outbound message. Six gates, in order.
-
-    a. length cap by age band
-    b. vocabulary, against the band's banned list
-    c. PII scrub
-    d. link and image stripping, for children
-    e. quick-replies presence, during a lesson
-    f. locale
-
-The order is not arbitrary and changing it changes behaviour. Length runs first
-because it is the gate most likely to trigger a rewrite, and a rewrite has to be
-re-checked by everything after it -- running vocabulary first would mean
-checking text the model is about to replace. PII runs after the rewrites,
-because a rewrite can reintroduce a number the model saw earlier in the thread.
-Links are stripped after PII so that a redacted e-mail address cannot leave a
-`mailto:` behind. Locale is last because it is the only gate that judges the
-whole finished message.
-
-## Widgets are split out before any of it, and put back after
-
-A lesson turn can carry a composed widget between `⟦widget⟧` markers. Every
-gate here runs on the PROSE only, with the blocks lifted out first
-(`widgets/sentinel.py`) and returned afterwards.
-
-Not a special case for tidiness -- without it the widget feature cannot work at
-all. A composed widget is a few hundred characters of JSON, so gate (a) counts
-it against a thirty-five word cap, decides the reply is four hundred words
-long, and re-prompts the model to shorten it. The model shortens it by deleting
-the widget. What reaches the child is prose, and what reaches the log is a
-length violation, and neither says that a widget was destroyed.
-
-The prose is still gated in full, so nothing is weakened: a widget has its own
-seven gates in `widgets/validate.py`, and those check exactly the things these
-cannot -- band-permitted primitive, control count, formula domain, copy against
-the band's word list.
-
-## What may use a model and what may not
-
-Detection is deterministic in every gate. Counting words is arithmetic; finding
-a national ID is a regex; a banned term is a set membership test. None of that
-is a judgement call and none of it may become one -- a model asked "is this too
-long for a six-year-old?" gives a different answer on Tuesday.
-
-Two gates use a model for the *remedy*, once each: a message over the cap is
-re-prompted with a shorten instruction, and a lesson turn with no chips is
-re-prompted for chips. A second failure is handled deterministically -- truncate
-at the last complete sentence, or fall back to a single chip -- because a second
-re-prompt is a third model call on a turn a child is waiting through, and the
-deterministic answer is always available.
-
-## This node is not skippable
-
-Every path through `main_graph` ends here, including the refusal paths, and
-that is enforced by the graph having exactly one edge into `persist` and it
-coming from this node. A router that could bypass this would be a router that
-could serve unbounded, unfiltered text to a six-year-old.
-"""
+"""The last thing that touches an outbound message."""
 
 from __future__ import annotations
 
@@ -72,21 +16,11 @@ from app.widgets import sentinel
 logger = logging.getLogger(__name__)
 
 #: The three names the lesson subgraph is registered under.
-#:
-#: Gate (e) used to name `learn_agent` alone, which meant a guardian preview and
-#: a signed-out sample ran the identical machine with the chip requirement
-#: switched off -- and those are precisely the two audiences being shown what
-#: the product is like.
 LEARNING_AGENTS: frozenset[str] = frozenset(
     {"learn_agent", "learning_preview", "learning_sample"}
 )
 
-#: Words allowed per answer, by band. `None` means no cap.
-#:
-#: These are reading-stamina numbers rather than comprehension numbers. A
-#: six-year-old can follow an idea for a long time; they cannot follow a wall of
-#: text. Thirty-five words is roughly three short sentences, which is what a
-#: mascot turn should be before it hands the conversation back.
+#: Words allowed per answer, by band.
 WORD_CAPS: dict[str, int | None] = {
     "5-8": 35,
     "9-12": 70,
@@ -96,22 +30,6 @@ WORD_CAPS: dict[str, int | None] = {
 }
 
 #: The same ceiling, for a turn that is TEACHING rather than talking.
-#:
-#: A lesson is a different kind of message from a mascot's conversational turn and
-#: needs a different ceiling. Thirty-five words is three short sentences: correct
-#: for "good question -- back to our snow cone money", and below the FLOOR of an
-#: explanation. A concept explained to a six-year-old in thirty-five words is a
-#: definition read aloud, which is precisely the "thin and generic" report that
-#: opened Track L.
-#:
-#: The reading-stamina argument still holds and these are not generous: ninety
-#: words at 5-8 is six or seven short sentences with an example in the middle,
-#: read once, about something they asked about. What it is not is a wall of text.
-#:
-#: These MUST equal `agents/learn/contract.CONTRACTS[band].max_words`. A prompt
-#: that asks for more words than this gate permits produces a re-prompt on every
-#: single turn -- a second model call, forever, caused by two constants drifting
-#: apart. `tests/learning/test_contract.py` pins them together.
 LESSON_WORD_CAPS: dict[str, int | None] = {
     "5-8": 90,
     "9-12": 120,
@@ -120,18 +38,32 @@ LESSON_WORD_CAPS: dict[str, int | None] = {
     "adult": 220,
 }
 
+#: The three names the Q&A subgraph is registered under.
+QA_AGENTS: frozenset[str] = frozenset(
+    {"qa_agent", "qa_agent_limited", "qa_agent_public"}
+)
+
+#: The ceiling for a FACTUAL answer, which needs room for conditions, amounts and steps.
+QA_WORD_CAPS: dict[str, int | None] = {
+    "5-8": 120,
+    "9-12": 180,
+    "13-15": 280,
+    "16-18": 400,
+    "adult": None,
+}
+
 
 def cap_for(band: str, agent: str | None) -> int | None:
-    """The word ceiling for this turn: the lesson cap when teaching, else the chat cap."""
-    table = LESSON_WORD_CAPS if agent in LEARNING_AGENTS else WORD_CAPS
+    """The word ceiling for this turn: lesson cap when teaching, QA cap when answering, else the chat cap."""
+    if agent in LEARNING_AGENTS:
+        table = LESSON_WORD_CAPS
+    elif agent in QA_AGENTS:
+        table = QA_WORD_CAPS
+    else:
+        table = WORD_CAPS
     return table.get(band)
 
-#: The band at and above which links may be shown, and the personas that never
-#: see them regardless.
-#:
-#: Gate (d) is "persona is stella, or persona is orion and the band is under
-#: 16". Written as data rather than as a condition so that the answer to "does
-#: this child see links?" is a lookup somebody can read.
+#: The band at and above which links may be shown, and the personas that never see them regardless.
 _NO_LINK_PERSONAS = frozenset({"stella"})
 _ORION_LINK_BAND = "16-18"
 
@@ -140,18 +72,14 @@ QUICK_REPLY_MIN = 2
 QUICK_REPLY_MAX = 4
 QUICK_REPLY_MAX_WORDS = 4
 
-#: The last-resort chip, when a re-prompt still produced nothing. One option,
-#: because a dead end is the failure being prevented and one way forward
-#: prevents it.
+#: The last-resort chip, when a re-prompt still produced nothing.
 _FALLBACK_CHIP: dict[str, str] = {
     "en": "Keep going",
     "es": "Seguimos",
     "fr": "On continue",
 }
 
-#: A callable that asks the model to try again. Injected rather than imported so
-#: the gates are testable without a network, and so the eval harness can count
-#: re-prompts without patching a module global.
+#: A callable that asks the model to try again.
 Reprompt = Callable[[str, str], Awaitable[str]]
 
 
@@ -159,45 +87,28 @@ Reprompt = Callable[[str, str], Awaitable[str]]
 
 
 def word_count(text: str) -> int:
-    """Words, by whitespace.
-
-    Not tokens and not characters. The cap is about how much a child has to
-    read, and whitespace-separated runs are what a reader experiences as words.
-    """
+    """Words, by whitespace."""
     return len(text.split())
 
 
 def over_cap(text: str, band: str, agent: str | None = None) -> bool:
-    """Whether this reply exceeds the ceiling for its band and its kind of turn.
-
-    `agent` defaults to None, which selects the conversational caps -- so every
-    existing caller keeps the behaviour it had, and only a turn that says it is
-    teaching gets the lesson ceiling.
-    """
+    """Whether this reply exceeds the ceiling for its band and its kind of turn."""
     cap = cap_for(band, agent)
     return cap is not None and word_count(text) > cap
 
 
-#: Sentence terminators, including the ones that end a spoken sentence in the
-#: three shipped locales.
+#: Sentence terminators, including the ones that end a spoken sentence in the three shipped locales.
 _SENTENCE_END = re.compile(r"[.!?…]['\")\]]*\s")
 
 
 def truncate_at_sentence(text: str, max_words: int) -> str:
-    """The longest prefix within the cap that ends on a complete sentence.
-
-    Falls back to a hard word cut with an ellipsis only when there is no
-    sentence boundary at all inside the budget -- one very long first sentence.
-    Cutting mid-sentence is bad; cutting mid-word is worse, and leaving a
-    six-year-old with 300 words is worse than both.
-    """
+    """The longest prefix within the cap that ends on a complete sentence."""
     words = text.split()
     if len(words) <= max_words:
         return text
 
     budget = " ".join(words[:max_words])
-    # Search the ORIGINAL text up to the budget's length so the terminator's
-    # trailing whitespace is present to match against.
+    # Search the ORIGINAL text up to the budget's length so the terminator's trailing whitespace is present to matc…
     window = text[: len(budget) + 1]
     ends = list(_SENTENCE_END.finditer(window))
     if ends:
@@ -206,11 +117,7 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
 
 
 def shorten_instruction(band: str, current: int, agent: str | None = None) -> str:
-    """The re-prompt for gate (a). Specific, with the number in it.
-
-    "Be briefer" produces a message that is 10% shorter. Naming the cap and the
-    current length produces one that fits, because the model can count.
-    """
+    """The re-prompt for gate (a)."""
     cap = cap_for(band, agent)
     return (
         f"That reply is {current} words. A learner in the {band} band can take "
@@ -223,8 +130,6 @@ def shorten_instruction(band: str, current: int, agent: str | None = None) -> st
 # ── gate d: links and images ─────────────────────────────────────────────────
 
 #: Markdown images first, then markdown links, then bare URLs and schemes.
-#: Ordered because `![alt](url)` also matches the link pattern, and stripping
-#: the link first would leave a stray `!`.
 _IMAGE_MD = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
 _LINK_MD = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 _BARE_URL = re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE)
@@ -233,15 +138,7 @@ _HTML_TAG = re.compile(r"</?[a-zA-Z][^>]*>")
 
 
 def strips_links(persona: str, band: str) -> bool:
-    """Whether this reader gets links at all.
-
-    Stella never. Orion below 16-18 never. Everyone else yes.
-
-    The rule is about who can evaluate a destination, not about who can read.
-    A link in a chat window is an instruction to leave the product, and a
-    thirteen-year-old following one has left every protection this file
-    represents.
-    """
+    """Whether this reader gets links at all."""
     if persona in _NO_LINK_PERSONAS:
         return True
     if persona == "orion":
@@ -250,12 +147,7 @@ def strips_links(persona: str, band: str) -> bool:
 
 
 def strip_links(text: str) -> str:
-    """Remove links and images, keeping the words that were linked.
-
-    Keeping the anchor text matters: "read the [eligibility rules](...)" becomes
-    "read the eligibility rules", which is still a sentence. Deleting the whole
-    phrase would leave "read the", which reads as a bug.
-    """
+    """Remove links and images, keeping the words that were linked."""
     out = _IMAGE_MD.sub("", text)
     out = _LINK_MD.sub(r"\1", out)
     out = _BARE_URL.sub("", out)
@@ -270,11 +162,7 @@ def strip_links(text: str) -> str:
 
 
 def quick_replies_ok(replies: list[str]) -> bool:
-    """Whether a lesson turn's chips are usable.
-
-    Count and length both. Two chips of nine words each are not a tap-first
-    interface -- they are a reading task with extra steps.
-    """
+    """Whether a lesson turn's chips are usable."""
     if not QUICK_REPLY_MIN <= len(replies) <= QUICK_REPLY_MAX:
         return False
     return all(0 < word_count(reply) <= QUICK_REPLY_MAX_WORDS for reply in replies)
@@ -291,12 +179,7 @@ _CHIP_LINE = re.compile(r"^\s*[-*•]\s+(.{1,60})\s*$", re.MULTILINE)
 
 
 def parse_chips(text: str) -> tuple[str, list[str]]:
-    """Pull a trailing bulleted list off a message. Returns `(prose, chips)`.
-
-    Only a run of bullets at the very END counts. A bulleted list in the middle
-    of an explanation is content, and hoisting it into chips would delete the
-    explanation's body and offer its steps as things to tap.
-    """
+    """Pull a trailing bulleted list off a message."""
     lines = text.rstrip().split("\n")
     chips: list[str] = []
     while lines:
@@ -310,17 +193,7 @@ def parse_chips(text: str) -> tuple[str, list[str]]:
 
 # ── gate f: locale ───────────────────────────────────────────────────────────
 
-#: Very common function words, per locale. Detection by stopword frequency
-#: rather than by a library, for the same reason the PII patterns are regexes:
-#: it runs on every message, it has to be explainable, and the decision it
-#: drives is "ask the model to try again", which is cheap to get wrong in the
-#: false-positive direction and is re-checked afterwards.
-#:
-#: The lists are deliberately LONG. A short list of the ten commonest words in
-#: each language does not separate Spanish from French, because they share most
-#: of them -- `un`, `que`, `de`, `en`, `la`, `tu` all count for both. The
-#: separation comes from the words that differ, so the lists carry pronouns,
-#: auxiliaries and prepositions rather than only articles.
+#: Very common function words, per locale.
 _STOPWORDS: dict[str, frozenset[str]] = {
     "en": frozenset(
         "the a an and is are was were you your yours that this it its to of for "
@@ -348,12 +221,7 @@ _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
 def detect_locale(text: str) -> str | None:
-    """Which of the three shipped locales this reads as, or None if unsure.
-
-    None on anything short. A four-word reply has no reliable signal, and
-    re-prompting a correct message because it was brief is exactly the false
-    positive that makes a gate get switched off.
-    """
+    """Which of the three shipped locales this reads as, or None if unsure."""
     words = [word.lower() for word in _WORD.findall(text)]
     if len(words) < 8:
         return None
@@ -364,8 +232,7 @@ def detect_locale(text: str) -> str | None:
     }
     best = max(scores, key=lambda locale: scores[locale])
     ordered = sorted(scores.values(), reverse=True)
-    # A clear winner only. Two locales within one hit of each other means the
-    # signal is noise -- short technical text, or a sentence of proper nouns.
+    # A clear winner only.
     if ordered[0] == 0 or ordered[0] - ordered[1] < 2:
         return None
     return best
@@ -400,14 +267,7 @@ def _text_of(message: Any) -> str:
 
 
 def make_safety_out(reprompt: Reprompt | None = None):
-    """Build the outbound gate.
-
-    `reprompt` may be None, and then both remedial gates fall straight through
-    to their deterministic fallback. That is the shape the unit tests use, and
-    it is also a legitimate production configuration: a deployment that would
-    rather truncate than pay a second model call sets it to None and loses
-    nothing but polish.
-    """
+    """Build the outbound gate."""
 
     async def safety_out(state: AspireState) -> dict[str, Any]:
         messages = state.get("messages", [])
@@ -415,25 +275,19 @@ def make_safety_out(reprompt: Reprompt | None = None):
             return {}
         last = messages[-1]
         if getattr(last, "type", None) != "ai":
-            # Nothing outbound this turn -- an interrupted graph waiting on an
-            # upload, for instance. There is nothing to gate.
+            # Nothing outbound this turn -- an interrupted graph waiting on an upload, for instance.
             return {}
 
         band = state.get("age_band", "adult")
         persona = state.get("persona", "")
-        # Read once, used by gate (a) to pick the ceiling and by gate (e) to
-        # decide whether chips are required. One read rather than two, because
-        # the two gates disagreeing about whether this is a lesson would produce
-        # a turn held to conversational length and required to offer chips.
+        # Read once, used by gate (a) to pick the ceiling and by gate (e) to decide whether chips are required.
         agent = state.get("active_agent")
         locale = state.get("locale", "en")
         original = _text_of(last)
         replies = list(state.get("quick_replies") or [])
         report: dict[str, Any] = {}
 
-        # Widgets out, before anything measures or rewrites. `text` is prose
-        # from here to the end of the node, and every gate below is written as
-        # though widgets do not exist -- which is the point of doing it here.
+        # Widgets out, before anything measures or rewrites.
         text, widgets = sentinel.split(original)
         prose_in = text
         if widgets:
@@ -463,10 +317,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
             report["vocab_violations"] = sorted({v.term for v in violations})
             if reprompt is not None:
                 text = await reprompt(vocab.explain(violations, band), text)
-                # Re-checked, and a second failure is NOT re-prompted again. The
-                # remaining terms are removed by hand instead: a banned word
-                # reaching a nine-year-old is the failure this gate exists to
-                # prevent, and it must not depend on the model complying.
+                # Re-checked, and a second failure is NOT re-prompted again.
                 remaining = vocab.check(text, band)
                 if remaining:
                     report["vocab_stripped"] = sorted({v.term for v in remaining})
@@ -479,8 +330,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = re.sub(r"\s{2,}", " ", text).strip()
                 report["vocab_stripped"] = report["vocab_violations"]
 
-            # A rewrite can push the reply back over the cap. Cheaper to
-            # re-truncate deterministically than to loop the model again.
+            # A rewrite can push the reply back over the cap.
             if over_cap(text, band, agent):
                 cap = cap_for(band, agent)
                 assert cap is not None
@@ -507,10 +357,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
 
         # ── (e) quick replies, during a lesson ──────────────────────────────
         if agent in LEARNING_AGENTS:
-            # The model may have written its chips as a trailing bulleted list
-            # rather than filling `quick_replies`. Harvest them before deciding
-            # anything is missing -- and always remove them from the prose,
-            # because leaving them there renders the options twice.
+            # The model may have written its chips as a trailing bulleted list rather than filling `quick_replies`.
             prose, harvested = parse_chips(text)
             if harvested:
                 text = prose
@@ -543,10 +390,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
             )
             if reprompt is not None:
                 retried = await reprompt(locale_instruction(locale), text)
-                # Accepted only if it actually moved. A second wrong-language
-                # reply is served rather than truncated: an answer in the wrong
-                # language is comprehensible to somebody, and no answer is
-                # comprehensible to nobody.
+                # Accepted only if it actually moved.
                 if detect_locale(retried) in (locale, None):
                     text = retried
                     # One last length check -- the retry is a fresh generation.
@@ -561,21 +405,13 @@ def make_safety_out(reprompt: Reprompt | None = None):
         if report:
             flags["outbound"] = report
 
-        # Widgets back in. When no gate touched the prose the ORIGINAL string is
-        # restored verbatim -- markers where the model put them, mid-paragraph
-        # if that is where it put them -- so the common case pays nothing for
-        # having been split. Only a rewritten reply moves its widgets to the end,
-        # and only because there is no longer a sentence to anchor them to.
+        # Widgets back in.
         if widgets:
             text = original if text == prose_in else sentinel.reattach(text, widgets)
 
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
         if text != original:
-            # Rewritten in place, keeping the message id, so `add_messages`
-            # REPLACES the message rather than appending a second copy. Without
-            # the id the transcript would carry both the unsafe original and its
-            # corrected version -- and the unsafe one would be the one the model
-            # reads back next turn.
+            # Rewritten in place, keeping the message id, so `add_messages` REPLACES the message rather than appending a se…
             update["messages"] = [AIMessage(content=text, id=getattr(last, "id", None))]
         return update
 

@@ -1,41 +1,4 @@
-"""A widget interaction is a TURN, and the agent must answer it.
-
-    "Whoa -- you found it. EC$5 a week for five years, and the bank added
-     EC$180 on top. You didn't work for that EC$180. That's compound interest."
-
-That sentence is the whole point of the widget system. Without it a widget is
-wallpaper: something that moved on screen and then the conversation carried on
-as though it had not.
-
-## Always the specific numbers, never generic praise
-
-"Great job!" tells a child nothing and they know it. The reply has to contain
-the figures THEY produced, because those figures are the evidence that the thing
-they just did meant something.
-
-The numbers come from the server, recomputed here from the interaction's final
-state through `formulas.registry`. The client sends what it computed too, and
-that value is used only to notice a disagreement -- the client is display, the
-server is the authority, and a mismatch is a parity bug worth a log line.
-
-## An allocator is never graded
-
-`no_wrong_answer` is fixed True on that schema for exactly this reason. The
-reply names the TRADE-OFF the child chose -- "you kept more than you spent, so
-the bicycle arrives sooner and the snow cones are fewer" -- and never says
-whether it was right, because it was a values question and there is no right.
-
-## Skipping is silence
-
-A widget the child never touched produces no interaction event at all, so this
-node never runs, and the agent carries on without comment. No guilt, no nagging,
-no "you didn't try the slider".
-
-## Mastery moves 0 to 1 and no further
-
-Enforced in `learning/mastery.py`, not here. This node records the evidence and
-the scale decides what it is worth -- which is exposure.
-"""
+"""A widget interaction is a TURN, and the agent must answer it."""
 
 from __future__ import annotations
 
@@ -68,12 +31,7 @@ class Interaction:
 
     @classmethod
     def parse(cls, payload: dict[str, Any]) -> "Interaction | None":
-        """Read an interaction, or None if it is not one.
-
-        Returns None rather than raising: this arrives from a browser, and a
-        malformed body is a client bug or a probe, neither of which should be a
-        500.
-        """
+        """Read an interaction, or None if it is not one."""
         if not isinstance(payload, dict):
             return None
         kind = payload.get("widget_kind")
@@ -92,13 +50,7 @@ class Interaction:
 
 
 def recompute(interaction: Interaction) -> dict[str, Any]:
-    """The figures, computed here rather than trusted from the client.
-
-    The client's own numbers are compared against these and a difference is
-    logged. It is not an error -- the reply uses the server's figures either
-    way -- but a divergence means the TypeScript mirror has drifted from the
-    Python registry, and the parity test should have caught it.
-    """
+    """The figures, computed here rather than trusted from the client."""
     state = interaction.final_state
 
     if interaction.widget_kind == "growth_stack":
@@ -119,10 +71,7 @@ def recompute(interaction: Interaction) -> dict[str, Any]:
         }
 
     if interaction.widget_kind == "simulator":
-        # The formula the widget named is not in the interaction payload, so the
-        # client's computed value is what there is. It has already been through
-        # the parity test; this path exists so a simulator's reply is still
-        # specific rather than generic.
+        # The formula the widget named is not in the interaction payload, so the client's computed value is what there…
         return dict(interaction.computed)
 
     return dict(interaction.computed)
@@ -161,12 +110,7 @@ def _simulator_reply(
 
 
 def _allocator_reply(interaction: Interaction, band: str) -> str:
-    """Names the trade-off. Never says whether the split was right.
-
-    `no_wrong_answer` is fixed True on the allocator schema so that this branch
-    cannot be reached for a widget the agent might grade -- and this function
-    contains no comparison, no "but", and no better/worse.
-    """
+    """Names the trade-off."""
     parts = {
         key: value
         for key, value in interaction.final_state.items()
@@ -237,9 +181,7 @@ def make_widget_result(store: MasteryStore | None = None):
         band = band_of(state)
         figures = recompute(interaction)
 
-        # The client's own figure, compared but never used. A divergence is a
-        # parity bug that `formulas.parity.test.ts` should have caught, and the
-        # log line is how it gets noticed if it did not.
+        # The client's own figure, compared but never used.
         claimed = interaction.computed.get("total") or interaction.computed.get("value")
         computed = figures.get("total")
         if claimed is not None and computed is not None and int(claimed) != int(computed):
@@ -250,8 +192,7 @@ def make_widget_result(store: MasteryStore | None = None):
                 computed,
             )
 
-        # None for an anonymous visitor. `MasteryStore.record` accepts it and
-        # writes nothing -- see `mastery.is_persistable`.
+        # None for an anonymous visitor.
         learner = state.get("user_id") or None
         try:
             await (store or MasteryStore()).record(
@@ -262,9 +203,6 @@ def make_widget_result(store: MasteryStore | None = None):
             )
         except Exception:
             # The reply is the point of this turn and it is already assembled.
-            # Losing the mastery row costs a scheduling hint; raising costs the
-            # child the answer about the numbers they just produced, and reads
-            # as the assistant breaking because they touched something.
             logger.warning(
                 "Could not record widget mastery for concept %s.",
                 interaction.concept_id,

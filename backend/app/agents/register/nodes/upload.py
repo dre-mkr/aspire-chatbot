@@ -1,40 +1,4 @@
-"""Collecting a document by pausing the graph.
-
-    doc = interrupt({
-        "type": "upload_request",
-        "slot": "child.birth_certificate",
-        "label": "Rachel's birth certificate",
-        "accepts": [...],
-        "max_mb": 10,
-        "help": "A clear photo of the whole page is fine.",
-    })
-
-`interrupt()` suspends the graph mid-node. The checkpoint holds everything, the
-frontend renders `UploadCard`, and `Command(resume=...)` continues from the
-same line with the document id.
-
-## Why an interrupt rather than a state flag and a second turn
-
-A slot loop that emitted "please upload" and ended the turn would have to
-re-derive, on the next turn, which slot that upload belongs to -- from state
-that the parent may have changed by typing something else. `interrupt` keeps the
-question and the answer in the same stack frame, so the pairing cannot come
-apart.
-
-It also means an upload that never arrives leaves the graph paused rather than
-advanced, which is the correct state: the slot is not filled.
-
-## The graph receives an id. Never bytes.
-
-The client PUTs to object storage directly (`storage/presign.py`). What crosses
-this boundary is `{"document_id": ..., "mime": ..., "size_bytes": ...}` -- a few
-dozen bytes of JSON. No file content enters graph state, a log line, a
-checkpoint, or a model context.
-
-`_assert_no_bytes` is not decoration: a future client that "helpfully" included
-a base64 preview would otherwise write a birth certificate into a Postgres
-checkpoint that gets replayed into a prompt.
-"""
+"""Collecting a document by pausing the graph."""
 
 from __future__ import annotations
 
@@ -50,8 +14,7 @@ ACCEPTS: list[str] = ["image/jpeg", "image/png", "image/heic", "application/pdf"
 
 MAX_MB = 10
 
-#: Keys a resume payload may carry. Anything else is dropped with a warning --
-#: see `_assert_no_bytes`.
+#: Keys a resume payload may carry.
 _ALLOWED_RESUME_KEYS = frozenset(
     {"document_id", "mime", "size_bytes", "checksum", "storage_key", "skipped"}
 )
@@ -87,23 +50,14 @@ def upload_directive(
     label: str | None = None,
     application_id: str = "",
 ) -> Any:
-    """The card the client renders while the graph is paused.
-
-    `application_id` decides which prefix the uploaded object lands in, so it is
-    the difference between a document that can be read back and one that cannot
-    -- see `UploadDirective.application_id`. It is an id the SERVER already
-    holds, passed down rather than looked up, because the only correct value is
-    the draft the calling node is working on.
-    """
+    """The card the client renders while the graph is paused."""
     return UploadDirective(
         slot=slot.path,
         label=label or slot.label,
         accepts=ACCEPTS,
         max_mb=MAX_MB,
         help=(HELP.get(slot.path, {}).get(locale) or HELP.get(slot.path, {}).get("en", "")),
-        # Carried from the slot table, so the card offers skip on exactly the
-        # documents `collect` will accept a skip for. Deriving it here rather
-        # than listing paths in the client keeps one definition of optional.
+        # Carried from the slot table, so the card offers skip on exactly the documents `collect` will accept a skip fo…
         optional=slot.optional,
         application_id=application_id,
     )
@@ -124,13 +78,7 @@ def interrupt_payload(
 
 
 def _assert_no_bytes(payload: dict[str, Any]) -> dict[str, Any]:
-    """Strip anything that is not an identifier, loudly.
-
-    The failure this prevents: a client that includes a base64 thumbnail "for
-    convenience". That string would be written into the checkpoint, which is
-    Postgres, and replayed into the model's context on the next turn -- putting
-    a child's birth certificate in a prompt by accident.
-    """
+    """Strip anything that is not an identifier, loudly."""
     unexpected = set(payload) - _ALLOWED_RESUME_KEYS
     if unexpected:
         logger.warning(
@@ -142,21 +90,12 @@ def _assert_no_bytes(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def make_collect_document(slot: Slot, locale: str, *, label: str | None = None):
-    """A node that pauses for one document and resumes with its id.
-
-    Written as a factory returning a node rather than as a node reading the slot
-    from state, because `interrupt` resumes INTO THIS FUNCTION -- the slot has to
-    be closed over, or the resumed call would have to re-derive which document
-    it is holding.
-    """
+    """A node that pauses for one document and resumes with its id."""
 
     def collect_document(state: Any) -> dict[str, Any]:
         from langgraph.types import interrupt
 
-        # The same id `graph._draft` rehydrates from, read straight out of state
-        # because this node holds no draft of its own. Missing it would sign the
-        # upload into the caller's session prefix instead of the application's,
-        # which is the mismatch `UploadDirective.application_id` documents.
+        # The same id `graph._draft` rehydrates from, read straight out of state because this node holds no draft of it…
         registration = state.get("registration") if isinstance(state, dict) else None
         application_id = ""
         if isinstance(registration, dict):
@@ -175,9 +114,7 @@ def make_collect_document(slot: Slot, locale: str, *, label: str | None = None):
 
         document_id = payload.get("document_id")
         if not document_id:
-            # Resumed with nothing usable. The slot stays unfilled and the loop
-            # asks again, which is correct: an upload that did not happen must
-            # not advance the form.
+            # Resumed with nothing usable.
             logger.info("document slot %s resumed with no id", slot.path)
             return {}
 
@@ -194,8 +131,7 @@ def make_collect_document(slot: Slot, locale: str, *, label: str | None = None):
                     "document_id": str(document_id),
                     "mime": str(payload.get("mime") or ""),
                     "size_bytes": int(payload.get("size_bytes") or 0),
-                    # Never `clean`. A document nobody scanned is not clean, and
-                    # this is the value the admin queue reads.
+                    # Never `clean`.
                     "scan_status": "pending",
                 }
             }

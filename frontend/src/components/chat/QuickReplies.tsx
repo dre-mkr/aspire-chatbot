@@ -1,25 +1,4 @@
-/**
- * The tap-not-type surface.
- *
- * Two to four large cards. For bands 5-8 and 9-12 these are the PRIMARY way to
- * reply and the text input is secondary; for older bands they are a
- * convenience under an ordinary chat.
- *
- * ## Sizes are not decoration
- *
- * 44x44 CSS pixels is the WCAG 2.1 floor and the minimum here. Band 5-8 gets
- * 64pt of height and 18px type, because a six-year-old's tap is imprecise and a
- * missed tap reads to them as the app ignoring them -- which is the single
- * fastest way to lose a young user.
- *
- * ## The fallback chip
- *
- * A learning turn that arrives with no quick replies renders one "Keep going"
- * chip rather than nothing. The server already re-prompts for chips and falls
- * back to the same string (`safety_out`), so this is the second net under the
- * same hole: a dead end in a tap-first interface is a child stuck with no
- * visible way forward and a keyboard they may not use.
- */
+/** The tap-not-type surface. */
 import { useAgeBand } from "./AgeBandProvider";
 
 export interface QuickReply {
@@ -39,13 +18,7 @@ export function QuickReplies({
 	options,
 	onPick,
 	locale = "en",
-	/**
-	 * Whether this turn came from the learning agent.
-	 *
-	 * Only a learning turn gets the fallback chip. A Q&A answer with no
-	 * suggestions is a finished answer, and inventing a "Keep going" under it
-	 * would invite somebody to continue a conversation that is complete.
-	 */
+	/** Whether this turn came from the learning agent. */
 	isLesson = false,
 	disabled = false,
 }: {
@@ -75,17 +48,11 @@ export function QuickReplies({
 
 	return (
 		// A fieldset with a hidden legend, rather than a div with role="group".
-		// Both announce as a group; only this one does it with the element the
-		// platform already has, so it needs no ARIA to be understood and cannot
-		// drift out of step with it. The default border and padding are removed
-		// because a box around chat replies is not what a fieldset looks like
-		// here.
 		<fieldset
 			className="quick-replies"
 			style={{
 				display: "grid",
-				// One per row for the youngest band. Two side by side at 375px is
-				// two 160px targets, and 160px is not a card a six-year-old aims at.
+				// One per row for the youngest band.
 				gridTemplateColumns: youngest
 					? "1fr"
 					: "repeat(auto-fit, minmax(min(100%, 11rem), 1fr))",
@@ -124,8 +91,7 @@ export function QuickReplies({
 						lineHeight: 1.35,
 						padding: youngest ? "1rem 1.25rem" : "0.625rem 1rem",
 						borderRadius: "0.875rem",
-						// Semantic tokens only. The palette lives in styles.css and a
-						// hex value here would be a colour the theme cannot correct.
+						// Semantic tokens only.
 						border: "1px solid var(--hairline)",
 						background: "var(--wash-6)",
 						color: "var(--plum-deep)",
@@ -137,8 +103,7 @@ export function QuickReplies({
 						transition: "background-color 140ms ease, transform 140ms ease",
 					}}
 					onPointerDown={(event) => {
-						// A press state a child can see. Transform only, so it cannot
-						// shift anything around it.
+						// A press state a child can see.
 						event.currentTarget.style.transform = "scale(0.98)";
 					}}
 					onPointerUp={(event) => {
@@ -155,13 +120,7 @@ export function QuickReplies({
 	);
 }
 
-/**
- * The "type instead" affordance for the youngest band.
- *
- * Small, quiet, and always present. The input is collapsed behind it, never
- * removed -- see `AgeBandProvider.inputCollapsed` for why that distinction is
- * the whole point.
- */
+/** The "type instead" affordance for the youngest band. */
 export function TypeInstead({ onOpen }: { onOpen: () => void }) {
 	const band = useAgeBand();
 	if (!band.inputCollapsed) return null;

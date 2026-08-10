@@ -1,83 +1,4 @@
-"""The pgvector retriever must return what the Chroma one returned.
-
-This is the gate on P13-002. Moving the corpus from a local Chroma store to
-Postgres is supposed to change where the vectors live and nothing else -- not
-which chunks reach the prompt, not their order, and not where the relevance floor
-falls.
-
-## What the investigation found
-
-The brief for this phase said a divergence "means an embedding or normalization
-bug, not an acceptable approximation difference". It was neither, and the third
-possibility is worth recording because it changes what can be asserted.
-
-Measured, on this corpus:
-
-* **Both searches are exact.** pgvector's `ORDER BY embedding <=> q` reproduces a
-  numpy cosine ranking element for element (`test_pgvector_ranking_is_exact`).
-  Chroma's HNSW also returned the exact ranking -- at 332 rows with
-  `ef_search=100` it examines the whole graph, so there was never an
-  approximation to inherit.
-* **OpenAI's embedding API is not bit-deterministic.** Two identical
-  `embed_query` calls differ by up to 9.2e-05 per component. The document vectors
-  from the Chroma ingest and the Neon ingest differ by up to 1.45e-03, which is a
-  cosine perturbation of ~1.5e-04.
-* **Two of the thirty probe questions have candidates closer together than that.**
-  For "Combien y a-t-il sur le compte d'épargne ASPIRE ?", ASP-254 and ASP-172 sit
-  1.5e-04 apart. Their order is a coin flip below the embedding model's own
-  reproducibility floor, and no amount of care in this code makes it stable.
-
-So exact top-k equality across a re-ingest is not obtainable while embeddings come
-from a hosted, non-deterministic provider. It would be obtainable by copying
-vectors instead of recomputing them, or by embedding locally with a deterministic
-model -- neither of which is this phase's job.
-
-What IS asserted, therefore: the ranking is exact given the vectors, rank 1 is
-stable, and anything that differs between the two backends differs only among
-chunks sitting within `NOISE_BAND` of the top-k boundary. A genuinely better chunk
-going missing would be far outside that band and would fail this file loudly.
-
-Retrieval *quality* was checked separately and is unchanged: `evals.run
---retrieval` scores hit_rate 0.95 / MRR 0.9056 on both backends, with identical
-per-language and per-kind breakdowns over all 60 golden cases.
-
-Marked `slow`: it embeds 30 questions against the live provider.
-
-## Why Chroma is constructed here rather than imported
-
-`app/rag.py` no longer knows what Chroma is, which is the point of the change. The
-baseline is built inside the test, against the store still on disk at
-`data/chroma`. Every comparison here skips when that directory is gone, so
-deleting it retires the comparison cleanly instead of breaking CI.
-
-## The baseline is frozen; the corpus is not (P15-006)
-
-`data/chroma` is a snapshot taken at the migration. It is gitignored, and nothing
-in this codebase can rebuild it -- `app/rag.py` dropped Chroma deliberately. The
-knowledge base has since grown, so the two stores no longer hold the same corpus:
-
-    chroma  332 rows        neon  706 rows
-    only in neon    374     (all FIN-*, added after the snapshot)
-    only in chroma    0     -- the move dropped nothing
-
-Comparing top-k across stores with different contents measures the CORPUS
-difference, not the backends. It did exactly that: pgvector returned FIN-304 for
-"How is the ASPIRE financial education delivered?" at cosine distance 0.209 --
-a better hit than anything Chroma held -- and the comparison read that as a
-regression 5.1e-02 outside `NOISE_BAND`. A new row winning is the corpus working.
-
-So the comparison is restricted to the ids the baseline actually holds. That
-restores the controlled experiment the file was always describing -- same
-documents, same query vector, two backends -- and on that footing the original
-claim still stands: rank 1 agrees on all 30 questions and no top-5 difference
-falls outside `NOISE_BAND`.
-
-The restricted ranking is computed in numpy rather than by `PgVectorRetriever`,
-which cannot filter by id. That is not a weaker check: it is only sound because
-`test_pgvector_ranking_is_exact` proves pgvector reproduces this exact numpy
-ranking over the whole corpus, element for element. The transitivity is the
-point, and it is asserted above rather than assumed here.
-"""
+"""The pgvector retriever must return what the Chroma one returned."""
 
 from __future__ import annotations
 
@@ -98,28 +19,20 @@ from app.rag import (
     chroma_floor_as_cosine_distance,
     get_embeddings,
 )
-from scripts.latency_probe import load_cases
+# The probe lives in a `scripts/` directory that not every checkout carries; a missing module must be a skip, n…
+_latency_probe = pytest.importorskip(
+    "scripts.latency_probe", reason="scripts/ is not in this checkout"
+)
+load_cases = _latency_probe.load_cases
 
 pytestmark = pytest.mark.slow
 
 #: How far apart two chunks may be and still be considered order-unstable.
-#:
-#: The measured worst-case cosine perturbation from re-embedding the same text is
-#: ~1.5e-04. This is an order of magnitude above that, and still two orders below
-#: the span that separates a relevant chunk from the relevance floor (top hits sit
-#: around 0.35 cosine distance; the floor is 0.5657). A recall bug would show up
-#: as a difference far outside this band.
 NOISE_BAND = 2e-3
 
 
 class _Fixed(Embeddings):
-    """Returns one prepared vector, so both backends search with the same query.
-
-    This is what turns the comparison into a controlled experiment. Embedding each
-    question twice -- once per backend -- would put provider nondeterminism on the
-    query side as well as the corpus side, and there would be no way to tell which
-    one moved a result.
-    """
+    """Returns one prepared vector, so both backends search with the same query."""
 
     def __init__(self, vector: list[float]) -> None:
         self.vector = vector
@@ -159,11 +72,7 @@ def chroma_store():
 
 @pytest.fixture(scope="module")
 def baseline_ids(chroma_store) -> set[str]:
-    """The knowledge-base ids the frozen Chroma snapshot actually holds.
-
-    Read through the public `get()` rather than the sqlite file, so this does not
-    depend on Chroma's internal schema to say which corpus it was built from.
-    """
+    """The knowledge-base ids the frozen Chroma snapshot actually holds."""
     metadatas = chroma_store.get(include=["metadatas"])["metadatas"]
     return {str(m["id"]) for m in metadatas if m and m.get("id")}
 
@@ -242,12 +151,7 @@ def test_the_floor_can_be_switched_off():
 
 
 def test_the_floor_derivation_matches_chromas_arithmetic():
-    """Rederived from Chroma's transform, independently of the implementation.
-
-    Chroma keeps a chunk when `1 - L2squared/sqrt(2) >= threshold`, and for unit
-    vectors `L2squared == 2 * cosine_distance`. Anything agreeing with this loop
-    agrees with Chroma.
-    """
+    """Rederived from Chroma's transform, independently of the implementation."""
     for threshold in (0.05, 0.2, 0.35, 0.5):
         cutoff = chroma_floor_as_cosine_distance(threshold)
         assert cutoff is not None
@@ -259,13 +163,7 @@ def test_the_floor_derivation_matches_chromas_arithmetic():
 
 
 def test_pgvector_ranking_is_exact(neon_corpus, probe_vectors):
-    """The real correctness gate, and it involves no provider nondeterminism.
-
-    Same vectors, same query, two independent implementations: Postgres'
-    `<=>` operator and a numpy dot product. They must agree exactly. If they ever
-    do not, the bug is in the SQL, the cast, or the stored vectors -- not in
-    anything upstream.
-    """
+    """The real correctness gate, and it involves no provider nondeterminism."""
     mismatches = []
     for question, vector in probe_vectors:
         retriever = PgVectorRetriever(embeddings=_Fixed(vector), k=5, max_cosine_distance=None)
@@ -280,12 +178,7 @@ def test_pgvector_ranking_is_exact(neon_corpus, probe_vectors):
 
 
 def test_repeated_synchronous_retrieval_works(probe_vectors):
-    """Regression: `asyncio.run` per call broke on the second question.
-
-    The engine is process-wide and its pooled asyncpg connections bind to the loop
-    that created them, so a fresh-loop-per-call bridge dies with "Event loop is
-    closed" the second time. `evals/run.py` calls `invoke()` sixty times.
-    """
+    """Regression: `asyncio.run` per call broke on the second question."""
     _, vector = probe_vectors[0]
     retriever = PgVectorRetriever(embeddings=_Fixed(vector), k=3, max_cosine_distance=None)
     for _ in range(4):
@@ -308,14 +201,7 @@ def test_nothing_past_the_floor_is_ever_returned(neon_corpus, probe_vectors):
 
 
 def test_the_floor_starves_an_out_of_scope_question():
-    """The defence-in-depth `build_retriever` describes, actually working.
-
-    Not checked against the probe questions: every one of those is answerable
-    from the corpus, so all four chunks clear the floor and the threshold never
-    bites. It bites here, which is the case it exists for -- without it these
-    questions put four irrelevant knowledge-base rows into the prompt and left
-    grounding entirely to the system prompt.
-    """
+    """The defence-in-depth `build_retriever` describes, actually working."""
     settings = get_settings()
     retriever = PgVectorRetriever(
         embeddings=get_embeddings(),
@@ -332,10 +218,7 @@ def test_the_floor_starves_an_out_of_scope_question():
 
 
 def test_the_floor_is_what_excludes_them_not_an_empty_corpus():
-    """The companion to the test above: without the floor, chunks do come back.
-
-    Two tests that could both pass on a broken corpus are worth one that cannot.
-    """
+    """The companion to the test above: without the floor, chunks do come back."""
     retriever = PgVectorRetriever(
         embeddings=get_embeddings(), k=4, max_cosine_distance=None
     )
@@ -347,14 +230,7 @@ def test_the_floor_is_what_excludes_them_not_an_empty_corpus():
 
 @requires_chroma
 def test_the_move_to_postgres_dropped_nothing(baseline_ids, neon_corpus):
-    """Every chunk the baseline holds is still in Postgres.
-
-    This replaces an equal-count assertion, which stopped meaning what it said
-    once the knowledge base grew: 332 != 706 reported a dropped row when what had
-    happened was 374 rows being ADDED. Containment is the property the migration
-    actually promises, and unlike a count it survives the corpus growing -- an
-    ingest that lost a row still fails here, loudly and by name.
-    """
+    """Every chunk the baseline holds is still in Postgres."""
     ids, _ = neon_corpus
     missing = sorted(baseline_ids - set(ids))
     assert not missing, (
@@ -367,11 +243,7 @@ def test_the_move_to_postgres_dropped_nothing(baseline_ids, neon_corpus):
 def test_rank_one_matches_chroma_for_every_probe_question(
     chroma_store, probe_vectors, neon_corpus, baseline_ids
 ):
-    """The best chunk is never a coin flip: it has a clear margin on all 30.
-
-    Ranked over the baseline's own 332 ids on both sides -- see the module
-    docstring. Unrestricted, this compares which CORPUS holds the better row.
-    """
+    """The best chunk is never a coin flip: it has a clear margin on all 30."""
     divergences = []
     for question, vector in probe_vectors:
         expected = [_key(d) for d in chroma_store.similarity_search_by_vector(vector, k=5)]
@@ -388,15 +260,7 @@ def test_rank_one_matches_chroma_for_every_probe_question(
 def test_any_top_5_difference_is_confined_to_near_ties(
     chroma_store, probe_vectors, neon_corpus, baseline_ids
 ):
-    """Sets may differ, but only among chunks too close to order reliably.
-
-    This is the assertion that would catch a real regression. A chunk dropped
-    because of a normalisation error, a wrong cast, or a mangled vector would sit
-    far from the boundary, and `NOISE_BAND` would not cover it.
-
-    Both sides rank the same 332 documents, so a difference here can only come
-    from the vectors themselves -- which is the one thing this test is about.
-    """
+    """Sets may differ, but only among chunks too close to order reliably."""
     offenders = []
     for question, vector in probe_vectors:
         expected = [_key(d) for d in chroma_store.similarity_search_by_vector(vector, k=5)]
@@ -429,8 +293,7 @@ def test_metadata_survives_the_move(probe_vectors):
 
     assert documents, "the corpus returned nothing"
     metadata = documents[0].metadata
-    # The columns the CSV carries, which the Chroma implementation also stored
-    # verbatim. `id` in particular is what `evals/run.py` scores on.
+    # The columns the CSV carries, which the Chroma implementation also stored verbatim.
     for field in ("id", "category", "question", "answer", "audience", "source_url"):
         assert field in metadata, f"{field} missing from retrieved metadata"
     assert metadata["source"] == "knowledge_base.csv"

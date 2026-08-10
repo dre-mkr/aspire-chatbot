@@ -1,30 +1,4 @@
-"""Persisting an application slot by slot, with PII encrypted and separated.
-
-## Every slot is written the moment it is answered
-
-Not at the end of a section, not on submit. A parent doing this on a phone
-between other things will not finish in one sitting -- they will be
-interrupted, their battery will die, or they will simply close it and come back
-on Thursday. An application that only persists at the end is an application most
-parents never complete, and nothing about that failure is visible: it looks like
-people losing interest.
-
-`resume_token` is what brings them back to the exact next question.
-
-## Sensitive values go to `application_pii`, encrypted, and nowhere else
-
-`Slot.sensitive` decides it. The value is Fernet-encrypted with
-`PII_ENCRYPTION_KEY` and written to a table the queue query never joins, so
-reading a child's date of birth is a separate act that can be logged.
-
-## Without a key, it REFUSES
-
-`save_slot` raises rather than falling back to plaintext. A registration flow
-that quietly degrades to storing national ID numbers in a JSONB column when an
-environment variable is missing is worse than one that stops -- the second
-failure is loud on the first deploy, and the first is discovered in a breach
-report.
-"""
+"""Persisting an application slot by slot, with PII encrypted and separated."""
 
 from __future__ import annotations
 
@@ -77,12 +51,7 @@ def encryption_available() -> bool:
 
 
 def _serialise(value: Any) -> str:
-    """A slot value as the string that gets encrypted or stored.
-
-    Dates go ISO so they round-trip; everything else is `str`. `repr` is
-    deliberately not used -- a value that round-trips through `repr` and back
-    through `str` is a value that gains quotes each time it is edited.
-    """
+    """A slot value as the string that gets encrypted or stored."""
     if isinstance(value, (date, datetime)):
         return value.isoformat()
     if isinstance(value, bool):
@@ -91,23 +60,14 @@ def _serialise(value: Any) -> str:
 
 
 def _deserialise(slot: Slot, raw: str) -> Any:
-    """The inverse, driven by the slot's own parser.
-
-    Using the parser rather than a type tag means there is one definition of
-    what a slot's value is, and a change to the parser cannot leave old rows
-    reading back as something else.
-    """
+    """The inverse, driven by the slot's own parser."""
     value, problem = slot.parse(raw)
     return raw if problem else value
 
 
 @dataclass
 class Draft:
-    """One application in progress, as the graph holds it.
-
-    `values` is keyed by slot path, with child slots indexed
-    (`child.0.full_name`). Documents are held as their `DocumentRef` dict.
-    """
+    """One application in progress, as the graph holds it."""
 
     application_id: str
     resume_token: str
@@ -117,15 +77,6 @@ class Draft:
     status: str = "draft"
     pending_corrections: list[str] = field(default_factory=list)
     #: Optional slots the parent declined, as resolved keys (`child.0.photo`).
-    #:
-    #: A list beside the values rather than a sentinel inside them. `next_missing`
-    #: reads "unfilled" as `None` or `""`, so recording a skip as a value would
-    #: either be indistinguishable from unanswered -- asking forever -- or would
-    #: need a magic string, which `graph.pick_slot` already explains reached
-    #: `submit` as a real answer the last time it was tried.
-    #:
-    #: Keys, not paths, because `child.photo` is skippable per child: declining a
-    #: photo for the first child must not decline it for the second.
     skipped: list[str] = field(default_factory=list)
 
     def key_for(self, path: str) -> str:
@@ -147,8 +98,7 @@ def new_draft(session_id: str | None = None) -> Draft:
 
     return Draft(
         application_id=str(uuid.uuid4()),
-        # 32 bytes of urlsafe randomness. This is the only credential that
-        # reopens a draft from another device, so it is sized like one.
+        # 32 bytes of urlsafe randomness.
         resume_token=secrets.token_urlsafe(32),
     )
 
@@ -157,13 +107,7 @@ def new_draft(session_id: str | None = None) -> Draft:
 
 
 async def open_application(draft: Draft, *, session_id: str | None, owner: str | None) -> None:
-    """Create the row before the first question is asked.
-
-    Ahead of the conversation rather than after it, for the same reason
-    `_open_conversation` is: an application a parent started must exist even if
-    the first answer never arrives, or the resume link they were given points at
-    nothing.
-    """
+    """Create the row before the first question is asked."""
     from sqlalchemy import text as sql
 
     from app.db import session
@@ -190,12 +134,7 @@ async def open_application(draft: Draft, *, session_id: str | None, owner: str |
 
 
 async def save_slot(draft: Draft, path: str, value: Any) -> None:
-    """Write one answer, immediately, to the right table.
-
-    Sensitive to `application_pii`, encrypted. Everything else to
-    `applications.answers`. There is no third branch and no fallback -- see the
-    module docstring for why a missing key raises here.
-    """
+    """Write one answer, immediately, to the right table."""
     slot = slot_for(path)
     if slot is None:
         raise ValueError(f"{path!r} is not a slot")
@@ -209,10 +148,7 @@ async def save_slot(draft: Draft, path: str, value: Any) -> None:
 
     async with session() as db:
         if db is None:
-            # No database is a supported state for the tests and for a local
-            # run. The draft still holds the value in memory, so the
-            # conversation works and nothing resumes -- which is the honest
-            # behaviour rather than a silent half-persistence.
+            # No database is a supported state for the tests and for a local run.
             return
 
         if slot.sensitive:
@@ -230,26 +166,6 @@ async def save_slot(draft: Draft, path: str, value: Any) -> None:
             )
         else:
             # The casts are load-bearing, not decoration.
-            #
-            # `to_jsonb` and `jsonb_build_object` are polymorphic, and asyncpg
-            # sends a bind parameter with no type attached. Postgres cannot
-            # resolve `to_jsonb(unknown)` and raises
-            #
-            #     DatatypeMismatchError: could not determine polymorphic type
-            #     because input has type unknown
-            #
-            # so EVERY non-sensitive slot failed to save. The first three slots
-            # are sensitive and take the branch above, which is why registration
-            # got as far as the guardian's name, ID and date of birth before
-            # dying on `guardian.relationship` -- far enough in to look like it
-            # worked and to have collected real PII first.
-            #
-            # `text` rather than a typed cast per slot, because `_serialise`
-            # already returns a string for every value including dates and
-            # booleans, and the load path reads `answers` back verbatim without
-            # `_deserialise`. Storing a real JSON boolean here would round-trip
-            # `child.existing_account` as Python True where the rest of this
-            # module expects the string "true".
             await db.execute(
                 sql(
                     """
@@ -278,12 +194,7 @@ async def save_slot(draft: Draft, path: str, value: Any) -> None:
 
 
 async def load_draft(resume_token: str) -> Draft | None:
-    """Reopen an application from its resume token.
-
-    Loads the non-sensitive answers and the PII together, because the graph
-    needs to know which slots are FILLED in order to find the next one -- and a
-    slot that is filled but invisible would be asked for again.
-    """
+    """Reopen an application from its resume token."""
     from sqlalchemy import text as sql
 
     from app.db import session
@@ -334,9 +245,7 @@ async def load_draft(resume_token: str) -> Draft | None:
         try:
             raw = decrypt(bytes(blob))
         except Exception:
-            # A row that will not decrypt is a key rotation gone wrong. Logged
-            # and skipped rather than raised: the parent should be asked for
-            # that one field again, not shown an error.
+            # A row that will not decrypt is a key rotation gone wrong.
             logger.error(
                 "Could not decrypt %s for application %s; it will be re-asked.",
                 slot_key,
@@ -388,12 +297,7 @@ async def record_documents(draft: Draft, rows: list[dict[str, Any]]) -> None:
 async def attest_and_submit(
     draft: Draft, *, consent_version: str, ip: str | None
 ) -> None:
-    """Record the attestation and move the application into the queue.
-
-    The consent VERSION is written in the same statement as the timestamp, so
-    there is no window in which an application is attested and nobody knows to
-    what. The schema's check constraint enforces the same thing from below.
-    """
+    """Record the attestation and move the application into the queue."""
     from sqlalchemy import text as sql
 
     from app.db import session

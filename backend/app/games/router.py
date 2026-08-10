@@ -1,17 +1,4 @@
-"""HTTP surface for the games layer.
-
-Why this exists alongside the agent tools: the card is direct manipulation. A
-child taps tiles into place and presses Check, and the verdict has to land
-immediately. Routing that through the model would put a multi-second round trip,
-and a token bill, behind every guess — for a decision the model is deliberately
-not allowed to make anyway.
-
-Both paths drive the same `GameEngine` and the same server-side session, so they
-cannot disagree: solve a word here and the agent's next turn already knows.
-
-Every response body is built from `app.games.schemas`, which has no field an
-unrevealed answer could occupy.
-"""
+"""HTTP surface for the games layer."""
 
 from __future__ import annotations
 
@@ -52,16 +39,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/games", tags=["games"])
 
-# Expected conditions, mapped to the status code that actually means them. The
-# body keeps the machine-readable reason so the UI can choose its own wording.
+# Expected conditions, mapped to the status code that actually means them.
 _STATUS = {
     GameNotRunning: 404,
     GameAlreadyRunning: 409,
     PersonaNotEligible: 403,
     NoContentAvailable: 422,
     UnknownGameType: 422,
-    # The request is well formed and the game is running; this game simply has
-    # no hints to give. Not the caller's mistake, so not a 400.
+    # The request is well formed and the game is running; this game simply has no hints to give.
     HintsNotAvailable: 422,
 }
 
@@ -84,11 +69,7 @@ def _language(raw: str) -> Language:
 
 
 def _persona(raw: str | None) -> Persona | None:
-    """Unknown personas are ignored, not rejected.
-
-    A client sending something we do not recognise should still be able to play;
-    only an explicit non-holder is turned away.
-    """
+    """Unknown personas are ignored, not rejected."""
     if not raw:
         return None
     try:
@@ -178,12 +159,7 @@ def list_games(language: str = Query(default="en")) -> GameListOut:
 
 @router.get("/state", response_model=GameStateEnvelope)
 def game_state(thread_id: str = Query(min_length=1, max_length=128)) -> GameStateEnvelope:
-    """The running game, if any.
-
-    Called on load and after every chat turn. The browser holds no game state of
-    its own, so this is what makes a refresh mid-word a non-event, and what tells
-    the UI that the assistant just started a game through its tools.
-    """
+    """The running game, if any."""
     state = _state_out(get_engine().state(thread_id))
     return GameStateEnvelope(active=state is not None, game=state)
 

@@ -1,35 +1,4 @@
-"""L1-L10: the learning agent's acceptance suite, plus a property sweep.
-
-Runs OFFLINE by default and that is the point. The repository's `make eval` gate
-is described as "something to run before pushing rather than something to wait
-for in CI", and a suite that needs a provider key is a suite that gets skipped.
-So the model is a scripted stub whose behaviour each scenario chooses -- which
-also makes L3 ("the composer raises") expressible at all, since you cannot ask a
-real model to fail on demand.
-
-`--live` swaps the stub for the configured models and re-runs the same
-assertions. The scenarios are identical; only the invoke functions differ.
-
-## Why prompts are code here
-
-The brief's rule, and it is right: a one-word edit to a system prompt moves the
-measured rates by several points and nothing about the diff says so. This suite
-is wired into `make eval` so a prompt change is gated the same way a code change
-is.
-
-## What each scenario is actually protecting
-
-    L1  a child's question produces a real lesson about THAT topic
-    L2  the same question produces a measurably different lesson for a teenager
-    L3  the widget composer raising cannot change one byte of the lesson
-    L4  a bare "4" is an answer, not a new query
-    L5  the hint ladder climbs and mastery floors at zero
-    L6  an uncovered topic is answered honestly, with nothing invented
-    L7  a Spanish turn is Spanish, widget labels included
-    L8  a repeat topic hits the widget cache and skips both model calls
-    L9  nothing here escalates
-    L10 every number and every programme claim traces to a KB row
-"""
+"""L1-L10: the learning agent's acceptance suite, plus a property sweep."""
 
 from __future__ import annotations
 
@@ -86,12 +55,7 @@ class Result:
 
 
 def scripted(*replies: str) -> Callable:
-    """A teaching model that returns each reply in turn, then repeats the last.
-
-    Deterministic by construction, so an assertion about word count or vocabulary
-    is an assertion about the CODE rather than about a sample from a model. The
-    live mode exercises the model; this mode exercises the machine around it.
-    """
+    """A teaching model that returns each reply in turn, then repeats the last."""
     remaining = list(replies)
 
     async def invoke(_messages):
@@ -337,8 +301,7 @@ async def l3(live: bool) -> Result:
     result.check(not outcome.emitted, "no widget directive was emitted")
     result.check(outcome.gate is not None, f"a gate failure was logged ({outcome.gate})")
     if not live:
-        # Byte-identity is only meaningful against a deterministic model. Live,
-        # two generations differ for reasons that have nothing to do with widgets.
+        # Byte-identity is only meaningful against a deterministic model.
         result.check(broken.text == healthy.text, "the prose is BYTE-IDENTICAL")
     result.check(broken.words >= 60, f"the lesson is still complete ({broken.words} words)")
     result.check(
@@ -395,16 +358,10 @@ async def l5(_live: bool) -> Result:
             f"rung {rung} does not give the answer away",
         )
 
-    # Mastery decrements and floors. Driven through the real transition table
-    # rather than asserted about it, because the floor is the property that
-    # matters: a child who gets two wrong must not go negative, and a negative
-    # score would resurface the concept forever.
+    # Mastery decrements and floors.
     from app.learning.mastery import Evidence, MasteryRow, apply
 
-    # The rule is "wrong TWICE decrements", not "every wrong decrements", and
-    # that distinction is the hint ladder's whole premise: a single miss is what
-    # a hint is for, and dropping a score on it would punish the child for
-    # engaging with a question they were meant to find hard.
+    # The rule is "wrong TWICE decrements", not "every wrong decrements", and that distinction is the hint ladder's…
     row = MasteryRow(concept_id="CON-0042", score=1)
     after_one = apply(row, Evidence.WRONG)
     after_two = apply(after_one, Evidence.WRONG)
@@ -455,8 +412,7 @@ async def l6(live: bool) -> Result:
 
     result.transcript = lesson.text
     result.check(bool(lesson.text.strip()), "something was said")
-    # The load-bearing assertion: no ASPIRE-specific claim from a turn with no
-    # ASP- row behind it.
+    # The load-bearing assertion: no ASPIRE-specific claim from a turn with no ASP- row behind it.
     invented = re.findall(r"\bEC\$\s?[\d,]+", lesson.text)
     result.check(not invented, f"no EC$ figures invented from nothing (found {invented})")
     return result
@@ -565,7 +521,18 @@ async def l10(live: bool) -> Result:
     result = Result("L10", "every number traces to a KB row or an anchor")
     concept = a_concept()
 
-    from scripts.seed_concepts import numbers_in
+    try:
+        from scripts.seed_concepts import numbers_in
+    except ModuleNotFoundError:
+        # `scripts/` is not in every checkout; the helper is three lines, so a
+        # local twin keeps the grounding gate running rather than skipping it.
+        import re as _re
+
+        def numbers_in(text: str) -> set[float]:
+            return {
+                float(match.replace(",", ""))
+                for match in _re.findall(r"\d[\d,]*(?:\.\d+)?", text or "")
+            }
 
     permitted = set(concept.numeric_anchors.values()) | {0.0, 1.0, 2.0, 3.0}
     mapping: list[str] = []
@@ -657,10 +624,6 @@ SCENARIOS: tuple[Callable, ...] = (l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, prop
 
 async def run(live: bool, only: str | None) -> int:
     # The store is process-wide because widget gate 3 consults it: `vocab.
-    # is_allowed_concept` asks whether the band may meet this concept, and a
-    # concept the store has never heard of fails closed. Correct in production
-    # (no concepts means no tutor turn means no widget) and pure noise here, so
-    # the eval's fixture concept is loaded for the whole run.
     from app.learning.concepts import set_store
 
     set_store(a_store())

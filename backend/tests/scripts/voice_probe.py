@@ -1,17 +1,4 @@
-"""First-audio-byte: the buffered path against the streaming path (P14-C).
-
-`/voice/speak` joins the whole MP3 server-side before the first byte crosses
-the wire; `/voice/speak-stream` passes each vendor chunk through as it exists.
-This fires the same texts at both and reports client-observed first byte and
-total, per language -- which is also the live verification that the flash tier
-actually serves EN, ES and FR.
-
-    python -m scripts.voice_probe --base-url http://127.0.0.1:8014
-
-Texts are distinct per (endpoint, language, run) -- a repeat would hit the
-voice cache and measure Valkey rather than ElevenLabs. Runs alternate between
-endpoints rather than batching, so vendor drift lands on both sides evenly.
-"""
+"""First-audio-byte: the buffered path against the streaming path (P14-C)."""
 
 from __future__ import annotations
 
@@ -78,12 +65,7 @@ def main() -> None:
     for run in range(args.runs):
         for language, text in TEXTS.items():
             for endpoint in ("speak", "speak-stream"):
-                # Unique tail per (endpoint, run): each request misses the
-                # voice cache and pays the vendor, which is the thing measured.
-                # LETTERS ONLY -- a digit in the salt trips `has_many_numbers`
-                # and silently reroutes the request to the quality tier, which
-                # is exactly what the first run of this probe measured without
-                # meaning to (every row came back model=eleven_multilingual_v2).
+                # Unique tail per (endpoint, run): each request misses the voice cache and pays the vendor, which is the thing…
                 salt = "".join(random.choices(string.ascii_lowercase, k=6))
                 salted = f"{text} Nota {salt}."
                 try:

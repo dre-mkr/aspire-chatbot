@@ -1,23 +1,4 @@
-"""What may be reconstructed out of a checkpoint row.
-
-langgraph rebuilds a checkpointed object by importing a module and calling a
-name out of it, driven by what is stored in the row. Its default is to do that
-for any type at all and log
-
-    Deserializing unregistered type app.graph.state.KBChunk from checkpoint.
-    This will be blocked in a future version.
-
-`allowed_checkpoint_types` replaces that with an allowlist. These tests exist
-because of how the blocked case FAILS: not with an exception, but by returning
-the raw payload. A `KBChunk` that is not on the list comes back as a plain dict,
-every attribute access one layer downstream starts raising, and nothing names
-the checkpoint. `test_an_unlisted_type_degrades_to_a_dict` pins that mechanism
-so the rest of the file is testing something real rather than a tautology.
-
-Measured against the live checkpoint tables when the allowlist was written:
-2,568 blobs and 3,152 writes decoded with zero blocked types, reconstructing
-560 `KBChunk`, 24 `Citation` and 108 `EscalatedDirective`.
-"""
+"""What may be reconstructed out of a checkpoint row."""
 
 from __future__ import annotations
 
@@ -52,12 +33,7 @@ def _roundtrip(value, serde):
 
 
 def test_an_unlisted_type_degrades_to_a_dict():
-    """The negative control, and the reason the rest of this file matters.
-
-    A blocked type does not raise. It comes back as its payload, so the damage
-    surfaces as an AttributeError somewhere else entirely -- `merge_citations`
-    doing `citation.kb_id` against a dict, for instance.
-    """
+    """The negative control, and the reason the rest of this file matters."""
     restored = _roundtrip(
         KBChunk(kb_id="ASP-001", content="x"),
         _serde(allow=[("app.graph.state", "Citation")]),
@@ -93,9 +69,7 @@ def test_a_citation_survives_the_round_trip_as_a_citation():
 
 
 def test_a_directive_survives_the_round_trip():
-    """`EscalatedDirective` was in 108 live checkpoint rows and was not in the
-    report's list of two. It was found by counting the database, which is why
-    the allowlist is derived rather than transcribed."""
+    """`EscalatedDirective` was in 108 live checkpoint rows and was not in the report's list of two."""
     from app.schemas.directives import EscalatedDirective
 
     restored = _roundtrip(
@@ -120,12 +94,7 @@ def test_the_whole_retrieved_list_round_trips():
 
 
 def test_every_directive_in_the_union_is_allowlisted():
-    """A new directive type must not need anyone to remember this file.
-
-    Derived from the same `UIDirective` union the emitters are typed against, so
-    the assertion is that the derivation covers the union rather than that a
-    literal was kept up to date.
-    """
+    """A new directive type must not need anyone to remember this file."""
     from typing import get_args
 
     from app.schemas.directives import UIDirective
@@ -142,11 +111,7 @@ def test_every_directive_in_the_union_is_allowlisted():
 
 
 def test_nested_models_are_reached_too():
-    """A widget lives inside `WidgetDirective`, and its panels inside it.
-
-    Nesting is where a hand-written list goes wrong: the outer type is obvious
-    and the third level down is not.
-    """
+    """A widget lives inside `WidgetDirective`, and its panels inside it."""
     allowed = set(allowed_checkpoint_types())
 
     for module, name in (
@@ -159,11 +124,7 @@ def test_nested_models_are_reached_too():
 
 
 def test_the_allowlist_stays_an_allowlist():
-    """Not `app.*`, and not everything importable.
-
-    The control only means something if things are left off it. `Settings` is a
-    real pydantic model in this codebase that never goes near a checkpoint.
-    """
+    """Not `app.*`, and not everything importable."""
     allowed = set(allowed_checkpoint_types())
 
     assert ("app.config", "Settings") not in allowed

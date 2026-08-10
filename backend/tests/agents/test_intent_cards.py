@@ -1,10 +1,4 @@
-"""The two turns that are cards, and the many that only look like them.
-
-The interesting half of this file is `test_lookups_stay_prose`. A matcher that
-opens the eligibility card on "what is the minimum age?" interrupts a one-line
-question with a six-step form, and it is the failure that is easy to ship
-because every phrase in it genuinely is about eligibility.
-"""
+"""The two turns that are cards, and the many that only look like them."""
 
 from __future__ import annotations
 
@@ -76,20 +70,14 @@ def test_personal_eligibility_questions_open_the_card(question: str) -> None:
         "Does Nevis count?",
         "how old do you have to be",
         "Is there an income limit?",
-        # The one that broke the injection detector for the same reason: a
-        # phrase that contains an eligibility word and asks nothing about
-        # eligibility.
+        # The one that broke the injection detector for the same reason: a phrase that contains an eligibility word and…
         "How do I act as a good saver?",
         "What is interest?",
         "How does compound interest work?",
     ],
 )
 def test_lookups_stay_prose(question: str) -> None:
-    """A question about ONE rule gets a cited answer, not a form.
-
-    Both halves matter. The first three would match the eligibility patterns
-    outright if `_LOOKUP` did not win ties.
-    """
+    """A question about ONE rule gets a cited answer, not a form."""
     assert not wants_eligibility(question)
 
 
@@ -131,12 +119,7 @@ def test_naming_a_game_is_optional() -> None:
 
 
 async def test_the_eligibility_card_is_the_whole_turn() -> None:
-    """A directive, and NO message.
-
-    This is the property v1 needed `TurnBuffer` to hold: the model wrote prose
-    alongside the card and it had to be discarded before it crossed the wire.
-    Here there is nothing to discard, because no model was asked.
-    """
+    """A directive, and NO message."""
     started: list[tuple[str, str]] = []
     gate = make_intent_gate(
         start_check=lambda session, locale: started.append((session, locale)),
@@ -208,18 +191,7 @@ async def test_a_disabled_module_never_opens_its_card() -> None:
     assert await gate(_state("let's play a game")) == {}
 
 
-# ── registration intent, for the personas that cannot register ───────────────
-#
-# Reported from a live session on Orion 16-18: "i want to register my child"
-# came back as a support ticket. The ticket recorded its own cause --
-#
-#     i want to register my child -- The closest chunk scored 0.519,
-#     below the 0.550 floor.
-#
-# -- which is `classify` sending an INTENT to `qa_agent`, the one agent shaped
-# to answer questions by attributing them to a corpus row. There is no row that
-# answers a request to do something, so nothing cleared the floor and
-# `ground_check` handed off to `escalate_agent`.
+# ── registration intent, for the personas that cannot register ─────────────── Reported from a live session on…
 
 
 from app.graph.access import allowed_agents  # noqa: E402
@@ -227,13 +199,7 @@ from app.graph.nodes.intents import wants_registration  # noqa: E402
 
 
 def _for(persona: str, band: str, message: str, **overrides):
-    """State with the REAL access matrix applied, not a hand-written list.
-
-    `guard` runs two nodes before this one, so `allowed_agents` is always
-    present in production. Deriving it here rather than hardcoding means a
-    future matrix change that hands registration back to a persona turns this
-    suite red instead of leaving a dead branch nobody notices.
-    """
+    """State with the REAL access matrix applied, not a hand-written list."""
     state = _state(message, persona=persona, age_band=band, **overrides)
     state["allowed_agents"] = allowed_agents(
         persona, band, "prospect", user_id=state["user_id"]
@@ -268,12 +234,7 @@ def test_these_are_registration_intents(message: str) -> None:
     ],
 )
 def test_questions_about_registering_are_not_intents(message: str) -> None:
-    """A question has an answer in the corpus and must keep reaching it.
-
-    "Who registers a child?" scores 0.759 -- comfortably grounded, properly
-    cited. Intercepting it with a fixed sentence would replace a good retrieved
-    answer with a worse hardcoded one.
-    """
+    """A question has an answer in the corpus and must keep reaching it."""
     assert wants_registration(message) is False
 
 
@@ -294,8 +255,7 @@ async def test_a_persona_that_cannot_register_is_answered_here(
 
 
 async def test_a_guardian_still_reaches_the_registration_agent() -> None:
-    """The case that must be UNTOUCHED. Aurora can register, so this node has
-    no opinion and the turn goes on to the classifier as before."""
+    """The case that must be UNTOUCHED."""
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
 
     assert await gate(_for("aurora", "adult", "i want to register my child")) == {}
@@ -314,8 +274,7 @@ async def test_a_signed_out_visitor_still_reaches_step_one() -> None:
 
 
 async def test_the_reply_routes_straight_to_the_outbound_gate() -> None:
-    """Not to the classifier. `_after_cards` recognises a `cards` turn that
-    produced a message and chips, which is the branch this reply relies on."""
+    """Not to the classifier."""
     from app.graph.main_graph import _after_cards
 
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
@@ -340,17 +299,7 @@ async def test_every_shipped_locale_has_its_own_copy(locale: str) -> None:
     assert len(update["quick_replies"]) == 2
 
 
-# ── the fallback is addressed to whoever is actually reading it ──────────────
-#
-# Reported live. A 16-18 account selected Aurora in the picker, asked to
-# register a daughter, and was told to ask its parent to choose Aurora:
-#
-#     WARNING app.api.stream: Refused a request for persona 'aurora'
-#     on a 16-18 band session.
-#
-# Two failures, one sentence. It addressed a parent as a child, and it
-# instructed them to select a persona the server had just refused them -- so
-# following the advice produced the same paragraph again, indefinitely.
+# ── the fallback is addressed to whoever is actually reading it ────────────── Reported live.
 
 
 from app.graph.nodes.cards import _REGISTRATION_HELP  # noqa: E402
@@ -359,13 +308,7 @@ from app.graph.nodes.cards import _REGISTRATION_HELP  # noqa: E402
 @pytest.mark.parametrize("audience", sorted(_REGISTRATION_HELP))
 @pytest.mark.parametrize("locale", ["en", "es", "fr"])
 def test_no_copy_tells_the_reader_to_pick_a_persona(audience: str, locale: str) -> None:
-    """The bug that made this a loop rather than a dead end.
-
-    Naming a persona here is only ever actionable for a reader who could select
-    it -- and a reader who could select Aurora has `register_agent` and never
-    reaches this node. So for everybody who DOES reach it, naming one is an
-    instruction that cannot be carried out.
-    """
+    """The bug that made this a loop rather than a dead end."""
     text = _REGISTRATION_HELP[audience][locale].lower()
 
     for persona in ("aurora", "stella", "orion", "nova"):
@@ -409,12 +352,7 @@ async def test_a_teacher_is_not_told_to_fetch_their_parent() -> None:
 
 
 async def test_the_offered_chip_actually_opens_the_wizard() -> None:
-    """The chip the fallback offers must be a route, not a phrase.
-
-    It is not a knowledge-base question and would not clear the grounding floor
-    if it were treated as one, so it has to be matched in this node -- and the
-    literal chip text is what a reader sends when they tap it.
-    """
+    """The chip the fallback offers must be a route, not a phrase."""
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
     state = _for("orion", "16-18", "i want to register my daughter")
     chip = (await gate(state))["quick_replies"][0]
@@ -434,9 +372,7 @@ async def test_a_child_asking_for_an_account_gets_no_guardian_branch() -> None:
 
 
 async def test_a_guardian_asking_for_an_account_is_still_answered() -> None:
-    """Unlike the registration fallback, this one is not conditional on being
-    unable to register. Having `register_agent` does not answer "I want an
-    account" -- it answers a different question."""
+    """Unlike the registration fallback, this one is not conditional on being unable to register."""
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
 
     update = await gate(_for("aurora", "adult", "i want to create an account"))
@@ -445,23 +381,14 @@ async def test_a_guardian_asking_for_an_account_is_still_answered() -> None:
 
 
 async def test_registering_a_child_is_not_mistaken_for_making_an_account() -> None:
-    """The two matchers overlap in vocabulary and must not overlap in effect.
-
-    A guardian who can register must reach `register_agent`, not a sign-up form
-    for the account they are already signed in to.
-    """
+    """The two matchers overlap in vocabulary and must not overlap in effect."""
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
 
     assert await gate(_for("aurora", "adult", "i want to register my daughter")) == {}
 
 
 async def test_the_signup_card_ends_the_turn_at_the_outbound_gate() -> None:
-    """A card turn must not fall through to the classifier.
-
-    `_after_cards` recognises it by `safety_flags["card"]`, not by the presence
-    of a directive — so a card that forgot the flag would be routed on to be
-    answered a second time by an agent.
-    """
+    """A card turn must not fall through to the classifier."""
     from app.graph.main_graph import _after_cards
 
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)

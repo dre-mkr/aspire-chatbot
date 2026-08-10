@@ -1,15 +1,4 @@
-/**
- * Global middleware registered on the Start instance in `src/start.ts`.
- *
- * Deliberately NOT under `src/server/` — `start.ts` is an isomorphic entry that
- * also loads in the browser (function middleware can have a `client` half), so
- * a module in the protected server-only directory would be a boundary
- * violation. The `.server()` bodies below are stripped from the client build by
- * the Start compiler; nothing privileged is imported here to begin with.
- *
- * `type: 'request'` runs once per inbound HTTP request (documents and server-fn
- * RPCs alike). `type: 'function'` wraps every server function call.
- */
+/** Global middleware registered on the Start instance in `src/start.ts`. */
 import { createMiddleware } from "@tanstack/react-start";
 
 /** Baseline security headers on every response. */

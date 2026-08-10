@@ -1,14 +1,4 @@
-"""Conversations and messages, with the running summary column
-
-Revision ID: 0003_conversations
-Revises: 0002_indexes
-Create Date: 2026-08-01
-
-Full-fidelity transcript storage. Nothing writes to these tables yet -- that is
-the next step. `summary` and `summarized_through_seq` are created now, unused,
-so that the memory change is a code change rather than a second migration
-against a table that already has rows in it.
-"""
+"""Conversations and messages, with the running summary column Revision ID: 0003_conversations Revises: 0002_ind…"""
 
 from __future__ import annotations
 
@@ -27,16 +17,13 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "conversations",
-        # The client's own thread id: already the URL, the localStorage key and
-        # the games session key. A surrogate key would only add a lookup.
+        # The client's own thread id: already the URL, the localStorage key and the games session key.
         sa.Column("id", sa.String(length=128), primary_key=True),
         sa.Column("title", sa.Text(), nullable=True),
         sa.Column("language", sa.String(length=8), nullable=False, server_default="en"),
         sa.Column("persona", sa.String(length=32), nullable=True),
         sa.Column("account_status", sa.String(length=32), nullable=True),
-        # For the memory step. `summarized_through_seq` is how the background
-        # job knows what it has already folded in; without it the job would
-        # either redo everything or lose the turns in the gap.
+        # For the memory step.
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column(
             "summarized_through_seq", sa.Integer(), nullable=False, server_default="0"
@@ -67,8 +54,7 @@ def upgrade() -> None:
             sa.ForeignKey("conversations.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        # Monotonic within a conversation. Ordering on a timestamp would be a
-        # bug waiting for two rows written in the same millisecond.
+        # Monotonic within a conversation.
         sa.Column("seq", sa.Integer(), nullable=False),
         sa.Column("role", sa.String(length=16), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
@@ -85,8 +71,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    # Unique, so `seq` is a real sequence rather than a hint, and covering the
-    # only read shape there is: this conversation, in order.
+    # Unique, so `seq` is a real sequence rather than a hint, and covering the only read shape there is: this conve…
     op.create_index(
         "ix_messages_conversation_seq",
         "messages",

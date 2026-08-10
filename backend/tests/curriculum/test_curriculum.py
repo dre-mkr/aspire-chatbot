@@ -50,11 +50,7 @@ class TestModuleOneLoads:
             assert lesson.concept_id in curriculum.concepts
 
     def test_prerequisites_resolve_and_do_not_point_upward(self, curriculum):
-        """A 9-12 concept requiring a 13-15 one is unreachable, silently.
-
-        Nothing at runtime reports it -- placement simply never selects that
-        lesson -- which is why it is checked at load.
-        """
+        """A 9-12 concept requiring a 13-15 one is unreachable, silently."""
         curriculum.validate_prerequisites()
 
 
@@ -75,12 +71,7 @@ class TestBandFiltering:
                 assert lesson.examples_for(band), f"{lesson.id} has no example for {band}"
 
     def test_inheritance_runs_downward_only(self):
-        """An older band may inherit younger text. Never the reverse.
-
-        Upward inheritance would hand a nine-year-old the thirteen-year-old's
-        wording -- exactly what the vocabulary gate exists to prevent, arriving
-        from content a human approved.
-        """
+        """An older band may inherit younger text."""
         mapping = {"9-12": "middle"}
         assert for_band(mapping, "13-15") == "middle"
         assert for_band(mapping, "adult") == "middle"
@@ -96,12 +87,7 @@ class TestTheContentItself:
 
     @pytest.mark.parametrize("band", ["5-8", "9-12", "13-15"])
     def test_no_teach_point_uses_a_word_the_band_has_not_met(self, curriculum, band):
-        """The rule that makes authored content safe without a runtime gate.
-
-        `safety_out` would catch a violation on a live turn -- by re-prompting a
-        model to rewrite a sentence a human wrote, which is the wrong repair for
-        the wrong problem. Catching it here means it never ships.
-        """
+        """The rule that makes authored content safe without a runtime gate."""
         for lesson in curriculum.lessons_for_band(band):
             for text in lesson.teach_for(band):
                 violations = vocab.check(text, band)
@@ -116,21 +102,14 @@ class TestTheContentItself:
 
     @pytest.mark.parametrize("band", ["5-8", "9-12"])
     def test_no_abstract_percentage_below_thirteen(self, curriculum, band):
-        """Never abstract percentages below age 13.
-
-        `proportion` teaches the same fact as "three coins out of ten", which a
-        nine-year-old already has the equipment to hold.
-        """
+        """Never abstract percentages below age 13."""
         for lesson in curriculum.lessons_for_band(band):
             for text in lesson.teach_for(band) + lesson.examples_for(band):
                 assert "%" not in text, f"{lesson.id} [{band}]: {text!r}"
                 assert "percent" not in text.lower()
 
     def test_the_examples_are_local(self, curriculum):
-        """Snow cones, patties, a bicycle, a Carnival costume, EC dollars.
-
-        An example a child here has not seen teaches nothing, however clear.
-        """
+        """Snow cones, patties, a bicycle, a Carnival costume, EC dollars."""
         corpus = " ".join(
             text
             for lesson in curriculum.lessons.values()
@@ -343,17 +322,7 @@ class TestValidationFailsLoudly:
 
 
 class TestTheSeed:
-    """Writing the authored curriculum into the tables that reference it.
-
-    The gap this closes was invisible from every test in this file. The YAML
-    loaded, validated and served lessons perfectly — and `concepts` was empty,
-    so `mastery.concept_id` had nothing to reference and every attempt to record
-    what a child had learned raised a foreign-key violation.
-
-    The learning tests could not see it either: they use the in-memory store,
-    which has no foreign keys to violate. Found by running one widget
-    interaction against the real database.
-    """
+    """Writing the authored curriculum into the tables that reference it."""
 
     @pytest.mark.anyio
     async def test_it_writes_every_concept(self, curriculum, monkeypatch):
@@ -390,30 +359,7 @@ class TestTheSeed:
 
     @pytest.mark.anyio
     async def test_the_insert_supplies_every_column_the_table_requires(self):
-        """The INSERT must name every NOT NULL column that has no default.
-
-        This is the one assertion in this class that reads the real schema, and it
-        is here because the faked-session test above cannot fail on a missing
-        column -- there is no table behind it, so a null is just a dict key that
-        was never set.
-
-        The gap it closes is a repeat of the one in the class docstring, one layer
-        down. Migration 0016 gave `concepts` teaching bodies and made `slug` and
-        `title` NOT NULL; this seeder still listed the original six columns. Every
-        startup then raised `NotNullViolationError` and swallowed it, so mastery
-        stopped recording and nothing said so.
-
-        The detail that makes it worth a schema round trip: the five authored rows
-        already existed with correct slugs, and `ON CONFLICT (id) DO UPDATE` still
-        failed. Postgres evaluates NOT NULL when it forms the candidate tuple,
-        before it consults the arbiter index -- so the UPDATE branch that would
-        have been fine was never reached. No amount of reasoning about the fake
-        session finds that; only the constraint does.
-
-        Skips without a database. That is a real hole in CI and an honest one:
-        the alternative is duplicating the column list into the test, which is the
-        same mistake being tested for, written twice.
-        """
+        """The INSERT must name every NOT NULL column that has no default."""
         import inspect
         import re
 
@@ -460,11 +406,7 @@ class TestTheSeed:
 
     @pytest.mark.anyio
     async def test_a_failure_is_logged_and_not_raised(self, curriculum, monkeypatch):
-        """A curriculum that cannot be seeded must not stop the service starting.
-
-        It runs in the lifespan. Raising would mean refusing to answer anybody's
-        questions because a scheduling hint could not be recorded.
-        """
+        """A curriculum that cannot be seeded must not stop the service starting."""
 
         @asynccontextmanager
         async def _broken():

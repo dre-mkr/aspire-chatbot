@@ -1,10 +1,4 @@
-"""Registering, signing in, and carrying an anonymous session's work across.
-
-The claim is the part of this feature most often skipped and the part most worth
-testing: somebody asks four questions, decides to sign up, and everything they
-just did has to still be there. A merge that loses half the conversations is
-worse than no merge, because it looks like it worked.
-"""
+"""Registering, signing in, and carrying an anonymous session's work across."""
 
 from __future__ import annotations
 
@@ -20,8 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import database_enabled  # noqa: E402
 from app.main import app  # noqa: E402
 
-#: P0-010 -- see the `slow` marker note in pyproject.toml. Both markers apply:
-#: this needs a live dependency AND is dominated by wall-clock cost.
+#: P0-010 -- see the `slow` marker note in pyproject.toml.
 pytestmark = [pytest.mark.slow, pytest.mark.skipif(
     not database_enabled(), reason="These are database-backed account tests."
 )]
@@ -50,14 +43,7 @@ def new_email() -> str:
 
 
 def converse(client: TestClient, token: str, message: str) -> str:
-    """One real turn, so there is a conversation to claim.
-
-    Two steps now rather than one. `/chat` is gone; a turn is a graph session
-    token minted from the account token, then a stream. Whether the stream
-    produces an answer is beside the point here -- `turn.open_conversation`
-    records the question and the owner before the graph runs, which is the row
-    these tests are about.
-    """
+    """One real turn, so there is a conversation to claim."""
     thread_id = str(uuid.uuid4())
     minted = client.post(
         "/v2/session", json={"session_id": thread_id}, headers=auth(token)
@@ -78,8 +64,7 @@ def signup_body(email: str, **over) -> dict:
         "password": STRONG,
         "first_name": "Jayla",
         "last_name": "Thomas",
-        # 15 years old on the date this was written: old enough to hold an
-        # account alone, so no guardian is required.
+        # 15 years old on the date this was written: old enough to hold an account alone, so no guardian is required.
         "date_of_birth": "2011-03-14",
         "island": "St. Kitts",
         "school": "Washington Archibald High School",
@@ -111,8 +96,7 @@ def test_registering_carries_the_anonymous_conversations_across(client: TestClie
     ids = {c["thread_id"] for c in listing.json()["conversations"]}
     assert {first, second} <= ids
 
-    # And the conversation the person was in the middle of still resolves, which
-    # is what stops sign-up from orphaning the tab they were looking at.
+    # And the conversation the person was in the middle of still resolves, which is what stops sign-up from orphani…
     detail = client.get(f"/api/conversations/{first}", headers=auth(body["token"]))
     assert detail.status_code == 200
 
@@ -125,8 +109,7 @@ def test_the_anonymous_token_stops_working_once_claimed(client: TestClient):
     )
     assert registered.status_code == 200
 
-    # The browser that just signed up must not be able to keep writing to an
-    # identity that now owns nothing.
+    # The browser that just signed up must not be able to keep writing to an identity that now owns nothing.
     stale = client.get("/api/conversations", headers=auth(guest["token"]))
     assert stale.status_code == 401
 
@@ -141,9 +124,7 @@ def test_an_anonymous_identity_cannot_be_claimed_twice(client: TestClient):
     assert first.status_code == 200
     assert first.json()["claim"]["conversations"] == 1
 
-    # Replaying the same anonymous token into a second account must take
-    # nothing. This is the shape of hole that would let somebody move records
-    # into an account of their choosing.
+    # Replaying the same anonymous token into a second account must take nothing.
     second = client.post(
         "/api/auth/register", json=signup_body(new_email()), headers=auth(guest["token"])
     )
@@ -179,8 +160,7 @@ def test_signing_into_an_existing_account_merges_rather_than_discards(client: Te
             "/api/conversations", headers=auth(back_in.json()["token"])
         ).json()["conversations"]
     }
-    # Both halves survive. Neither the account's history nor the session's work
-    # is thrown away.
+    # Both halves survive.
     assert {original, while_out} <= ids
 
 
@@ -194,8 +174,7 @@ def test_claiming_is_all_or_nothing(client: TestClient):
     )
     assert account.status_code == 200
 
-    # A second sign-in attempt with the (now dead) anonymous token changes
-    # nothing about who owns the conversation.
+    # A second sign-in attempt with the (now dead) anonymous token changes nothing about who owns the conversation.
     owner = client.get(f"/api/conversations/{thread}", headers=auth(account.json()["token"]))
     assert owner.status_code == 200
 
@@ -227,8 +206,7 @@ def test_an_under_13_account_is_held_by_the_guardian(client: TestClient):
         ),
     )
     assert created.status_code == 200, created.text
-    # The credentials on the account are the adult's; the child rides along on
-    # the same row until profiles exist.
+    # The credentials on the account are the adult's; the child rides along on the same row until profiles exist.
     assert created.json()["email"] == guardian_email
 
 
@@ -258,8 +236,7 @@ def test_sign_in_says_the_same_thing_for_both_failures(client: TestClient):
         "/api/auth/login", json={"email": new_email(), "password": "wrongpassword1"}
     )
     assert wrong.status_code == missing.status_code == 401
-    # Identical wording, so the response is not an oracle for which addresses
-    # have accounts.
+    # Identical wording, so the response is not an oracle for which addresses have accounts.
     assert wrong.json()["detail"] == missing.json()["detail"]
 
 

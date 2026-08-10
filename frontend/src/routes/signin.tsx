@@ -6,19 +6,7 @@ import { Field } from "#/components/auth/Field";
 import { AuthError, requestSignInLink, signIn } from "#/lib/aspire/auth";
 import { keys } from "#/lib/aspire/queries";
 
-/**
- * Signing in, at `/signin`.
- *
- * A full route rather than a modal, because it is a place you can be sent to
- * and a place you can link somebody to — and because a modal over a
- * conversation would put the thing you were reading behind a scrim while you
- * type a password.
- *
- * `next` is carried through the whole flow so that signing in returns you to
- * what you were doing rather than to a generic landing screen. It is validated
- * as a path on this origin: an unchecked redirect target is how a sign-in page
- * becomes a way to bounce somebody to another site with a trusted-looking link.
- */
+/** Signing in, at `/signin`. */
 
 interface SignInSearch {
 	next?: string;
@@ -27,20 +15,13 @@ interface SignInSearch {
 /** Only same-origin paths. Anything else falls back to the empty state. */
 function safeNext(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
-	// Reject any second character that is a slash OR a backslash. `//evil.com` is
-	// the obvious protocol-relative form; `/\evil.com` is the same attack wearing
-	// the other slash, and some browsers normalise it to the first.
+	// Reject any second character that is a slash OR a backslash.
 	if (!value.startsWith("/") || /^[/\\]/.test(value.slice(1))) return undefined;
 	return value;
 }
 
 export const Route = createFileRoute("/signin")({
-	// Full-document SSR, stated rather than inherited. This form is entirely
-	// client-interactive, but it is also the first paint a signed-out visitor
-	// gets, so the shell should arrive as HTML rather than after the bundle.
-	// It was rendering this way already -- by inheriting `defaultSsr` from a
-	// declaration that lived in a generated file. Saying so here means the mode
-	// is a decision on the record and survives the next regeneration.
+	// Full-document SSR, stated rather than inherited.
 	ssr: true,
 	validateSearch: (search: Record<string, unknown>): SignInSearch => {
 		const next = safeNext(search.next);
@@ -64,14 +45,7 @@ function SignIn() {
 		form?: string;
 	}>({});
 
-	/**
-	 * Everything user-scoped belongs to whoever is signed in.
-	 *
-	 * Removed rather than invalidated: invalidating leaves the previous
-	 * identity's data readable while the refetch is in flight, and the rail
-	 * showing somebody else's conversation titles for even one frame is exactly
-	 * what must not happen.
-	 */
+	/** Everything user-scoped belongs to whoever is signed in. */
 	function resetScopedCaches() {
 		queryClient.removeQueries({ queryKey: keys.allConversations() });
 		queryClient.removeQueries({ queryKey: keys.allGames() });
@@ -87,20 +61,14 @@ function SignIn() {
 		try {
 			const result = await signIn(email.trim(), password);
 			resetScopedCaches();
-			// The claimed conversations have to appear without a manual reload,
-			// so the list is asked for again the moment the identity changes.
+			// The claimed conversations have to appear without a manual reload, so the list is asked for again the moment t…
 			await queryClient.invalidateQueries({
 				queryKey: keys.allConversations(),
 			});
-			// Checked again here, deliberately. The validator on the route is the
-			// first line, but the value that matters is the one handed to
-			// `navigate`, and an unchecked redirect target is how a sign-in page
-			// becomes a way to bounce somebody to another site behind a link that
-			// looks like ours. Two cheap checks beat one clever one.
+			// Checked again here, deliberately.
 			void navigate({
 				to: safeNext(next) ?? "/",
-				// A signed-in person should not be able to press Back into the
-				// sign-in page they just used.
+				// A signed-in person should not be able to press Back into the sign-in page they just used.
 				replace: true,
 				search: (previous: Record<string, unknown>) => previous,
 			});

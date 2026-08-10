@@ -1,16 +1,4 @@
-"""The checkpoint holds pointers. FINDINGS.md F1, asserted.
-
-`_persist_state` used to return `"values": draft.values` -- the whole slot
-dictionary into `AspireState.registration`, which `AsyncPostgresSaver`
-serialises to `checkpoint_blobs`. A read-only probe of the live store found the
-map key `guardian.full_name` in `registration`-channel blobs, and every other
-slot reached the same table by construction. Nothing purges it: `retention.py`
-defines one sweep and it does not touch checkpoints.
-
-These tests are written against the SERIALISED form rather than the dict,
-because serialisation is what the checkpointer stores and a nested structure can
-hide a value that a top-level key check would miss.
-"""
+"""The checkpoint holds pointers."""
 
 from __future__ import annotations
 
@@ -22,8 +10,7 @@ from app.agents.register.graph import PRESENT, _draft, _persist_state
 from app.agents.register.schema import GUARDIAN_SLOTS
 from app.agents.register.store import Draft
 
-#: Values a completed guardian section would hold. Recognisable on sight so a
-#: failure names what leaked.
+#: Values a completed guardian section would hold.
 ANSWERS = {
     "guardian.full_name": "Marcia Weekes",
     "guardian.national_id": "A12345678",
@@ -55,8 +42,7 @@ class TestNoAnswerReachesTheCheckpoint:
         assert value not in _serialised(), f"{slot} leaked its value into the checkpoint"
 
     def test_the_values_key_is_gone_entirely(self):
-        """Not emptied -- absent. An empty `values` dict would be a place for the
-        next edit to start putting things again."""
+        """Not emptied -- absent."""
         assert "values" not in _persist_state(_filled_draft())
 
     def test_what_remains_is_pointers_and_scalars(self):
@@ -71,28 +57,19 @@ class TestNoAnswerReachesTheCheckpoint:
             "status",
             "pending_corrections",
             "awaiting",
-            # Slot keys the parent declined. Same class as `filled` -- a field
-            # name, never an answer -- and pinned as such by
-            # `test_skipped_carries_keys_not_answers` below.
+            # Slot keys the parent declined.
             "skipped",
         }
 
     def test_filled_carries_paths_not_answers(self):
-        """"guardian.national_id" is a field name. "A12345678" is a national ID.
-        Only the first belongs in a checkpoint."""
+        """"guardian.national_id" is a field name."""
         persisted = _persist_state(_filled_draft())
 
         assert "guardian.national_id" in persisted["filled"]
         assert "A12345678" not in json.dumps(persisted["filled"])
 
     def test_skipped_carries_keys_not_answers(self):
-        """A decline is recorded as which field was declined, never as a value.
-
-        The whitelist above is what stops a new key reaching `checkpoint_blobs`
-        unnoticed, which is the F1 protection. Widening it is only safe if the
-        new key is the same class of thing as the others, so this asserts it
-        rather than leaving the widening to stand on its own.
-        """
+        """A decline is recorded as which field was declined, never as a value."""
         from app.agents.register import store
 
         draft = _filled_draft()
@@ -107,8 +84,7 @@ class TestNoAnswerReachesTheCheckpoint:
         assert _persist_state(_filled_draft())["awaiting"] == "child.0.date_of_birth"
 
     def test_internal_keys_are_not_published_as_filled_slots(self):
-        """`__awaiting` is bookkeeping. Listing it as a filled slot would make
-        the walk think a slot called `__awaiting` had been answered."""
+        """`__awaiting` is bookkeeping."""
         assert not any(
             path.startswith("__") for path in _persist_state(_filled_draft())["filled"]
         )
@@ -133,8 +109,7 @@ class TestTheRoundTripStillDrivesTheWalk:
             assert value not in blob
 
     def test_the_walk_moves_past_answered_slots(self):
-        """The presence map is enough for `next_missing`, which only ever asks
-        whether a slot is empty."""
+        """The presence map is enough for `next_missing`, which only ever asks whether a slot is empty."""
         from app.agents.register.graph import pick_slot
 
         state = {"registration": _persist_state(_filled_draft())}

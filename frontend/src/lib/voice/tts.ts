@@ -1,31 +1,4 @@
-/**
- * Speaking the answer, and stopping the instant a child touches anything.
- *
- * ## Interruptible is the requirement, not a feature
- *
- * A six-year-old who taps a chip while the mascot is mid-sentence expects the
- * mascot to stop. If it talks over their tap they will tap again, and again,
- * and the interface will feel like it is not listening -- which for a
- * voice-first product is the whole product failing.
- *
- * So `stop()` is synchronous, it is wired to a global pointerdown and keydown
- * listener, and it does not wait for a fade. Audio cutting off abruptly is
- * correct here.
- *
- * ## Streaming, because time-to-first-sound is the number that matters
- *
- * The existing voice layer already streams from ElevenLabs (see
- * `app/voice/`), and this consumes that endpoint rather than a second one. The
- * child hears the first syllable while the rest is still being synthesised.
- *
- * ## Word timings drive `KaraokeText`
- *
- * When the endpoint returns character-level timings they are converted to word
- * spans here, once, and handed to the highlighter. When it does not, the
- * highlighter falls back to a per-sentence highlight -- which is a real
- * degradation and still useful, because the fallback is the reduced-motion
- * behaviour anyway.
- */
+/** Speaking the answer, and stopping the instant a child touches anything. */
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -55,12 +28,7 @@ export interface Speech {
 
 let current: { audio: HTMLAudioElement; stop: () => void } | null = null;
 
-/**
- * Stop whatever is playing. Safe to call at any time, from anywhere.
- *
- * Exported and wired to a document-level listener by `installInterrupts`, so
- * every tap anywhere stops playback without each component having to remember.
- */
+/** Stop whatever is playing. */
 export function stopSpeaking(): void {
 	if (!current) return;
 	const { stop } = current;
@@ -68,13 +36,7 @@ export function stopSpeaking(): void {
 	stop();
 }
 
-/**
- * Stop speech on any interaction. Returns a teardown.
- *
- * Capture phase, deliberately: a chip's own click handler will send a message
- * and re-render, and a bubbling listener attached to the document might never
- * run. Capture fires before anything can stop propagation.
- */
+/** Stop speech on any interaction. */
 export function installInterrupts(
 	target: Document | HTMLElement = document,
 ): () => void {
@@ -87,13 +49,7 @@ export function installInterrupts(
 	};
 }
 
-/**
- * Speak `text`. Any speech already playing is stopped first.
- *
- * Never more than one voice at a time: two overlapping mascots is unusable, and
- * it is what happens when a turn arrives while the previous one is still being
- * read.
- */
+/** Speak `text`. */
 export async function speak(
 	text: string,
 	options: VoiceOptions,
@@ -110,9 +66,7 @@ export async function speak(
 			text,
 			persona: options.persona,
 			language: options.locale,
-			// Asked for, not required. A provider that does not return them makes
-			// `KaraokeText` fall back to sentence highlighting, which is the
-			// reduced-motion behaviour anyway.
+			// Asked for, not required.
 			with_timestamps: true,
 		}),
 	});
@@ -135,8 +89,7 @@ export async function speak(
 
 	const cleanup = () => {
 		audio.pause();
-		// Revoked, always. A conversation of forty turns leaks forty audio blobs
-		// otherwise, and on a phone that is real memory.
+		// Revoked, always.
 		URL.revokeObjectURL(url);
 		settle();
 	};
@@ -149,8 +102,7 @@ export async function speak(
 	try {
 		await audio.play();
 	} catch (error) {
-		// Autoplay was refused. Not an error to surface: the child has simply
-		// not interacted with the page yet, and the next tap will unblock it.
+		// Autoplay was refused.
 		console.info("[aspire] speech was not permitted to start", error);
 		cleanup();
 	}
@@ -163,13 +115,7 @@ export function isSpeaking(): boolean {
 	return current !== null;
 }
 
-/**
- * Character timings from the provider, folded into word spans.
- *
- * Done here rather than in the highlighter because it is a pure transformation
- * of provider output, and doing it per render would be doing it sixty times a
- * second for a value that never changes.
- */
+/** Character timings from the provider, folded into word spans. */
 function parseTimings(header: string, text: string): Array<WordSpan> {
 	let raw: Array<{ start: number; end: number }>;
 	try {

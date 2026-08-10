@@ -1,36 +1,6 @@
 @import "tailwindcss";
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Webfonts — self-hosted
-   ─────────────────────────────────────────────────────────────────────────
-
-   These used to come from `fonts.googleapis.com`, linked from `__root.tsx`.
-   That was two problems wearing one hat.
-
-   Privacy, and it is the one that decided this: every child using this service
-   sent their IP, user-agent and referer to Google before the page painted. On a
-   government product for minors, a third-party disclosure needs a reason, and
-   "it is the convenient way to load a font" is not one.
-
-   Latency: a render-blocking stylesheet on a third origin, gating first paint
-   behind DNS, TLS and two round trips to two hosts, before the font files
-   themselves were even discovered. Self-hosted they are same-origin, already
-   warm, and preloaded from the document head.
-
-   Only the `latin` subset is shipped. It covers U+0000-00FF plus U+0152-0153,
-   which is every character English, Spanish and French need -- including œ and
-   every accented vowel. `latin-ext` is deliberately not here; adding a language
-   outside that range means adding it back.
-
-   Sora is a variable font, so 400 through 700 is one 25KB file rather than
-   four. Weight 300 was requested and never used by any rule in this file, so it
-   is gone. Three files, 67KB total, versus five requests to two third-party
-   origins.
-
-   `font-display: swap` is unchanged: text is readable in a fallback face from
-   the first paint and reflows once, which is the right trade for a reading
-   product. P5 measured the fonts contributing 0.0003 CLS, so this is not a
-   layout-shift risk. */
+/* ───────────────────────────────────────────────────────────────────────── Webfonts — self-hosted ────────────… */
 
 @font-face {
 	font-family: "Sora";
@@ -48,21 +18,7 @@
 	font-family: "Instrument Serif";
 	font-style: normal;
 	font-weight: 400;
-	/* `optional`, not `swap`, and this is the only face that differs.
-
-	   It draws one thing: the hero title, at ~44px. A swap on type that large
-	   moves the most visible element on the landing screen, and measuring showed
-	   it was the single largest remaining CLS contributor — blocking the fonts
-	   entirely took landing CLS from 0.0176 to 0.0001.
-
-	   `optional` gives it ~100ms and then commits either way, so there is no
-	   second reflow. Preloaded and same-origin it almost always wins that race;
-	   when it does not, the hero renders in Georgia, which is the declared
-	   fallback and a perfectly good serif for one heading.
-
-	   Sora keeps `swap` deliberately: it sets every word of prose in the
-	   product, and a whole session stuck in a fallback because a network hiccup
-	   cost 100ms is a much worse outcome than one reflow. */
+	/* `optional`, not `swap`, and this is the only face that differs. */
 	font-display: optional;
 	src: url("/fonts/instrument-serif-400-latin.woff2") format("woff2");
 	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
@@ -81,17 +37,9 @@
 		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   ASPIRE design system
-   Tokens mirror the shared design-system bundle (tokens/*.css). The product
-   is light-only by design: the brand gradient carries the contrast, so a dark
-   theme would fight it rather than help.
-   ───────────────────────────────────────────────────────────────────────── */
+/* ───────────────────────────────────────────────────────────────────────── ASPIRE design system Tokens mirror… */
 
-/* One palette, one place. `@theme` is the source — Tailwind generates its
-   utilities from these, so a value that lives only in `:root` is a value the
-   utility layer can contradict. The `:root` block below aliases them into the
-   short names the stylesheet actually writes. */
+/* One palette, one place. */
 @theme {
 	--font-sans: "Sora", system-ui, -apple-system, sans-serif;
 	--font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -105,13 +53,7 @@
 
 	--color-ink: #1a1a2e;
 	--color-prose: #2d3748;
-	/* Muted text is tinted from the brand purple rather than left neutral grey.
-	   The original design-system greys (#566279 / #7a8aa3 / #a0aec4) sit at
-	   4.2:1, 2.9:1 and 1.9:1 on these surfaces — two of them below AA. These are
-	   the same steps pulled to AA and given the plum cast, so quiet text reads
-	   as part of the palette, not beside it. Measured on white:
-	     --color-slate 7.99:1 · --color-quiet 5.85:1 · --color-faint 3.93:1
-	   --color-faint is for icons and rules only; never for text. */
+	/* Muted text is tinted from the brand purple rather than left neutral grey. */
 	--color-slate: #554d63;
 	--color-quiet: #6a6177;
 	--color-faint: #857d92;
@@ -119,9 +61,7 @@
 	--color-success: #16a34a;
 	/* 5.9:1 on the page surface — a failure has to be readable, not just red. */
 	--color-danger: #b3261e;
-	/* A wrong guess in a game is not an error. Amber says "not yet" where red
-	   would say "you broke something", and #b45309 carries the text at 5.1:1
-	   where the #d97706 line colour would only reach 3.1:1. */
+	/* A wrong guess in a game is not an error. */
 	--color-warn: #d97706;
 	--color-warn-ink: #b45309;
 }
@@ -143,10 +83,7 @@
 	--success: var(--color-success);
 	--danger: var(--color-danger);
 
-	/* Every rule that tints against a brand colour derives from these, so a
-	   palette change never leaves a stray hard-coded rgba() behind. Plum is the
-	   structural wash; magenta marks the selected and recording states; danger
-	   is failure only. The number is the alpha in hundredths. */
+	/* Every rule that tints against a brand colour derives from these, so a palette change never leaves a stray har… */
 	--wash-3: rgb(72 41 119 / 0.03);
 	--wash-6: rgb(72 41 119 / 0.06);
 	--wash-7: rgb(72 41 119 / 0.07);
@@ -183,9 +120,7 @@
 	--settle: 300ms var(--ease);
 
 	--rail-open: 272px;
-	/* 40px mark + 18px padding either side + the rail's own 1px right border,
-	   plus a hair of slack. At the old 76px the border and padding left the
-	   content box at 39px and clipped the mark by a pixel. */
+	/* 40px mark + 18px padding either side + the rail's own 1px right border, plus a hair of slack. */
 	--rail-shut: 78px;
 	--reading-width: 780px;
 }
@@ -229,10 +164,7 @@ body {
 
 /* ── Shell ──────────────────────────────────────────────────────────────── */
 
-/* No min-height. The shell is height-driven and clips at its own edge, so a
-   floor taller than the viewport puts the composer off-screen with nothing to
-   scroll — a phone in landscape could read but not ask. Every track inside
-   collapses instead. */
+/* No min-height. */
 .app {
 	position: relative;
 	display: flex;
@@ -249,8 +181,7 @@ body {
 		#ffffff 92%
 	);
 
-	/* Phase-driven geometry. The landing state is the default; `data-phase`
-	   flips these and every consumer transitions on its own schedule. */
+	/* Phase-driven geometry. */
 	--rail-w: 0px;
 	--rail-events: none;
 	--rail-border: transparent;
@@ -263,10 +194,7 @@ body {
 	--input-h: min(96px, 12vh);
 }
 
-/* The ring is plum everywhere it lands on a light surface. The one control
-   still sitting on the dark gradient during landing is the drawer trigger, so
-   only it flips to white — a white ring on the white composer would be no ring
-   at all. */
+/* The ring is plum everywhere it lands on a light surface. */
 .app[data-phase="landing"] .rail-open {
 	--focus-ring: #ffffff;
 }
@@ -288,12 +216,7 @@ body {
 	--rail-w: var(--rail-shut);
 }
 
-/* On the landing screen the rail is a drawer at every width, not a column.
-   `--rail-w` stays 0 so the gradient runs full-bleed and the hero keeps the
-   whole frame; the rail lifts out of flow and slides over it when asked for.
-   Without this it was simply unreachable on landing, which made a refresh a
-   dead end — `phase` resets to `landing`, so a returning user had no route to
-   the conversations the rail says are saved on this device. */
+/* On the landing screen the rail is a drawer at every width, not a column. */
 .app[data-phase="landing"] .rail {
 	position: absolute;
 	inset: 0 auto 0 0;
@@ -323,18 +246,13 @@ body {
 	transition: opacity 700ms var(--ease);
 }
 
-/* No `will-change`. It is a targeted hint for a known-expensive transition, not
-   a resting state — left on, it pins four large blurred layers in compositor
-   memory for the whole session. These animate slowly enough that the promotion
-   the animation itself triggers is sufficient. */
+/* No `will-change`. */
 .atmosphere span {
 	position: absolute;
 	border-radius: 50%;
 }
 
-/* In chat the frame covers all but a 16px margin, so the drift is doing
-   continuous GPU work almost nobody can see. The layers stay — they still tint
-   that margin — but they stop moving. */
+/* In chat the frame covers all but a 16px margin, so the drift is doing continuous GPU work almost nobody can s… */
 .app[data-phase="chat"] .atmosphere span {
 	animation-play-state: paused;
 }
@@ -411,13 +329,7 @@ body {
 
 /* ── Frame ──────────────────────────────────────────────────────────────── */
 
-/* The shell's flex row: rail beside workspace, edge to edge.
-   It used to inset itself by 16px in the chat phase with a 28px radius and a
-   drop shadow, so the app read as a floating card on the gradient. The frame is
-   gone; the surface fills the viewport. Nothing here paints — `.app` owns the
-   background and `.workspace` owns the panel — so this is layout only.
-   No transition either: the three properties it animated were the frame's, and
-   animating `margin` was two of the detector's `layout-transition` findings. */
+/* The shell's flex row: rail beside workspace, edge to edge. */
 .frame {
 	position: relative;
 	z-index: 1;
@@ -454,19 +366,7 @@ body {
 	padding: 18px 18px 14px;
 }
 
-/* One cell, two marks, stacked.
-   The header used to show the A mark and the wordmark side by side — two logos
-   for one brand. Now only one is visible at a time, and because they occupy the
-   same grid cell rather than replacing each other in flow, the swap cannot
-   change the header's height or nudge "New chat" while the rail is resizing.
-   Only the rail's width moves.
-
-   Height is pinned to the A mark's 40px: the cell is the taller of the two, so
-   neither state can grow it. `overflow: hidden` keeps the wordmark from
-   spilling out of the 40px-wide content box of a collapsed rail while it fades.
-
-   `min-width: 0` lets this flex item actually shrink to the collapsed width;
-   without it the wordmark's intrinsic size would hold the header open. */
+/* One cell, two marks, stacked. */
 .rail__logo {
 	position: relative;
 	display: grid;
@@ -480,15 +380,11 @@ body {
 	grid-area: 1 / 1;
 	align-self: center;
 	justify-self: start;
-	/* The rail's own chrome fades on --settle; matching it here is what makes
-	   the logo swap and the rail collapse read as one motion rather than two
-	   things happening near each other. */
+	/* The rail's own chrome fades on --settle; matching it here is what makes the logo swap and the rail collapse r… */
 	transition: opacity var(--settle);
 }
 
-/* Expanded shows the wordmark; collapsed shows the mark. The mark is also the
-   only toggle a 76px rail has room for, so it is a real button whenever it is
-   visible -- never hover-gated, and it takes a focus ring like any other. */
+/* Expanded shows the wordmark; collapsed shows the mark. */
 .rail__mark {
 	opacity: 0;
 	pointer-events: none;
@@ -504,10 +400,7 @@ body {
 	overflow: hidden;
 	background: linear-gradient(135deg, var(--plum), var(--magenta));
 	box-shadow: 0 4px 12px rgb(72 41 119 / 0.28);
-	/* Both, explicitly. This rule and `.rail__logo > *` have equal specificity,
-	   so whichever comes last wins outright — declaring only `transform` here
-	   silently dropped the opacity transition the crossfade depends on, and the
-	   mark swapped in as a hard cut. */
+	/* Both, explicitly. */
 	transition:
 		opacity var(--settle),
 		transform var(--settle);
@@ -537,16 +430,11 @@ body {
 	width: auto;
 	/* Never squashed by the shrinking header -- it fades, it does not compress. */
 	flex-shrink: 0;
-	/* It shares a grid cell with the A mark and comes after it in the DOM, so it
-	   paints on top. An image faded to zero opacity is still hit-testable, and
-	   it was swallowing every click aimed at the mark underneath -- the collapsed
-	   rail's only toggle, which therefore did nothing. It is decorative; it has
-	   no business receiving a pointer at all. */
+	/* It shares a grid cell with the A mark and comes after it in the DOM, so it paints on top. */
 	pointer-events: none;
 }
 
-/* Everything that folds away when the rail collapses shares one rule, so the
-   fade always stays in step with the width animation. */
+/* Everything that folds away when the rail collapses shares one rule, so the fade always stays in step with the… */
 .rail__fold {
 	opacity: 1;
 	transition: opacity var(--settle);
@@ -569,21 +457,8 @@ body {
 	padding: 6px 18px 16px;
 }
 
-/* Out of the flow, not merely faded.
-   It used to sit in the header's flex row with `margin-left: auto`, and it kept
-   its ~32px of space plus the 12px gap even when collapsed and invisible. In a
-   76px rail the header's content box is exactly 40px, so those 44px left the
-   logo cell with nothing: the A mark was laid out at its full 40px, clipped to a
-   zero-width container, and was neither visible nor clickable. Opacity looked
-   perfectly correct throughout, which is why it survived a first pass.
-
-   Absolute keeps the logo cell full-width in both states, so the mark has its
-   40px whatever the collapse button is doing, and the button can still fade on
-   the shared timing rather than being cut with `display: none`. */
-/* Scoped to the header, and that is not decoration: this button also carries
-   `.icon-btn`, which sets `position: relative` for its 44px hit overlay and is
-   defined later in this file. At equal specificity the later rule wins, so a
-   bare `.rail__collapse` was quietly losing and the button stayed in flow. */
+/* Out of the flow, not merely faded. */
+/* Scoped to the header, and that is not decoration: this button also carries `.icon-btn`, which sets `position:… */
 .rail__head .rail__collapse {
 	position: absolute;
 	top: 18px;
@@ -604,8 +479,7 @@ body {
 	white-space: nowrap;
 }
 
-/* Fixed 20px so the glyph holds the same column whether the rail is open or
-   folded to icons — the label beside it is what disappears, not the rhythm. */
+/* Fixed 20px so the glyph holds the same column whether the rail is open or folded to icons — the label beside… */
 .rail__section-glyph {
 	display: flex;
 	justify-content: center;
@@ -629,8 +503,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* The quiet way back from a failed load. A link rather than a button shape:
-   the failure is not worth a control that competes with "New chat". */
+/* The quiet way back from a failed load. */
 .rail__retry {
 	padding: 0;
 	border: 0;
@@ -642,13 +515,7 @@ body {
 	cursor: pointer;
 }
 
-/* Three rows of nothing, so first load reads as "still arriving" rather than
-   as "you have none" -- which is what it said before, on every slow connection,
-   right up until the rows popped in.
-
-   `aria-hidden`: a screen reader is told nothing at all here, which is correct.
-   The list that follows is what has meaning, and announcing placeholder shapes
-   would be announcing the absence of information. */
+/* Three rows of nothing, so first load reads as "still arriving" rather than as "you have none" -- which is wha… */
 .rail__skeleton {
 	display: flex;
 	flex-direction: column;
@@ -669,8 +536,7 @@ body {
 	animation: rail-shimmer 1.4s ease-in-out infinite;
 }
 
-/* Each row starts a beat after the one above, so the group reads as one
-   loading surface rather than three synchronised bars. */
+/* Each row starts a beat after the one above, so the group reads as one loading surface rather than three synch… */
 .rail__skeleton i:nth-child(2) {
 	animation-delay: 0.12s;
 	width: 82%;
@@ -696,8 +562,7 @@ body {
 	}
 }
 
-/* 12px, the documented body floor: "Today" and "Yesterday" are read as words,
-   not scanned as a tracked label. */
+/* 12px, the documented body floor: "Today" and "Yesterday" are read as words, not scanned as a tracked label. */
 .rail__group-title {
 	margin: 0;
 	padding: 0 10px 6px;
@@ -741,8 +606,7 @@ body {
 	white-space: nowrap;
 }
 
-/* Sans, not mono: this is a sentence about where things are kept, not a
-   measurement. And a sentence gets the 12px body floor. */
+/* Sans, not mono: this is a sentence about where things are kept, not a measurement. */
 .rail__note {
 	font-size: 0.75rem;
 	color: var(--quiet);
@@ -795,12 +659,7 @@ body {
 	white-space: nowrap;
 }
 
-/* ── Touch targets ──────────────────────────────────────────────────────────
-   Several controls are deliberately small — a 44px painted icon button would
-   shout. The painted box stays as designed and an invisible overlay carries the
-   pointer target out to 44px in the vertical axis, which is the one a thumb
-   misses in. Horizontal growth is opt-in, because these sit in rows 8px apart
-   and two overlapping targets steal each other's taps. */
+/* ── Touch targets ────────────────────────────────────────────────────────── Several controls are deliberately… */
 
 .chip-btn,
 .text-btn,
@@ -834,10 +693,7 @@ body {
 	transform: translate(-50%, -50%);
 }
 
-/* These sit alone or with wide gaps, so they can grow in both axes.
-   `.tool-btn` qualifies because the composer's tool row is `space-between`:
-   it is hard left with the mic and send pair hard right. It needs the width
-   most of all — under 620px its label is hidden and it paints 36x36. */
+/* These sit alone or with wide gaps, so they can grow in both axes. */
 .chip-btn--square::after,
 .composer__mic::after,
 .composer__send::after,
@@ -883,14 +739,8 @@ body {
 	color: var(--faint);
 }
 
-/* Real height rather than the 44px overlay the other controls use: history
-   rows are stacked with no gap, so an overlay would have neighbours
-   overlapping by 6px and stealing each other's taps — the exact failure the
-   overlay was introduced to avoid. */
-/* A conversation and its overflow trigger share a row. The trigger is always
-   present and always focusable -- revealed on hover, on focus inside the row,
-   or while its own menu is open. A control that only exists on hover does not
-   exist for a keyboard or a touchscreen. */
+/* Real height rather than the 44px overlay the other controls use: history rows are stacked with no gap, so an… */
+/* A conversation and its overflow trigger share a row. */
 .history-row {
 	position: relative;
 	display: flex;
@@ -946,19 +796,11 @@ body {
 	color: var(--plum);
 }
 
-/* Fixed, not absolute: the rail body scrolls, and a scroll container clips its
-   absolutely positioned children — the menu on the last row was cut off by
-   50px and could not be clicked. Coordinates come from the trigger. */
+/* Fixed, not absolute: the rail body scrolls, and a scroll container clips its absolutely positioned children —… */
 .row-menu {
 	position: fixed;
 	z-index: 40;
-	/* Fixed rather than min-width, and that is about the confirmation. The menu
-	   has two faces — four actions, or a sentence and two answers — and a width
-	   that fitted each of them would slide the whole popover sideways at the
-	   moment somebody is being asked to confirm a delete, which is the worst
-	   possible moment to move a button. One width, wide enough to wrap the
-	   sentence at a readable measure and narrow enough to sit inside the rail.
-	   `Rail.tsx` measures the result rather than repeating the number. */
+	/* Fixed rather than min-width, and that is about the confirmation. */
 	width: 236px;
 	padding: 6px;
 	border: 1px solid var(--wash-12);
@@ -998,9 +840,7 @@ body {
 	color: var(--quiet);
 }
 
-/* Delete. Red, and fenced off by a rule above it: everything else in this menu
-   is reversible or additive, and this one is neither. The hairline is what
-   stops a slipped click on "Save chat" landing one item lower. */
+/* Delete. */
 .row-menu__item--danger {
 	margin-top: 5px;
 	border-top: 1px solid var(--hairline);
@@ -1017,8 +857,7 @@ body {
 	color: currentcolor;
 }
 
-/* While the question is up, the destructive answer is one of two ordinary
-   items and needs no separator of its own — the sentence above is the fence. */
+/* While the question is up, the destructive answer is one of two ordinary items and needs no separator of its o… */
 .row-menu__confirm + .row-menu__item--danger {
 	margin-top: 0;
 	border-top: 0;
@@ -1026,9 +865,7 @@ body {
 	padding-top: 0;
 }
 
-/* Says what is actually about to happen, in the words a reader would use. The
-   same shape as `.account__confirm`, deliberately: this product asks "are you
-   sure" in exactly two places and they should not look like two products. */
+/* Says what is actually about to happen, in the words a reader would use. */
 .row-menu__confirm {
 	margin: 0;
 	padding: 4px 10px 8px;
@@ -1042,8 +879,7 @@ body {
 	width: 100%;
 	min-height: 44px;
 	text-align: left;
-	/* Right padding leaves the overflow trigger somewhere to sit without the
-	   title running underneath it. */
+	/* Right padding leaves the overflow trigger somewhere to sit without the title running underneath it. */
 	padding: 9px 38px 9px 10px;
 	border: none;
 	border-radius: 12px;
@@ -1059,11 +895,7 @@ body {
 		color var(--swift);
 }
 
-/* One line of text that dissolves when it is replaced — the provisional label
-   giving way to the generated title. Both strings share a single grid cell so
-   the outgoing one cannot widen the row or push the overflow trigger while it
-   leaves. The ellipsis moves in here from `.history-item`, which is now only
-   the box around it. */
+/* One line of text that dissolves when it is replaced — the provisional label giving way to the generated title. */
 .xfade {
 	display: grid;
 	min-width: 0;
@@ -1098,9 +930,7 @@ body {
 
 /* ── Workspace ──────────────────────────────────────────────────────────── */
 
-/* Positioned so the title bar and the landing drawer trigger anchor to the
-   conversation column rather than to `.frame` — which spans the rail too, and
-   would put the bar straight across the sidebar's logo. */
+/* Positioned so the title bar and the landing drawer trigger anchor to the conversation column rather than to `… */
 .workspace {
 	position: relative;
 	display: flex;
@@ -1112,8 +942,7 @@ body {
 }
 
 
-/* Chrome controls read against both the purple gradient and the white panel by
-   deriving every colour from the inherited text colour. */
+/* Chrome controls read against both the purple gradient and the white panel by deriving every colour from the i… */
 .chip-btn {
 	display: flex;
 	align-items: center;
@@ -1147,10 +976,7 @@ body {
 
 /* ── Title bar ───────────────────────────────────────────────────────────── */
 
-/* Thin, quiet, and translucent so the transcript scrolls under it -- which is
-   what keeps the thread's top fade meaningful. A solid bar would have left a
-   mask dissolving content into an opaque edge, which is a fade doing nothing.
-   Chat phase only; the empty state carries the product identity itself. */
+/* Thin, quiet, and translucent so the transcript scrolls under it -- which is what keeps the thread's top fade… */
 .titlebar {
 	position: absolute;
 	z-index: 12;
@@ -1198,8 +1024,7 @@ body {
 	background: var(--wash-6);
 }
 
-/* Click to rename, so it is a button -- but it has to read as a title, not as
-   a control sitting in a bar. */
+/* Click to rename, so it is a button -- but it has to read as a title, not as a control sitting in a bar. */
 .titlebar__title {
 	position: relative;
 	display: grid;
@@ -1221,8 +1046,7 @@ body {
 	background: var(--wash-6);
 }
 
-/* Both layers share one grid cell, so a title arriving cannot move the bar or
-   the thread under it. */
+/* Both layers share one grid cell, so a title arriving cannot move the bar or the thread under it. */
 .titlebar__text {
 	grid-area: 1 / 1;
 	min-width: 0;
@@ -1264,11 +1088,7 @@ body {
 	outline-offset: 1px;
 }
 
-/* The bar overlays the thread, so the thread's own top padding has to clear it
-   rather than the floating trigger it was sized for -- and the fade has to
-   start where the bar ends. Left at the top of the container it sat entirely
-   underneath the 52px bar and was never once visible, which made the comment
-   claiming it softened the edge simply untrue. */
+/* The bar overlays the thread, so the thread's own top padding has to clear it rather than the floating trigger… */
 .app[data-phase="chat"] .thread {
 	padding-top: 72px;
 	mask-image: linear-gradient(
@@ -1280,8 +1100,7 @@ body {
 	);
 }
 
-/* Renaming inline in the rail. Same box as the row it replaces, so the list
-   does not jump while a title is being typed. */
+/* Renaming inline in the rail. */
 .history-item--input {
 	min-height: 44px;
 	padding: 9px 10px;
@@ -1308,13 +1127,7 @@ body {
 	transition: grid-template-rows var(--morph);
 }
 
-/* The thread now runs to the top of the viewport — there is no bar above it to
-   stop against. Two things follow.
-   Padding, so the first message clears the window edge and the floating drawer
-   trigger instead of colliding with them. And a mask, so a message scrolling
-   out dissolves into the top edge rather than being cut in half by it. The
-   fade is only as tall as the padding, so nothing that is meant to be read is
-   ever dimmed at rest. */
+/* The thread now runs to the top of the viewport — there is no bar above it to stop against. */
 .thread {
 	display: flex;
 	flex-direction: column;
@@ -1331,24 +1144,15 @@ body {
 	);
 }
 
-/* The fade is 24px, not 56px: at 56px a line arriving into the viewport sat
-   24px inside the band and lost half its contrast (5.36:1 against 11.52:1
-   measured on the same ink), which is the opposite of "nothing that is meant
-   to be read is ever dimmed". 24px dissolves the line leaving without touching
-   the line arriving. The chat phase overrides the padding to clear the bar;
-   the floating trigger it used to clear now only exists on landing, where the
-   padding is 0 anyway. */
+/* The fade is 24px, not 56px: at 56px a line arriving into the viewport sat 24px inside the band and lost half… */
 
-/* The landing hero is vertically composed and centred in the stage; the same
-   top padding there would push it off balance, and there is nothing scrolling
-   out to dissolve. */
+/* The landing hero is vertically composed and centred in the stage; the same top padding there would push it of… */
 .app[data-phase="landing"] .thread {
 	padding-top: 0;
 	mask-image: none;
 }
 
-/* Anchors short conversations to the bottom so the first reply rises out of
-   the composer instead of dropping in from the top. */
+/* Anchors short conversations to the bottom so the first reply rises out of the composer instead of dropping in… */
 .thread__inner {
 	margin-top: auto;
 	width: 100%;
@@ -1365,29 +1169,13 @@ body {
 	text-align: center;
 	opacity: var(--hero-opacity);
 	max-height: var(--hero-max);
-	/* Rows 2 and 3 of ANIMATION-INVENTORY.md, and the reason the greeting fades
-	   rather than vanishing. The custom properties flip instantly on the phase
-	   change; these two make the used values travel. The stagger is the point —
-	   the hero is gone at 380ms while its height is still collapsing at 560ms,
-	   so the composer appears to settle last. `anim-check.mjs` asserts both
-	   durations against the inventory. */
+	/* Rows 2 and 3 of ANIMATION-INVENTORY.md, and the reason the greeting fades rather than vanishing. */
 	transition:
 		opacity 380ms var(--ease),
 		max-height var(--morph);
 }
 
-/* A soft plum vignette under the hero copy.
-   The subtitle is white over the 36–67% band of the page gradient — its
-   lightest, most magenta stretch — and measured 3.0:1 against 16px/300 text
-   where AA wants 4.5:1. Lifting the text alone cannot close that: pure white
-   on the sampled background tops out near 3.7:1. So the background comes down
-   instead. Reaching transparent at 78% keeps the falloff inside the hero's own
-   box, so `overflow: hidden` never cuts a hard edge across it, and it reads as
-   the hero being lit rather than as a panel sitting on the gradient.
-
-   This rule carried no `background` at all -- an empty positioned box -- so the
-   fix described above was not painting and the subtitle measured 3.95:1 against
-   real pixels. Restored, and tuned until it clears AA. */
+/* A soft plum vignette under the hero copy. */
 .hero::before {
 	content: "";
 	position: absolute;
@@ -1396,8 +1184,7 @@ body {
 	pointer-events: none;
 }
 
-/* `.hero::before` is positioned, so without this it would paint over the
-   static children it exists to sit behind. */
+/* `.hero::before` is positioned, so without this it would paint over the static children it exists to sit behin… */
 .hero > * {
 	position: relative;
 	z-index: 1;
@@ -1416,10 +1203,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* Full white at 400, not 82% at 300. Diluting white on a mid-tone gradient
-   buys a little elegance and costs the contrast that makes the sentence
-   readable; 300 at 16px is thin enough that the strokes themselves start
-   losing against a moving background. The vignette above does the rest. */
+/* Full white at 400, not 82% at 300. */
 .hero__sub {
 	margin: 0 0 8px;
 	/* Padding, not just max-width: at 390px the copy ran to a 12px gutter. */
@@ -1520,23 +1304,13 @@ body {
 	padding: 24px 0 18px;
 }
 
-/* Only present past 60 turns, where the transcript switches to windowing.
-   Its height is the virtualizer's total — every turn's, measured or estimated —
-   so the scrollbar and the remembered scroll offset stay honest even though
-   most of those turns are not in the DOM. */
+/* Only present past 60 turns, where the transcript switches to windowing. */
 .transcript__window {
 	position: relative;
 	width: 100%;
 }
 
-/* Rows are taken out of flow and placed by transform, which is what lets the
-   list skip the ones nobody is looking at.
-
-   `position: absolute` also establishes a block formatting context, and that is
-   load-bearing rather than incidental: `.turn`'s 30px `margin-bottom` is
-   contained by it and therefore counted in `offsetHeight`. Measured heights
-   would otherwise all be 30px short and every row would creep upwards over the
-   one before it. */
+/* Rows are taken out of flow and placed by transform, which is what lets the list skip the ones nobody is looki… */
 .transcript__row {
 	position: absolute;
 	top: 0;
@@ -1544,11 +1318,7 @@ body {
 	width: 100%;
 }
 
-/* Restored by default, arriving only when the transcript says so.
-   `rise` used to be unconditional, so every message read out of storage played
-   its own entrance — reopening a forty-turn chat animated all forty at once,
-   which read as the conversation being re-delivered rather than reopened. An
-   entrance belongs to a message that has just been sent. */
+/* Restored by default, arriving only when the transcript says so. */
 .turn {
 	display: flex;
 	flex-direction: column;
@@ -1574,10 +1344,7 @@ body {
 	align-items: flex-end;
 }
 
-/* `overflow-wrap: anywhere` because the content is whatever a child typed or
-   dictated. A pasted URL or a long unbroken run has no break opportunity, and
-   without this the bubble clips it at its own right edge — leaving them unable
-   to read back the question they just asked. */
+/* `overflow-wrap: anywhere` because the content is whatever a child typed or dictated. */
 .bubble {
 	max-width: 74%;
 	padding: 13px 18px;
@@ -1607,26 +1374,13 @@ body {
 	padding-top: 1px;
 }
 
-/* Same reason as .bubble, and more urgent here: the assistant is the side that
-   emits URLs. `.thread` is `overflow-x: hidden`, so an unbroken run does not
-   produce a scrollbar — it is simply cut off and unrecoverable. Measured 1058px
-   of answer in a 736px column before this. */
+/* Same reason as .bubble, and more urgent here: the assistant is the side that emits URLs. */
 .answer p,
 .answer li {
 	overflow-wrap: anywhere;
 }
 
-/* The child combinator is load-bearing, not tidiness.
-   As `.answer p` this rule is specificity (0,1,1); every widget paragraph rule
-   -- `.tf__statement`, `.game__eyebrow`, `.game__lead`, 22 of them -- is a single
-   class at (0,1,0), and every card renders inside `.answer`. So answer prose
-   won on font-size, line-height, colour AND margin in all three cards at once:
-   measured, every paragraph in every widget rendered at 15.5px, whatever it
-   declared. A 21px statement and its 11px eyebrow came out the same size, which
-   is the whole typographic hierarchy of the cards collapsed into one step.
-   Restricting this to direct children keeps it on the prose it was written for
-   -- `Block` renders paragraphs at the top level of `.answer` -- and lets each
-   card keep the scale it declares. */
+/* The child combinator is load-bearing, not tidiness. */
 .answer > p {
 	margin: 0 0 19px;
 	font-size: 0.96875rem;
@@ -1635,18 +1389,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* Scoped off every <ul>/<li> inside .answer that is not answer prose.
-
-   `.answer li` is specificity (0,1,1) and a bare class is (0,1,0), so a
-   component's own `display` never won: every item became a flex row, its first
-   child collapsed to min-content width, and a prose bullet appeared in front of
-   it. It broke the sources panel first — at 390px "Risk" rendered 11px wide as
-   R/i/s/k stacked vertically — and then the eligibility checklist in exactly
-   the same way, turning "birth certificate" into a five-line column.
-
-   The exclusion list is explicit rather than clever because the failure is
-   silent and only visible at a glance: ANY list component rendered inside an
-   answer has to be added here. These three rules are for answer prose only. */
+/* Scoped off every <ul>/<li> inside .answer that is not answer prose. */
 .answer ul:not(.sources__list, .elig__checklist) {
 	display: flex;
 	flex-direction: column;
@@ -1679,10 +1422,7 @@ body {
 	margin-bottom: 0;
 }
 
-/* ── Voice ──────────────────────────────────────────────────────────────────
-   The microphone, the listening state, and everything that explains what
-   happens to a recording. Sits between the transcript and the composer so a
-   consent panel or a failure note never covers the answer being read. */
+/* ── Voice ────────────────────────────────────────────────────────────────── The microphone, the listening sta… */
 
 .voice-slot {
 	display: flex;
@@ -1694,13 +1434,7 @@ body {
 	width: min(780px, 100%);
 }
 
-/* Step the hero back while the consent panel is up.
-   The panel is opaque now, which is the point — but on a short viewport it
-   overlaps the headline and, being opaque, slices it through the middle of a
-   word instead of letting it bleed through. Dimming the hero makes the overlap
-   read as focus moving to the panel rather than as a broken clip. `:has` is a
-   progressive enhancement: where it is unsupported nothing happens and the
-   panel is still perfectly readable. */
+/* Step the hero back while the consent panel is up. */
 .stage:has(.voice-consent) .hero {
 	opacity: 0.28;
 	transition: opacity var(--settle);
@@ -1708,13 +1442,7 @@ body {
 
 /* ── Consent ─────────────────────────────────────────────────────────────── */
 
-/* Carries its own opaque surface rather than a wash.
-   `--wash-3` is a 3% plum tint, which only reads as a panel when something
-   white is already behind it. This panel's whole job happens in the landing
-   phase, where `--panel-bg` is transparent and the parent is the raw brand
-   gradient — so the wash put the microphone promises straight onto the magenta
-   band at roughly 2.5:1, and the line telling a guardian where to turn voice
-   off was invisible. Same surface as .composer, for the same reason. */
+/* Carries its own opaque surface rather than a wash. */
 .voice-consent {
 	display: flex;
 	flex-direction: column;
@@ -1860,8 +1588,7 @@ body {
 
 /* ── Notes ───────────────────────────────────────────────────────────────── */
 
-/* Opaque for the same reason as .voice-consent: the mic-denied and no-speech
-   notes are shown in the landing phase, over the gradient. */
+/* Opaque for the same reason as .voice-consent: the mic-denied and no-speech notes are shown in the landing pha… */
 .voice-note {
 	display: flex;
 	align-items: center;
@@ -1921,11 +1648,8 @@ body {
 	border-color: var(--wash-18);
 }
 
-/* Tone carries the meaning; the icon and copy carry it too, so colour is never
-   the only signal. */
-/* Each tone keeps its tint but paints it over the opaque base rather than
-   replacing it — a 7% wash alone is transparent, and these notes appear in the
-   landing phase where the layer behind them is the brand gradient. */
+/* Tone carries the meaning; the icon and copy carry it too, so colour is never the only signal. */
+/* Each tone keeps its tint but paints it over the opaque base rather than replacing it — a 7% wash alone is tra… */
 .voice-note[data-tone="bad"] {
 	border-color: var(--danger-line-strong);
 	background:
@@ -2106,8 +1830,7 @@ body {
 	border: 1px solid transparent;
 	border-radius: 10px;
 	background: transparent;
-	/* --faint is 3.93:1 and is reserved for icons and rules. This button has a
-	   visible label, so it takes the text step. */
+	/* --faint is 3.93:1 and is reserved for icons and rules. */
 	color: var(--quiet);
 	font: inherit;
 	font-size: 0.78125rem;
@@ -2172,10 +1895,7 @@ body {
 	animation: rise 220ms var(--ease) both;
 }
 
-/* Opens upward. It used to hang below a top bar; anchored to the composer it
-   has to go the other way, or it would open straight down off the screen.
-   Left-aligned to its trigger, and `max-height` plus its own scroll so a short
-   viewport clips the panel rather than letting it run past the top edge. */
+/* Opens upward. */
 .voice-menu--up {
 	top: auto;
 	bottom: calc(100% + 10px);
@@ -2185,8 +1905,7 @@ body {
 	animation: rise-up 220ms var(--ease) both;
 }
 
-/* `rise` travels downward, which reads as falling when the panel is above its
-   trigger. Same duration, same easing, opposite direction. */
+/* `rise` travels downward, which reads as falling when the panel is above its trigger. */
 @keyframes rise-up {
 	from {
 		opacity: 0;
@@ -2198,8 +1917,7 @@ body {
 	}
 }
 
-/* Below the drawer breakpoint it is a bottom sheet, not a floating panel:
-   pinned to the bottom edge, full width, and reachable with a thumb. */
+/* Below the drawer breakpoint it is a bottom sheet, not a floating panel: pinned to the bottom edge, full width… */
 .voice-menu--up[data-sheet] {
 	position: fixed;
 	z-index: 60;
@@ -2234,8 +1952,7 @@ body {
 	animation: fade-in 200ms var(--ease) both;
 }
 
-/* The settings trigger: icon-only at every width, so it never competes with
-   the plain-words chip for room on a narrow screen. */
+/* The settings trigger: icon-only at every width, so it never competes with the plain-words chip for room on a… */
 .tool-btn--icon {
 	min-width: 36px;
 	padding: 0;
@@ -2313,10 +2030,7 @@ body {
 	color: var(--plum);
 }
 
-/* `--magenta` on this wash measured 4.41:1 at 12.5px/500 — just under AA, and
-   this is the only indication of which speed and which language are active.
-   `--plum-deep` on the same wash clears it comfortably; the magenta border
-   still carries the "selected" signal, so nothing changes at a glance. */
+/* `--magenta` on this wash measured 4.41:1 at 12.5px/500 — just under AA, and this is the only indication of wh… */
 .voice-choice[aria-pressed="true"] {
 	border-color: var(--wash-m-32);
 	background: var(--wash-m-10);
@@ -2401,10 +2115,7 @@ body {
 	transform: translateX(18px);
 }
 
-/* ── Links inside an answer ─────────────────────────────────────────────────
-   Underlined rather than colour-only: colour alone is not a distinguishable
-   affordance, and these often sit inside bold where weight is already spoken
-   for. The offset keeps the rule clear of descenders in Sora. */
+/* ── Links inside an answer ───────────────────────────────────────────────── Underlined rather than colour-onl… */
 
 .answer-link {
 	color: var(--plum);
@@ -2431,9 +2142,7 @@ body {
 	text-decoration-color: currentColor;
 }
 
-/* ── Sources ────────────────────────────────────────────────────────────────
-   The evidence behind an answer, not the answer itself: closed by default,
-   quiet when closed, and legible the moment it opens. */
+/* ── Sources ──────────────────────────────────────────────────────────────── The evidence behind an answer, no… */
 
 .sources {
 	margin: -4px 0 2px;
@@ -2498,8 +2207,7 @@ body {
 	border-top: 1px solid var(--hairline);
 }
 
-/* `.answer p` is more specific than a lone class, so both of these carry the
-   parent to win the cascade rather than reaching for !important. */
+/* `.answer p` is more specific than a lone class, so both of these carry the parent to win the cascade rather t… */
 .answer .source__label {
 	margin: 0 0 5px;
 	font-size: 0.78125rem;
@@ -2533,9 +2241,7 @@ body {
 	color: var(--danger);
 }
 
-/* Stopping is a decision, not a fault. Same neutral wash the rest of the
-   product uses for "nothing is wrong here", so a child who stops an answer is
-   not shown a red panel for having done exactly what the button offered. */
+/* Stopping is a decision, not a fault. */
 .answer .failure[data-tone="stopped"] {
 	border-color: var(--wash-18);
 	background: var(--wash-6);
@@ -2552,16 +2258,7 @@ body {
 	animation: none;
 }
 
-/* The evidence chip and the action row, held in reserve.
-
-   They used to mount when the answer settled, which grew the turn by 53px —
-   95px with sources — at that exact instant. With the thread pinned to the
-   bottom that is not a gap opening below the answer, it is the answer itself
-   sliding up out from under the reader on the last word.
-
-   So the space is committed from the first frame of the reveal and only the
-   visibility changes. Opacity alone, deliberately: anything that animates the
-   height would put the movement back, in slow motion. */
+/* The evidence chip and the action row, held in reserve. */
 .answer__tail {
 	transition: opacity 220ms var(--ease);
 }
@@ -2574,9 +2271,7 @@ body {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	/* 8px, not 6: the buttons carry 44px-tall invisible hit areas and this is
-	   the margin that keeps neighbouring targets from stealing each other's
-	   taps. */
+	/* 8px, not 6: the buttons carry 44px-tall invisible hit areas and this is the margin that keeps neighbouring ta… */
 	gap: 8px;
 	margin-top: 12px;
 }
@@ -2600,9 +2295,7 @@ body {
 		color var(--swift);
 }
 
-/* Armed state for a press that discards later messages. Amber, matching the
-   game's "not yet" rather than the red reserved for failures — nothing has
-   gone wrong, the button is just asking whether you meant it. */
+/* Armed state for a press that discards later messages. */
 .text-btn[data-confirming] {
 	background: var(--warn-wash);
 	color: var(--warn-ink);
@@ -2641,8 +2334,7 @@ body {
 	animation: dot-pulse 1.2s ease-in-out infinite;
 }
 
-/* The run walks plum → magenta, so the middle dot is the midpoint rather than
-   a fourth colour nobody declared. */
+/* The run walks plum → magenta, so the middle dot is the midpoint rather than a fourth colour nobody declared. */
 .thinking__dots i:nth-child(2) {
 	background: color-mix(in srgb, var(--plum-light), var(--magenta) 45%);
 	animation-delay: 0.16s;
@@ -2668,13 +2360,7 @@ body {
 
 /* ── Follow-ups ─────────────────────────────────────────────────────────── */
 
-/* Reserved on the same terms as the answer's tail, and for the same reason:
-   these chips are the last thing in the thread, so mounting them at completion
-   pushed the whole conversation up.
-
-   `rise` is gone from here. It was an entrance, and it fired at the moment the
-   answer FINISHED rather than the moment the chips arrived — which is precisely
-   backwards. They now arrive with the answer and simply become visible. */
+/* Reserved on the same terms as the answer's tail, and for the same reason: these chips are the last thing in t… */
 .follow-ups {
 	display: flex;
 	flex-wrap: wrap;
@@ -2744,13 +2430,7 @@ body {
 		box-shadow var(--swift);
 }
 
-/* The focus ring has to be visible, not just present.
-   The textarea sets `outline: none` and delegates its focus indicator to this
-   rule, so this ring is the only thing a keyboard user has to go on for the
-   product's primary control. It was drawn in `--hairline` — plum at 10% — which
-   lands near 1.1:1 against the panel and is effectively invisible. `--plum` at
-   full strength carries it, and the deepened border gives the ring an edge to
-   sit against so it reads as one control, not a halo. */
+/* The focus ring has to be visible, not just present. */
 .composer:focus-within {
 	border-color: var(--plum);
 	box-shadow:
@@ -2758,8 +2438,7 @@ body {
 		0 0 0 3px rgb(72 41 119 / 0.45);
 }
 
-/* Windows High Contrast strips box-shadow, so the ring above disappears
-   exactly where it is needed most. `outline` survives forced colours. */
+/* Windows High Contrast strips box-shadow, so the ring above disappears exactly where it is needed most. */
 @media (forced-colors: active) {
 	.composer:focus-within {
 		outline: 3px solid Highlight;
@@ -2767,8 +2446,7 @@ body {
 	}
 }
 
-/* The input grows and shrinks with the phase. Sizing the track rather than the
-   textarea keeps the morph off the element's own layout box. */
+/* The input grows and shrinks with the phase. */
 .composer__field {
 	display: grid;
 	grid-template-rows: var(--input-h);
@@ -2824,9 +2502,7 @@ body {
 	color: var(--plum);
 }
 
-/* Filled, not just tinted. Under 620px the label is clipped and this button
-   becomes a bare sparkle, so a 10% wash was the only thing distinguishing
-   "plain words on" from "off" — and colour alone is not a state cue. */
+/* Filled, not just tinted. */
 .tool-btn[aria-pressed="true"] {
 	border-color: transparent;
 	background: linear-gradient(135deg, var(--plum), var(--magenta));
@@ -2841,20 +2517,13 @@ body {
 	}
 }
 
-/* Space held for a card whose chunk is still arriving. Sized to the shortest
-   of the three so it can only ever grow into place, never shrink -- the thread
-   is pinned to the bottom, so a shrink would pull the answer above it down. */
+/* Space held for a card whose chunk is still arriving. */
 .card-loading {
 	min-height: 180px;
 }
 
-/* Out of the way until a keyboard asks for it, then a real control in a real
-   place. Not `display: none` and not `width: 1px` — both would take it out of
-   the tab order, which is the one thing it exists to be in. */
-/* Only present in the last 500 characters, and quiet even then. It sits inside
-   the field's own box so it cannot move the composer when it appears -- the
-   thread is pinned to the bottom, so anything that changes the composer's
-   height shifts the conversation above it. */
+/* Out of the way until a keyboard asks for it, then a real control in a real place. */
+/* Only present in the last 500 characters, and quiet even then. */
 .composer__counter {
 	margin: 0;
 	padding: 0 4px 2px;
@@ -2863,9 +2532,7 @@ body {
 	text-align: right;
 }
 
-/* The limit reached is worth more than "getting close" -- this is the moment
-   the box stops accepting what is being typed, and silence there reads as a
-   broken keyboard. */
+/* The limit reached is worth more than "getting close" -- this is the moment the box stops accepting what is be… */
 .composer__counter[data-full] {
 	color: var(--danger);
 	font-weight: 500;
@@ -2876,8 +2543,7 @@ body {
 	z-index: 60;
 	top: 8px;
 	left: 50%;
-	/* Parked above the viewport rather than hidden, so it slides in from where
-	   it will land instead of appearing out of nowhere. */
+	/* Parked above the viewport rather than hidden, so it slides in from where it will land instead of appearing ou… */
 	transform: translate(-50%, -200%);
 	padding: 10px 18px;
 	border-radius: 12px;
@@ -2901,9 +2567,7 @@ body {
 
 /* ── Route states: not found, error, pending ─────────────────────────────── */
 
-/* The whole viewport, because these replace the view rather than sit inside
-   it. Centred and quiet: something has already gone wrong, and a loud screen
-   about it does not help a child get back to where they were. */
+/* The whole viewport, because these replace the view rather than sit inside it. */
 .route-state {
 	display: flex;
 	flex-direction: column;
@@ -2989,21 +2653,14 @@ body {
 	color: var(--slate);
 }
 
-/* Nothing but the orb. The pending state is an acknowledgement that something
-   is happening, not an announcement about it. */
+/* Nothing but the orb. */
 .route-state--pending {
 	gap: 0;
 }
 
 /* ── Persona picker ──────────────────────────────────────────────────────── */
 
-/* Who the assistant is answering for, chosen from the composer's tool row.
-
-   Deliberately quieter than "Explain it simply" beside it. That control is a
-   toggle whose state has to be legible at a glance; this one names its current
-   value in its own label, so a filled treatment would make the composer read as
-   two competing switches. It carries the same 36px height and the same border
-   as its neighbour so the row is one family. */
+/* Who the assistant is answering for, chosen from the composer's tool row. */
 .persona {
 	position: relative;
 	display: flex;
@@ -3025,10 +2682,7 @@ body {
 	font-weight: 600;
 }
 
-/* Under 620px the row is tight and "Explain it simply" already sheds its
-   label. The persona name stays -- it IS the control's value, and an unlabelled
-   person glyph would say nothing about who is currently being answered. What
-   goes is the chevron, which is decoration. */
+/* Under 620px the row is tight and "Explain it simply" already sheds its label. */
 @media (max-width: 620px) {
 	.persona__trigger {
 		padding: 0 10px;
@@ -3038,16 +2692,11 @@ body {
 	}
 }
 
-/* Fixed, like `.row-menu`, and for the same reason: the composer sits inside a
-   clipping context and an absolutely positioned child is cut off by it.
-   Anchored from the bottom so it grows away from the composer rather than over
-   the box being typed in. */
+/* Fixed, like `.row-menu`, and for the same reason: the composer sits inside a clipping context and an absolute… */
 .persona__menu {
 	position: fixed;
 	z-index: 40;
-	/* 288px, not 260: at 260 every blurb wrapped to three lines and the rows
-	   stopped scanning as rows. These are one sentence each and should read as
-	   one or two lines. */
+	/* 288px, not 260: at 260 every blurb wrapped to three lines and the rows stopped scanning as rows. */
 	width: 288px;
 	max-width: calc(100vw - 24px);
 	padding: 6px;
@@ -3066,8 +2715,7 @@ body {
 	align-items: flex-start;
 	gap: 8px;
 	width: 100%;
-	/* 44px would be the floor for a single-line row; these are two lines and
-	   comfortably past it. */
+	/* 44px would be the floor for a single-line row; these are two lines and comfortably past it. */
 	padding: 9px 10px;
 	border: none;
 	border-radius: 10px;
@@ -3082,27 +2730,20 @@ body {
 	background: var(--wash-6);
 }
 
-/* The focus ring is drawn INSIDE the row.
-
-   The global rule offsets it by 2px, which on a full-width row inside a 6px
-   padded menu put the ring outside the menu's own rounded edge -- it read as a
-   box hanging off the bottom rather than as the focused option. Inset, it
-   traces the row it belongs to. */
+/* The focus ring is drawn INSIDE the row. */
 .persona__option:focus-visible {
 	outline-offset: -2px;
 	border-radius: 10px;
 }
 
-/* A separator rather than a heading: "Everyone" is the absence of a choice,
-   not a fifth persona, and grouping it with the four would say otherwise. */
+/* A separator rather than a heading: "Everyone" is the absence of a choice, not a fifth persona, and grouping i… */
 .persona__option--none {
 	margin-top: 4px;
 	padding-top: 12px;
 	border-top: 1px solid var(--wash-12);
 }
 
-/* Reserved from the start, so checking a different option does not shunt every
-   label sideways by the width of a tick. */
+/* Reserved from the start, so checking a different option does not shunt every label sideways by the width of a… */
 .persona__tick {
 	display: flex;
 	align-items: center;
@@ -3128,16 +2769,14 @@ body {
 	font-weight: 600;
 }
 
-/* Who it is for, beside the name. This is the line people choose by, so it is
-   not hidden in the description underneath. */
+/* Who it is for, beside the name. */
 .persona__audience {
 	font-size: 0.75rem;
 	font-weight: 500;
 	color: var(--quiet);
 }
 
-/* 12px is the documented body floor and this is a full sentence, so it sits at
-   it rather than under it. */
+/* 12px is the documented body floor and this is a full sentence, so it sits at it rather than under it. */
 .persona__blurb {
 	font-size: 0.75rem;
 	line-height: 1.45;
@@ -3175,10 +2814,7 @@ body {
 	box-shadow: 0 9px 22px rgb(72 41 119 / 0.42);
 }
 
-/* The stop state. Same footprint and position as send, so the control does not
-   jump when a reply starts; magenta because that is already the recording and
-   in-progress colour in this palette, and it reads as "something is running"
-   rather than as an error. */
+/* The stop state. */
 .composer__send--stop {
 	background: linear-gradient(90deg, var(--magenta), var(--magenta-light));
 	box-shadow: 0 5px 16px rgb(194 47 153 / 0.35);
@@ -3243,12 +2879,7 @@ body {
 
 /* ── Disclaimer ─────────────────────────────────────────────────────────── */
 
-/* `--slate` rather than `--quiet`: measured at 390px in the chat phase this
-   line sits on the panel's lavender tint rather than on white, where `--quiet`
-   fell to 4.21:1 — under AA for 12.5px text. `--slate` clears it on both
-   surfaces. The bottom padding is a safe-area inset because the text was
-   flush to the viewport edge, which on a phone puts the one sentence telling a
-   child to check with their mentor under the home indicator. */
+/* `--slate` rather than `--quiet`: measured at 390px in the chat phase this line sits on the panel's lavender t… */
 .disclaimer {
 	display: flex;
 	align-items: center;
@@ -3301,10 +2932,7 @@ body {
 }
 
 /* Dismiss layer behind the drawer. Only mounted while the drawer is open. */
-/* The drawer trigger, floating over the thread now that the bar is gone.
-   It is not the sidebar's collapse toggle -- that still lives in the sidebar.
-   This is the only way to reach conversations whenever the rail is a drawer,
-   and on the landing screen it is the only route to them at all. */
+/* The drawer trigger, floating over the thread now that the bar is gone. */
 .rail-open {
 	position: absolute;
 	z-index: 12;
@@ -3340,25 +2968,16 @@ body {
 	background: rgb(255 255 255 / 0.95);
 }
 
-/* On the landing screen it sits on the gradient, where a white-on-white pill
-   would vanish. */
+/* On the landing screen it sits on the gradient, where a white-on-white pill would vanish. */
 .app[data-phase="landing"] .rail-open,
 .app[data-phase="landing"] .account__signin {
-	/* A plum wash, not a white one. Both controls sit on the lightest, most
-	   magenta band of the page gradient, and a white veil there lifts the
-	   background towards the white text on top of it — "Sign in" measured
-	   3.76:1 at 1280 and 4.05:1 at 768, both under AA. Darkening the pill is
-	   the only move that helps, since the text is already pure white. The
-	   hamburger takes the same value: they are one pair and must not drift. */
+	/* A plum wash, not a white one. */
 	background: rgb(38 16 70 / 0.42);
 	color: #fff;
 	border-color: rgb(255 255 255 / 0.34);
 }
 
-/* Listed with the hamburger rather than given its own rule, because they are
-   one pair: the same frosted surface at either end of the same line, and the
-   two treatments must move together or they stop matching the first time one
-   is adjusted. */
+/* Listed with the hamburger rather than given its own rule, because they are one pair: the same frosted surface… */
 .app[data-phase="landing"] .account__signin:hover {
 	background: rgb(38 16 70 / 0.52);
 }
@@ -3391,19 +3010,7 @@ body {
 	}
 }
 
-/* ── Word scramble ──────────────────────────────────────────────────────────
-   The game card, rendered inside an assistant turn rather than as a screen of
-   its own: the point of it is that the lesson never leaves the conversation.
-
-   Everything sized below reads from the custom properties on `.game`, so the
-   card's whole scale — tiles, type, targets and padding — moves from one place.
-
-   There used to be a second `[data-scale="stella"]` set here for younger
-   players. It was unreachable: the scale came from a `persona` prop on
-   `AspireChat` that nothing has ever passed, so the card rendered at the orion
-   scale even when the server's own session said stella. Removed rather than
-   left as a scale nobody could see. Re-add it against `GameState.persona`,
-   which the service already returns, if a persona picker ships. */
+/* ── Word scramble ────────────────────────────────────────────────────────── The game card, rendered inside an… */
 
 .game {
 	--tile: 52px;
@@ -3417,8 +3024,7 @@ body {
 	--step: 26px;
 	--btn-h: 40px;
 	--btn-fs: 0.875rem;
-	/* Shared by every card: the numbered step, the marker chip and the rule
-	   beside an eyebrow are one primitive each, not one per widget. */
+	/* Shared by every card: the numbered step, the marker chip and the rule beside an eyebrow are one primitive eac… */
 	--disabled: 0.45;
 	--lead-fs: 1.0625rem;
 	--meaning-word: 2.25rem;
@@ -3523,9 +3129,7 @@ body {
 	align-items: center;
 	gap: 7px;
 	flex-shrink: 0;
-	/* Hard right in every card. The games get this free from `.game__sub`
-	   being `flex: 1`, but the eligibility card deliberately has no subtitle,
-	   so without this its exit control sat against the title. */
+	/* Hard right in every card. */
 	margin-left: auto;
 	min-height: var(--btn-h);
 	padding: 0 13px;
@@ -3547,8 +3151,7 @@ body {
 	border-color: var(--wash-30);
 }
 
-/* Carries `disabled` while a request is in flight and had no disabled state at
-   all, so it stayed fully lit and read as pressable throughout. */
+/* Carries `disabled` while a request is in flight and had no disabled state at all, so it stayed fully lit and… */
 .game__leave:disabled {
 	opacity: var(--disabled);
 	cursor: not-allowed;
@@ -3590,10 +3193,7 @@ body {
 	color: var(--danger);
 }
 
-/* ── Tiles ───────────────────────────────────────────────────────────────
-   The tray sits at slight angles so it reads as loose letters rather than a
-   keyboard; the slots are square to the baseline so the word being built stays
-   legible as a word. */
+/* ── Tiles ─────────────────────────────────────────────────────────────── The tray sits at slight angles so it… */
 
 .game__tray,
 .game__slots,
@@ -3632,11 +3232,7 @@ body {
 		0 4px 10px rgb(53 29 90 / 0.08);
 	cursor: pointer;
 	transform: rotate(var(--rot, 0deg));
-	/* The one overshoot in the product, and it is load-bearing: a letter tile
-	   landing for a child is the single place the interface is meant to feel
-	   physical. Everything else uses --ease. Documented as a deliberate
-	   exception in DESIGN.md, and collapsed to its final frame under
-	   prefers-reduced-motion. */
+	/* The one overshoot in the product, and it is load-bearing: a letter tile landing for a child is the single pla… */
 	animation: tile-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; /* impeccable-disable-line bounce-easing -- deliberate, see note above */
 }
 
@@ -3649,8 +3245,7 @@ body {
 	transform: scale(0.94);
 }
 
-/* A spent tile keeps its place in the row so the tray does not reflow under
-   the child's finger mid-word. */
+/* A spent tile keeps its place in the row so the tray does not reflow under the child's finger mid-word. */
 .tile--tray[data-spent] {
 	border: 1.5px dashed var(--wash-18);
 	background: var(--wash-3);
@@ -3713,8 +3308,7 @@ body {
 	}
 }
 
-/* The row shakes once on a wrong guess — the letters are all still there, and
-   the shake says "these, in another order" faster than a sentence does. */
+/* The row shakes once on a wrong guess — the letters are all still there, and the shake says "these, in another… */
 .game__slots[data-shake] {
 	animation: nudge 400ms var(--ease);
 }
@@ -3754,10 +3348,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* The tone is carried by the fill and the icon, not by a 4px coloured tab down
-   the left edge — that stripe is generic callout furniture and it was the only
-   thing separating these two callouts from each other. A wrong guess is amber
-   throughout; a clue is plum throughout. */
+/* The tone is carried by the fill and the icon, not by a 4px coloured tab down the left edge — that stripe is g… */
 .game__wrong {
 	border: 1px solid var(--warn-line);
 	background: var(--warn-wash);
@@ -3950,8 +3541,7 @@ body {
 	color: var(--magenta);
 }
 
-/* The word gets the display face — it is the thing being taught, and the serif
-   is the only place this product uses one. */
+/* The word gets the display face — it is the thing being taught, and the serif is the only place this product u… */
 .game__meaning-word {
 	font-family: var(--font-display);
 	font-size: var(--meaning-word);
@@ -3988,10 +3578,7 @@ body {
 	box-shadow: 0 4px 12px rgb(72 41 119 / 0.26);
 }
 
-/* ── True or false ──────────────────────────────────────────────────────────
-   Shares the card shell above — header, steps, leave, buttons, meaning panel —
-   and adds only what a statement needs. The two games should read as the same
-   object with a different job, not as two cards that happen to sit together. */
+/* ── True or false ────────────────────────────────────────────────────────── Shares the card shell above — hea… */
 
 .tf {
 	--stmt: 1.3125rem;
@@ -4026,8 +3613,7 @@ body {
 	background: var(--hairline);
 }
 
-/* The statement is the thing being judged, so it gets the weight — and a
-   measure short enough that judging it does not become reading it twice. */
+/* The statement is the thing being judged, so it gets the weight — and a measure short enough that judging it d… */
 .tf__statement {
 	margin: 0;
 	max-width: 60ch;
@@ -4059,8 +3645,7 @@ body {
 	gap: 12px;
 }
 
-/* Deliberately large. This is the whole interaction, and on a phone it should
-   be reachable with a thumb without looking. */
+/* Deliberately large. */
 .tf__choice {
 	flex: 1 1 0;
 	display: flex;
@@ -4106,8 +3691,7 @@ body {
 	margin-left: auto;
 }
 
-/* Both verdicts, side by side: the right one marked, and the one they picked
-   marked too. The correction is visible without a sentence saying "wrong". */
+/* Both verdicts, side by side: the right one marked, and the one they picked marked too. */
 .tf__pills {
 	display: flex;
 	gap: 12px;
@@ -4149,10 +3733,7 @@ body {
 	color: var(--warn-ink);
 }
 
-/* 12px rather than the 11px the other tracked labels use. This one names which
-   pill is the right answer and which one the child picked, at the moment they
-   find out whether they were right — the worst moment to make someone squint.
-   The tracking keeps it compact enough that the extra pixel costs no line. */
+/* 12px rather than the 11px the other tracked labels use. */
 .tf__pill-tag {
 	min-height: 1em;
 	text-align: center;
@@ -4167,8 +3748,7 @@ body {
 	color: var(--warn-ink);
 }
 
-/* The takeaway is a sentence, not a word, so it wraps where the scramble's
-   single word never had to. */
+/* The takeaway is a sentence, not a word, so it wraps where the scramble's single word never had to. */
 .tf__takeaway {
 	max-width: 26ch;
 	font-size: var(--takeaway);
@@ -4182,8 +3762,7 @@ body {
 	line-height: 1.66;
 }
 
-/* A numbered breakdown, for teaching that a paragraph cannot carry — the
-   10-20-30-40 shares only mean anything read against each other. */
+/* A numbered breakdown, for teaching that a paragraph cannot carry — the 10-20-30-40 shares only mean anything… */
 .tf__bullets {
 	display: flex;
 	flex-direction: column;
@@ -4237,8 +3816,7 @@ body {
 	color: var(--ink);
 }
 
-/* A wrong answer is amber, not red: it resolved the statement and taught
-   something. Only a skipped one is neutral. */
+/* A wrong answer is amber, not red: it resolved the statement and taught something. */
 .game__result[data-outcome="correct"] .game__result-icon {
 	background: rgb(22 163 74 / 0.14);
 	color: var(--success);
@@ -4251,21 +3829,13 @@ body {
 
 /* ── Eligibility check ───────────────────────────────────────────────────── */
 
-/* Built on `.game`, not beside it. The two cards are the same object in the
-   thread — a panel the conversation hands you — and giving this one its own
-   shell would make the interface look like it has two ideas about what a card
-   is. Only what genuinely differs is redeclared below. */
+/* Built on `.game`, not beside it. */
 
 .elig {
 	--stack: 14px;
 }
 
-/* The pre-check claim, and the single most important line on the card.
-
-   It sits between the header and the body for the whole flow, at full width, in
-   the reading column rather than beside it. Explicitly NOT a `<details>`, not a
-   footnote, and not sized down: "this is a pre-check, not a decision" is the
-   one thing somebody screenshotting this card has to take away with it. */
+/* The pre-check claim, and the single most important line on the card. */
 .elig__banner {
 	display: flex;
 	align-items: center;
@@ -4287,15 +3857,7 @@ body {
 	height: 15px;
 }
 
-/* Progress sits on its own row in this card rather than inline: with five
-   questions the track is wider than a game's four, and the header also carries
-   a longer title. Same primitive, different placement.
-
-   This used to be a separate bar-segment treatment (`.elig__pip`) because
-   numbered steps shared a header line with a subtitle that ellipsised at any
-   width under ~900px. The card stopped rendering that subtitle -- the banner
-   states the same thing in full -- so the reason for a second progress
-   language went with it. */
+/* Progress sits on its own row in this card rather than inline: with five questions the track is wider than a g… */
 .elig .game__steps {
 	order: 4;
 	width: 100%;
@@ -4342,10 +3904,7 @@ body {
 	color: var(--plum);
 }
 
-/* One option per row. A grid would fit more on a wide screen and would also
-   put "I am not sure" beside "Yes" as though they were the same kind of
-   answer — and would break the moment French wrapped one of them to two
-   lines. A column reads the same at 320px and at 1280. */
+/* One option per row. */
 .elig__options {
 	display: flex;
 	flex-direction: column;
@@ -4366,8 +3925,7 @@ body {
 	font-weight: 500;
 	color: var(--ink);
 	text-align: left;
-	/* French and Spanish run 20-30% longer. Wrapping is the expected case here,
-	   not the degraded one. */
+	/* French and Spanish run 20-30% longer. */
 	text-wrap: pretty;
 	cursor: pointer;
 	transition:
@@ -4390,8 +3948,7 @@ body {
 	cursor: not-allowed;
 }
 
-/* The answer this question already has, when the reader has come back to it.
-   Marked, never re-asked from blank. */
+/* The answer this question already has, when the reader has come back to it. */
 .elig__option[data-chosen] {
 	border-color: var(--magenta);
 	background: var(--wash-m-6);
@@ -4449,9 +4006,7 @@ body {
 	color: var(--success);
 }
 
-/* Amber, never red, and the reasoning is the same as a wrong game answer:
-   red says "you broke something". This says "not yet", which is a date, not a
-   fault — and it is the outcome most likely to be read as rejection. */
+/* Amber, never red, and the reasoning is the same as a wrong game answer: red says "you broke something". */
 .elig__verdict[data-verdict="not_yet"] .elig__verdict-icon,
 .elig__verdict[data-verdict="needs_confirmation"] .elig__verdict-icon {
 	background: var(--warn-tint);
@@ -4466,8 +4021,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* The question to put to a person, set as a quotation because it is one —
-   it is meant to be read out or pasted into an email unchanged. */
+/* The question to put to a person, set as a quotation because it is one — it is meant to be read out or pasted… */
 .elig__mentor {
 	padding: 14px 16px;
 	border: 1px solid var(--wash-12);
@@ -4545,9 +4099,7 @@ body {
 	background: rgb(22 163 74 / 0.05);
 }
 
-/* An alternative, tucked under the item it substitutes for so the pair reads
-   as one decision rather than two errands. Dashed, and inset, because "either
-   this or that" has to be visible before the words are read. */
+/* An alternative, tucked under the item it substitutes for so the pair reads as one decision rather than two er… */
 .elig__doc[data-alt] {
 	margin-top: -4px;
 	margin-left: 18px;
@@ -4580,8 +4132,7 @@ body {
 
 .elig__checkbox {
 	flex-shrink: 0;
-	/* 20px, and deliberately not smaller: this is tapped on a phone by someone
-	   holding a document in the other hand. */
+	/* 20px, and deliberately not smaller: this is tapped on a phone by someone holding a document in the other hand. */
 	width: 20px;
 	height: 20px;
 	margin: 1px 0 0;
@@ -4624,9 +4175,7 @@ body {
 	color: var(--slate);
 }
 
-/* The source's own hedge on a document the programme has not settled. Amber
-   rather than grey: it is a warning about the list, not a footnote to it, and
-   greying it out would be exactly how it gets skipped. */
+/* The source's own hedge on a document the programme has not settled. */
 .elig__doc-caveat {
 	margin: 8px 0 0 30px;
 	padding: 6px 10px;
@@ -4686,8 +4235,7 @@ body {
 .elig__step-text .answer-link {
 	display: inline-block;
 	margin-top: 6px;
-	/* A URL has no spaces to break at, so at 320px it is the one thing that can
-	   push the card wider than the screen. */
+	/* A URL has no spaces to break at, so at 320px it is the one thing that can push the card wider than the screen. */
 	overflow-wrap: anywhere;
 }
 
@@ -4707,9 +4255,7 @@ body {
 	overflow-wrap: anywhere;
 }
 
-/* The disclaimer again, under the verdict, where a decision would be read.
-   The header banner is not enough on its own: this is the moment somebody
-   screenshots the card and shows it to a relative. */
+/* The disclaimer again, under the verdict, where a decision would be read. */
 .elig__disclaimer {
 	margin: 0;
 	padding: 12px 14px;
@@ -4741,8 +4287,7 @@ body {
 	}
 }
 
-/* On a phone the action row stacks rather than letting the primary button drift
-   away from the one beside it. */
+/* On a phone the action row stacks rather than letting the primary button drift away from the one beside it. */
 @media (max-width: 620px) {
 	.game__btn--go {
 		margin-left: 0;
@@ -4758,9 +4303,7 @@ body {
 		margin-left: 0;
 	}
 
-	/* The indent that keeps the checklist detail lined up under its title costs
-	   30px of a 320px screen, and French document names need every one of them.
-	   The checkbox is still the row's own affordance. */
+	/* The indent that keeps the checklist detail lined up under its title costs 30px of a 320px screen, and French… */
 	.elig__doc-detail,
 	.elig__doc-meta,
 	.elig__doc-caveat {
@@ -4770,8 +4313,7 @@ body {
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 
-/* Below this width the rail stops being a column and becomes an overlay, so
-   the conversation keeps the full reading width on a phone. */
+/* Below this width the rail stops being a column and becomes an overlay, so the conversation keeps the full rea… */
 @media (max-width: 860px) {
 	.app[data-phase="chat"] .rail {
 		position: absolute;
@@ -4792,8 +4334,7 @@ body {
 		pointer-events: none;
 	}
 
-	/* The landing rail is already a drawer at every width (see below); inside
-	   this breakpoint it only needs the heavier drawer shadow. */
+	/* The landing rail is already a drawer at every width (see below); inside this breakpoint it only needs the hea… */
 	.app[data-phase="landing"] .rail {
 		box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
 	}
@@ -4819,11 +4360,7 @@ body {
 	}
 }
 
-/* The composer tool row is the first thing to overflow on narrow screens. The
-   labels go; the buttons stay. "Explain it simply" is the plain-words toggle
-   and has no other entry point, so dropping the control would remove the
-   feature from exactly the readers it exists for. The label keeps its place in
-   the accessibility tree, so the button is still named. */
+/* The composer tool row is the first thing to overflow on narrow screens. */
 @media (max-width: 620px) {
 	.tool-btn {
 		min-width: 36px;
@@ -4847,14 +4384,7 @@ body {
 		font-size: 0.9375rem;
 	}
 
-	/* One scrolling row instead of four stacked ones.
-	   At 390px each chip takes a full line, so the four of them ran past the
-	   space the grid gives `.starters` and the last one — "Does it cost
-	   anything to join?" — overlapped the disclaimer. Measured 238x5px of
-	   collision, and it was still clickable, so a child could tap the chip and
-	   the safety line at once. A single row keeps all four reachable, hands
-	   ~140px back to the hero and composer, and the half-visible second chip
-	   is its own affordance that there is more to the right. */
+	/* One scrolling row instead of four stacked ones. */
 	.starters__row {
 		flex-wrap: nowrap;
 		justify-content: flex-start;
@@ -4862,9 +4392,7 @@ body {
 		overscroll-behavior-x: contain;
 		scroll-snap-type: x proximity;
 		padding: 14px 16px 14px;
-		/* Without this, snapping to `start` eats the row's own left padding and
-		   the first chip rests 1px from the viewport edge while the composer
-		   directly above it keeps a 16px inset. */
+		/* Without this, snapping to `start` eats the row's own left padding and the first chip rests 1px from the viewp… */
 		scroll-padding-left: 16px;
 		scrollbar-width: none;
 	}
@@ -4879,10 +4407,7 @@ body {
 	}
 }
 
-/* Short viewports — a phone in landscape, a small window, or a soft keyboard
-   taking half the screen. Height is the scarce axis here, so the hero gives up
-   its space first and the composer keeps its own. Nothing may push the input
-   past the bottom edge: the shell clips and does not scroll. */
+/* Short viewports — a phone in landscape, a small window, or a soft keyboard taking half the screen. */
 @media (max-height: 600px) {
 	.app {
 		--hero-max: 0px;
@@ -4906,11 +4431,7 @@ body {
 	}
 }
 
-/* ── Motion preferences ─────────────────────────────────────────────────────
-   Scoped, not blanket. A global `animation: 0.01ms` also kills the two
-   indicators that report a request is still in flight, which leaves a reduced-
-   motion reader unable to tell working from hung. Decorative motion stops;
-   progress keeps a signal, carried by opacity alone so nothing travels. */
+/* ── Motion preferences ───────────────────────────────────────────────────── Scoped, not blanket. */
 
 @keyframes dot-fade {
 	0%,
@@ -4943,10 +4464,7 @@ body {
 		animation: none !important;
 	}
 
-	/* Entrances collapse to their finished frame rather than travelling.
-	   `.follow-ups` is not in this list any more: it no longer has an entrance,
-	   it is reserved and revealed, and the global transition rule below covers
-	   it. */
+	/* Entrances collapse to their finished frame rather than travelling. */
 	.turn,
 	.voice-consent,
 	.voice-note,
@@ -4960,9 +4478,7 @@ body {
 		animation-duration: 1ms !important;
 	}
 
-	/* The wrong-guess shake is the one motion here that carries meaning, so it
-	   is replaced rather than removed: the tiles recolour to amber and the
-	   sentence beside them says the same thing. */
+	/* The wrong-guess shake is the one motion here that carries meaning, so it is replaced rather than removed: the… */
 	.game__slots[data-shake] {
 		animation: none !important;
 	}
@@ -4978,8 +4494,7 @@ body {
 		scroll-behavior: auto !important;
 	}
 
-	/* The three keep working: the thinking dots, the transcribing spinner, and
-	   the recording dot are the only evidence that something is happening. */
+	/* The three keep working: the thinking dots, the transcribing spinner, and the recording dot are the only evide… */
 	.thinking__dots i {
 		animation: dot-fade 1.4s ease-in-out infinite !important;
 		transform: none !important;
@@ -4996,15 +4511,7 @@ body {
 	}
 }
 
-/* ─── Auth surface ──────────────────────────────────────────────────────────
-
-   `/signin` and `/signup`. A split surface: the brand panel carries the
-   gradient, the white column carries the form.
-
-   Everything here is built from the tokens already in `styles.css` — `--plum`,
-   `--magenta`, `--ink`, `--prose`, the `--wash-*` ramp, `--ease`. The auth
-   pages are the same product as the chat, and a second set of greys and radii
-   living beside the first is how two products end up in one codebase. */
+/* ─── Auth surface ────────────────────────────────────────────────────────── `/signin` and `/signup`. */
 
 .auth {
 	display: flex;
@@ -5069,8 +4576,7 @@ body {
 	padding: 0 clamp(48px, 5vw, 80px);
 }
 
-/* The wordmark is a dark asset; this is what puts it on a dark panel without
-   shipping a second file for it. */
+/* The wordmark is a dark asset; this is what puts it on a dark panel without shipping a second file for it. */
 .auth__logo {
 	height: 58px;
 	width: auto;
@@ -5328,17 +4834,7 @@ body {
 	color: var(--prose);
 }
 
-/* "Create an account" and "Sign in" — the route between the two auth screens,
-   and measured at 18px tall.
-
-   That is a WCAG 2.2 **2.5.8 (AA)** failure: the minimum is 24x24, and these
-   were the only controls in the product actually under it. The programme's
-   choice is to hold the 2.2 AA bar rather than the 44px AAA one (2.5.5), so
-   this raises the target to 24px and stops there.
-
-   Same technique as the touch-target block above: the painted text is
-   untouched and an invisible overlay carries the target. An inline link cannot
-   simply be given a height without breaking the sentence it sits in. */
+/* "Create an account" and "Sign in" — the route between the two auth screens, and measured at 18px tall. */
 .auth__foot-link {
 	position: relative;
 	color: var(--plum);
@@ -5390,14 +4886,7 @@ body {
 	font-weight: 600;
 }
 
-/* The role picker: the first thing sign-up asks, and the answer the rest of
-   the form is shaped by.
-
-   Stacked full-width rather than the pill row above, because each option needs
-   a sentence under it. "I'm a parent or guardian" and "I'm joining ASPIRE" are
-   not distinguishable enough at pill size to be worth the horizontal saving —
-   and choosing wrong here produces an account that cannot be repaired from
-   inside the product. */
+/* The role picker: the first thing sign-up asks, and the answer the rest of the form is shaped by. */
 .auth__roles {
 	display: flex;
 	flex-direction: column;
@@ -5515,8 +5004,7 @@ body {
 	border-radius: 16px;
 	background: #fff;
 	font-family: inherit;
-	/* 16px exactly: anything smaller makes iOS zoom the page on focus, which
-	   throws the layout out from under whoever is typing. */
+	/* 16px exactly: anything smaller makes iOS zoom the page on focus, which throws the layout out from under whoev… */
 	font-size: 1rem;
 	color: var(--ink);
 	outline: none;
@@ -5617,8 +5105,7 @@ body {
 	margin-top: 2px;
 }
 
-/* Below this the panel stops being a column and becomes a header, with the
-   form rising over it as a sheet. */
+/* Below this the panel stops being a column and becomes a header, with the form rising over it as a sheet. */
 @media (max-width: 900px) {
 	.auth {
 		flex-direction: column;
@@ -5675,8 +5162,7 @@ body {
 	}
 }
 
-/* `fieldset` is the right element for a group of inputs under one label, and
-   it arrives with a border and padding nobody asked for. */
+/* `fieldset` is the right element for a group of inputs under one label, and it arrives with a border and paddi… */
 .auth__fieldset {
 	min-width: 0;
 	margin: 0;
@@ -5689,31 +5175,17 @@ body {
 	margin-bottom: 8px;
 }
 
-/* ─── The account control ───────────────────────────────────────────────────
-
-   One control, two placements: floating top-right opposite the hamburger, and
-   as the block at the foot of the sidebar.
-
-   Both are always mounted. Which one is visible is opacity, not presence — so
-   during the 560ms `/` → `/chat/:id` morph the handover is a cross-fade rather
-   than one popping out as the other pops in. Unmounting either would make the
-   transition stutter at exactly the moment it is meant to be seamless. */
+/* ─── The account control ─────────────────────────────────────────────────── One control, two placements: floa… */
 
 .account-slot {
 	position: absolute;
-	/* Above `.titlebar`, which is also 12 and spans the full width. At equal
-	   z-index the later node wins, and the bar is later — so on any width where
-	   the rail collapses and the corner control takes over, the bar was painted
-	   across the whole control and it could not be clicked at all. The
-	   `padding-right` rule further down stops the TITLE colliding with it; it
-	   does nothing about the bar's own box, which is what was in the way. */
+	/* Above `.titlebar`, which is also 12 and spans the full width. */
 	z-index: 13;
 	top: 14px;
 	right: 14px;
 	opacity: 0;
 	pointer-events: none;
-	/* Matched to the morph, so the two controls trade places over the same
-	   period the composer takes to travel. */
+	/* Matched to the morph, so the two controls trade places over the same period the composer takes to travel. */
 	transition: opacity var(--morph);
 }
 
@@ -5726,9 +5198,7 @@ body {
 	display: flex;
 }
 
-/* Holds the slot open while the session is still unknown, so nothing jumps
-   when the answer arrives. Deliberately not a spinner: the wait is usually one
-   frame, and a spinner that flashes for 16ms is worse than a quiet gap. */
+/* Holds the slot open while the session is still unknown, so nothing jumps when the answer arrives. */
 .account__placeholder {
 	width: 40px;
 	height: 40px;
@@ -5743,13 +5213,9 @@ body {
 	background: var(--wash-6);
 }
 
-/* The signed-out corner control. Same frosted treatment as `.rail-open`
-   opposite it: same radius, same height, same blur, same shadow — it is the
-   other end of one pair, and a second surface treatment here would read as a
-   different product. */
+/* The signed-out corner control. */
 .account__signin {
-	/* So the 44px target below is positioned against this pill rather than
-	   whatever ancestor happens to be positioned. */
+	/* So the 44px target below is positioned against this pill rather than whatever ancestor happens to be position… */
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -5771,10 +5237,7 @@ body {
 		color var(--morph);
 }
 
-/* The same trick `.rail-open` uses, and for the same reason: the pill is 40px
-   because that is what pairs with the hamburger beside it, and 40px is under
-   the 44px a finger needs. The visual size is left alone and the target is
-   grown around it. `verify.mjs` measures the target, not the border. */
+/* The same trick `.rail-open` uses, and for the same reason: the pill is 40px because that is what pairs with t… */
 .account__signin::after {
 	content: "";
 	position: absolute;
@@ -5789,9 +5252,7 @@ body {
 	background: rgb(255 255 255 / 0.95);
 }
 
-/* Signed in, the corner is the avatar and nothing else. A name beside it would
-   compete with the centred hero, which is the one thing on that screen meant to
-   hold attention. */
+/* Signed in, the corner is the avatar and nothing else. */
 .account__avatar-btn {
 	display: flex;
 	padding: 0;
@@ -5814,8 +5275,7 @@ body {
 	flex-shrink: 0;
 }
 
-/* The sidebar block. Padding, gap and icon slot are the foot's own, so the
-   signed-in and signed-out states are the same shape. */
+/* The sidebar block. */
 .account--rail {
 	width: 100%;
 }
@@ -5839,8 +5299,7 @@ body {
 	color: var(--plum);
 }
 
-/* An address is long and the rail is narrow; it may shorten but must not push
-   the row wider. */
+/* An address is long and the rail is narrow; it may shorten but must not push the row wider. */
 .account--rail .rail__note {
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -5867,8 +5326,7 @@ body {
 	right: 0;
 }
 
-/* Above the foot rather than below it: there is no room under the last row of
-   a full-height sidebar. */
+/* Above the foot rather than below it: there is no room under the last row of a full-height sidebar. */
 .account__menu[data-variant="rail"] {
 	bottom: calc(100% + 8px);
 	left: 8px;
@@ -5924,8 +5382,7 @@ body {
 	background: var(--danger-wash);
 }
 
-/* One sentence, because from the menu it is not obvious what happens to the
-   conversations in the rail — and the honest answer is "nothing". */
+/* One sentence, because from the menu it is not obvious what happens to the conversations in the rail — and the… */
 .account__confirm {
 	margin: 0;
 	padding: 2px 10px 8px;
@@ -5935,24 +5392,9 @@ body {
 	text-wrap: pretty;
 }
 
-/* The corner control sits over the gradient on the landing screen and over the
-   white workspace in a conversation; `--chrome` already flips between them for
-   the hamburger, and this rides the same variable. */
+/* The corner control sits over the gradient on the landing screen and over the white workspace in a conversatio… */
 
-/* The title bar and the account control share the top-right corner in a
-   conversation, and at narrow widths they collided — the chat's title ran
-   underneath the button rather than stopping before it.
-   
-   The bar reserves the room instead. This does shorten the title, which is a
-   visual change, but a title ending in an ellipsis is a great deal better than
-   one hidden behind a button. It applies only while the control is actually
-   shown, so a conversation with the sidebar expanded keeps the full width it
-   has always had.
-
-   Sized for the WIDER of the two states — the "Sign in" button, not the
-   avatar — so the title's right edge does not move when the session resolves
-   or when somebody signs in. A title that reflowed on sign-in would be the
-   auth flash wearing different clothes. */
+/* The title bar and the account control share the top-right corner in a conversation, and at narrow widths they… */
 .app:has(.account-slot[data-shown]) .titlebar {
 	padding-right: 100px;
 }

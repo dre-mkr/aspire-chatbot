@@ -1,15 +1,4 @@
-"""Per-session sliding-window rate limiting.
-
-IMPORTANT: this is abuse dampening, not a security boundary. The chat endpoint
-has no authentication, so the only session identifier available is the client's
-own thread_id, which anyone can regenerate. It exists to stop a stuck retry loop
-or a demo laptop from draining the ElevenLabs account, not to stop an attacker.
-A real per-user limit needs real auth.
-
-In-memory and therefore per-process: with several uvicorn workers each holds its
-own window, so the effective limit is the configured number times the worker
-count.
-"""
+"""Per-session sliding-window rate limiting."""
 
 from __future__ import annotations
 

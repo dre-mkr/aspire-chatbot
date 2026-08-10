@@ -1,9 +1,4 @@
-"""The ElevenLabs boundary.
-
-Everything that talks to the vendor lives here: timeouts, the circuit breaker,
-and the rule that audio exists only in memory. Nothing above this module holds
-an API key or a raw upload.
-"""
+"""The ElevenLabs boundary."""
 
 from __future__ import annotations
 
@@ -23,11 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class VoiceUnavailable(RuntimeError):
-    """Upstream failed, timed out, or the breaker is open.
-
-    Always surfaces to the client as a 503 telling it to fall back to the
-    browser's own speech APIs, never as a stack trace.
-    """
+    """Upstream failed, timed out, or the breaker is open."""
 
 
 @dataclass
@@ -115,8 +106,7 @@ class VoiceClient:
                 file=(filename, audio, "application/octet-stream"),
                 model_id=self._settings.stt_model,
                 language_code=language_hint,
-                # Defaults to True upstream; a transcript full of "(laughter)"
-                # is not a user message.
+                # Defaults to True upstream; a transcript full of "(laughter)" is not a user message.
                 tag_audio_events=False,
                 diarize=False,
                 keyterms=keyterms,
@@ -165,21 +155,13 @@ class VoiceClient:
                 model_id=model_id,
                 output_format=output_format,
                 voice_settings=settings,
-                # 'auto' is the documented default. Note it has no effect on
-                # v2.5 Flash outside Enterprise plans, which is exactly why
-                # speakable() spells numbers out before we get here.
+                # 'auto' is the documented default.
                 apply_text_normalization="auto",
                 request_options=RequestOptions(
                     timeout_in_seconds=int(self._settings.tts_timeout_seconds)
                 ),
             )
-            # `t_tts_first_byte` is measured where the first chunk arrives from
-            # the vendor -- which is NOT when the caller can play anything. The
-            # join below waits for the whole file, deliberately, because the audio
-            # is cached and replayed. Recording both is the point: the gap between
-            # first byte and last is exactly the latency a streaming voice
-            # response would remove, and it cannot be argued about without a
-            # number.
+            # `t_tts_first_byte` is measured where the first chunk arrives from the vendor -- which is NOT when the caller…
             chunks: list[bytes] = []
             for chunk in stream:
                 if not chunk:
@@ -218,26 +200,7 @@ class VoiceClient:
         settings: ElevenVoiceSettings,
         output_format: str = "mp3_44100_128",
     ):
-        """Text-to-speech, yielded chunk by chunk as the vendor produces it.
-
-        The whole point of P14-C: `synthesise` above joins the entire MP3 before
-        anyone may play a byte, so first audio lands at first-byte PLUS the rest
-        of synthesis. This yields each chunk the moment it exists -- the caller
-        streams it on, and the reader hears sentence one while the vendor is
-        still writing sentence five.
-
-        The vendor SDK's iterator is synchronous, so it runs in a worker thread
-        and hands chunks across on a queue. The timeout is per-GAP rather than
-        per-call, because a stream that is producing audio is healthy however
-        long the whole answer takes -- what must not hang is the wait for the
-        NEXT chunk.
-
-        Failure discipline differs from `synthesise` by necessity. Before the
-        first chunk, failure is clean: raise `VoiceUnavailable`, exactly as the
-        buffered path does. After bytes have gone out they cannot be unsent, so
-        a mid-stream failure ends the stream early and the caller decides what a
-        truncated answer means for it. The breaker records the failure either way.
-        """
+        """Text-to-speech, yielded chunk by chunk as the vendor produces it."""
         if self._breaker.is_open:
             raise VoiceUnavailable("Voice temporarily disabled by circuit breaker.")
 
@@ -245,19 +208,12 @@ class VoiceClient:
         loop = asyncio.get_running_loop()
         started = time.perf_counter()
         sentinel_done, sentinel_failed = object(), object()
-        #: Set when the consumer walks away -- a disconnect, a cancel -- so the
-        #: producer stops pulling (and billing) instead of finishing into a
-        #: queue nobody drains.
+        #: Set when the consumer walks away -- a disconnect, a cancel -- so the producer stops pulling (and billing) ins…
         abandoned = threading.Event()
 
         def produce() -> None:
             try:
-                # `stream`, NOT `convert`. Measured before this distinction was
-                # made: `convert`'s iterator yields chunks of a body the vendor
-                # only starts sending once synthesis is COMPLETE, so the
-                # "streaming" endpoint's first byte landed at the buffered
-                # endpoint's total (~1.7-2.1 s, scripts/voice_probe.py). The
-                # /stream API is the one that emits audio as it is generated.
+                # `stream`, NOT `convert`.
                 stream = self._client.text_to_speech.stream(
                     voice_id=voice_id,
                     text=text,
@@ -273,10 +229,7 @@ class VoiceClient:
                     if abandoned.is_set():
                         return
                     if chunk:
-                        # Blocks when the consumer is slower than the vendor,
-                        # which is the backpressure keeping memory flat. The
-                        # shutdown path drains the queue until this thread
-                        # exits, so a blocked put can always complete.
+                        # Blocks when the consumer is slower than the vendor, which is the backpressure keeping memory flat.
                         asyncio.run_coroutine_threadsafe(queue.put(chunk), loop).result()
                 asyncio.run_coroutine_threadsafe(queue.put(sentinel_done), loop).result()
             except Exception:
@@ -311,8 +264,7 @@ class VoiceClient:
                 if item is sentinel_failed:
                     self._breaker.record_failure()
                     if produced_any:
-                        # Bytes are on the wire; a truncated stream is the
-                        # honest remainder of this turn.
+                        # Bytes are on the wire; a truncated stream is the honest remainder of this turn.
                         return
                     raise VoiceUnavailable("Speech synthesis failed.")
 
@@ -323,10 +275,7 @@ class VoiceClient:
                     produced_any = True
                 yield item
         finally:
-            # Orderly on every exit: tell the producer to stop, then drain until
-            # it has -- a put blocked on a full queue completes into the drain,
-            # sees the flag, and the thread ends. Without the drain, awaiting a
-            # blocked worker here is a deadlock.
+            # Orderly on every exit: tell the producer to stop, then drain until it has -- a put blocked on a full queue co…
             abandoned.set()
             while not worker.done():
                 while not queue.empty():

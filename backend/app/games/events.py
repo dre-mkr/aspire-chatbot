@@ -1,15 +1,4 @@
-"""Structured events for gamification later.
-
-No points, badges or streaks today — the client asked for a warm-up game, not a
-reward system. But every one of those is a query over this stream, so the stream
-has to be rich enough now that adding them later is a feature, not a migration.
-
-Deliberately absent: the answer. Events record `entry_id`, never `word`. Logs
-get shipped to places the running service never goes, and an answer key sitting
-in a log file is the same leak by a slower route.
-
-Writing is best effort. A game must never fail because an append failed.
-"""
+"""Structured events for gamification later."""
 
 from __future__ import annotations
 
@@ -39,8 +28,7 @@ class GameEvent:
     game_type: str
     language: str
     persona: str | None
-    # Seconds since the game started, so a duration is available on every event
-    # rather than only at the end.
+    # Seconds since the game started, so a duration is available on every event rather than only at the end.
     elapsed_seconds: float
     timestamp: float = field(default_factory=time.time)
     data: dict[str, Any] = field(default_factory=dict)
@@ -63,12 +51,7 @@ class EventSink(Protocol):
 
 
 class JsonlEventSink:
-    """One JSON object per line, appended under `data/`.
-
-    A file rather than a table because this service has no database, and a
-    line-delimited file is the format every later consumer — a load into
-    Postgres, a pandas read, a `jq` one-liner — already understands.
-    """
+    """One JSON object per line, appended under `data/`."""
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -83,8 +66,7 @@ class JsonlEventSink:
                 with self._path.open("a", encoding="utf-8") as handle:
                     handle.write(line + "\n")
         except OSError:
-            # Warn once. A read-only or full disk should not turn every
-            # subsequent move in the game into a log storm.
+            # Warn once.
             if not self._warned:
                 logger.warning(
                     "Could not write game events to %s; continuing without them.",

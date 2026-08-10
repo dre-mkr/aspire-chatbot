@@ -16,28 +16,9 @@ import {
 	submitAnswer,
 } from "#/lib/aspire/games";
 
-/**
- * The word scramble, played in the thread.
- *
- * Letters live in a tray and are placed into slots — tap, or drag. The card
- * never knows the answer: `Check` asks the server, which is the only thing that
- * grades. A word only appears here once the server has given up on it.
- *
- * Everything below the header is one of four states: an invitation, the puzzle,
- * the word just resolved with what it means, and the set finished.
- */
+/** The word scramble, played in the thread. */
 
-/* Counts come from the set, never from the copy.
-   These read "4 words", "See all four" and "…all four" while the body renders
-   `word {position} of {total}` and draws `total` pips. They happen to agree
-   today because the warm-up set is four words, and they would quietly stop
-   agreeing the moment anyone authored a set of a different length -- the header
-   would say four while five pips sat beside it. Exactly the defect TrueFalse
-   already carries a note about; this is the same fix.
-
-   There was a second `stella` dictionary here, in simpler words, selected by a
-   `persona` prop that nothing ever passed. Every player read this one. Removed
-   rather than left as copy no reader could reach. */
+/* Counts come from the set, never from the copy. */
 const COPY = {
 	title: "Word scramble",
 	sub: (total: number) =>
@@ -94,12 +75,15 @@ interface WordScrambleProps {
 	state: GameState;
 	/** Fires whenever the server state moves on; null once the game is over. */
 	onChanged: (state: GameState | null) => void;
+	/** Fires once, with the final numbers, the moment the set resolves. */
+	onSummary?: (summary: GameSummary) => void;
 }
 
 export function WordScramble({
 	threadId,
 	state,
 	onChanged,
+	onSummary,
 }: WordScrambleProps) {
 	const copy = COPY;
 
@@ -115,9 +99,7 @@ export function WordScramble({
 	const [failure, setFailure] = useState<string | null>(null);
 	const dragFrom = useRef<number | null>(null);
 
-	// Rebuild the tray whenever the server moves to a different word. Keyed on
-	// position as well as the letters, so a set that ever repeats a scramble
-	// still resets between the two.
+	// Rebuild the tray whenever the server moves to a different word.
 	const wordKey = `${state.prompt.position}:${state.prompt.text}`;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: keyed reset
 	useEffect(() => {
@@ -178,23 +160,17 @@ export function WordScramble({
 		);
 	}, [tray, used]);
 
-	/**
-	 * Records a finished word and, if the set is done, the closing summary.
-	 *
-	 * `next` is null on the last word: the server session is over the moment the
-	 * fourth word lands. The parent is deliberately NOT told that — telling it
-	 * would unmount this card, and the child would never see the word they just
-	 * got, what it means, or the four they collected. The card stays until they
-	 * close it, which is what `leave` is for.
-	 */
+	/** Records a finished word and, if the set is done, the closing summary. */
 	const settle = useCallback(
 		(entry: Learned, next: GameState | null, done: GameSummary | null) => {
 			setLearned((current) => [...current, entry]);
 			setResolved(entry);
 			setSummary(done);
+			// The final numbers go up the moment they exist -- the launcher needs them to report the real score, and `onCha…
+			if (done) onSummary?.(done);
 			if (next) onChanged(next);
 		},
-		[onChanged],
+		[onChanged, onSummary],
 	);
 
 	const guard = useCallback(async (work: () => Promise<void>) => {
@@ -298,8 +274,7 @@ export function WordScramble({
 				<span className="game__title">{copy.title}</span>
 				<span className="game__sub">{copy.sub(state.prompt.total)}</span>
 
-				{/* Decorative: the section's own label already announces which word
-				    this is, and four unlabelled dots read as noise after it. */}
+				{/* Decorative: the section's own label already announces which word this is, and four unlabelled dots read as no… */}
 				<div className="game__steps" aria-hidden="true">
 					{Array.from({ length: state.prompt.total }, (_, i) => {
 						const n = i + 1;
@@ -360,9 +335,7 @@ export function WordScramble({
 						<div className="game__tray">
 							{tray.map((ch, i) => (
 								<button
-									// Tray position is the identity: two of the same letter are
-									// two different tiles.
-									// biome-ignore lint/suspicious/noArrayIndexKey: positional
+									// biome-ignore lint/suspicious/noArrayIndexKey: tray position is the identity
 									key={i}
 									type="button"
 									className="tile tile--tray"
@@ -419,8 +392,7 @@ export function WordScramble({
 							))}
 						</div>
 
-						{/* <output> rather than a div with role=status: this announces
-						    the result of the check the child just ran. */}
+						{/* <output> rather than a div with role=status: this announces the result of the check the child just ran. */}
 						{wrong ? (
 							<output className="game__wrong">
 								<RetryIcon />

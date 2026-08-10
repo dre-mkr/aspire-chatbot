@@ -1,10 +1,4 @@
-"""The tool layer: what the agent can and cannot do.
-
-Tool descriptions are prompt text — the agent reasons over them — so a few of
-these assert on wording rather than behaviour. That is deliberate: "never offer
-a game unprompted" is a product rule, and if someone edits it out of the
-description the rule is gone with no other test failing.
-"""
+"""The tool layer: what the agent can and cannot do."""
 
 from __future__ import annotations
 
@@ -47,8 +41,7 @@ def test_the_expected_tools_are_exposed():
 
 def test_list_games_describes_what_actually_exists(engine):
     payload = tools_module.list_games.invoke({}, config=cfg())
-    # The fixture engine carries word scramble only; the true/false set that
-    # ships is a draft and reports nothing until its real content lands.
+    # The fixture engine carries word scramble only; the true/false set that ships is a draft and reports nothing u…
     assert payload["games"] == [
         {
             "id": "word_scramble",

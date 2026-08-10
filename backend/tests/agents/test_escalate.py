@@ -1,9 +1,4 @@
-"""Escalation: triage, redaction, and the rule about children.
-
-The two acceptance criteria for G1 are here by name: an out-of-KB question
-produces a ticket with a redacted summary and a clear user-facing message, and
-a distress signal produces a high-priority ticket plus a guardian notification.
-"""
+"""Escalation: triage, redaction, and the rule about children."""
 
 from __future__ import annotations
 
@@ -60,8 +55,7 @@ class TestTriage:
         assert decision.notify_guardian is True
 
     def test_an_adult_in_distress_is_high_without_a_guardian_notification(self):
-        """There is no guardian record to notify, and inventing one would be
-        telling somebody's next of kin about their mental health."""
+        """There is no guardian record to notify, and inventing one would be telling somebody's next of kin about their…"""
         decision = esc.triage(
             state_for(persona="aurora", age_band="adult", safety_flags={"distress": True})
         )
@@ -111,18 +105,13 @@ class TestRedaction:
         assert "[collected: national_id]" in summary
 
     def test_a_summary_written_upstream_is_not_rewritten(self):
-        """The QA agent redacts at the point of escalating; doing it twice would
-        turn `[collected: email]` into a second pass over nothing."""
+        """The QA agent redacts at the point of escalating; doing it twice would turn `[collected: email]` into a second…"""
         state = state_for(escalation_summary="already done")
         assert esc.summarise(state) == {}
 
     @pytest.mark.asyncio
     async def test_a_leaked_value_is_caught_at_the_table_boundary(self, caplog):
-        """The last check before a row that gets exported.
-
-        Every writer redacts. This asserts what happens when one does not,
-        because a ticket table is joined to case records and read by people.
-        """
+        """The last check before a row that gets exported."""
         recorder = Recorder()
         state = state_for(escalation_summary="call me on 869-555-0123")
         with caplog.at_level("ERROR"):
@@ -183,11 +172,7 @@ class TestTheTicket:
 @pytest.mark.asyncio
 class TestWhatTheUserIsTold:
     async def test_a_child_is_never_given_an_external_channel(self):
-        """The rule this agent exists to hold.
-
-        An external channel is unmonitored, unlogged and unbounded. Offering one
-        to a child in difficulty is worse than offering nothing.
-        """
+        """The rule this agent exists to hold."""
         graph = esc.build_escalate_graph()
         result = await graph.ainvoke(state_for(safety_flags={"safeguarding": True}))
         text = result["messages"][-1].content

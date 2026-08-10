@@ -1,14 +1,4 @@
-"""Reads and validates the seed files.
-
-Validation is strict and happens at load, not at play. A malformed set is a
-content bug, and the moment to find it is a failing build — not a child staring
-at a puzzle that cannot be solved because someone mistyped a letter.
-
-Each game type declares its own required keys and its own checks, dispatched on
-the set's `game_type`. The one that earns its place for scramble: every scramble
-must be an anagram of its word. The one that earns its place for true/false: a
-volatile fact must carry the date someone last confirmed it.
-"""
+"""Reads and validates the seed files."""
 
 from __future__ import annotations
 
@@ -91,8 +81,7 @@ def _common(raw: dict, *, set_language: Language, where: str) -> dict[str, Any]:
                     f"{where}: verified_on must be YYYY-MM-DD, got {verified_raw!r}"
                 ) from exc
 
-    # A volatile item with no date can never be served, which is the safe
-    # outcome — but it is almost always an authoring slip, so say so loudly.
+    # A volatile item with no date can never be served, which is the safe outcome — but it is almost always an auth…
     if volatility is Volatility.VOLATILE and verified_on is None:
         logger.warning(
             "%s: marked volatile with no verified_on, so it will never be served.",
@@ -153,8 +142,7 @@ def _statement_entry(raw: dict, *, set_language: Language, where: str) -> Statem
     )
 
     statement = _text(raw, "statement", where)
-    # A statement phrased as a question cannot be judged true or false. This is
-    # exactly the defect flagged in item 9 of the ECCB bank.
+    # A statement phrased as a question cannot be judged true or false.
     _require(
         not statement.rstrip().endswith("?"),
         where,
@@ -162,8 +150,7 @@ def _statement_entry(raw: dict, *, set_language: Language, where: str) -> Statem
         "something, not ask it",
     )
 
-    # Optional layout for teaching that runs longer than a sentence. Absent is
-    # normal — `explanation` alone is always enough to render.
+    # Optional layout for teaching that runs longer than a sentence.
     bullets_raw = raw.get("bullets") or []
     bullets = []
     for i, b in enumerate(bullets_raw):
@@ -225,8 +212,7 @@ def _set_from(path: Path) -> GameSet:
     except ValueError as exc:
         raise SeedError(f"{where}: unknown language {raw['language']!r}") from exc
 
-    # The folder is the authority: a file claiming `language: es` under en/ is a
-    # copy-paste that would otherwise serve Spanish items to English players.
+    # The folder is the authority: a file claiming `language: es` under en/ is a copy-paste that would otherwise se…
     folder = path.parent.name
     _require(
         folder == language.value,
@@ -270,12 +256,7 @@ def _set_from(path: Path) -> GameSet:
 def load_sets(
     seed_dir: Path, *, game_type: str | None = None
 ) -> dict[Language, list[GameSet]]:
-    """Load sets under `seed_dir`, grouped by language.
-
-    Pass `game_type` to load only one game's content. A language folder with no
-    matching YAML is normal — that is how the Spanish and French sets sit until
-    someone authors them.
-    """
+    """Load sets under `seed_dir`, grouped by language."""
     by_language: dict[Language, list[GameSet]] = {lang: [] for lang in Language}
     seen_ids: set[str] = set()
 

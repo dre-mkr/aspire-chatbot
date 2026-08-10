@@ -11,12 +11,7 @@ from app import cache as response_cache
 
 
 def test_a_short_session_secret_is_refused(monkeypatch):
-    """The presence check was never the strength check.
-
-    A 7-byte key signs perfectly valid tokens and no library complains, so
-    nothing downstream would ever surface it. It also feeds `hash_ip`, so a weak
-    key weakens the address pseudonymisation too.
-    """
+    """The presence check was never the strength check."""
     from app import auth
     from app.config import Settings, get_settings
 
@@ -42,12 +37,7 @@ def test_an_adequate_session_secret_is_accepted(monkeypatch):
 
 
 def test_the_cache_key_changes_with_the_corpus(monkeypatch, tmp_path):
-    """Re-ingesting an edited CSV must not leave stale answers servable.
-
-    Before this the key was (question, language, persona, account_status) and
-    nothing else, so a corrected answer kept serving the old text for up to
-    RESPONSE_CACHE_TTL_SECONDS -- six hours by default.
-    """
+    """Re-ingesting an edited CSV must not leave stale answers servable."""
     from app.config import Settings, get_settings
 
     original = tmp_path / "kb.csv"
@@ -90,12 +80,7 @@ def test_a_missing_corpus_does_not_stop_caching(monkeypatch, tmp_path):
 
 
 def test_the_console_mailer_does_not_log_links_by_default(caplog, monkeypatch):
-    """A production deploy that forgets RESEND_API_KEY must not leak tokens.
-
-    The body carries a working sign-in or password-reset link. Logging it is
-    right in development and a credential leak anywhere else, so it now has to
-    be asked for rather than inherited.
-    """
+    """A production deploy that forgets RESEND_API_KEY must not leak tokens."""
     import asyncio
 
     from app import mail

@@ -1,33 +1,4 @@
-/**
- * Shared parts every widget is built from: tokens, a panel, a coin, and the
- * two affordances that are not optional.
- *
- * ## Colour is a token, never a value
- *
- * `tone()` maps the five semantic tokens the schema allows onto CSS custom
- * properties from `styles.css`. Nothing in this directory writes a hex value,
- * an `rgb()` or an `oklch()`, and the backend refuses a widget whose JSON
- * contains one (`SafeText` in `widgets/schemas.py`). The two halves together
- * mean a theme change reaches every widget and a generated widget can never
- * pick its own contrast.
- *
- * ## Every widget carries two things it cannot opt out of
- *
- *   **A text equivalent.** `A11yText` renders the widget's `a11y_text` into a
- *   visually hidden block. It is not an `aria-label` on a container, because a
- *   label is announced as a name and this is a paragraph -- a blind child
- *   should receive the lesson, not the widget's title.
- *
- *   **A way out.** `WidgetActions` renders "Got it" and "Skip". No widget is
- *   mandatory to proceed, and a child who does not want to play must be able to
- *   return to the conversation without appearing to fail at something.
- *
- * ## Motion
- *
- * Under 600ms, and `useReducedMotion` turns every animation into an instant
- * state change rather than a faster one. A child with vestibular sensitivity
- * does not want a quicker slide.
- */
+/** Shared parts every widget is built from: tokens, a panel, a coin, and the two affordances that are not option… */
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 
 export type ColourToken =
@@ -45,8 +16,7 @@ export function tone(token: ColourToken | undefined): {
 } {
 	switch (token) {
 		case "accent":
-			// The money the bank added. This is the one token with a job: in
-			// `GrowthStack` it marks the free money, which IS the lesson.
+			// The money the bank added.
 			return {
 				fill: "var(--wash-m-16)",
 				line: "var(--magenta)",
@@ -105,13 +75,7 @@ export function money(cents: number, currency = "EC$"): string {
 	return `${sign}${currency}${whole.toLocaleString("en-US")}.${String(part).padStart(2, "0")}`;
 }
 
-/**
- * The text equivalent, for a screen reader.
- *
- * Visually hidden with the clip technique rather than `display: none` or
- * `visibility: hidden`, both of which remove it from the accessibility tree as
- * well as from the screen -- which would make this component do nothing at all.
- */
+/** The text equivalent, for a screen reader. */
 export function A11yText({ children }: { children: ReactNode }) {
 	const hidden: CSSProperties = {
 		position: "absolute",
@@ -142,11 +106,7 @@ export function Panel({
 	footer?: ReactNode;
 }) {
 	return (
-		// `<figure>` rather than `<section role="group">`. A section with an
-		// accessible name is announced as a LANDMARK, and a transcript with nine
-		// landmarks in it cannot be skimmed by a screen-reader user. A figure is
-		// a self-contained illustrative unit whose implicit role is not a
-		// landmark -- which is exactly what a widget is.
+		// `<figure>` rather than `<section role="group">`.
 		<figure
 			style={{
 				position: "relative",
@@ -187,14 +147,7 @@ export function Panel({
 	);
 }
 
-/**
- * "Got it" and "Skip". Present on every widget, always.
- *
- * Two buttons rather than one, and both return to the conversation. The
- * difference is what the agent hears: "Got it" is a completed interaction it
- * can respond to with the child's own numbers; "Skip" is silence, and the agent
- * carries on WITHOUT COMMENT. No guilt, no nagging, no "are you sure?".
- */
+/** "Got it" and "Skip". */
 export function WidgetActions({
 	onDone,
 	onSkip,
@@ -277,8 +230,7 @@ export function Coin({
 				borderRadius: "50%",
 				background: filled ? colours.fill : "transparent",
 				border: `2px solid ${filled ? colours.line : "var(--hairline)"}`,
-				// Staggered entry, capped well under 600ms in total. Reduced
-				// motion removes the animation rather than shortening it.
+				// Staggered entry, capped well under 600ms in total.
 				animation: reduced || !filled ? undefined : "none",
 				opacity: 1,
 				transition: reduced

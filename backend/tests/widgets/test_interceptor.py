@@ -1,10 +1,4 @@
-"""The sentinel machine, driven at every chunk boundary that could break it.
-
-The failure modes this file exists to catch all live in *where the chunk
-boundary falls*. A test that feeds whole sentinels proves nothing, so several of
-these feed the same stream one character at a time, and one feeds it at every
-possible split point.
-"""
+"""The sentinel machine, driven at every chunk boundary that could break it."""
 
 from __future__ import annotations
 
@@ -90,12 +84,7 @@ class TestTheHappyPath:
         assert ordinals == list(range(1, len(ordinals) + 1))
 
     def test_the_widget_sits_between_the_prose_that_surrounded_it(self):
-        """Position is the whole reason the ordinal exists.
-
-        Asserted on the prose either side of the directive rather than on the
-        event count: prose arrives in as many token events as the chunking
-        produces, and that number is not a property worth pinning.
-        """
+        """Position is the whole reason the ordinal exists."""
         events = drain(interceptor(), f"before{widget_block()}after", 4)
         at = next(index for index, event in enumerate(events) if event.event == "directive")
         assert prose_of(events[:at]) == "before"
@@ -103,12 +92,7 @@ class TestTheHappyPath:
 
     @pytest.mark.parametrize("split", range(1, 60))
     def test_no_split_point_leaks_a_bracket(self, split):
-        """Rule 1, exhaustively.
-
-        A partial opening sentinel must never reach the client. Splitting the
-        stream at every position up to and past the sentinel is the only way to
-        show that, because the bug is invisible at every other split.
-        """
+        """Rule 1, exhaustively."""
         stream = f"Look here.{widget_block()}Done."
         machine = interceptor()
         events = machine.feed(stream[:split]) + machine.feed(stream[split:])
@@ -120,11 +104,7 @@ class TestTheHappyPath:
 
 class TestPartialsAreNeverForwarded:
     def test_a_lone_partial_sentinel_is_held_until_it_resolves(self):
-        """Only the ambiguous tail is held. The prose before it goes straight out.
-
-        Holding the whole chunk would be safe and would also stall the
-        typewriter every time a bracket appeared.
-        """
+        """Only the ambiguous tail is held."""
         machine = interceptor()
         first = machine.feed("Hello ⟦wid")
         assert prose_of(first) == "Hello "
@@ -134,11 +114,7 @@ class TestPartialsAreNeverForwarded:
         assert len(directives_of(events)) == 1
 
     def test_a_bracket_that_cannot_become_a_sentinel_is_shown_at_once(self):
-        """Held is a last resort, not a policy.
-
-        "⟦ " can no longer grow into "⟦widget⟧", so there is nothing to wait
-        for and the typewriter must not stall on it.
-        """
+        """Held is a last resort, not a policy."""
         machine = interceptor()
         assert "⟦" in prose_of(machine.feed("The bracket ⟦ is just a bracket"))
 
@@ -245,31 +221,14 @@ class TestOnlyTheLearningAgentEmitsWidgets:
         "agent", ["learn_agent", "learning_preview", "learning_sample"]
     )
     def test_every_learning_name_may(self, agent):
-        """One subgraph, registered three times, all three able to emit.
-
-        `learning_preview` (a guardian looking at what their child is taught)
-        and `learning_sample` (a signed-out visitor trying one) run the exact
-        same machine as `learn_agent`. They are also the two audiences being
-        shown what the product is like, so a lesson with its interactive half
-        silently dropped is the worst place to drop it.
-        """
+        """One subgraph, registered three times, all three able to emit."""
         events = drain(interceptor(active_agent=agent), widget_block(), 8)
         assert len(directives_of(events)) == 1
 
 
 @pytest.mark.asyncio
 class TestTwoSpeakersInOneTurn:
-    """`teach` explains and `check` asks, both in one turn, each its own message.
-
-    Reported from a live session:
-
-        ...choosing to move money from now to later.You move EC$25 into your
-        account instead of spending it this week. What is that?
-
-    Two messages arriving as separate `messages` events with nothing between
-    them. The nodes are right to stay separate -- the explanation is generated
-    and the question is authored -- so the join belongs here.
-    """
+    """`teach` explains and `check` asks, both in one turn, each its own message."""
 
     async def _say(self, machine, node, *chunks):
         events = []
@@ -290,18 +249,14 @@ class TestTwoSpeakersInOneTurn:
         assert self._prose(events) == "Money kept is money later.\n\nWhat is that?"
 
     async def test_one_node_streaming_is_never_broken_up(self):
-        """The chunk case. A streamed node arrives as hundreds of events all
-        carrying the same node name, and a break between any two of them would
-        cut a sentence in half."""
+        """The chunk case."""
         machine = interceptor()
         events = await self._say(machine, "teach", "Saving ", "means ", "keeping ", "money.")
 
         assert self._prose(events) == "Saving means keeping money."
 
     async def test_the_persisted_reply_matches_what_was_read(self):
-        """`prose` is what the turn is stored as. If the break only reached the
-        wire, the transcript the model reads back next turn would still have the
-        two sentences fused."""
+        """`prose` is what the turn is stored as."""
         machine = interceptor()
         await self._say(machine, "teach", "Money kept is money later.")
         await self._say(machine, "check", "What is that?")
@@ -321,8 +276,7 @@ class TestTwoSpeakersInOneTurn:
         assert "\n\n\n" not in self._prose(events)
 
     async def test_a_widget_is_not_split_by_a_node_change(self):
-        """A break inserted between the sentinels would corrupt the JSON. Not
-        something the graph does today, and the guard is one condition."""
+        """A break inserted between the sentinels would corrupt the JSON."""
         machine = interceptor()
         await self._say(machine, "teach", f"Look at this {OPEN}")
         events = await self._say(machine, "check", '{"kind":"compare"}')
@@ -362,11 +316,7 @@ class TestBandEnforcement:
 
 class TestDisabledWidgets:
     def test_sentinels_are_inert_text_when_widgets_are_off(self):
-        """A deployment with WIDGETS_ENABLED=false shows the characters.
-
-        They are inert -- no markup, no scheme -- so this is ugly rather than
-        unsafe, which is the right failure for a feature flag.
-        """
+        """A deployment with WIDGETS_ENABLED=false shows the characters."""
         machine = interceptor(widgets_enabled=False)
         events = machine.feed(f"a{OPEN}b")
         assert OPEN in prose_of(events)
@@ -381,10 +331,7 @@ class TestOtherEvents:
         assert second[0].data["i"] == first[0].data["i"] + 1
 
     def test_an_error_event_does_not_consume_an_ordinal(self):
-        """The ordinal sequence describes content; an error is why there is no more.
-
-        A client positioning by ordinal must not have to reason about a gap.
-        """
+        """The ordinal sequence describes content; an error is why there is no more."""
         machine = interceptor()
         machine.feed("hello")
         before = machine.stats()["events"]

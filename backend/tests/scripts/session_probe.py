@@ -1,33 +1,4 @@
-"""Latency probe for the population `latency_probe.py` deliberately excludes.
-
-`latency_probe.py` fires anonymous opening turns, because that is the turn a
-first-time reader waits through. Two stages are therefore always 0.0 ms in it and
-cannot be measured there at all:
-
-* `t_identity` -- `owner_id_for(None)` returns without touching the database, so
-  an anonymous run reports a lookup that never happened.
-* `t_history` -- an opening turn skips the window read by construction (P13-003).
-
-P13-007 makes exactly those two overlap, so the main probe is blind to it by
-design. This one mints a real session and asks on a thread that already has a
-past, which is the only population where either stage costs anything.
-
-    python -m scripts.session_probe --base-url http://127.0.0.1:8011 --label after
-
-Run it against a server started the way the baseline doc says:
-
-    TIMINGS_ENDPOINT_ENABLED=1 CHAT_MESSAGES_PER_WINDOW=500 uvicorn app.main:app --port 8011
-
-## What to read
-
-The **stage** figures, not `t_ttft`. Every phase of this workstream has recorded
-the same warning and it applies here more than anywhere: at this sample size the
-model call moves by more than this change is worth, so `t_ttft` is reported for
-completeness and `t_session_wait` is the claim.
-
-Before the change there is no `t_session_wait`; the comparable quantity is
-`t_identity + t_history`, which is what the two cost when they ran in sequence.
-"""
+"""Latency probe for the population `latency_probe.py` deliberately excludes."""
 
 from __future__ import annotations
 
@@ -40,9 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-#: Continuing turns, so every one of them reads a real window. Deliberately
-#: varied rather than one string repeated: identical questions on one thread
-#: would make the model's own cache the thing being measured.
+#: Continuing turns, so every one of them reads a real window.
 QUESTIONS = [
     "And what about withdrawals?",
     "How much can I put in each month?",
@@ -69,11 +38,7 @@ def _post(url: str, payload: dict, *, token: str | None = None, timeout: float =
 
 
 def mint_session(base_url: str) -> str:
-    """A real anonymous identity, so `owner_id_for` has a row to go and find.
-
-    This is the whole reason the phase is measurable: with no token the lookup
-    short-circuits in Python and there is nothing to overlap.
-    """
+    """A real anonymous identity, so `owner_id_for` has a row to go and find."""
     body = _post(
         f"{base_url}/api/auth/anonymous",
         {"device_id": f"probe-{uuid.uuid4().hex[:12]}"},
@@ -87,14 +52,7 @@ def mint_session(base_url: str) -> str:
 def graph_session(
     base_url: str, *, thread_id: str, token: str, timeout: float = 20.0
 ) -> str:
-    """Exchange an ACCOUNT token for a GRAPH session token.
-
-    Two different credentials. `token` proves who the caller is; what comes back
-    carries the persona, age band and account status the graph routes on, all
-    derived server-side from the account record. This probe exists to measure an
-    authenticated continuing turn, so it has to make the same two calls a real
-    authenticated client makes.
-    """
+    """Exchange an ACCOUNT token for a GRAPH session token."""
     request = urllib.request.Request(
         f"{base_url}/v2/session",
         data=json.dumps({"session_id": thread_id}).encode(),
@@ -110,12 +68,7 @@ def graph_session(
 def ask(
     base_url: str, question: str, *, thread_id: str | None, token: str, timeout: float
 ) -> dict[str, Any]:
-    """One streamed turn, timed from the client as well as the server.
-
-    `thread_id` IS the graph session id -- one identifier for the conversation,
-    the checkpointer thread and the games session -- so a continuing turn is a
-    session minted for the same id, not a `thread_id` field in the body.
-    """
+    """One streamed turn, timed from the client as well as the server."""
     thread_id = thread_id or str(uuid.uuid4())
     session_token = graph_session(
         base_url, thread_id=thread_id, token=token, timeout=timeout
@@ -137,8 +90,7 @@ def ask(
     returned_thread: str | None = None
     error: str | None = None
 
-    # The v2 wire: `event:` names the kind, `data:` carries the body, and the
-    # two are separate lines -- so the name has to be remembered across them.
+    # The v2 wire: `event:` names the kind, `data:` carries the body, and the two are separate lines -- so the name…
     kind = ""
     with urllib.request.urlopen(request, timeout=timeout) as response:
         for raw in response:
@@ -160,8 +112,7 @@ def ask(
                 error = event.get("message", "unknown")
 
     return {
-        # The turn echoes the id it ran on. Falls back to the one we minted for,
-        # which is the same value -- a `done` without it is an older server.
+        # The turn echoes the id it ran on.
         "thread_id": returned_thread or thread_id,
         "client_ttft_ms": None
         if first_token_at is None
@@ -184,9 +135,7 @@ def fetch_summary(base_url: str, last: int) -> dict[str, Any]:
         raise
 
 
-#: What this probe exists to report. `t_session_wait` does not exist before the
-#: change and `t_identity`/`t_history` stop being budget lines after it, so the
-#: table carries all three and the reader compares the pair against the single.
+#: What this probe exists to report.
 REPORTED = (
     "t_session_wait",
     "t_identity",
@@ -220,8 +169,7 @@ def render(summary: dict[str, Any], observed: list[dict], label: str) -> str:
             f"{entry['p95']:.1f} | {entry['p99']:.1f} |"
         )
 
-    # The sum that the gather is supposed to replace. Printed so the comparison
-    # does not depend on a reader adding two rows in their head.
+    # The sum that the gather is supposed to replace.
     identity = stages.get("t_identity", {})
     history = stages.get("t_history", {})
     if identity.get("count") and history.get("count"):
@@ -263,9 +211,7 @@ def main() -> None:
     base_url = args.base_url.rstrip("/")
     token = mint_session(base_url)
 
-    # One opening turn to bring a conversation into existence. It is NOT measured:
-    # it is anonymous of history and would drag an opening turn's zeros into a
-    # table about continuing ones.
+    # One opening turn to bring a conversation into existence.
     seed = ask(
         base_url,
         "What is ASPIRE?",
@@ -280,8 +226,7 @@ def main() -> None:
     observed: list[dict] = []
     for index in range(args.turns):
         question = QUESTIONS[index % len(QUESTIONS)]
-        # Suffixed so a repeat of the list is never the identical string twice on
-        # one thread, which the model would answer from what it just said.
+        # Suffixed so a repeat of the list is never the identical string twice on one thread, which the model would ans…
         if index >= len(QUESTIONS):
             question = f"{question} (following up again, {index})"
         row = ask(

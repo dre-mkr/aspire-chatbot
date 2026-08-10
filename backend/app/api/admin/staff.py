@@ -1,27 +1,4 @@
-"""Signing a staff member in, and creating the first one.
-
-## Sign-in is deliberately slow and deliberately vague
-
-`bcrypt.checkpw` runs even when the email matched nothing. Without that, a
-wrong email returns in a microsecond and a wrong password returns in ~200ms,
-and the difference tells anybody who is looking which addresses are real staff
-accounts — which is the first half of a targeted attack on the queue of
-children's documents.
-
-The failure message is the same for both, for the same reason.
-
-## The first account is created from a command line, not from a form
-
-There is no "register as staff" endpoint and there will not be. An admin portal
-that anybody can sign up to is an admin portal, briefly. The first account is
-seeded by somebody with shell access to the deployment:
-
-    python -m app.api.admin.staff create rachel@aspire.kn --role admin
-
-It prints a generated password once and sets `must_change_password`. A password
-chosen on the command line ends up in shell history, in a terminal scrollback,
-and often in a chat message to the person it is for.
-"""
+"""Signing a staff member in, and creating the first one."""
 
 from __future__ import annotations
 
@@ -38,8 +15,7 @@ from app.api.admin.auth import ROLES, Staff, mint_staff_token
 
 logger = logging.getLogger(__name__)
 
-#: A generated password. 12 urlsafe bytes is ~96 bits, which is well past what
-#: a human would choose and short enough to read out over a phone once.
+#: A generated password.
 GENERATED_PASSWORD_BYTES = 12
 
 MIN_PASSWORD_LENGTH = 12
@@ -57,29 +33,17 @@ def hash_password(password: str) -> str:
 
 
 def password_problem(password: str) -> str | None:
-    """Why this password is not acceptable, or None.
-
-    Longer than the public side's minimum (12 rather than 10) and with no
-    composition rules, for the same reason `auth.password_problem` has none:
-    composition pushes people towards `Password1!`. What differs is the length,
-    because this credential opens a different door.
-    """
+    """Why this password is not acceptable, or None."""
     if len(password) < MIN_PASSWORD_LENGTH:
         return f"Use at least {MIN_PASSWORD_LENGTH} characters."
     if len(password.encode("utf-8")) > 72:
-        # bcrypt truncates silently at 72 bytes, which would make two different
-        # long passwords equivalent. Refused rather than truncated.
+        # bcrypt truncates silently at 72 bytes, which would make two different long passwords equivalent.
         return "That password is too long. Use 72 characters or fewer."
     return None
 
 
 async def sign_in(email: str, password: str) -> SignInResult | None:
-    """Verify a staff credential. None for every failure.
-
-    None rather than a reason, and the caller must not distinguish: "no such
-    account", "wrong password" and "account disabled" are all one answer to
-    anybody outside.
-    """
+    """Verify a staff credential."""
     from sqlalchemy import text as sql
 
     from app.db import session
@@ -103,18 +67,14 @@ async def sign_in(email: str, password: str) -> SignInResult | None:
         ).first()
 
     if row is None:
-        # A bcrypt round against a throwaway hash, so a missing account costs
-        # the same as a wrong password. Without it the timing difference names
-        # every real staff address to anybody who asks.
+        # A bcrypt round against a throwaway hash, so a missing account costs the same as a wrong password.
         bcrypt.checkpw(b"x", bcrypt.gensalt())
         return None
 
     if not bcrypt.checkpw(password.encode("utf-8"), row[3].encode("ascii")):
         return None
     if not row[5]:
-        # Checked AFTER the password, so a disabled account is indistinguishable
-        # from a wrong one -- otherwise disabling somebody tells them, and tells
-        # anybody holding their old password, that the account is real.
+        # Checked AFTER the password, so a disabled account is indistinguishable from a wrong one -- otherwise disablin…
         logger.warning("Sign-in refused for disabled staff account %s.", row[1])
         return None
 
@@ -130,12 +90,7 @@ async def sign_in(email: str, password: str) -> SignInResult | None:
 
 
 async def change_password(staff_id: str, current: str, new: str) -> str | None:
-    """Rotate a password. Returns a problem, or None on success.
-
-    The current password is required even though the caller is already
-    authenticated. A staff token on a shared desk is exactly the situation this
-    guards: holding the token must not be enough to lock its owner out.
-    """
+    """Rotate a password."""
     problem = password_problem(new)
     if problem:
         return problem
@@ -181,12 +136,7 @@ async def change_password(staff_id: str, current: str, new: str) -> str | None:
 
 
 async def create_staff(email: str, role: str, full_name: str = "") -> tuple[str, str]:
-    """Create an account with a generated password. Returns `(id, password)`.
-
-    The password is generated rather than taken as an argument: one supplied on
-    a command line ends up in shell history, in a terminal scrollback, and often
-    in a chat message to the person it belongs to.
-    """
+    """Create an account with a generated password."""
     if role not in ROLES:
         raise ValueError(f"{role!r} is not a role. Use one of: {', '.join(ROLES)}")
 
@@ -249,8 +199,7 @@ def main() -> int:
         print(f"  id:       {staff_id}")
         print(f"  password: {password}")
         print()
-        # Said out loud, because the alternative is one password everybody in
-        # the office knows.
+        # Said out loud, because the alternative is one password everybody in the office knows.
         print("Give this password to them directly. They must change it on first")
         print("sign-in; the portal will not let them past until they do.")
         return 0

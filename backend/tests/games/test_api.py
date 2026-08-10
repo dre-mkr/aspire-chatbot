@@ -1,9 +1,4 @@
-"""The HTTP surface the game card talks to.
-
-Same integrity rule as the tool layer, asserted separately: the browser is a
-less trusted place than the agent, so "no answer in the response" is checked
-against every endpoint, not inferred from the engine tests.
-"""
+"""The HTTP surface the game card talks to."""
 
 from __future__ import annotations
 
@@ -56,10 +51,7 @@ def test_start_returns_the_first_scramble(client, all_words):
 
 
 def test_state_survives_a_reload(client, all_words):
-    """A refresh is a new GET, and the game is still there.
-
-    The browser was never holding it, so there was nothing to lose.
-    """
+    """A refresh is a new GET, and the game is still there."""
     client.post("/api/games/start", json={"thread_id": THREAD})
     client.post("/api/games/hint", json={"thread_id": THREAD})
 

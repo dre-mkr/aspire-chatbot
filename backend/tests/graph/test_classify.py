@@ -1,17 +1,4 @@
-"""The router, against the one property it must never lose and the one it should hit.
-
-**Containment** is a hard assertion, checked against a deliberately hostile
-classifier: one that returns other agents' names, invented names, injections,
-malformed JSON and nothing at all. It must be impossible for any of those to
-produce a route outside `allowed_agents`.
-
-**Accuracy** is measured, reported, and asserted only when a model is actually
-available. It runs against `evals/routing.jsonl` -- forty labelled utterances
-spread across the four personas, both identity states, and the mid-flow cases
-that stickiness exists for. The target is 85%. Without an API key the accuracy
-test skips and the containment tests still run, because containment is a
-property of this code and accuracy is a property of a model.
-"""
+"""The router, against the one property it must never lose and the one it should hit."""
 
 from __future__ import annotations
 
@@ -78,37 +65,20 @@ class TestTheLabelledSetIsWellFormed:
     """The fixture is data; data goes wrong quietly. These keep it honest."""
 
     def test_the_set_is_the_expected_size(self):
-        """Thirty-three since Track E.2.
-
-        The seven `escalate_agent` cases moved to `evals/escalation_entry.jsonl`.
-        They were never really router cases -- escalation is no longer a routing
-        destination -- and scoring the classifier on labels it cannot produce
-        would peg routing accuracy at 82.5% forever. The intents themselves are
-        still tested, harder than before: see `tests/escalation/test_router.py`,
-        which asserts each one reaches a person through the matcher, the safety
-        edge or the complaint detector.
-        """
+        """Thirty-three since Track E.2."""
         assert len(CASES) == 33
 
     def test_ids_are_unique(self):
         assert len({case["id"] for case in CASES}) == len(CASES)
 
     def test_no_case_expects_an_unroutable_agent(self):
-        """The router cannot produce these, so a label naming one is unscorable.
-
-        This is what caught the seven cases when E.2 landed.
-        """
+        """The router cannot produce these, so a label naming one is unscorable."""
         from app.graph.nodes.classify import UNROUTABLE
 
         assert not {case["expected"] for case in CASES} & UNROUTABLE
 
     def test_every_label_is_reachable_for_its_own_identity(self):
-        """A label the access matrix forbids is an impossible test, not a hard one.
-
-        This is the check that caught `orion`/`13-15`/`qa_agent`: the teen band
-        gets `qa_agent_limited`, and labelling it `qa_agent` would have made
-        that row permanently unscorable.
-        """
+        """A label the access matrix forbids is an impossible test, not a hard one."""
         for case in CASES:
             permitted = allowed_agents(
                 case["persona"],
@@ -119,26 +89,14 @@ class TestTheLabelledSetIsWellFormed:
             assert case["expected"] in permitted, case["id"]
 
     def test_every_routable_agent_the_matrix_can_grant_has_a_description(self):
-        """An agent with no description is one a small model will not pick.
-
-        Scoped to ROUTABLE agents since Track E.2. `escalate_agent` is still
-        granted by the matrix -- it is still a node, still reachable from the
-        safety edge, the request matcher and a tool call -- but the router is no
-        longer offered it, and this test's own premise is why: an undescribed
-        agent is one the model will not pick, which is now the intended state
-        for exactly one name.
-        """
+        """An agent with no description is one a small model will not pick."""
         from app.graph.access import KNOWN_AGENTS
         from app.graph.nodes.classify import UNROUTABLE
 
         assert (KNOWN_AGENTS - UNROUTABLE) <= set(AGENT_DESCRIPTIONS)
 
     def test_no_unroutable_agent_is_described(self):
-        """The other direction, and the one that matters.
-
-        A description reintroduced for `escalate_agent` would put it back on the
-        menu, which is the whole of what E.2 removed.
-        """
+        """The other direction, and the one that matters."""
         from app.graph.nodes.classify import UNROUTABLE
 
         assert not (UNROUTABLE & set(AGENT_DESCRIPTIONS))
@@ -221,16 +179,14 @@ class TestContainment:
 
 class TestThePrompt:
     def test_the_menu_contains_only_permitted_agents(self):
-        """The containment property, restated at the prompt boundary.
-
-        Even if the model were perfectly obedient, it could not name an
-        excluded agent -- it is never shown one.
-        """
+        """The containment property, restated at the prompt boundary."""
         state = state_for(CASES[0])
         menu = agent_menu(state["allowed_agents"])
+        # Entry-wise, not substring: "qa_agent" is a prefix of "qa_agent_limited".
+        listed = {line.removeprefix("- ").split(":")[0] for line in menu.splitlines()}
         for agent in ("servicing_agent", "register_agent", "qa_agent"):
             if agent not in state["allowed_agents"]:
-                assert agent not in menu
+                assert agent not in listed
 
     def test_an_agent_without_a_description_is_still_listed(self):
         """Dropping it would silently make a permitted capability unreachable."""
@@ -239,12 +195,7 @@ class TestThePrompt:
 
 class TestStickiness:
     def test_an_ambiguous_turn_does_not_leave_a_registration(self):
-        """The case the mechanism exists for.
-
-        A parent answering "march" mid-registration is a one-word turn with no
-        registration vocabulary in it. Without stickiness the whole flow is one
-        ambiguous answer away from being abandoned.
-        """
+        """The case the mechanism exists for."""
         state = state_for(
             {
                 "id": "s1",
@@ -334,12 +285,7 @@ ACCURACY_TARGET = 0.85
 
 
 def _model_available() -> bool:
-    """Whether the model the router would actually use is callable here.
-
-    Goes through `resolve_classifier_model` rather than reading the setting, so
-    a deployment that falls back to its chat model still runs this measurement
-    rather than skipping it and reporting nothing.
-    """
+    """Whether the model the router would actually use is callable here."""
     from app.config import get_settings
     from app.graph.nodes.classify import resolve_classifier_model
 
@@ -359,12 +305,7 @@ def _model_available() -> bool:
     not _model_available(), reason="no API key for the configured classifier model"
 )
 async def test_routing_accuracy_against_the_labelled_set(capsys):
-    """Reports accuracy, and fails below the target.
-
-    Reported rather than merely asserted: the number is the point. A run that
-    passes at 86% and a run that passes at 97% are very different states of the
-    prompt, and only one of them is worth leaving alone.
-    """
+    """Reports accuracy, and fails below the target."""
     from app.graph.nodes.classify import default_invoke
 
     classify = make_classify(default_invoke)

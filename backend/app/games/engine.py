@@ -1,14 +1,4 @@
-"""The game engine: state, scoring and correctness.
-
-This is the half of the feature the language model does not touch. It owns the
-cursor, the verdict and the score; the agent owns the voice. Nothing in this
-module imports LangChain, and nothing in it calls a model.
-
-It knows nothing about letters or statements either. Games declare what they
-can do — hints or not, a round or the whole set, whether a wrong answer resolves
-the item — and everything here reads those declarations rather than the game's
-name.
-"""
+"""The game engine: state, scoring and correctness."""
 
 from __future__ import annotations
 
@@ -50,8 +40,7 @@ from app.games.truefalse import get_true_false
 
 logger = logging.getLogger(__name__)
 
-# Emitted when an item resolves against the player. Distinct from a skip: they
-# engaged with it and got it wrong, which is a different thing to learn from.
+# Emitted when an item resolves against the player.
 WORD_MISSED = "word_missed"
 
 
@@ -85,11 +74,7 @@ class PersonaNotEligible(GameError):
 
 
 class HintsNotAvailable(GameError):
-    """This game has no hints to give.
-
-    True/false is the case that forced this: a hint on a binary choice is the
-    answer, so there is nothing to offer between "no help" and "told you".
-    """
+    """This game has no hints to give."""
 
     reason = "hints_not_available"
 
@@ -198,13 +183,7 @@ class GameEngine:
         return summary
 
     def _servable(self, entries: tuple[Entry, ...], persona: Persona | None) -> list[Entry]:
-        """Items this player may be served, right now.
-
-        Two filters. `persona_bands` targets an age range — with no persona
-        known, everything is in scope. Volatility is the harder one: a rate
-        nobody has confirmed inside the review window drops out of play rather
-        than being taught to a child as current fact.
-        """
+        """Items this player may be served, right now."""
         today = self._today or date.today()
         return [
             entry
@@ -240,9 +219,7 @@ class GameEngine:
         language: Language = Language.EN,
         persona: Persona | None = None,
     ) -> StartResult:
-        # Games are a learning activity for account holders. An explicitly
-        # non-playing persona is declined; an unknown one is allowed, because
-        # "we do not know who this is" must not silently mean "no games".
+        # Games are a learning activity for account holders.
         if persona is not None and persona not in PLAYING_PERSONAS:
             raise PersonaNotEligible(
                 f"Games are for account holders; {persona.value} is not one."
@@ -258,11 +235,7 @@ class GameEngine:
                 f"No {game_type} set has been authored in {language.value} yet."
             )
 
-        # The first set with anything servable for this player. A game may ship
-        # one set per audience — true/false has an Orion bank and a Stella bank,
-        # written natively rather than simplified from each other — and the
-        # persona filter is what chooses between them. With no persona known the
-        # first set wins, which is the denser default.
+        # The first set with anything servable for this player.
         game_set = None
         servable: list[Entry] = []
         for candidate in sets:
@@ -280,11 +253,7 @@ class GameEngine:
             )
 
         if game.round_size:
-            # Shuffled per session, and only then stored. Two reasons: the bank
-            # is answer-biased enough that a fixed order is learnable, and a
-            # round is meant to feel different the second time. Seeded on the
-            # session so the same conversation always gets the same round back
-            # if anything ever needs to recompute it.
+            # Shuffled per session, and only then stored.
             rng = random.Random(f"{session_id}:{game_set.id}")
             chosen = rng.sample(servable, min(game.round_size, len(servable)))
             order = tuple(entry.id for entry in chosen)
@@ -318,9 +287,7 @@ class GameEngine:
 
         verdict = game.check(entry, answer)
 
-        # Unreadable is not wrong. Spending a statement on an answer nobody
-        # could interpret teaches nothing, so the item stays open and unspent
-        # and the attempt is not counted against them.
+        # Unreadable is not wrong.
         if verdict is None:
             return SubmitResult(
                 correct=False,
@@ -334,12 +301,10 @@ class GameEngine:
 
         if not verdict and not game.advance_on_wrong:
             self._store.put(session)
-            # No echo of the answer, and no "close!" — a near-miss signal is a
-            # side channel that narrows the item for anyone probing it.
+            # No echo of the answer, and no "close!" — a near-miss signal is a side channel that narrows the item for anyon…
             return SubmitResult(correct=False, attempts=attempts_taken)
 
-        # From here the item resolves, right or wrong, and the cursor moves in
-        # the same call that produces the answer.
+        # From here the item resolves, right or wrong, and the cursor moves in the same call that produces the answer.
         reveal = game.reveal(entry)
 
         if verdict:
@@ -389,8 +354,7 @@ class GameEngine:
         session = self._session(session_id)
         game = self._game(session.game_type)
 
-        # Declined by the game, not special-cased here. A hint on a binary
-        # choice is the answer, and there is nothing honest to return instead.
+        # Declined by the game, not special-cased here.
         if not game.supports_hints:
             raise HintsNotAvailable(
                 f"{game.display_name} does not have hints — there is no clue to "
@@ -401,9 +365,7 @@ class GameEngine:
         session.hint_level += 1
         level = session.hint_level
 
-        # Past the last rung, asking again is not a request for a hint — it is a
-        # child who has had enough. Give the answer with its meaning and move on;
-        # that is a lesson, not a loss.
+        # Past the last rung, asking again is not a request for a hint — it is a child who has had enough.
         if level > self._settings.max_hint_level:
             return self._give_up(session, entry, reason="revealed")
 
@@ -425,13 +387,7 @@ class GameEngine:
         )
 
     def _give_up(self, session: GameSession, entry: Entry, *, reason: str) -> HintResult:
-        """Reveal the answer and advance, in one step.
-
-        The two happen together on purpose. Because the cursor moves in the same
-        call that produces the answer, the revealed item is never the item being
-        scored — there is no state in which a caller holds the answer to a
-        question still open.
-        """
+        """Reveal the answer and advance, in one step."""
         game = self._game(session.game_type)
         self._emit(
             session,
@@ -468,16 +424,7 @@ class GameEngine:
         return self._store.get(session_id) is not None
 
     def state(self, session_id: str) -> GameState | None:
-        """The running game, or None. Never raises, never mutates.
-
-        This is what the browser calls on load. The client stores nothing about
-        a game, so this is the only way it can redraw one — and it is why a
-        refresh mid-item is not a lost game.
-
-        Spent clue texts are re-derived rather than stored: `hint` is a pure
-        function of the entry and the level, so replaying levels 1..n gives back
-        exactly what was shown, with nothing extra kept around to leak.
-        """
+        """The running game, or None."""
         session = self._store.get(session_id)
         if session is None or session.finished:
             return None

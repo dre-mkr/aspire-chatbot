@@ -1,10 +1,4 @@
-"""The copy: complete in three languages, and never claiming a decision.
-
-These are the tests that stop the flow degrading quietly. A missing French
-option label is a KeyError at the worst possible moment; a headline that says
-"you are approved" is a promise the programme has not made. Both are the kind of
-thing that survives review and fails in production.
-"""
+"""The copy: complete in three languages, and never claiming a decision."""
 
 from __future__ import annotations
 
@@ -89,8 +83,6 @@ def test_the_language_enum_matches_the_games_one():
 # --- no approval language --------------------------------------------------
 
 # Phrases that read as a decision on an application, in all three languages.
-# "This is a pre-check, not an application outcome" is the whole point, and it
-# is the single easiest thing to lose in a rewrite of the copy.
 FORBIDDEN = (
     "you are approved",
     "you're approved",
@@ -168,11 +160,7 @@ def test_the_pre_check_disclaimer_is_visible_chrome_not_fine_print(language: Lan
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_the_hedged_documents_stay_hedged_in_every_language(language: Language):
-    """Three of the five documents are hedged by the SOURCE itself.
-
-    A list that reads as settled in French and provisional in English is the
-    same defect as inventing one.
-    """
+    """Three of the five documents are hedged by the SOURCE itself."""
     for document_id in ("passport", "guardian_id", "proof_of_address"):
         strings = copy.DOCUMENTS[document_id][language]
         assert strings.get("caveat", "").strip(), (
@@ -184,11 +172,7 @@ def test_the_hedged_documents_stay_hedged_in_every_language(language: Language):
 def test_no_document_claims_a_civil_registry_the_source_does_not_name(
     language: Language,
 ):
-    """The knowledge base says nothing about where to obtain a birth certificate.
-
-    So the copy routes to the support channels it does carry, and must not
-    acquire an address, an office name or opening hours for one it does not.
-    """
+    """The knowledge base says nothing about where to obtain a birth certificate."""
     for document_id in ("birth_certificate", "descent_certificate"):
         where = copy.DOCUMENTS[document_id][language]["where"].lower()
         for invented in ("civil registry", "registrar", "high court", "registro civil"):
@@ -219,8 +203,7 @@ def test_contact_details_are_never_invented():
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_the_whole_flow_renders_end_to_end_in_every_language(language: Language):
-    """Walks every question and both plan shapes, so a missing key is a failure
-    here rather than a KeyError in front of a child."""
+    """Walks every question and both plan shapes, so a missing key is a failure here rather than a KeyError in front…"""
     answers = {
         "age": "under5",
         "age_exact": "3",

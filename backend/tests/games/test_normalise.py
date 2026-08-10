@@ -1,8 +1,4 @@
-"""Answer checking.
-
-A five-year-old on a keyboard is the design target. Every accepted case here is
-a child who knew the word; every rejected case is a child who did not.
-"""
+"""Answer checking."""
 
 from __future__ import annotations
 
@@ -61,20 +57,12 @@ def test_one_typo_is_forgiven_on_a_long_word(typed):
 
 @pytest.mark.parametrize("typed", ["safe", "cave", "gave", "wave", "sane"])
 def test_a_different_short_word_is_not_a_typo(typed):
-    """All are one edit from SAVE, and all are words a child might mean.
-
-    This is why the edit-distance floor exists rather than applying at every
-    length: accepting `safe` for SAVE would teach the wrong word.
-    """
+    """All are one edit from SAVE, and all are words a child might mean."""
     assert not answer_matches(typed, "SAVE", **TOLERANCE)
 
 
 def test_a_plural_of_a_long_word_is_accepted():
-    """`interests` is one edit from INTEREST, and the child clearly solved it.
-
-    Judged deliberately rather than by accident: they unscrambled the word and
-    added an s. Marking that wrong would teach spelling pedantry, not money.
-    """
+    """`interests` is one edit from INTEREST, and the child clearly solved it."""
     assert answer_matches("interests", "INTEREST", **TOLERANCE)
 
 

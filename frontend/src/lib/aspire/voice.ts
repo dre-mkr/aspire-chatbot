@@ -1,17 +1,10 @@
-/**
- * The voice half of the ASPIRE backend client.
- *
- * Kept apart from `api.ts` so the whole voice feature can be reviewed — or
- * removed — in one move, exactly as the backend module is.
- */
+/** The voice half of the ASPIRE backend client. */
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
 
-/** Personas map to voices on the server. Nothing in the UI selects one yet, so
- *  every request uses the newcomer voice; wire this to the persona picker when
- *  one exists. */
+/** Personas map to voices on the server. */
 export const DEFAULT_PERSONA = "nova";
 
 export type VoiceLanguage = "en" | "es" | "fr";
@@ -42,12 +35,7 @@ export type VoiceFailure =
 	| "offline"
 	| "dropped"
 	| "limited"
-	/**
-	 * The caller cancelled it. Not a failure the reader should be told about —
-	 * they pressed stop, or sent a new message, or navigated away. It is in this
-	 * union so callers can recognise and swallow it rather than showing "the
-	 * connection dropped" for something they did on purpose.
-	 */
+	/** The caller cancelled it. */
 	| "aborted";
 
 export class VoiceError extends Error {
@@ -60,10 +48,7 @@ export class VoiceError extends Error {
 	}
 }
 
-/**
- * Ask the server what voice can do. A 404 means the module is switched off
- * server-side, which is a normal state, not an error.
- */
+/** Ask the server what voice can do. */
 export async function fetchVoiceConfig(): Promise<VoiceConfig | null> {
 	try {
 		const response = await fetch(`${API_URL}/api/voice/config`, {
@@ -77,14 +62,7 @@ export async function fetchVoiceConfig(): Promise<VoiceConfig | null> {
 	}
 }
 
-/**
- * A filename whose extension matches what was actually recorded.
- *
- * Not cosmetic: the transcription API detects the container from the filename,
- * so a Safari recording (mp4) labelled `.webm` is a file that disagrees with
- * itself. `blob.type` carries the codec parameter — `audio/webm;codecs=opus` —
- * so the container is the part before the semicolon.
- */
+/** A filename whose extension matches what was actually recorded. */
 function filenameFor(blobType: string) {
 	const container = blobType.split(";", 1)[0].trim().toLowerCase();
 	const extension =
@@ -104,8 +82,7 @@ export async function transcribe(
 	threadId: string | null,
 ): Promise<Transcription> {
 	const form = new FormData();
-	// The blob's own type rides along as the part's Content-Type; the filename
-	// has to agree with it, because that is what the API reads the container from.
+	// The blob's own type rides along as the part's Content-Type; the filename has to agree with it, because that i…
 	form.append("file", audio, filenameFor(audio.type));
 	form.append("voice_consent", "true");
 	form.append("language", language);
@@ -131,27 +108,16 @@ export async function transcribe(
 	return body;
 }
 
-/**
- * Synthesise an answer. Returns an object URL the caller must revoke.
- */
+/** Synthesise an answer. */
 export async function speak(
 	text: string,
 	language: VoiceLanguage,
 	threadId: string | null,
-	/**
-	 * Cancels the synthesis, and with it the ElevenLabs call behind it.
-	 *
-	 * Optional because the 20s timeout still applies regardless -- this composes
-	 * with it rather than replacing it. Without one, interrupting playback,
-	 * sending a new message or navigating away left the synthesis running to
-	 * completion and billed in full for audio nobody would hear. Exactly the
-	 * defect class as P0-002 on the chat call, in a second subsystem.
-	 */
+	/** Cancels the synthesis, and with it the ElevenLabs call behind it. */
 	signal?: AbortSignal,
 ): Promise<string> {
 	let response: Response;
-	// The external signal and the timeout are combined rather than chosen
-	// between: whichever fires first should stop the request.
+	// The external signal and the timeout are combined rather than chosen between: whichever fires first should sto…
 	const timeout = AbortSignal.timeout(20_000);
 	const cancel = signal ? AbortSignal.any([signal, timeout]) : timeout;
 	try {
@@ -167,8 +133,7 @@ export async function speak(
 			signal: cancel,
 		});
 	} catch {
-		// A caller-driven abort is not a fault and must not be dressed as one:
-		// the caller already knows, because it is the one that asked.
+		// A caller-driven abort is not a fault and must not be dressed as one: the caller already knows, because it is…
 		if (signal?.aborted) throw new VoiceError("aborted");
 		throw new VoiceError("dropped");
 	}
@@ -179,35 +144,14 @@ export async function speak(
 	return URL.createObjectURL(await response.blob());
 }
 
-/**
- * Synthesise an answer and start it playing before it has finished being made.
- *
- * `speak` above waits out the whole file twice — the server joins every chunk
- * before responding, then the client downloads the lot before `play()`. This
- * hits the streaming endpoint and, where the browser supports MediaSource for
- * MP3, feeds audio into playback as the bytes arrive: first sound at the
- * vendor's first chunk rather than after its last.
- *
- * Falls back to the blob path on browsers without MSE for `audio/mpeg`
- * (notably Safari): those still gain the server-side half — the download
- * overlaps synthesis instead of following it.
- *
- * Failure discipline mid-stream: the reader's TEXT is a different request and
- * is never touched by anything here. A stream that dies after some bytes ends
- * the audio at the last complete frame; the player fires `onended` and the UI
- * returns to Play, which is exactly the recovery the reader wants.
- */
+/** Synthesise an answer and start it playing before it has finished being made. */
 export async function speakStream(
 	text: string,
 	language: VoiceLanguage,
 	threadId: string | null,
 	signal?: AbortSignal,
 ): Promise<string> {
-	// The timeout must cover WAITING for audio, never the audio itself: a long
-	// answer streams for longer than any sensible timeout, and aborting the
-	// fetch mid-body would cut playback off. The server holds its response
-	// until the first vendor chunk exists, so "headers arrived" means "audio is
-	// flowing" — the manual timer below is cleared at that moment.
+	// The timeout must cover WAITING for audio, never the audio itself: a long answer streams for longer than any s…
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 20_000);
 	if (signal) {
@@ -270,8 +214,7 @@ export async function speakStream(
 				});
 
 			const finish = () => {
-				// Ending a source that is already closed (stopPlayback revoked
-				// the URL) throws; that is teardown, not a failure.
+				// Ending a source that is already closed (stopPlayback revoked the URL) throws; that is teardown, not a failure.
 				try {
 					if (source.readyState === "open") source.endOfStream();
 				} catch {
@@ -290,8 +233,7 @@ export async function speakStream(
 						await wait;
 					}
 				} catch {
-					// A dropped stream or an abort: whatever audio arrived is
-					// playable, and the ended event returns the UI to Play.
+					// A dropped stream or an abort: whatever audio arrived is playable, and the ended event returns the UI to Play.
 				} finally {
 					finish();
 				}
@@ -300,8 +242,7 @@ export async function speakStream(
 		{ once: true },
 	);
 
-	// Stop pulling bytes the moment the caller aborts — without this the fetch
-	// keeps billing and downloading into a player nobody is listening to.
+	// Stop pulling bytes the moment the caller aborts — without this the fetch keeps billing and downloading into a…
 	signal?.addEventListener(
 		"abort",
 		() => void reader.cancel().catch(() => {}),

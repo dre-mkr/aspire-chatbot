@@ -1,51 +1,4 @@
-"""The lesson gets written here, and it is guaranteed to exist.
-
-Three tiers, and all three are implemented because the first two are the ones
-that "should be enough":
-
-    1  GENERATE   the strong model, given the concept body for this band
-    2  VALIDATE   `contract.check_lesson`; on failure, regenerate ONCE with the
-                  violation quoted back
-    3  FLOOR      a template rendered in Python from the concept row itself
-
-Tier 3 is what makes the reported symptom impossible. It reads a little flat. It
-is never empty, never thin, never off-topic, and never a widget with no lesson
-attached -- because it is assembled from the same band body, local example and
-check question a reviewer signed off, joined with persona-appropriate connectors
-from a fixed table. A deployment with no provider key at all serves tier 3 and
-still teaches.
-
-## Why this generates and then emits, rather than streaming and then checking
-
-`stream_mode="messages"` forwards tokens as the model produces them, so by the
-time a lesson can be measured it has already been read. Tier 2 cannot exist on
-top of that: "regenerate once with the violation quoted" is not available to a
-turn whose first attempt is already on screen.
-
-So the teaching call is made whole and validated before a token crosses the wire.
-The cost is time-to-first-token on the prose; the benefit is that a lesson which
-is too short, off-topic, or missing its check question never reaches a child.
-That trade is the entire point of the workstream, and it is close to free in
-practice for a reason worth recording: `plan_widget`'s model call used to sit in
-FRONT of the teaching call on the critical path, and it does not any more (see
-`widgets.py`) -- so a turn spends about as long before its first token as it did,
-and spends it on the lesson rather than on choosing a slider.
-
-The objection to this design, and the argument for streaming instead, is written
-up in `learning/OBJECTIONS.md`.
-
-## Context assembly order is load-bearing
-
-    [cacheable prefix]   GLOBAL + PERSONA_CARD + LEARN_ROLE
-    ─────────────────────── cache breakpoint ───────────────────────
-    [per turn]           concept block, supporting rows, learner state,
-                         check item, recent history, MOVE
-
-`prompting/builder.py` owns the first three layers and the breakpoint. Everything
-this module adds goes BELOW it, in `extra_instruction` -- a concept block above
-the breakpoint would change the prefix on every turn and cost the prefix cache on
-the agent that makes the longest calls.
-"""
+"""The lesson gets written here, and it is guaranteed to exist."""
 
 from __future__ import annotations
 
@@ -94,8 +47,7 @@ HOW TO WRITE
 - Write only what the learner reads. Never describe what you are doing."""
 
 
-#: The RAG-teach role. A different job: there is no authored concept, so the rows
-#: ARE the material and the lesson has to be honest about the thinness of it.
+#: The RAG-teach role.
 RAG_TEACH_ROLE = """You are the ASPIRE learning tutor. You TEACH.
 
 No authored concept covers this question. You have knowledge-base rows retrieved for it
@@ -150,14 +102,7 @@ _MOVE_INSTRUCTIONS: dict[Move, str] = {
 
 @dataclass(slots=True)
 class TeachContext:
-    """Everything one teaching call needs, assembled in a fixed order.
-
-    A dataclass rather than a dict so that a field the prompt builder forgets is
-    an attribute error in a test rather than a silently missing block in
-    production -- the failure mode being designed out is a lesson generated
-    without its concept body, which reads exactly like a lesson generated with
-    one and is wrong.
-    """
+    """Everything one teaching call needs, assembled in a fixed order."""
 
     concept: TeachingConcept | None
     band: str
@@ -187,13 +132,7 @@ class TeachContext:
         return (self.concept.body_for(self.band) or "") if self.concept else ""
 
     def grounding_terms(self) -> tuple[str, ...]:
-        """Distinctive words from the concept, for the tier-2 grounding check.
-
-        The title's words and the aliases' words, minus anything short enough to
-        appear by accident. A lesson about compound interest that contains
-        neither "interest" nor "compound" nor "grow" was not written from the
-        material it was given.
-        """
+        """Distinctive words from the concept, for the tier-2 grounding check."""
         if self.concept is None:
             return ()
         source = f"{self.concept.title} {' '.join(self.concept.aliases)}"
@@ -214,13 +153,7 @@ _COMMON = frozenset(
 
 
 def build_teach_context(context: TeachContext) -> str:
-    """The per-turn block, in the fixed order the module docstring names.
-
-    Order is not cosmetic. It is the order the cache breakpoint requires -- every
-    block below is per-turn and therefore below it -- and within that, it is
-    ordered most-load-bearing first, because a model reading a long block weights
-    the beginning of it.
-    """
+    """The per-turn block, in the fixed order the module docstring names."""
     parts: list[str] = []
     concept = context.concept
 
@@ -238,10 +171,7 @@ def build_teach_context(context: TeachContext) -> str:
             )
             block.append(f"\nWhat learners get wrong about this:\n{wrong_right}")
         if concept.numeric_anchors:
-            # Named as the ONLY numbers permitted, not as a suggestion. The
-            # registry computed everything derived from them; the model's job is
-            # to use them, and a model that arithmetics its way to a new figure
-            # has invented a fact about a child's savings.
+            # Named as the ONLY numbers permitted, not as a suggestion.
             numbers = ", ".join(f"{key} = {value}" for key, value in concept.numeric_anchors.items())
             block.append(
                 f"\nThe ONLY numbers you may use, exactly as given: {numbers}\n"
@@ -315,15 +245,7 @@ def build_teach_context(context: TeachContext) -> str:
 
 # ── tier 3: the deterministic floor ──────────────────────────────────────────
 
-#: Connectors that stitch a template render into something that reads like a
-#: person wrote it. Per band, because "Here is the thing" and "So here's how it
-#: works" are not interchangeable across an eleven-year gap.
-#:
-#: A fixed table rather than a generated sentence: tier 3 runs when generation is
-#: unavailable or has failed twice, so it must not depend on a model. Randomised
-#: within the band so that a deployment sitting on tier 3 does not produce
-#: byte-identical lessons -- which is the failure the model call was added to fix
-#: in the first place.
+#: Connectors that stitch a template render into something that reads like a person wrote it.
 _CONNECTORS: dict[str, dict[str, tuple[str, ...]]] = {
     "5-8": {
         "open": ("Let us look at this one.", "Here is something good to know.", "Ready? Here we go."),
@@ -360,16 +282,7 @@ def template_lesson(
     check_item: CheckItem | None,
     rng: random.Random | None = None,
 ) -> str:
-    """The lesson, assembled in Python from the concept row. Never empty.
-
-    Reads a little flat and that is the trade being made knowingly: this runs
-    when the model is unavailable or has produced something that failed the
-    contract twice, and a slightly wooden explanation of the right idea beats
-    both alternatives -- an empty turn, and a fluent turn about the wrong thing.
-
-    Every string it uses was written by a person and validated at build time, so
-    tier 3 is also the only tier that cannot hallucinate.
-    """
+    """The lesson, assembled in Python from the concept row."""
     picker = rng or random.Random()
     phrases = _CONNECTORS.get(band) or _CONNECTORS["9-12"]
     contract = contract_for(band)
@@ -380,9 +293,7 @@ def template_lesson(
     if concept.local_example:
         pieces.append(f"{picker.choice(phrases['example'])} {concept.local_example}")
 
-    # The tail is built separately and kept whole. A trim must never take the
-    # check question with it: a lesson that ends mid-explanation with nothing to
-    # answer is a dead end, and a dead end in a lesson is where a child stops.
+    # The tail is built separately and kept whole.
     tail = ""
     if check_item is not None:
         tail = f"{picker.choice(phrases['check'])} {check_item.question}".strip()
@@ -390,16 +301,7 @@ def template_lesson(
     text = " ".join(piece.strip() for piece in pieces if piece.strip())
     text = re.sub(r"\s{2,}", " ", text).strip()
 
-    # Trim the explanation to fit the ceiling WITH the question, at a sentence
-    # boundary. The floor is not enforceable here -- if the authored body is
-    # short, the body is short, and padding to reach a count is the failure this
-    # whole file exists to prevent.
-    #
-    # The question's own length comes out of the budget first, so a long check
-    # question shortens the explanation rather than overflowing the cap. Twenty
-    # words is the floor on what is left: below that the "lesson" is a question
-    # with a sentence in front of it, and serving the untrimmed body is more
-    # honest than serving that.
+    # Trim the explanation to fit the ceiling WITH the question, at a sentence boundary.
     if contract.max_words is not None:
         budget = contract.max_words - word_count(tail)
         if word_count(text) > budget:
@@ -412,13 +314,7 @@ def template_lesson(
 
 
 def decline_text(band: str, alternatives: Sequence[TeachingConcept]) -> str:
-    """What to say when nothing was resolved. In persona, with a way forward.
-
-    Never an error message and never an apology loop. A child who asked about
-    something the curriculum does not cover has done nothing wrong, and the reply
-    they are owed names two things that ARE available rather than closing the
-    conversation.
-    """
+    """What to say when nothing was resolved."""
     offers = [concept.title.lower() for concept in alternatives[:2]]
     if band == "5-8":
         opening = "I do not know that one yet!"
@@ -439,13 +335,7 @@ def decline_text(band: str, alternatives: Sequence[TeachingConcept]) -> str:
 
 @dataclass(slots=True)
 class RenderResult:
-    """The lesson, and how it was arrived at.
-
-    `tier` and `retry` are logged on every learning turn. Their RATES are the
-    metric that says whether the prompt needs work -- a fallback rate above 2%
-    means the generation path is failing systematically, and that is invisible
-    from any single turn.
-    """
+    """The lesson, and how it was arrived at."""
 
     text: str
     tier: int
@@ -466,14 +356,7 @@ async def render_teach(
     session_context: Any = None,
     rng: random.Random | None = None,
 ) -> RenderResult:
-    """Write the lesson. Returns prose, always.
-
-    `invoke` is `async (messages) -> str`, injected and optional. None means the
-    deployment has no provider configured, which is a supported configuration:
-    tier 3 runs and the learner still gets a lesson.
-
-    This function does not raise. Every failure inside it degrades one tier.
-    """
+    """Write the lesson."""
     role = LEARN_ROLE if context.concept is not None else RAG_TEACH_ROLE
     turn_block = build_teach_context(context)
     expect_question = context.move is not Move.HINT or context.check_item is not None
@@ -490,9 +373,7 @@ async def render_teach(
     result = check_lesson(
         text or "", band=context.band, expect_question=expect_question, grounding_terms=terms
     )
-    # `servable`, not `ok`. A lesson with one over-long sentence teaches; a
-    # lesson that is empty, thin, ungrounded or unanswerable does not, and only
-    # the second kind is worth a second frontier call. See `contract.BLOCKING`.
+    # `servable`, not `ok`.
     if text and result.servable:
         if result.violations:
             logger.info(
@@ -511,10 +392,7 @@ async def render_teach(
 
     # ── tier 2: one retry, with the violation quoted ────────────────────────
     if invoke is not None:
-        # Every violation is quoted, not only the blocking ones: the model is
-        # rewriting anyway, so it may as well fix the over-long sentence while it
-        # is there. It is the BLOCKING set that decided to retry, and the full
-        # set that says what to change.
+        # Every violation is quoted, not only the blocking ones: the model is rewriting anyway, so it may as well fix t…
         retry_block = (
             f"{turn_block}\n\n"
             "YOUR PREVIOUS ATTEMPT WAS REJECTED. What was wrong with it:\n"
@@ -538,10 +416,7 @@ async def render_teach(
         if retried and second.servable:
             return _finish(RenderResult(text=retried, tier=1, retry=True, contract=second), context)
 
-        # A retry that is merely IMPERFECT still beats the template, and the
-        # template is only better than a retry that is absent or empty. A
-        # 55-word lesson for a band wanting 60 is a lesson; the floor exists for
-        # nothing at all, not for near-misses.
+        # A retry that is merely IMPERFECT still beats the template, and the template is only better than a retry that…
         if retried and second.words >= contract_for(context.band).min_words * 0.6:
             logger.info(
                 "Serving an imperfect retry (%d words, %s) rather than the template.",
@@ -580,8 +455,6 @@ async def render_teach(
             )
 
     # Nothing to teach from at all: no concept row and no usable generation.
-    # This is the decline, and it is still prose -- an empty turn is the one
-    # outcome this function may not produce.
     logger.warning(
         "teach_fallback=decline band=%s move=%s: nothing to teach from.",
         context.band,
@@ -597,12 +470,7 @@ def _finish(result: RenderResult, context: TeachContext) -> RenderResult:
 
 
 def _default_user_turn(context: TeachContext) -> str:
-    """What to put in the human turn when the learner said nothing.
-
-    A lesson can begin because the previous one ended, with no message behind it.
-    The concept's own title is the honest stand-in -- it is what the turn is
-    about -- and an empty human turn makes some providers reject the request.
-    """
+    """What to put in the human turn when the learner said nothing."""
     if context.concept is not None:
         return f"Teach me about {context.concept.title.lower()}."
     return "Teach me something about money."
@@ -616,12 +484,7 @@ async def _generate(
     turn_block: str,
     utterance: str,
 ) -> str | None:
-    """One model call, or None. Never raises into the caller.
-
-    None rather than an exception because every caller has a lower tier ready,
-    and a traceback escaping here would turn a degraded lesson into no lesson --
-    the exact inversion of this module's guarantee.
-    """
+    """One model call, or None."""
     if invoke is None:
         return None
 
@@ -637,9 +500,7 @@ async def _generate(
             extra_instruction=turn_block,
         )
     else:
-        # No resolved session context: a unit test driving the renderer directly,
-        # or a turn where `resolve_context` did not run. The prefix is lost and
-        # the lesson is not.
+        # No resolved session context: a unit test driving the renderer directly, or a turn where `resolve_context` did…
         messages = [
             SystemMessage(content=f"{role}\n\n{turn_block}"),
             HumanMessage(content=utterance),

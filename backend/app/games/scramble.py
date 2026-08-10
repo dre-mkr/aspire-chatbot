@@ -1,9 +1,4 @@
-"""Word scramble: unscramble a word, three clues deep.
-
-Pure Python. It imports nothing from LangChain and nothing from FastAPI, so the
-rules can be tested on their own — which is the point of keeping the model out
-of the grading.
-"""
+"""Word scramble: unscramble a word, three clues deep."""
 
 from __future__ import annotations
 
@@ -30,11 +25,9 @@ class WordScrambleGame:
     display_name = "Unscramble These Words"
 
     supports_hints = True
-    # The ECCB handout is four words in a printed order, and the chat game shows
-    # a child the same puzzle in the same sequence. No round, no shuffle.
+    # The ECCB handout is four words in a printed order, and the chat game shows a child the same puzzle in the sam…
     round_size = None
-    # The letters are still on the table after a wrong guess, and rearranging
-    # them is the activity. Moving on would end the puzzle, not teach it.
+    # The letters are still on the table after a wrong guess, and rearranging them is the activity.
     advance_on_wrong = False
 
     def __init__(self, settings: GameSettings | None = None) -> None:
@@ -94,14 +87,7 @@ class WordScrambleGame:
         return entry.definition
 
     def hint(self, entry: Entry, level: int) -> str:
-        """Three rungs, none of which is the answer.
-
-        1. the first letter — enough to break a stare, not enough to solve
-        2. length and category — narrows the field without naming it
-        3. the definition — by now this is teaching, not hinting
-
-        A fourth request is not a hint; the engine reveals instead.
-        """
+        """Three rungs, none of which is the answer."""
         assert isinstance(entry, ScrambleEntry)
         if level <= 1:
             return f"It starts with {entry.word[0].upper()}."

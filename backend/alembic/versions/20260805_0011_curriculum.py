@@ -1,31 +1,4 @@
-"""Curriculum: modules, lessons, concepts and their prerequisites
-
-Revision ID: 0011_curriculum
-Revises: 0010_tickets
-Create Date: 2026-08-05
-
-## Why the curriculum is in the database at all when the YAML is the source
-
-It is not a second copy of the content. These tables hold the SPINE -- ids,
-ordering, band ranges, prerequisite edges -- and nothing that a person authors
-in prose. Teach points, examples and hints stay in YAML, in git, where they are
-reviewed.
-
-The spine is here because three things need to join against it and cannot join
-against a file: mastery rows point at `concepts.id`, the learning session log
-points at `lessons.id`, and the admin portal's progress views group by module.
-Foreign keys are the point -- a mastery row for a concept that no longer exists
-should fail on insert, not surface as a blank name in a report.
-
-`app/curriculum/loader` upserts this from the YAML at startup. The YAML wins on
-every field it owns; nothing writes prose here.
-
-## `concept_prerequisites` is a table, not an array column
-
-A prerequisite is an edge, and edges get queried in both directions: "what does
-this concept need?" and "what unlocks once this is mastered?". An array answers
-the first cheaply and the second not at all.
-"""
+"""Curriculum: modules, lessons, concepts and their prerequisites Revision ID: 0011_curriculum Revises: 0010_tic…"""
 
 from __future__ import annotations
 
@@ -40,11 +13,6 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 #: Bands, as a check constraint rather than a Postgres ENUM.
-#:
-#: An ENUM would be tidier and would need a migration to add a value. A check
-#: constraint needs one too -- but it is a constraint swap rather than an
-#: `ALTER TYPE`, which cannot run inside a transaction on older Postgres and so
-#: cannot be rolled back with the rest of a deploy.
 _BANDS = "('5-8','9-12','13-15','16-18','adult')"
 
 
@@ -79,9 +47,7 @@ def upgrade() -> None:
             sa.ForeignKey("modules.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        # The words this concept introduces. An array is right here and not for
-        # prerequisites: nothing ever asks "which concepts introduce the word
-        # 'budget'?", it only ever reads the list for one concept.
+        # The words this concept introduces.
         sa.Column(
             "vocabulary",
             sa.ARRAY(sa.Text()),
@@ -108,13 +74,10 @@ def upgrade() -> None:
             sa.ForeignKey("concepts.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        # A concept requiring itself is an infinite loop in the placement step
-        # and is trivially preventable here.
+        # A concept requiring itself is an infinite loop in the placement step and is trivially preventable here.
         sa.CheckConstraint("concept_id <> requires_id", name="ck_prereq_not_self"),
     )
-    # The reverse direction: "what unlocks once this is mastered?" It is the
-    # query the placement step actually runs, and without this index it is a
-    # sequential scan on every lesson turn.
+    # The reverse direction: "what unlocks once this is mastered?" It is the query the placement step actually runs…
     op.create_index(
         "ix_prereq_reverse", "concept_prerequisites", ["requires_id"]
     )

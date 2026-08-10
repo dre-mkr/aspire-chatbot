@@ -1,34 +1,4 @@
-"""Handing a conversation to a person, safely.
-
-    summarise → triage → open_ticket → tell_the_user
-
-Four things it must get right, and one thing it must never do.
-
-## Never connect a child to an external channel
-
-A distressed nine-year-old does not get a phone number, an e-mail address or a
-live-chat handoff. They get told that a grown-up who helps with ASPIRE will
-look at this, and the ticket is raised against the GUARDIAN's record and the
-staff queue at high priority. That is the whole rule, and `_is_child` is where
-it is decided.
-
-The reason is not squeamishness. An external channel is unmonitored, unlogged
-and unbounded -- it is precisely the surface a safeguarding process exists to
-avoid, and offering one to a child in difficulty is worse than offering
-nothing.
-
-## The summary is redacted before it is written, not after
-
-A ticket is read by staff, exported to a case system and joined to a record.
-It is the last place a national ID should end up and the easiest place for one
-to arrive unnoticed. `pii.redact_for_summary` runs on the way in, so the ticket
-row cannot contain a value even if the conversation did.
-
-## The user is told what happens next, specifically
-
-"Someone will be in touch" is not an answer. A ticket id, a realistic window,
-and what to do in the meantime are.
-"""
+"""Handing a conversation to a person, safely."""
 
 from __future__ import annotations
 
@@ -59,8 +29,6 @@ class Triage:
 
 
 #: How long each priority actually takes, written as a person would say it.
-#: These are promises; keeping them shorter than the team can meet is how a
-#: support channel loses trust in a fortnight.
 _ETA: dict[str, str] = {
     "high": "within the hour",
     "normal": "by the end of the next working day",
@@ -68,17 +36,6 @@ _ETA: dict[str, str] = {
 }
 
 #: The reasons a turn escalates, mapped to how urgently a person should see it.
-#:
-#: `safeguarding` is the only automatic high, and it is high regardless of who
-#: raised it or what else is going on in the conversation.
-#: Keyed on `EscalationReason` values first, then on the pre-contract strings.
-#:
-#: Both sets are present because a conversation checkpointed before Track E
-#: carries the old string and must not crash on resume. The four retrieval
-#: reasons are kept for exactly that reason and nothing else -- nothing produces
-#: them any more; `ground_check` declines instead (`agents/qa/nodes.py`). When
-#: the oldest live checkpoint predates the deploy by more than a session, the
-#: bottom half of this table can go.
 _TRIAGE: dict[str, tuple[Priority, str]] = {
     # The contract (`agents/escalation/contract.py`).
     "safety_or_distress": ("high", "safeguarding"),
@@ -97,9 +54,7 @@ _TRIAGE: dict[str, tuple[Priority, str]] = {
     "repeated_clarification": ("normal", "comprehension"),
 }
 
-#: Three failed clarifications in a row is an escalation trigger in its own
-#: right. A person asked to rephrase three times has been told three times that
-#: the assistant cannot help, without being told it.
+#: Three failed clarifications in a row is an escalation trigger in its own right.
 CLARIFICATION_LIMIT = 3
 
 
@@ -108,12 +63,7 @@ def _is_child(state: AspireState) -> bool:
 
 
 def triage(state: AspireState) -> Triage:
-    """How urgent this is, and who else needs to know.
-
-    A child's escalation is never routed outward, and a child's escalation for
-    a safety reason also notifies the guardian record. Both facts are decided
-    here so there is one place to read them.
-    """
+    """How urgent this is, and who else needs to know."""
     flags = state.get("safety_flags") or {}
     reason = str(state.get("escalation_reason") or "user_request")
 
@@ -133,9 +83,7 @@ def triage(state: AspireState) -> Triage:
 
 # ── what the user is told ────────────────────────────────────────────────────
 
-#: Copy per locale, per audience. Children and adults are told different things
-#: because different things are true for them: an adult may be contacted
-#: directly, a child will not be.
+#: Copy per locale, per audience.
 _CHILD_MESSAGE: dict[str, str] = {
     "en": (
         "Thank you for telling me. A grown-up who helps with ASPIRE is going to "
@@ -196,17 +144,7 @@ def user_message(state: AspireState, ticket_id: str, decision: Triage) -> str:
 
 
 def summarise(state: AspireState) -> dict[str, Any]:
-    """A redacted account of the conversation, for the ticket.
-
-    Deterministic, and NOT a model call. Two reasons: a summariser is one more
-    thing that can fail on a turn that is already failing, and a model asked to
-    summarise a distressed child's message will paraphrase it -- which loses the
-    words a safeguarding reviewer needs to see.
-
-    So it takes the last few turns verbatim and redacts them. Verbatim and
-    redacted is the right combination here: the reviewer sees what was actually
-    said, and sees `[collected: phone]` where a number was.
-    """
+    """A redacted account of the conversation, for the ticket."""
     if state.get("escalation_summary"):
         # Whoever escalated has already written one, redacted at the source.
         return {}
@@ -224,13 +162,7 @@ def summarise(state: AspireState) -> dict[str, Any]:
 
 
 def make_open_ticket(persist=None):
-    """Create the ticket. `persist` is `async (dict) -> None`.
-
-    Injected so this subgraph runs without a database -- and so that a database
-    failure cannot swallow an escalation. The ticket id is minted here, before
-    persistence is attempted, so the user is given a reference even when the
-    write fails; a support conversation can then find it in the log.
-    """
+    """Create the ticket."""
 
     async def open_ticket(state: AspireState) -> dict[str, Any]:
         decision = triage(state)
@@ -249,9 +181,7 @@ def make_open_ticket(persist=None):
             "locale": state.get("locale"),
         }
 
-        # Asserted rather than assumed. `summarise` and every escalating caller
-        # redact, but this is the last point before the value is written to a
-        # table that gets exported -- and the cost of the check is a regex pass.
+        # Asserted rather than assumed.
         leaked = pii.kinds_in(row["summary"])
         if leaked:
             logger.error(
@@ -266,8 +196,6 @@ def make_open_ticket(persist=None):
                 await persist(row)
             except Exception:
                 # The reference has already been minted and is about to be shown.
-                # Losing the row is our problem; refusing the escalation is the
-                # user's, and they are the one who needs a person.
                 logger.exception("Could not persist ticket %s", ticket_id)
 
         logger.warning(
@@ -288,13 +216,7 @@ def make_open_ticket(persist=None):
 
 
 def tell_the_user(state: AspireState) -> dict[str, Any]:
-    """Say what happened and what happens next.
-
-    The `escalated` directive carries the ticket id and the window so the client
-    can render them as a card rather than leaving them buried in a sentence --
-    a reference number a person has to copy out of prose is a reference number
-    they will get wrong.
-    """
+    """Say what happened and what happens next."""
     decision = triage(state)
     ticket_id = str(state.get("escalation_ticket") or "")
 

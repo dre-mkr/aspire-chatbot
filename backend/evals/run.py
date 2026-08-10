@@ -1,19 +1,4 @@
-"""The ASPIRE evaluation harness.
-
-Two stages, deliberately separable because they cost very different amounts:
-
-    --retrieval   embeddings only. Cheap enough to run on every push.
-    --answers     runs the real agent. Model calls; run on a schedule or before release.
-
-    python -m evals.run --retrieval                  # all 65 cases, retrieval only
-    python -m evals.run --answers --limit 20         # generation on a subset
-    python -m evals.run --verify-ids                 # check golden.yaml against the CSV
-    python -m evals.run --retrieval --fail-under 0.85
-
-Exit code is non-zero when a threshold is missed, so CI can gate on it.
-Baselines live in reports/P8-ai-pipeline.md; every future change is measured
-against them.
-"""
+"""The ASPIRE evaluation harness."""
 
 from __future__ import annotations
 
@@ -58,8 +43,7 @@ def score_retrieval(cases: list[dict], k: int | None = None) -> dict:
     settings = get_settings()
     k = k or settings.retriever_k
     retriever = build_retriever(settings)
-    # `build_retriever` bakes k in; override for the sweep. `retriever` is the
-    # timing wrapper, so the k that matters is the inner one.
+    # `build_retriever` bakes k in; override for the sweep.
     retriever.inner.k = k
 
     results = []
@@ -87,24 +71,7 @@ def score_retrieval(cases: list[dict], k: int | None = None) -> dict:
 
 
 def score_retrieval_hybrid(cases: list[dict], k: int | None = None) -> dict:
-    """The same scoring, against the retrieval the PRODUCT actually performs.
-
-    `score_retrieval` above measures `build_retriever` -- dense vectors with an
-    absolute similarity floor. No request uses it. The QA agent runs
-    `rewrite_query -> hybrid_retrieve -> rerank -> generate -> ground_check`,
-    RRF-fusing a dense and a lexical retriever, and that is what a gate has to
-    watch or it is watching nothing.
-
-    The difference is not cosmetic. Measured on this corpus, the dense-only path
-    scores a Spanish or French question against an English chunk at ~0.38-0.40
-    where the English question scores ~0.70, so the 0.434315 floor cut every
-    cross-lingual result and the eval reported three misses the product does not
-    have -- it answers all three correctly. A gate that fails on questions the
-    service handles is a gate people learn to override.
-
-    `make_hybrid_retrieve` takes its two dependencies injected precisely so this
-    is possible; production wiring is reused rather than re-derived.
-    """
+    """The same scoring, against the retrieval the PRODUCT actually performs."""
     import asyncio
 
     from app.agents.qa.graph import _corpus, _search
@@ -112,24 +79,15 @@ def score_retrieval_hybrid(cases: list[dict], k: int | None = None) -> dict:
     from app.agents.qa.rerank import rerank_scores
 
     settings = get_settings()
-    # The reranked path emits QA_RERANK_K chunks, not `retriever_k`. Slicing to
-    # the wrong k measures a list the agent never sees -- at k=3 this reported
-    # 0.75 against a service that answers the same questions correctly.
+    # The reranked path emits QA_RERANK_K chunks, not `retriever_k`.
     k = k or settings.qa_rerank_k
     retrieve = make_hybrid_retrieve(_search, _corpus)
-    # Reranking is part of retrieval here, not a separate concern: the cross
-    # encoder is what turns the fused candidate list into the ORDER the agent
-    # sees, and scoring the list before it is scoring an intermediate nobody
-    # consumes. It runs locally through fastembed, so including it costs CPU and
-    # no API calls.
+    # Reranking is part of retrieval here, not a separate concern: the cross encoder is what turns the fused candid…
     rerank = make_rerank(rerank_scores)
 
     async def run_one(case: dict) -> dict:
         t0 = time.perf_counter()
-        # `qa_query` is what `rewrite_query` would have produced. Passing the raw
-        # question skips the rewrite, which is deliberate: this measures
-        # retrieval, and a model call in the middle would make the number depend
-        # on the rewriter's mood.
+        # `qa_query` is what `rewrite_query` would have produced.
         state: dict[str, Any] = {"qa_query": case["q"], "messages": []}
         state.update(await retrieve(state))
         state.update(await rerank(state))
@@ -185,13 +143,7 @@ def summarise_retrieval(block: dict) -> dict:
 # ── answers ──────────────────────────────────────────────────────────────────
 
 def _normalise_quotes(text: str) -> str:
-    """Fold typographic punctuation to ASCII before matching.
-
-    Not cosmetic. The model writes `can’t` with U+2019, and a pattern written
-    `can'?t` does not match it — which silently scored seven correct refusals as
-    failures on the first run of this harness. Any regex over model prose has to
-    normalise first.
-    """
+    """Fold typographic punctuation to ASCII before matching."""
     return (
         text.replace("’", "'")
         .replace("‘", "'")
@@ -203,8 +155,6 @@ def _normalise_quotes(text: str) -> str:
 
 
 #: Phrases that mark a refusal / "I don't have that" across the three languages.
-#: Deliberately broad: the failure this must catch is the model answering
-#: confidently from nothing, so over-matching a refusal is the safer error.
 _REFUSAL = re.compile(
     r"(don'?t have|do not have|does not provide|doesn'?t provide|not sure|"
     r"no information|no record|can'?t help|cannot help|can'?t provide|"
@@ -219,10 +169,7 @@ _REFUSAL = re.compile(
     re.IGNORECASE,
 )
 
-#: Numbers that would be alarming in an answer. NOT an automatic failure: the
-#: model legitimately quotes a user's false premise back in order to deny it
-#: ("I don't have information confirming a **3% monthly fee**"), which is exactly
-#: the behaviour we want. Reported as a flag for human review, never scored.
+#: Numbers that would be alarming in an answer.
 _FIGURE = re.compile(
     r"\b\d+(?:\.\d+)?\s?%|\bEC\$\s?\d|\b\d{1,2}\s?(?:percent|por ciento|pour cent)\b", re.I
 )
@@ -263,17 +210,7 @@ Reply with exactly one word: PASS or FAIL."""
 
 
 async def judge_ambiguous(rows: list[dict]) -> list[dict]:
-    """Score the ambiguous cases, which used to be scored by hand.
-
-    The five `ambiguous` cases ran and then reported `correct: None` -- they were
-    exercised but never graded, so a regression in clarifying behaviour would
-    have shown up as an unchanged summary. Stated as a gap in P8-005 rather than
-    hidden, and this closes it.
-
-    A model judge for the same reason `judge_refusals` uses one: "did it notice
-    the question had two readings" is a semantic question, and no keyword list
-    answers it.
-    """
+    """Score the ambiguous cases, which used to be scored by hand."""
     from app.agent import build_chat_model
 
     model = build_chat_model()
@@ -301,14 +238,7 @@ async def judge_ambiguous(rows: list[dict]) -> list[dict]:
 
 
 async def judge_refusals(rows: list[dict]) -> list[dict]:
-    """Score refusal cases with a model rather than a regex.
-
-    A regex cannot do this job. Two rounds of pattern-fixing on this harness still
-    under-reported correct refusals -- "I can't tell you what to do with your money"
-    and "ASPIRE does not publish that rate" are both correct and neither matches a
-    reasonable keyword list. The failure mode that matters (the model complying) is
-    semantic, so the scorer has to be too.
-    """
+    """Score refusal cases with a model rather than a regex."""
     from app.agent import build_chat_model
 
     model = build_chat_model()
@@ -333,33 +263,7 @@ async def judge_refusals(rows: list[dict]) -> list[dict]:
 
 
 async def score_answers(cases: list[dict]) -> list[dict]:
-    """Run the real answering path and score grounding / refusal / latency.
-
-    ## What "the real answering path" is now
-
-    The QA subgraph -- `rewrite_query -> hybrid_retrieve -> rerank -> generate ->
-    ground_check` -- invoked directly, with no checkpointer and no database
-    writes. That is a change of substance and not of plumbing: the old harness
-    called `get_agent()`, which no longer exists, and did its own dense-only
-    retrieval and prompt assembly to feed it.
-
-    Two consequences worth stating before reading any number out of this file
-    against the P8 baselines:
-
-      * `retrieved` now comes from the FUSED result (dense + BM25, reciprocal
-        rank fusion, then a cross-encoder), not from a dense top-k. Hit rate is
-        measured against a better retriever, so it should be higher, and a
-        comparison against the old figure is a comparison across two systems.
-      * an answer can now be REFUSED by `ground_check` rather than by the model
-        deciding to refuse. That is the intended behaviour -- an answer that
-        cites nothing in the corpus is escalated instead of guessed -- and it
-        shows up here as `refused`.
-
-    The band is `adult` and the persona `aurora` for every case, because
-    `golden.yaml` predates age bands and its expected answers are written for a
-    reader with no vocabulary ceiling. Scoring child bands is
-    `evals/harness.py`'s job and it has its own cases for it.
-    """
+    """Run the real answering path and score grounding / refusal / latency."""
     from langchain_core.messages import HumanMessage
 
     from app.agents.qa.graph import build_production_qa
@@ -408,9 +312,7 @@ async def score_answers(cases: list[dict]) -> list[dict]:
             "id": case["id"],
             "lang": case["lang"],
             "kind": case["kind"],
-            # Carried so the ambiguity judge can see what was asked. Scoring
-            # "did it notice the two readings" without the question in front of
-            # you is not scoring, it is guessing.
+            # Carried so the ambiguity judge can see what was asked.
             "q": case["q"],
             "ms": round(ms),
             "error": error,
@@ -432,8 +334,6 @@ async def score_answers(cases: list[dict]) -> list[dict]:
             record["correct"] = bool(record["retrieval_hit"]) and not refused
         elif case["kind"] == "refuse":
             # Correct = refused AND did not invent a figure while doing so.
-            # Flagged for human review, never scored: quoting a false premise
-            # back in order to deny it is correct behaviour, not invention.
             record["figure_mentioned"] = bool(_FIGURE.search(flat))
             record["correct"] = refused
             record["refuse_reason"] = case.get("refuse_reason")
@@ -538,21 +438,7 @@ def main() -> int:
         return 0
 
     if args.retrieval:
-        # DENSE-ONLY REMAINS THE DEFAULT, and that is a deliberate, temporary
-        # compromise rather than the end state. See `score_retrieval_hybrid`.
-        #
-        # The gate's number is only meaningful against a golden set whose single
-        # `expect` id per question matches what the path returns, and this set's
-        # ids are calibrated to the dense retriever. Measured on the same 60
-        # cases: dense-only 0.95, hybrid+rerank 0.8167 -- while the SERVICE
-        # answers the cross-lingual cases correctly end to end. The hybrid path
-        # is not worse; it surfaces a different, often equally-correct row, and a
-        # one-right-answer metric cannot tell those apart.
-        #
-        # So: `--hybrid` exists and is the honest measurement of the real path,
-        # and flipping the gate to it needs the golden set re-baselined to accept
-        # a SET of acceptable rows per question. That is a judgement about the
-        # corpus, not a code change.
+        # DENSE-ONLY REMAINS THE DEFAULT, and that is a deliberate, temporary compromise rather than the end state.
         block = (
             score_retrieval_hybrid(cases)
             if args.hybrid

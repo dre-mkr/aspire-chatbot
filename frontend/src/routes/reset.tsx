@@ -4,22 +4,10 @@ import { AuthSurface } from "#/components/auth/AuthSurface";
 import { Field } from "#/components/auth/Field";
 import { AuthError, completeReset } from "#/lib/aspire/auth";
 
-/**
- * Where a password-reset email lands, at `/reset?token=…`.
- *
- * The token is single-use and the service spends it here. Arriving with a
- * missing or expired one is the ordinary case rather than an error worth
- * dressing up — links get forwarded, opened twice, and read a week later — so
- * it says so plainly and offers the one useful next step.
- */
+/** Where a password-reset email lands, at `/reset?token=…`. */
 
 export const Route = createFileRoute("/reset")({
-	// Full-document SSR, stated rather than inherited. This form is entirely
-	// client-interactive, but it is also the first paint a signed-out visitor
-	// gets, so the shell should arrive as HTML rather than after the bundle.
-	// It was rendering this way already -- by inheriting `defaultSsr` from a
-	// declaration that lived in a generated file. Saying so here means the mode
-	// is a decision on the record and survives the next regeneration.
+	// Full-document SSR, stated rather than inherited.
 	ssr: true,
 	validateSearch: (search: Record<string, unknown>) => ({
 		token: typeof search.token === "string" ? search.token : "",
@@ -61,8 +49,7 @@ function Reset() {
 		setError("");
 		try {
 			await completeReset(token, password);
-			// Straight in. Having just proved control of the address and set a
-			// password, being asked to type it again would be theatre.
+			// Straight in.
 			void navigate({ to: "/", replace: true });
 		} catch (failure) {
 			setError(

@@ -1,15 +1,4 @@
-"""Embeddings, and retrieval over the `documents` table in Neon.
-
-`build_embeddings` is the single switch point for the embeddings backend: add a
-branch there (and a value to Settings.embeddings_provider) to move provider
-without touching ingestion, the agent, or the API.
-
-`build_retriever` is the single switch point for retrieval. As of P13-002 it
-searches Postgres with pgvector, and Postgres is the source of truth for the
-corpus. It previously searched a local Chroma store; see
-`chroma_floor_as_cosine_distance` for the one piece of that implementation that
-had to be carried across exactly rather than reimplemented.
-"""
+"""Embeddings, and retrieval over the `documents` table in Neon."""
 
 from __future__ import annotations
 
@@ -44,13 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class FastEmbedEmbeddings(Embeddings):
-    """LangChain Embeddings backed by fastembed's local ONNX models.
-
-    Used instead of langchain-community's wrapper because that package now pulls
-    in langchain-classic (the deprecated pre-1.0 chain APIs) as a dependency.
-    fastembed's own surface is small and stable, so wrapping it directly keeps
-    the dependency tree clean.
-    """
+    """LangChain Embeddings backed by fastembed's local ONNX models."""
 
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
@@ -69,22 +52,12 @@ class FastEmbedEmbeddings(Embeddings):
         return [vector.tolist() for vector in self.model.embed(texts)]
 
     def embed_query(self, text: str) -> list[float]:
-        # query_embed applies the model's query prefix where one is expected
-        # (BGE models are trained with an asymmetric query/passage prompt).
+        # query_embed applies the model's query prefix where one is expected (BGE models are trained with an asymmetric…
         return next(iter(self.model.query_embed(text))).tolist()
 
 
 class TimedEmbeddings(Embeddings):
-    """Delegates to a real embeddings backend and times `embed_query`.
-
-    Only the query side is timed. `embed_documents` runs at ingest, which is not
-    a request and is not what the latency workstream is measuring.
-
-    Wrapping rather than editing each backend is what keeps the measurement
-    honest across a provider switch: `EMBEDDINGS_PROVIDER=openai` is a network
-    round trip and `fastembed` is local ONNX inference, and `t_embed` has to mean
-    the same thing -- "what embedding this query cost" -- in both cases.
-    """
+    """Delegates to a real embeddings backend and times `embed_query`."""
 
     def __init__(self, inner: Embeddings) -> None:
         self.inner = inner
@@ -133,58 +106,13 @@ def get_embeddings() -> Embeddings:
 
 
 def chroma_floor_as_cosine_distance(threshold: float) -> float | None:
-    """Translate the old Chroma relevance floor into a cosine-distance cutoff.
-
-    This function is the whole reason the retrieval floor survived the move off
-    Chroma unchanged, so it is worth being explicit about the arithmetic.
-
-    `RETRIEVER_SCORE_THRESHOLD` was written against Chroma's
-    `similarity_score_threshold`, which keeps a chunk when
-    `relevance >= threshold`. What Chroma computed for `relevance` was NOT cosine
-    similarity, despite what the comment in `config.py` used to say:
-
-      * the collection was created with the DEFAULT distance metric, `l2` --
-        `build_vector_store` never passed a `collection_configuration`, so the
-        cosine setting nobody wrote was never in effect;
-      * Chroma's `l2` space returns the SQUARED euclidean distance;
-      * so the relevance function selected was `_euclidean_relevance_score_fn`,
-        which is `1 - distance / sqrt(2)`.
-
-    Measured against the live collection to confirm rather than assume: for the
-    query "What is ASPIRE Day?" Chroma reported 0.49243456, and the same pair of
-    vectors gives `2 - 2*cos_sim = 0.49244264`. Squared L2, as expected.
-
-    The embeddings are unit vectors (measured: norms within 4e-4 of 1.0), so
-    `L2^2 = 2 * (1 - cos_sim) = 2 * cos_dist`, and the keep condition unrolls:
-
-        1 - (2 * cos_dist) / sqrt(2)  >=  threshold
-        cos_dist                      <=  (1 - threshold) / sqrt(2)
-
-    At the configured 0.2 that is `cos_dist <= 0.565685`, i.e. cosine similarity
-    >= 0.434315. `tests/test_retriever_equivalence.py` checks the consequence
-    end to end rather than trusting this derivation.
-
-    Returns None when the floor is switched off, which `RETRIEVER_SCORE_THRESHOLD=0`
-    has always meant.
-    """
+    """Translate the old Chroma relevance floor into a cosine-distance cutoff."""
     if threshold <= 0:
         return None
     return (1.0 - threshold) / math.sqrt(2.0)
 
 
 #: One loop for every synchronous retrieval in this process, created on demand.
-#:
-#: `asyncio.run` per call does NOT work here and the failure is not obvious: it
-#: opens a fresh loop and closes it on the way out, while the SQLAlchemy engine is
-#: process-wide and its pooled asyncpg connections stay bound to whichever loop
-#: first created them. The second call then reaches for a socket whose loop is
-#: gone and dies with "Event loop is closed" -- which is exactly what
-#: `evals/run.py` hit on its second question.
-#:
-#: Reusing one loop keeps the pool valid across calls. The consequence worth
-#: knowing: a single process should retrieve either synchronously or
-#: asynchronously, not both. Nothing does -- the server is async throughout and
-#: the eval harness and CLI are sync throughout.
 _sync_loop: asyncio.AbstractEventLoop | None = None
 
 
@@ -210,20 +138,7 @@ def _run_sync(coro):
 
 
 class PgVectorRetriever(BaseRetriever):
-    """Top-k nearest chunks from `documents`, by cosine distance.
-
-    Deliberately NOT filtered by language. The corpus is English-only and
-    `evals/golden.yaml` is built on exactly that: every Spanish and French probe
-    question has to match an English chunk, so cross-lingual matching is the
-    design rather than an oversight. Adding `WHERE language = :lang` here would
-    silently return nothing for two of the three supported languages.
-
-    There is no vector index and that is intentional -- see migration 0009. At
-    706 rows a sequential scan is exact and costs single-digit milliseconds,
-    while an HNSW index over `halfvec(3072)` would be approximate twice over.
-    (The number was 332 when this was written; the reasoning is unchanged at
-    twice that, and the scan is still the right call well beyond it.)
-    """
+    """Top-k nearest chunks from `documents`, by cosine distance."""
 
     embeddings: Embeddings
     #: Mutable so the eval sweep can vary k without rebuilding the retriever.
@@ -239,11 +154,7 @@ class PgVectorRetriever(BaseRetriever):
         return statement.order_by(distance).limit(self.k)
 
     def _scored_statement(self, vector: list[float]):
-        """`_statement`, plus the distance itself as a third column.
-
-        Separate rather than always selecting the distance, so the existing
-        query -- which every current caller uses -- is byte-for-byte unchanged.
-        """
+        """`_statement`, plus the distance itself as a third column."""
         distance = Document.embedding.cosine_distance(vector)
         statement = select(Document.content, Document.metadata_, distance.label("distance"))
         if self.max_cosine_distance is not None:
@@ -253,17 +164,7 @@ class PgVectorRetriever(BaseRetriever):
     async def asearch_with_scores(
         self, vector: list[float]
     ) -> list[tuple[LangchainDocument, float]]:
-        """Chunks with their cosine RELEVANCE, 1.0 being identical.
-
-        Added for the QA subgraph's grounding check, which needs a calibrated
-        similarity rather than a rank. Nothing else calls it, and
-        `asearch_by_vector` is unchanged -- so the existing `/chat` path
-        produces exactly the query and the results it always did.
-
-        pgvector's `cosine_distance` runs 0..2. Relevance is `1 - distance`,
-        clamped at zero: a negative similarity means "points the other way",
-        which for a grounding floor is the same as "not relevant".
-        """
+        """Chunks with their cosine RELEVANCE, 1.0 being identical."""
         async with session() as db:
             if db is None:
                 raise RuntimeError(
@@ -281,26 +182,17 @@ class PgVectorRetriever(BaseRetriever):
         ]
 
     async def asearch_by_vector(self, vector: list[float]) -> list[LangchainDocument]:
-        """The database half of a search, for callers that already embedded.
-
-        The server path embeds through the Valkey cache (P14-D) and shares the
-        vector with the semantic response cache, so it arrives here with one in
-        hand. The plain `_search` below stays the whole operation for everything
-        else -- the evals, the CLI -- whose behaviour must not change.
-        """
+        """The database half of a search, for callers that already embedded."""
         async with session() as db:
             if db is None:
-                # Loud rather than empty. An empty result set is indistinguishable
-                # from "nothing matched", which would turn a misconfigured
-                # deployment into a service that confidently answers nothing.
+                # Loud rather than empty.
                 raise RuntimeError(
                     "No database configured, so there is no corpus to search. "
                     "Postgres is the source of truth for the knowledge base."
                 )
             rows = (await db.execute(self._statement(vector))).all()
 
-        # `metadata` is returned as stored, so a source on the wire has exactly
-        # the shape it had under Chroma.
+        # `metadata` is returned as stored, so a source on the wire has exactly the shape it had under Chroma.
         return [
             LangchainDocument(page_content=content, metadata=dict(metadata or {}))
             for content, metadata in rows
@@ -318,22 +210,12 @@ class PgVectorRetriever(BaseRetriever):
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun, **kwargs: Any
     ) -> list[LangchainDocument]:
-        """Synchronous bridge, for the eval harness and the CLI.
-
-        The request path is async and never lands here. This exists because
-        `evals/run.py` calls `retriever.invoke(...)` from sync code.
-        """
+        """Synchronous bridge, for the eval harness and the CLI."""
         return _run_sync(self._search(query))
 
 
 class TimedRetriever(BaseRetriever):
-    """Times the whole retrieval call and counts what came back.
-
-    The span covers embedding *and* the vector query, because the retriever
-    embeds the question before it can search and there is no seam between them
-    from out here. `TurnTimings.payload` subtracts `t_embed` to report the vector
-    query on its own -- see the note there.
-    """
+    """Times the whole retrieval call and counts what came back."""
 
     inner: BaseRetriever
 
@@ -361,13 +243,6 @@ class TimedRetriever(BaseRetriever):
 
 
 #: How retrieved chunks are joined into one block of prompt text.
-#:
-#: Byte-identical to what `create_retriever_tool` produced when retrieval was a
-#: tool: its default `document_prompt` is `PromptTemplate.from_template(
-#: "{page_content}")` and its default `document_separator` is "\n\n", so the tool's
-#: ToolMessage content was exactly this join. Keeping it identical is what makes
-#: P13-005 a change to WHEN the model is given the corpus rather than WHAT it is
-#: given.
 CONTEXT_SEPARATOR = "\n\n"
 
 
@@ -377,35 +252,12 @@ def format_context(documents: list[LangchainDocument]) -> str:
 
 
 def context_from(documents: list[LangchainDocument]) -> str:
-    """The knowledge block for a prompt, including when nothing was retrieved.
-
-    The one place that decides what "no results" looks like to the model, because
-    two places deciding it is how the request path and the eval harness come to
-    disagree about what the assistant was even asked. `evals/run.py` scores
-    refusals, so a difference here would show up as a quality change that no code
-    change explains.
-    """
+    """The knowledge block for a prompt, including when nothing was retrieved."""
     return format_context(documents) if documents else KNOWLEDGE_CONTEXT_EMPTY
 
 
 def build_retriever(settings: Settings | None = None) -> BaseRetriever:
-    """The retriever, with a floor on how irrelevant a chunk may be.
-
-    `k` alone returns the top four chunks regardless of distance, so an
-    out-of-scope question -- "what is the capital of France" -- still put four
-    irrelevant knowledge-base rows into the prompt. Refusal correctness measures
-    10/10 today, which means the system prompt is carrying it entirely: grounding
-    depends on prompt discipline with no retrieval-side backstop, and a future
-    prompt edit could remove it without anything failing.
-
-    So this is defence in depth, not a fix for a live defect. The threshold is
-    deliberately permissive -- it is calibrated to drop chunks that are plainly
-    unrelated, not to second-guess borderline ones, because a retrieval floor
-    that starves a real question is a much worse failure than one that lets a
-    weak chunk through to a prompt that will refuse anyway.
-
-    Set `RETRIEVER_SCORE_THRESHOLD=0` to switch it off entirely.
-    """
+    """The retriever, with a floor on how irrelevant a chunk may be."""
     settings = settings or get_settings()
 
     inner = PgVectorRetriever(
@@ -415,32 +267,18 @@ def build_retriever(settings: Settings | None = None) -> BaseRetriever:
             settings.retriever_score_threshold
         ),
     )
-    # Timing only. `TimedRetriever` forwards the query unchanged and returns
-    # exactly what the inner retriever returned, so `k`, the threshold and the
-    # documents that reach the prompt are all untouched.
+    # Timing only.
     return TimedRetriever(inner=inner)
 
 
 @lru_cache(maxsize=1)
 def get_retriever() -> BaseRetriever:
-    """Process-wide retriever.
-
-    Cached for the same reason the agent is: it holds the embeddings backend, and
-    a local model must not be loaded per request. Since P13-005 the request path
-    calls this directly rather than reaching it through the agent's tool list.
-    """
+    """Process-wide retriever."""
     return build_retriever()
 
 
 async def embed_query_cached(text: str) -> list[float]:
-    """This query's embedding: from Valkey when it has been asked before (P14-D).
-
-    On a hit `t_embed` is recorded at what the read cost -- fractions of a
-    millisecond -- rather than left absent, so the stage table says "embedding
-    was free this turn" instead of "embedding did not happen".
-
-    The write-back is fire-and-forget inside `put_embedding`, which never raises.
-    """
+    """This query's embedding: from Valkey when it has been asked before (P14-D)."""
     from app import cache as response_cache
 
     model = get_settings().embeddings_model
@@ -458,14 +296,7 @@ async def embed_query_cached(text: str) -> list[float]:
 
 
 async def retrieve_with_vector(vector: list[float], *, started_at: float) -> list[LangchainDocument]:
-    """The vector search, timed to mean what `TimedRetriever` has always meant.
-
-    `t_retrieve_total` has covered embedding AND query since P13-001, because the
-    retriever embedded internally and there was no seam between them. The server
-    path now embeds separately (shared with the semantic cache), so the caller
-    passes the moment the whole operation began and the figure keeps its meaning:
-    subtracting `t_embed` still yields the query on its own.
-    """
+    """The vector search, timed to mean what `TimedRetriever` has always meant."""
     inner = getattr(get_retriever(), "inner", None)
     if not isinstance(inner, PgVectorRetriever):  # pragma: no cover - config error
         raise RuntimeError("The configured retriever cannot search by vector.")

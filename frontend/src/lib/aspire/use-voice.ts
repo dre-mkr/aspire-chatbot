@@ -10,16 +10,7 @@ import {
 } from "./voice";
 
 export type VoicePhase = "rest" | "consent" | "listening" | "transcribing";
-/**
- * "aborted" is excluded on purpose, and the type is what enforces it.
- *
- * Every other failure has a note because every other failure is something the
- * reader needs told. An abort is something they asked for -- they pressed stop,
- * played a different answer, or navigated away -- and a message about it would
- * be the product apologising for doing as it was told. Leaving it out of this
- * union means a future `showNote(failure)` that forgets to filter it will not
- * compile.
- */
+/** "aborted" is excluded on purpose, and the type is what enforces it. */
 export type NoteKind = Exclude<VoiceFailure, "aborted"> | "review";
 export type NoteTone = "brand" | "bad" | "warn" | "quiet";
 
@@ -110,20 +101,9 @@ export interface UseVoiceOptions {
 	/** Transcribed text is handed back for the user to check before sending. */
 	onTranscript: (text: string) => void;
 	threadId: string | null;
-	/**
-	 * The language from the URL, when the URL says.
-	 *
-	 * Language used to live here alone, in `useState` seeded from localStorage
-	 * after mount — which the server cannot read, so every load painted English
-	 * and swapped. The address is the one place the server can see, so it wins
-	 * when it has an opinion and the stored preference fills in when it does not.
-	 */
+	/** The language from the URL, when the URL says. */
 	language?: VoiceLanguage;
-	/**
-	 * Where a change goes. The URL is written by the caller, which owns routing;
-	 * this hook still writes localStorage, so the next visit without a link
-	 * remembers.
-	 */
+	/** Where a change goes. */
 	onLanguageChange?: (next: VoiceLanguage) => void;
 }
 
@@ -140,28 +120,14 @@ export function useVoice({
 	const [captured, setCaptured] = useState(0);
 	const [level, setLevel] = useState(2);
 	const [note, setNote] = useState<VoiceNote | null>(null);
-	// Defaults on the server render, real preferences once mounted — unless the
-	// URL says, in which case the server already knew and there is nothing to
-	// swap in.
+	// Defaults on the server render, real preferences once mounted — unless the URL says, in which case the server…
 	const [storedLanguage, setStoredLanguage] = useState<VoiceLanguage>(
 		DEFAULT_PREFS.language,
 	);
-	/**
-	 * The language in force: the address when it has an opinion, otherwise this
-	 * device's remembered preference.
-	 *
-	 * The URL is the half the server can see, which is what removes the paint
-	 * flash -- there is nothing to swap in on mount because the first render
-	 * already had it.
-	 */
+	/** The language in force: the address when it has an opinion, otherwise this device's remembered preference. */
 	const language = languageFromUrl ?? storedLanguage;
 
-	/**
-	 * Both places, deliberately.
-	 *
-	 * The address so the choice is shareable and survives SSR; storage so a
-	 * later visit with no link still opens in the language this device chose.
-	 */
+	/** Both places, deliberately. */
 	const setLanguage = useCallback(
 		(next: VoiceLanguage) => {
 			setStoredLanguage(next);
@@ -209,8 +175,7 @@ export function useVoice({
 		}
 	}, [autoSpeak, language, prefsLoaded, speed]);
 
-	// A 404 or a disabled module both mean "no voice", which the mic button
-	// shows as unavailable rather than as an error.
+	// A 404 or a disabled module both mean "no voice", which the mic button shows as unavailable rather than as an…
 	useEffect(() => {
 		let live = true;
 		fetchVoiceConfig().then((config) => {
@@ -231,8 +196,7 @@ export function useVoice({
 
 	const releaseMic = useCallback(() => {
 		recorder.current = null;
-		// Releasing every track is what turns the browser's recording indicator
-		// off. Leaving it on would contradict what the consent panel promises.
+		// Releasing every track is what turns the browser's recording indicator off.
 		stream.current?.getTracks().forEach((track) => {
 			track.stop();
 		});
@@ -255,10 +219,7 @@ export function useVoice({
 				showNote("review");
 			} catch (error) {
 				if (cancelled.current) return;
-				// `transcribe` takes no external signal, so "aborted" cannot arrive
-				// here today. Handled anyway because the union allows it and a
-				// silent fallthrough to "offline" would be the wrong message on the
-				// day it can.
+				// `transcribe` takes no external signal, so "aborted" cannot arrive here today.
 				if (error instanceof VoiceError) {
 					if (error.failure !== "aborted") showNote(error.failure);
 				} else {
@@ -327,8 +288,7 @@ export function useVoice({
 			if (seconds >= MAX_SECONDS) stopListening();
 		}, 1000);
 
-		// The bars read as "something is being heard". Real level metering would
-		// need an AnalyserNode; this is deliberately decorative.
+		// The bars read as "something is being heard".
 		levelTimer.current = setInterval(
 			() => setLevel(1 + Math.floor(Math.random() * 4)),
 			LEVEL_INTERVAL_MS,
@@ -371,9 +331,7 @@ export function useVoice({
 	}, []);
 
 	const stopPlayback = useCallback(() => {
-		// Abort the synthesis too, not just the playback. Without this,
-		// interrupting a reply that was still being spoken left ElevenLabs
-		// generating -- and billing for -- audio that had already been cancelled.
+		// Abort the synthesis too, not just the playback.
 		synthesis.current?.abort();
 		synthesis.current = null;
 		audio.current?.pause();
@@ -386,22 +344,10 @@ export function useVoice({
 		setPausedId(null);
 	}, []);
 
-	/**
-	 * Stop on the way out, as well as on every deliberate interruption.
-	 *
-	 * `stopPlayback` was already called on send, regenerate, stop, chat switch
-	 * and audio-end, and no effect returned it as a cleanup. `AspireChat`
-	 * survives `/` to `/chat/:id`, so this was narrow -- but navigating to
-	 * `/signin`, `/signup`, `/verify` or `/reset` unmounts the shell, and audio
-	 * playing at that moment carried on with its blob never revoked.
-	 */
+	/** Stop on the way out, as well as on every deliberate interruption. */
 	useEffect(() => stopPlayback, [stopPlayback]);
 
-	/**
-	 * Play an answer aloud, pause it if it is already playing, or resume it if
-	 * it was paused. Resuming reuses the audio already fetched, so it continues
-	 * from where it stopped instead of restarting.
-	 */
+	/** Play an answer aloud, pause it if it is already playing, or resume it if it was paused. */
 	const play = useCallback(
 		async (id: number, text: string) => {
 			if (playingId === id) {
@@ -427,13 +373,10 @@ export function useVoice({
 			synthesis.current = controller;
 			let url: string;
 			try {
-				// Streaming (P14-C): playback starts on the vendor's first chunk
-				// instead of after the whole file is synthesised and downloaded.
+				// Streaming (P14-C): playback starts on the vendor's first chunk instead of after the whole file is synthesised…
 				url = await speakStream(text, language, threadId, controller.signal);
 			} catch (error) {
-				// An abort is this component's own doing -- another answer was
-				// played, the reader stopped it, the shell unmounted. Saying "the
-				// connection dropped" for something they asked for would be a lie.
+				// An abort is this component's own doing -- another answer was played, the reader stopped it, the shell unmount…
 				if (error instanceof VoiceError) {
 					if (error.failure !== "aborted") showNote(error.failure);
 				} else {
@@ -442,8 +385,7 @@ export function useVoice({
 				return;
 			}
 
-			// Cancelled while the bytes were arriving. Nothing to play, and the
-			// object URL must not leak.
+			// Cancelled while the bytes were arriving.
 			if (controller.signal.aborted) {
 				URL.revokeObjectURL(url);
 				return;
@@ -461,9 +403,7 @@ export function useVoice({
 			try {
 				await element.play();
 			} catch {
-				// A browser can refuse to start audio that the user did not ask for
-				// directly. That is not a failure of the service, so it leaves the
-				// answer sitting on Play instead of claiming voice is offline.
+				// A browser can refuse to start audio that the user did not ask for directly.
 				setPlayingId(null);
 				setPausedId(id);
 			}
@@ -471,8 +411,7 @@ export function useVoice({
 		[language, pausedId, playingId, showNote, speed, stopPlayback, threadId],
 	);
 
-	// Changing the speed mid-sentence applies to what is already playing rather
-	// than only to the next answer.
+	// Changing the speed mid-sentence applies to what is already playing rather than only to the next answer.
 	useEffect(() => {
 		if (audio.current) audio.current.playbackRate = Number(speed) || 1;
 	}, [speed]);

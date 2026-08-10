@@ -1,15 +1,4 @@
-"""Turn an agent reply into something worth listening to.
-
-The agent writes for a screen: markdown, source ids, URLs, and figures like
-"EC$500" or "ages 5-18". Read aloud verbatim that is unpleasant at best and
-wrong at worst, and every wasted character is billed.
-
-Number handling is done here rather than by the API on purpose. ElevenLabs can
-normalise numbers itself, but `apply_text_normalization='on'` is Enterprise-only
-on the v2.5 Flash model this service uses for live replies, so on a standard
-plan Flash silently reads "500" as digits. Doing it in text also lets each
-language get its own currency and date wording, which the API would not.
-"""
+"""Turn an agent reply into something worth listening to."""
 
 from __future__ import annotations
 
@@ -39,12 +28,8 @@ _BARE_DOMAIN = re.compile(
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 
 # A connector left stranded by a removed URL or address ("apply online at .").
-# Every language's words are matched regardless of the target language: the
-# knowledge base is written in English, so an English reply and a Spanish one
-# can both arrive carrying "at https://...".
 _DANGLING_CONNECTOR = re.compile(
-    # Anchored to the text immediately before a removed link, so stripping a
-    # conjunction here cannot touch one in the middle of a sentence.
+    # Anchored to the text immediately before a removed link, so stripping a conjunction here cannot touch one in t…
     r"\b(?:"
     r"at|on|via|from|email|e-?mail|visit|or|and"  # en
     r"|en|por|desde|correo|visita|o|y"  # es
@@ -139,15 +124,13 @@ def _strip_structure(text: str) -> str:
 
 def _strip_links(text: str) -> str:
     """Drop URLs and emails, and any connector they leave stranded."""
-    # Longest-first so an explicit URL is consumed before the bare-domain rule
-    # can bite a fragment of it.
+    # Longest-first so an explicit URL is consumed before the bare-domain rule can bite a fragment of it.
     for pattern in (_EXPLICIT_URL, _EMAIL, _BARE_DOMAIN):
         out: list[str] = []
         last = 0
         for match in pattern.finditer(text):
             head = text[last : match.start()]
-            # "Apply online at https://..." must not become "Apply online at."
-            # Applied repeatedly so "or email info@..." loses both words.
+            # "Apply online at https://..." must not become "Apply online at." Applied repeatedly so "or email info@..." lo…
             trimmed = head.rstrip()
             while True:
                 shorter = _DANGLING_CONNECTOR.sub("", trimmed).rstrip()
@@ -207,8 +190,7 @@ def _normalise_numbers(text: str, language: Language) -> str:
     def plain(match: re.Match[str]) -> str:
         return _decimal(match.group(0), language)
 
-    # Dates first: an ISO date contains hyphens that the range rule would
-    # otherwise read as "two thousand twenty-four to nine".
+    # Dates first: an ISO date contains hyphens that the range rule would otherwise read as "two thousand twenty-fo…
     text = re.sub(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", iso_date, text)
     text = re.sub(
         r"\b(?P<day>\d{1,2})(?:st|nd|rd|th)?\s+(?:de\s+)?(?P<month>[A-Za-zéûàî]+)\.?,?\s+"
@@ -269,8 +251,7 @@ def _truncate(text: str, limit: int) -> str:
 
     window = text[:limit]
     boundary = max(window.rfind(". "), window.rfind("! "), window.rfind("? "))
-    # Only honour a boundary that keeps most of the budget; otherwise a reply
-    # whose first sentence is short would be cut to almost nothing.
+    # Only honour a boundary that keeps most of the budget; otherwise a reply whose first sentence is short would b…
     if boundary >= limit * 0.6:
         return window[: boundary + 1].strip()
 
@@ -279,11 +260,7 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def speakable(text: str, language: Language | str, *, max_chars: int = 1500) -> str:
-    """Prepare agent output for text-to-speech.
-
-    Strips screen-only syntax, removes citations and links, reads figures and
-    dates as words in `language`, and caps the result at a sentence boundary.
-    """
+    """Prepare agent output for text-to-speech."""
     if not text or not text.strip():
         return ""
 

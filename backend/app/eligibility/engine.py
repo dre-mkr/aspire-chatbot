@@ -1,21 +1,4 @@
-"""The eligibility engine: the flow, the verdict, and the personalised result.
-
-The half of the feature no language model touches. `rules.py` decides, this
-assembles, and the agent's only involvement is calling one tool that starts it.
-Nothing here imports LangChain and nothing here calls a model — for the same
-reason the games engine does not: a verdict a model produced is a verdict that
-can be argued into changing, and this one is about whether a child gets told
-they are entitled to a government programme.
-
-Two invariants worth stating plainly, because the tests check both:
-
-* **No dead ends.** Every reachable set of answers produces one of the three
-  outcomes. "I am not sure" is a valid token on every question and never blocks:
-  it either costs nothing, or it moves the verdict to NEEDS CONFIRMATION.
-* **Nothing personal survives the result.** `finish` deletes the session in the
-  same call that produces the result, and the outcome that goes to Postgres is
-  built from the verdict and the criterion only — never from the answers.
-"""
+"""The eligibility engine: the flow, the verdict, and the personalised result."""
 
 from __future__ import annotations
 
@@ -67,11 +50,7 @@ class CheckAlreadyRunning(EligibilityError):
 
 
 class UnknownAnswer(EligibilityError):
-    """A token that is not an option on the question being asked.
-
-    Rejected rather than coerced. The options are a closed set precisely so the
-    verdict cannot be steered by a value nobody could have tapped.
-    """
+    """A token that is not an option on the question being asked."""
 
     reason = "unknown_answer"
 
@@ -123,11 +102,7 @@ class EligibilityEngine:
             position=counted_position(question_id),
             total=len(COUNTED),
             answered_with=session.answers.get(question_id),
-            # Offered on every step but the first thing shown. Keyed on the
-            # cursor rather than the displayed position, because `age_exact`
-            # shares position 1 with `age` and must still be able to go back
-            # to it. Answers are kept, so back and forward again re-selects
-            # what was chosen.
+            # Offered on every step but the first thing shown.
             can_go_back=session.index > 0,
         )
 
@@ -189,8 +164,7 @@ class EligibilityEngine:
         year = reminder_year(session.answers, self._today or date.today())
         if decision.copy_key == "age_minimum" and year is not None:
             body.append(str(strings["year"]).format(year=year))
-        # "Here is what you can do instead" is the part that stops a not-yet
-        # reading as a door closing, so it is appended rather than optional.
+        # "Here is what you can do instead" is the part that stops a not-yet reading as a door closing, so it is append…
         if "meanwhile" in strings:
             body.append(str(strings["meanwhile"]))
 
@@ -203,9 +177,7 @@ class EligibilityEngine:
             else None
         )
 
-        # The checklist and the walkthrough are for people who have somewhere to
-        # go. A non-citizen child is not helped by a list of documents to gather
-        # for a programme that is not open to them.
+        # The checklist and the walkthrough are for people who have somewhere to go.
         actionable = decision.verdict in (Verdict.LIKELY_ELIGIBLE, Verdict.NEEDS_CONFIRMATION)
 
         return Result(
@@ -228,13 +200,7 @@ class EligibilityEngine:
         )
 
     def _finish(self, session: Session) -> Snapshot:
-        """Produce the result and discard the answers, in one step.
-
-        The two happen together on purpose. There is no state in which the
-        result exists and the answers that produced it are still held: the
-        session is deleted here, so a later request for this thread finds
-        nothing to read back.
-        """
+        """Produce the result and discard the answers, in one step."""
         result = self._result(session)
         self._store.delete(session.session_id)
         return Snapshot(
@@ -255,13 +221,7 @@ class EligibilityEngine:
         return self._snapshot(session)
 
     def answer(self, session_id: str, value: str) -> Snapshot:
-        """Record one answer and move on.
-
-        Rejects a token that is not an option on the question being asked. That
-        is the whole validation story, and it is enough: the answers dict can
-        only ever hold values from `OPTIONS`, so `decide` can only ever be
-        reasoning over things a person could have tapped.
-        """
+        """Record one answer and move on."""
         session = self._session(session_id)
         questions = plan(session.answers)
         if session.index >= len(questions):
@@ -273,16 +233,11 @@ class EligibilityEngine:
 
         session.answers[question_id] = value
 
-        # Answering `age` can change the plan underneath us -- picking "Under 5"
-        # inserts `age_exact` at index 1, picking something else removes it. The
-        # cursor is re-derived from the NEW plan by position of the question just
-        # answered, so the next step is right in both directions.
+        # Answering `age` can change the plan underneath us -- picking "Under 5" inserts `age_exact` at index 1, pickin…
         questions = plan(session.answers)
         session.index = questions.index(question_id) + 1
 
-        # Leaving the under-5 branch strands an `age_exact` answer that is no
-        # longer asked. Dropped rather than kept: nothing should hold an answer
-        # to a question the person is not being shown.
+        # Leaving the under-5 branch strands an `age_exact` answer that is no longer asked.
         if "age_exact" not in questions:
             session.answers.pop("age_exact", None)
 
@@ -290,12 +245,7 @@ class EligibilityEngine:
         return self._snapshot(session)
 
     def back(self, session_id: str) -> Snapshot:
-        """Step back one question, keeping every answer.
-
-        Answers are deliberately not cleared. Going back to check something and
-        forward again should re-select what was chosen, not present a blank
-        question — and re-answering simply overwrites.
-        """
+        """Step back one question, keeping every answer."""
         session = self._session(session_id)
         session.index = max(0, session.index - 1)
         self._store.put(session)
@@ -309,34 +259,17 @@ class EligibilityEngine:
         return self.start(session_id, chosen)
 
     def quit(self, session_id: str) -> None:
-        """Leave without finishing. Discards the answers and nothing else.
-
-        No outcome is recorded: an abandoned flow has no verdict, and inventing
-        one would put noise in the only table this feature writes to.
-        """
+        """Leave without finishing."""
         self._store.delete(session_id)
 
     def state(self, session_id: str) -> Snapshot | None:
-        """The flow in progress, or None. Never raises, never mutates.
-
-        This is what the browser calls on load, and it is why a refresh mid-flow
-        is not a lost flow.
-
-        A FINISHED check has no session — `_finish` deletes it in the same call
-        that produces the result — so this returns None for one. That is correct
-        and is not a gap: the result is held by the client, in the same
-        device-local store the transcript already lives in, which is exactly
-        where a minor's answers were supposed to end up. Rebuilding it here
-        would mean the server keeping the answers to rebuild it FROM.
-        """
+        """The flow in progress, or None."""
         session = self._store.get(session_id)
         if session is None:
             return None
         questions = plan(session.answers)
         if session.index >= len(questions):
-            # Unreachable in practice: answering the last question finishes and
-            # deletes. Treated as finished rather than trusted, so a store that
-            # somehow held a complete session cannot serve a half-rendered card.
+            # Unreachable in practice: answering the last question finishes and deletes.
             return None
         return Snapshot(
             language=session.language,
@@ -348,11 +281,7 @@ class EligibilityEngine:
 
     @staticmethod
     def outcome_of(result: Result, language: Language) -> Outcome:
-        """The anonymised row for the insight view.
-
-        Built from the result, never from the session: there is no argument here
-        that could carry an answer even by accident.
-        """
+        """The anonymised row for the insight view."""
         return Outcome(
             verdict=result.verdict,
             criterion=result.criterion,

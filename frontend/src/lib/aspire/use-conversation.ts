@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Directive,
+	GameResultPayload,
 	UploadResult,
 	WidgetInteraction,
 } from "../stream/types";
@@ -50,66 +51,27 @@ export type ChatMessage =
 			blocks: Array<AnswerBlock>;
 			followUps: Array<string>;
 			sources: Array<Source>;
-			/**
-			 * Rendered under the prose by `DirectiveView`, in the order the turn
-			 * emitted them. Absent on a restored turn: directives are live -- a
-			 * widget's interaction feeds back into the graph, an upload card
-			 * resumes an interrupted registration -- and replaying one out of a
-			 * stored transcript would offer a control wired to nothing.
-			 */
+			/** Rendered under the prose by `DirectiveView`, in the order the turn emitted them. */
 			directives?: Array<Directive>;
 	  }
-	/**
-	 * A turn that started a game. The card is its entire content.
-	 *
-	 * A real position in the array rather than something appended after it: a
-	 * conversation carries on past a game, and a card pinned to the end would
-	 * float below every later question.
-	 */
+	/** A turn that started a game. */
 	| { id: number; role: "game"; gameType: string }
-	/**
-	 * A turn that opened the eligibility check. The card is its entire content.
-	 *
-	 * A real position in the array for the same reason a game turn is: the
-	 * conversation carries on past it, and a card pinned to the end would float
-	 * below every later question.
-	 */
+	/** A turn that opened the eligibility check. */
 	| { id: number; role: "eligibility" }
 	| {
 			id: number;
 			role: "error";
 			text: string;
 			canRetry: boolean;
-			/**
-			 * "stopped" is the reader's own decision, not a fault, and is drawn
-			 * accordingly — the same reason a wrong game answer is amber and not
-			 * red. Absent means a real failure.
-			 */
+			/** "stopped" is the reader's own decision, not a fault, and is drawn accordingly — the same reason a wrong game… */
 			tone?: "stopped";
 	  };
 
-/**
- * The answer currently being revealed, held apart from `messages`.
- *
- * The typewriter ticks 25 times a second. If the growing answer lived in the
- * messages array, every tick would hand the whole settled transcript a new
- * identity and React would re-create an element per turn — work that grows with
- * the length of the conversation, for a change confined to its last few words.
- * Keeping it separate means `messages` changes only when a turn actually
- * settles, and only this one component re-renders on a tick.
- */
+/** The answer currently being revealed, held apart from `messages`. */
 export interface StreamingAnswer {
 	id: number;
 	blocks: Array<AnswerBlock>;
-	/**
-	 * The finished answer's evidence and suggestions, carried from the first tick.
-	 *
-	 * Not drawn while the reveal runs — they belong to an answer that has landed,
-	 * and follow-ups in particular would appear above the text they follow. They
-	 * are here so the transcript can *lay them out* from the start and reveal
-	 * them in place, rather than mounting them at completion and growing the turn
-	 * by 53px (95px with a sources chip) under whoever is reading it.
-	 */
+	/** The finished answer's evidence and suggestions, carried from the first tick. */
 	sources: Array<Source>;
 	followUps: Array<string>;
 }
@@ -119,44 +81,12 @@ export type Phase = "landing" | "chat";
 /** Pacing of the typewriter reveal. Tuned to read as thinking, not as lag. */
 const TICK_MS = 40;
 
-/**
- * How the reveal decides how much to draw, and why it is not a constant.
- *
- * It was a constant — four words every tick, about a hundred words a second.
- * No model writes that fast. The typewriter therefore drained whatever had
- * arrived almost instantly and then sat frozen waiting for more, which is the
- * stutter this pacing exists to remove: `reveal-sim.mjs` measured a 2.16-second
- * freeze in the middle of a perfectly ordinary answer.
- *
- * So the rate is a fraction of the backlog instead. That one change makes the
- * reveal self-tuning, because it is a proportional controller: draw
- * `pending / SMOOTH_TICKS` words a tick and, in the steady state, the reveal
- * rate converges on whatever rate the words are arriving at, whatever that
- * happens to be. The reader sees an even cadence without anything having to
- * know or measure how fast the model is.
- *
- * What it converges to is a constant *lag* rather than a constant speed:
- * roughly `SMOOTH_TICKS` ticks of text held in hand at any moment. That reserve
- * is the entire point — it is what a pause in generation is spent against, so a
- * hitch on the wire costs a slightly slower reveal instead of a dead screen.
- */
+/** How the reveal decides how much to draw, and why it is not a constant. */
 const SMOOTH_TICKS = 8;
-/**
- * Words per tick, floor and ceiling.
- *
- * The floor keeps a nearly-caught-up reveal visibly moving. The ceiling is what
- * stops a burst — a reconnect, a proxy flushing, the whole reply arriving at
- * once — from dumping a paragraph into one frame.
- */
+/** Words per tick, floor and ceiling. */
 const MIN_RATE = 0.3;
 const MAX_RATE = 5;
-/**
- * The same, once the turn is over.
- *
- * Nothing more is coming, so there is no reserve worth keeping and the only job
- * left is to finish at a speed that still reads as typing. Without a raised
- * floor the proportional term decays toward zero and the last few words crawl.
- */
+/** The same, once the turn is over. */
 const MIN_RATE_ENDED = 2.5;
 const MAX_RATE_ENDED = 8;
 
@@ -170,14 +100,7 @@ function blockWords(block: AnswerBlock): number {
 	);
 }
 
-/**
- * A block cut to its first `words` words.
- *
- * A list is cut across its items rather than at an item boundary, so a long
- * bullet types itself out instead of appearing whole after a wait. The items
- * before the cut are complete; the one containing it is a prefix of itself,
- * which is the same append-only growth a paragraph has.
- */
+/** A block cut to its first `words` words. */
 function sliceBlock(block: AnswerBlock, words: number): AnswerBlock {
 	if (block.kind === "paragraph") {
 		return {
@@ -198,50 +121,18 @@ function sliceBlock(block: AnswerBlock, words: number): AnswerBlock {
 }
 
 interface StreamCursor {
-	/**
-	 * The answer as far as it is known, reparsed as more of it arrives.
-	 *
-	 * Only ever grows, and only over settled text — see `settled.ts` — so the
-	 * indices below stay valid and the reveal is never rewound.
-	 */
+	/** The answer as far as it is known, reparsed as more of it arrives. */
 	answer: Answer;
 	sources: Array<Source>;
 	id: number;
-	/**
-	 * Whether the service has said the turn is over.
-	 *
-	 * The reveal runs alongside the wire, so reaching the end of `answer` does
-	 * not mean the answer is finished -- it usually means the typewriter has
-	 * caught up and should wait. Only `ended` settles the turn, because only the
-	 * final payload carries the sources and follow-ups that settle with it.
-	 */
+	/** Whether the service has said the turn is over. */
 	ended: boolean;
-	/**
-	 * Whether the prose is final, which happens earlier.
-	 *
-	 * These are two different questions and were one flag. The text stops
-	 * growing when the model stops writing; the *turn* stops when the follow-ups
-	 * have been generated and the transcript persisted, which is seconds later.
-	 * Conflating them meant the reveal spent those seconds treating a finished
-	 * answer as one that might still grow — holding back its last word, since
-	 * `settledText` cannot know a word is complete until something says so.
-	 *
-	 * So this governs everything about *drawing*: the pacing, whether the last
-	 * block may be stepped past, and whether the trailing word is safe. `ended`
-	 * governs only when the turn leaves the typewriter and joins the transcript.
-	 */
+	/** Whether the prose is final, which happens earlier. */
 	textEnded: boolean;
 	blockIndex: number;
 	/** Words revealed within the current block. */
 	wordIndex: number;
-	/**
-	 * Fractional words carried between ticks.
-	 *
-	 * The controller's rate is usually well under one word per tick — at a
-	 * realistic 25 tokens a second it is about 0.7 — and truncating that every
-	 * tick would floor it to zero and stall outright. Carrying the remainder is
-	 * what turns a fractional rate into "a word every tick and a half".
-	 */
+	/** Fractional words carried between ticks. */
 	credit: number;
 	built: Array<AnswerBlock>;
 }
@@ -270,42 +161,14 @@ function prefersReducedMotion() {
 	);
 }
 
-/**
- * Mints the id for a conversation, in the browser, before anything is sent.
- *
- * This used to come back on the `/chat` response, which made the id an outcome
- * of the round trip — and a URL cannot become `/chat/:id` a beat before an id
- * exists. Minting here is what lets the address bar, the sidebar row and the
- * title bar all arrive with the user's own message rather than trailing the
- * server by a second or more.
- *
- * Safe to do: the backend takes `thread_id or uuid4()`, so a supplied id is
- * already authoritative, and the games endpoints accept any string. Nothing
- * downstream ever parsed this value.
- *
- * `randomUUID` needs a secure context, which a plain-HTTP staging box is not.
- * The fallback is not for cryptography — it only has to not collide inside one
- * browser's history.
- */
+/** Mints the id for a conversation, in the browser, before anything is sent. */
 function newThreadId(): string {
 	const uuid = globalThis.crypto?.randomUUID?.();
 	if (uuid) return uuid;
 	return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/**
- * What to call a conversation that opened with a game.
- *
- * A game turn has no assistant prose, so there is nothing for the title model to
- * read and the chat would keep the truncated question ("Can we play the word
- * scramble?") forever. These are deterministic rather than generated: the title
- * is known the moment the game starts, so a model call would add a failure mode
- * and a delay for a string we can already write correctly.
- *
- * The server's `display_name` is not used because it is authored per set and is
- * currently English in every language directory — deriving the title from it
- * would put an English name on a Spanish chat.
- */
+/** What to call a conversation that opened with a game. */
 const GAME_TITLES: Record<string, Record<string, string>> = {
 	word_scramble: {
 		en: "Word scramble practice",
@@ -325,15 +188,7 @@ function gameTitle(gameType: string, language: string): string | null {
 	return byLanguage[language] ?? byLanguage.en;
 }
 
-/**
- * What to call a conversation that opened with the eligibility check.
- *
- * Same problem as a game turn: no assistant prose means nothing for the title
- * model to read, so the chat would keep the truncated question ("Am I too old
- * for ASPIRE?") for good. Deterministic rather than generated — the title is
- * known the moment the card opens, and it must never be derived from the
- * answers.
- */
+/** What to call a conversation that opened with the eligibility check. */
 const ELIGIBILITY_TITLES: Record<string, string> = {
 	en: "ASPIRE eligibility check",
 	es: "Consulta de elegibilidad de ASPIRE",
@@ -383,44 +238,17 @@ function toStored(messages: Array<ChatMessage>): Array<StoredMessage> {
 }
 
 export interface UseConversationOptions {
-	/**
-	 * Which language to name the conversation in.
-	 *
-	 * A getter because the voice layer that owns this setting is constructed
-	 * after this hook. Read at call time, once, when a title is requested.
-	 */
+	/** Which language to name the conversation in. */
 	getLanguage?: () => string;
-	/**
-	 * Fired the moment a reply lands, with the whole text — before the
-	 * typewriter starts revealing it. Read-aloud uses this so audio begins as
-	 * the answer arrives rather than after it has finished being drawn.
-	 */
+	/** Fired the moment a reply lands, with the whole text — before the typewriter starts revealing it. */
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
 	persona?: string | null;
-	/**
-	 * Fired synchronously inside `send`, the instant a conversation is minted.
-	 *
-	 * Carries the brand-new thread id, in the same commit as the optimistic user
-	 * bubble and the storage write. The shell uses it to replace `/` with
-	 * `/chat/:id`, which is why the address bar never lags the message.
-	 */
+	/** Fired synchronously inside `send`, the instant a conversation is minted. */
 	onThreadStart?: (threadId: string) => void;
-	/**
-	 * Fired when a turn started a game instead of answering.
-	 *
-	 * The shell responds by loading the game's authoritative state. Separate
-	 * from `onAnswer` on purpose: this turn has no text, and everything hung off
-	 * `onAnswer` (read-aloud, most obviously) must not run for it.
-	 */
-	onGameStart?: (threadId: string) => void;
-	/**
-	 * Fired when a turn opened the eligibility check instead of answering.
-	 *
-	 * Separate from `onAnswer` for the same reason `onGameStart` is: this turn
-	 * has no text, so read-aloud must not fire for it. The card speaks its own
-	 * question when asked to.
-	 */
+	/** Fired when a turn started a game instead of answering. Carries the directive's game name and concept. */
+	onGameStart?: (threadId: string, gameType: string, concept: string) => void;
+	/** Fired when a turn opened the eligibility check instead of answering. */
 	onEligibilityStart?: (threadId: string, language: string) => void;
 }
 
@@ -438,58 +266,23 @@ export function useConversation({
 	const [isThinking, setIsThinking] = useState(false);
 	const queryClient = useQueryClient();
 
-	// Subscribed to the session, so a sign-in or sign-out re-renders this and
-	// the query picks up the new owner's key. Without it the hook would keep
-	// asking for the previous identity's list.
+	// Subscribed to the session, so a sign-in or sign-out re-renders this and the query picks up the new owner's ke…
 	const { session } = useSession();
 	const [threadId, setThreadId] = useState<string | null>(null);
 
-	/**
-	 * What this hook needs from the conversation list, and nothing more.
-	 *
-	 * This used to subscribe to the whole list and hand it down. That put the
-	 * rail's data inside the hook that owns the entire chat surface, so every
-	 * write to `["conversations", owner]` — the optimistic insert on send, a
-	 * retitle, the post-turn invalidation refetch — re-rendered the transcript
-	 * along with it. The list is now subscribed in `Rail`, which is the only
-	 * thing that draws it.
-	 *
-	 * Two facts about the list genuinely belong to the surface rather than the
-	 * rail, so they stay, each behind a `select` that narrows the subscription to
-	 * a primitive. A re-render then costs a shallow compare and happens only when
-	 * the value a consumer actually reads has changed — not on every row that
-	 * moved.
-	 */
+	/** What this hook needs from the conversation list, and nothing more. */
 	const ownerId = session?.userId ?? "anon";
 	// Drives the layout: whether there is anything for the rail to offer at all.
 	const { data: hasHistory = false } = useQuery({
 		...conversationsQuery(ownerId),
 		select: (rows) => rows.length > 0,
 	});
-	/**
-	 * The open conversation's stored name, as the title bar's change trigger.
-	 *
-	 * The bar reads the full record imperatively (`readConversation`) so it can
-	 * prefer a loaded transcript over the list summary. What it lacked was a
-	 * reason to re-run when a rename landed, and subscribing to the whole list
-	 * for that was the expensive way to learn one string.
-	 */
+	/** The open conversation's stored name, as the title bar's change trigger. */
 	const { data: activeStoredTitle } = useQuery({
 		...conversationsQuery(ownerId),
 		select: (rows) => rows.find((row) => row.threadId === threadId)?.title,
 	});
-	/**
-	 * The oldest message id allowed to play its entry animation.
-	 *
-	 * `.turn` animates `rise` on mount, which is right for a message that was
-	 * just sent and wrong for forty that were just read out of storage —
-	 * reopening a conversation replayed the whole transcript's arrival, so a
-	 * chat from last week looked like it was being typed at you again.
-	 *
-	 * Ids are monotonic, so "everything from here up is new" is a single number.
-	 * Restoring parks it past the restored block; sending leaves it alone,
-	 * because the message being sent is always above it.
-	 */
+	/** The oldest message id allowed to play its entry animation. */
 	const [animateAfterId, setAnimateAfterId] = useState(0);
 
 	const nextId = useRef(0);
@@ -497,19 +290,9 @@ export function useConversation({
 	const cursor = useRef<StreamCursor | undefined>(undefined);
 	/** Last question asked, so "Try again" can re-ask it. */
 	const lastQuestion = useRef("");
-	/**
-	 * Guards against a reply from an abandoned turn landing in the transcript —
-	 * "New chat" or a second question while the first is still in flight.
-	 */
+	/** Guards against a reply from an abandoned turn landing in the transcript — "New chat" or a second question whi… */
 	const turnToken = useRef(0);
-	/**
-	 * Cancels the request behind the turn in flight.
-	 *
-	 * `turnToken` already stopped an abandoned reply from being *rendered*, but
-	 * the work carried on regardless: the model finished generating, the service
-	 * persisted the turn, and the programme was billed for an answer nobody would
-	 * ever see. Bumping a number cannot stop a fetch; only aborting it can.
-	 */
+	/** Cancels the request behind the turn in flight. */
 	const inFlight = useRef<AbortController | null>(null);
 
 	/** Ends the request in flight, if there is one. Safe to call twice. */
@@ -517,20 +300,9 @@ export function useConversation({
 		inFlight.current?.abort();
 		inFlight.current = null;
 	}, []);
-	/**
-	 * Threads this session has already tried to name.
-	 *
-	 * A ref, not state, so a re-render cannot fire a second call. Keyed by
-	 * thread so reopening a past conversation never re-titles it.
-	 */
+	/** Threads this session has already tried to name. */
 	const titledThreads = useRef(new Set<string>());
-	/**
-	 * Mirrors `isThinking` for the in-flight guard in `send`.
-	 *
-	 * A ref rather than the state value because `send` is deliberately stable —
-	 * depending on `isThinking` would rebuild the whole send pipeline on every
-	 * turn.
-	 */
+	/** Mirrors `isThinking` for the in-flight guard in `send`. */
 	const isThinkingRef = useRef(false);
 	// Held in a ref so a changing callback never re-creates the send pipeline.
 	const onAnswerRef = useRef(onAnswer);
@@ -538,16 +310,13 @@ export function useConversation({
 		onAnswerRef.current = onAnswer;
 	}, [onAnswer]);
 
-	// Same reason as onAnswer: the voice layer is created after this hook (it
-	// needs the thread id this hook owns), so the language reaches the title
-	// call through a ref rather than a prop.
+	// Same reason as onAnswer: the voice layer is created after this hook (it needs the thread id this hook owns),…
 	const getLanguageRef = useRef(getLanguage);
 	useEffect(() => {
 		getLanguageRef.current = getLanguage;
 	}, [getLanguage]);
 
-	// Same again: `send` has to stay stable, and the shell's navigate callback
-	// is not.
+	// Same again: `send` has to stay stable, and the shell's navigate callback is not.
 	const onThreadStartRef = useRef(onThreadStart);
 	useEffect(() => {
 		onThreadStartRef.current = onThreadStart;
@@ -563,44 +332,22 @@ export function useConversation({
 		onEligibilityStartRef.current = onEligibilityStart;
 	}, [onEligibilityStart]);
 
-	/**
-	 * The thread the next request belongs to, readable synchronously.
-	 *
-	 * `send` mints an id and `ask` runs in the same tick, so the state setter has
-	 * not landed yet and a closure over `threadId` would still say null — which
-	 * would have the backend mint a *second* conversation for a chat the URL was
-	 * already pointing at. The ref is the value; the state is for rendering.
-	 */
+	/** The thread the next request belongs to, readable synchronously. */
 	const threadRef = useRef<string | null>(null);
 
-	// Commits before any later click can be dispatched, so the guard in `send`
-	// never reads a stale value.
+	// Commits before any later click can be dispatched, so the guard in `send` never reads a stale value.
 	useEffect(() => {
 		isThinkingRef.current = isThinking;
 	}, [isThinking]);
 
-	/**
-	 * Adopt the conversations this browser started before ownership existed.
-	 *
-	 * Runs once. Every transcript written before the owner column is readable by
-	 * nobody, and this browser is the only thing left that knows their ids —
-	 * presenting one is the strongest claim available in a product with no
-	 * accounts. The service only ever adopts rows that are currently unowned, so
-	 * replaying somebody else's ids takes nothing.
-	 *
-	 * Failure is silent and harmless: those conversations stay unreadable, which
-	 * is exactly where they were a moment ago.
-	 */
+	/** Adopt the conversations this browser started before ownership existed. */
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once, on mount
 	useEffect(() => {
-		// An identity first, because everything user-scoped is gated on having
-		// one. Anonymous and free: nobody is asked to sign up, and a failure here
-		// costs the rail its contents and nothing else — the chat still works.
+		// An identity first, because everything user-scoped is gated on having one.
 		void ensureSession()
 			.then(async (session) => {
 				if (!session) return;
-				// The queries were disabled while there was no session. Now there
-				// is one, so they may run.
+				// The queries were disabled while there was no session.
 				await queryClient.invalidateQueries({
 					queryKey: conversationsQuery().queryKey,
 				});
@@ -617,24 +364,7 @@ export function useConversation({
 			.catch(() => undefined);
 	}, []);
 
-	/**
-	 * Names a conversation, in the cache and on the server.
-	 *
-	 * Cache first so the rail changes now rather than after a round trip — a
-	 * title crossfading in is a deliberate moment in this product, and putting a
-	 * network hop in front of it would turn it into a stutter.
-	 *
-	 * It was `setQueryData` plus `void renameConversation(...).catch(() => {})`,
-	 * and that last clause was the defect: a rename that failed left the rail
-	 * showing a name the server had never heard of, indefinitely, until some
-	 * unrelated invalidation happened to refetch. Failure was indistinguishable
-	 * from success — and because there was no mutation object anywhere in the
-	 * product, it could not even be forced into an error state to observe.
-	 *
-	 * As a mutation it keeps the optimism and gains the half that was missing:
-	 * `onMutate` snapshots the name being replaced, `onError` puts it back, and
-	 * `onSettled` asks the server what is actually true.
-	 */
+	/** Names a conversation, in the cache and on the server. */
 	const renameMutation = useMutation({
 		mutationFn: ({
 			id,
@@ -659,20 +389,12 @@ export function useConversation({
 				context.previous.titleSource,
 			);
 		},
-		// Runs on success and on failure alike. On success it settles a race: the
-		// completion handoff invalidates the list at almost exactly this moment,
-		// and a refetch that started before the rename landed answers with the old
-		// name -- which would put the truncated question back a beat after the
-		// generated title crossfaded in. On failure it replaces the rolled-back
-		// guess with whatever the server actually holds.
+		// Runs on success and on failure alike.
 		onSettled: () =>
 			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
 	});
 
-	// Still fire-and-forget at the call sites, and deliberately so: a name that
-	// fails to save is worth strictly less than the answer the reader is looking
-	// at and must never interrupt it. What changed is that the failure now
-	// resolves to the truth instead of persisting as a lie.
+	// Still fire-and-forget at the call sites, and deliberately so: a name that fails to save is worth strictly les…
 	const nameConversation = useCallback(
 		(id: string, title: string, source: "generated" | "manual") => {
 			renameMutation.mutate({ id, title, source });
@@ -680,54 +402,26 @@ export function useConversation({
 		[renameMutation.mutate],
 	);
 
-	/**
-	 * Deletes a conversation, for good.
-	 *
-	 * Optimistic like the rename beside it, and for a stronger reason: a row the
-	 * reader has just confirmed they want gone must not sit there for a round
-	 * trip looking like the click missed. `removeConversationFromCache` takes it
-	 * out of the rail and drops its transcript in the same commit.
-	 *
-	 * The rollback is the half that makes that safe. A delete that fails puts
-	 * the conversation back rather than leaving the rail claiming something was
-	 * removed that is still on the server -- which, for a delete, is the worse
-	 * of the two lies.
-	 *
-	 * A 404 is the one failure that is not a failure: it means the conversation
-	 * is already gone, which is the state being asked for, so it settles rather
-	 * than restoring a row the server does not have.
-	 */
+	/** Deletes a conversation, for good. */
 	const deleteMutation = useMutation({
 		mutationFn: (id: string) => deleteConversation(id),
 		onMutate: (id: string) => ({
 			removed: removeConversationFromCache(queryClient, id),
 		}),
 		onSuccess: (_result, id) => {
-			// The device-local copy, which nothing writes any more but which
-			// still holds whole transcripts from before history moved to the
-			// service. Deleting a conversation and leaving it in the browser's
-			// own storage is not deleting it. Only on success: while the server
-			// still has the conversation, so should this.
+			// The device-local copy, which nothing writes any more but which still holds whole transcripts from before hist…
 			forgetLocalConversation(id);
 		},
 		onError: (error, _id, context) => {
 			if (error instanceof HttpError && error.status === 404) return;
 			if (context?.removed) upsertConversation(queryClient, context.removed);
 		},
-		// Ordering after a rollback comes from here rather than from the restore:
-		// `upsertConversation` puts a row at the front, and where this one
-		// actually belongs is the server's answer.
+		// Ordering after a rollback comes from here rather than from the restore: `upsertConversation` puts a row at th…
 		onSettled: () =>
 			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
 	});
 
-	/**
-	 * Deletes one conversation. Nothing here asks first — the rail does.
-	 *
-	 * Fire-and-forget at the call site, like `nameConversation`: the row is
-	 * already gone from the screen, and the mutation above owns what happens if
-	 * the service disagrees.
-	 */
+	/** Deletes one conversation. */
 	const deleteChat = useCallback(
 		(id: string) => {
 			deleteMutation.mutate(id);
@@ -749,9 +443,7 @@ export function useConversation({
 
 	useEffect(() => clearTimers, [clearTimers]);
 
-	// Leaving the page is the clearest possible signal that nobody is waiting for
-	// this answer. Before this, closing the tab mid-reply left the model
-	// generating to the end and the turn billed in full.
+	// Leaving the page is the clearest possible signal that nobody is waiting for this answer.
 	useEffect(() => abortInFlight, [abortInFlight]);
 
 	/** The reveal reached the end: the answer joins the settled transcript. */
@@ -767,21 +459,7 @@ export function useConversation({
 		]);
 	}, [clearTimers]);
 
-	/**
-	 * Settles only what has actually been revealed.
-	 *
-	 * Deliberately not `finishStream`, which appends `state.answer` — the whole
-	 * reply, including the words the reveal had not reached. Calling that from
-	 * `stop` made the stop button a reveal-everything button for the entire
-	 * length of the typewriter, which is the opposite of what it says.
-	 *
-	 * Follow-ups are dropped: they belong to an answer that finished.
-	 *
-	 * Used by the two ways a turn can end early — the reader pressing Stop, and
-	 * the stream dying mid-flight. Defined here rather than beside `stop` because
-	 * `ask` needs it too, and a `useCallback` cannot depend on one declared
-	 * further down the component.
-	 */
+	/** Settles only what has actually been revealed. */
 	const settleRevealed = useCallback(() => {
 		clearTimers();
 		const state = cursor.current;
@@ -810,18 +488,14 @@ export function useConversation({
 
 		const pending = pendingWords(state);
 		if (pending === 0) {
-			// Caught up. Everything written has been drawn; the turn settles only
-			// once the payload has arrived, because the sources and follow-ups
-			// have to appear in the same commit as the answer they belong to.
-			// Finishing before that would truncate the answer mid-sentence.
+			// Caught up.
 			if (state.ended) finishStream();
 			return;
 		}
 
 		state.credit += paceFor(pending, state.textEnded);
 		const budget = Math.floor(state.credit);
-		// Less than a whole word owed. The remainder carries; drawing nothing is
-		// correct and costs one frame, not a stall.
+		// Less than a whole word owed.
 		if (budget < 1) return;
 		state.credit -= budget;
 
@@ -839,10 +513,7 @@ export function useConversation({
 			}
 
 			if (state.wordIndex < total) break;
-			// This block is fully drawn. Stepping past it is only safe once it can
-			// no longer grow -- otherwise the words that arrive next are written
-			// into a block the typewriter has already left behind, and never
-			// appear until the finished answer replaces the revealed one.
+			// This block is fully drawn.
 			if (
 				!blockIsClosed(state.blockIndex, state.answer.blocks, state.textEnded)
 			)
@@ -856,28 +527,17 @@ export function useConversation({
 			blocks: [...state.built],
 			sources: state.sources,
 			followUps: state.answer.followUps,
-			// No directives. They are emitted from the settled state, after the
-			// last token, and a control drawn under a half-written answer would be
-			// tappable before the answer it belongs to had finished its point.
+			// No directives.
 		});
 	}, [finishStream]);
 
-	/**
-	 * Starts revealing an answer. Returns its id.
-	 *
-	 * `ended` says whether the whole reply is already in hand. When it is — the
-	 * non-streaming fallback, a restored turn — the typewriter simply plays it
-	 * out. When it is not, the same loop runs against an answer that is still
-	 * growing, and the pacing controller above is what keeps the cadence even
-	 * across the difference.
-	 */
+	/** Starts revealing an answer. */
 	const beginStream = useCallback(
 		(answer: Answer, sources: Array<Source>, ended = true) => {
 			setIsThinking(false);
 			const id = nextId.current++;
 
-			// Reduced motion still skips the reveal, but only once the answer is
-			// whole -- settling a half-delivered stream would drop the rest of it.
+			// Reduced motion still skips the reveal, but only once the answer is whole -- settling a half-delivered stream…
 			if (ended && prefersReducedMotion()) {
 				setMessages((current) => [...current, completed(answer, sources, id)]);
 				return id;
@@ -907,12 +567,7 @@ export function useConversation({
 		[tick],
 	);
 
-	/**
-	 * Asks the service and reveals the reply.
-	 *
-	 * There is no artificial thinking delay any more: the request itself takes
-	 * real time, and the thinking orb covers exactly that.
-	 */
+	/** Asks the service and reveals the reply. */
 	const ask = useCallback(
 		async (
 			question: string,
@@ -920,25 +575,12 @@ export function useConversation({
 			token: number,
 			interaction?: WidgetInteraction,
 			uploadResult?: UploadResult,
+			gameResult?: GameResultPayload,
 		) => {
 			const controller = new AbortController();
 			inFlight.current?.abort(); // a previous turn should never outlive this one
 			inFlight.current = controller;
-			/**
-			 * Feeds the reveal from the wire, without letting the wire pace it.
-			 *
-			 * Two separate things have to be true at once, and they pull against
-			 * each other. Nothing may be shown before it is safe to show —
-			 * `settledBlocks` owns that, and holds back only an ambiguous prefix
-			 * and a partial word. And the reveal has to advance evenly whatever
-			 * the model is doing — the controller above owns that, by drawing a
-			 * fraction of the backlog rather than a fixed number of words.
-			 *
-			 * Neither alone is enough. Safe-but-unpaced empties its buffer and
-			 * freezes; paced-but-unsafe rewrites lines that have already been
-			 * read. Together they are a reveal that starts within a word or two
-			 * of the first token and keeps moving until the last one.
-			 */
+			/** Feeds the reveal from the wire, without letting the wire pace it. */
 			let buffer = "";
 			let streamingId = -1;
 			const onDelta = (delta: string) => {
@@ -947,10 +589,7 @@ export function useConversation({
 
 				const blocks = settledBlocks(buffer, false);
 				if (streamingId === -1) {
-					// Nothing settles until the first newline lands, which on a real
-					// reply is one line. The thinking orb covers exactly that gap;
-					// starting the reveal on an empty block list would replace it
-					// with an empty bubble.
+					// Nothing settles until the first newline lands, which on a real reply is one line.
 					if (blocks.length === 0) return;
 					streamingId = beginStream({ blocks, followUps: [] }, [], false);
 					return;
@@ -958,20 +597,11 @@ export function useConversation({
 
 				const state = cursor.current;
 				if (!state) return;
-				// Only ever grows, and only over settled text, so `built` indices
-				// stay valid and the reveal is never rewound.
+				// Only ever grows, and only over settled text, so `built` indices stay valid and the reveal is never rewound.
 				state.answer = { ...state.answer, blocks };
 			};
 
-			/**
-			 * The model has stopped writing. The turn has not finished.
-			 *
-			 * Re-settles the buffer with nothing held back — the trailing word is
-			 * safe now, and it is the one `settledText` was keeping — and lets the
-			 * reveal draw to the end at its finishing pace. The turn itself still
-			 * waits for the payload, so the sources and follow-ups appear in the
-			 * same commit as the answer settling, exactly as before.
-			 */
+			/** The model has stopped writing. */
 			const onTextEnd = () => {
 				if (turnToken.current !== token) return;
 				const state = cursor.current;
@@ -980,19 +610,7 @@ export function useConversation({
 				state.textEnded = true;
 			};
 
-			/**
-			 * Everything that happens once the service has said what the turn is.
-			 *
-			 * Called the moment `aspire.turn` lands rather than when the stream
-			 * finishes, and those are no longer the same instant: the chips cost a
-			 * second model call, so the run stays open for seconds after the answer,
-			 * the sources and the card are all known. Waiting for it left a finished
-			 * answer on screen with no sources, no action row and no chips.
-			 *
-			 * Idempotent, because it still runs after the await for the paths that
-			 * never announce a turn separately -- the non-streaming fallback inside
-			 * `streamAspire`, and any deployment older than the split.
-			 */
+			/** Everything that happens once the service has said what the turn is. */
 			let settled = false;
 			const settleTurn = (result: AskResult) => {
 				if (settled) return;
@@ -1000,38 +618,12 @@ export function useConversation({
 				if (turnToken.current !== token) return; // the turn was abandoned
 
 				// Adopt the server's id only when we had none to begin with.
-				//
-				// Once this browser mints an id, that id *is* the conversation: it
-				// is in the address bar, it is the storage key, and it is what the
-				// sidebar row and the games session are filed under. Overwriting it
-				// with a different value from the response leaves all four pointing
-				// at a thread that no longer exists — the reconciler sees the open
-				// chat stop matching the URL, reloads the half-written record from
-				// storage, and replaces the answer arriving on screen with the
-				// never-got-an-answer recovery turn.
-				//
-				// The real service echoes `request.thread_id`, so this only ever
-				// differs if something upstream rewrites it. When it does, the
-				// address the user is looking at wins.
 				if (!threadRef.current) {
 					threadRef.current = result.threadId;
 					setThreadId(result.threadId);
 				}
 
 				// A game turn is the card and nothing else.
-				//
-				// No assistant message is created at all — not an empty one, not a
-				// placeholder. That is what makes the rest of the requirements fall
-				// out rather than needing their own special cases: there is no
-				// text to render beside the card, no typewriter, and no copy /
-				// Play / Ask again row, because those belong to `Answer` and it
-				// never mounts. `onAnswer` never fires either, so read-aloud stays
-				// silent on a turn whose only content is a puzzle it must not read
-				// out — "Ask again" would reroll the puzzle mid-play, and speaking
-				// the word would give it away.
-				//
-				// The card itself comes from the games endpoint, which is the one
-				// authority on the session's state.
 				if (result.startedGame) {
 					setIsThinking(false);
 					setMessages((current) => [
@@ -1043,14 +635,7 @@ export function useConversation({
 						},
 					]);
 
-					// Name the chat now, while we know what it is. With no prose on
-					// this turn the title effect below never fires, so without this
-					// a chat that opened with a game would keep the truncated
-					// question as its name for good.
-					//
-					// Written as "generated" rather than "manual": an explicit
-					// regenerate should still be able to replace it later, once the
-					// conversation has some actual content to name it after.
+					// Name the chat now, while we know what it is.
 					const named = gameTitle(
 						result.startedGame.gameType,
 						getLanguageRef.current(),
@@ -1060,21 +645,15 @@ export function useConversation({
 						nameConversation(result.threadId, named, "generated");
 					}
 
-					onGameStartRef.current?.(result.threadId);
+					onGameStartRef.current?.(
+						result.threadId,
+						result.startedGame.gameType,
+						result.startedGame.concept,
+					);
 					return;
 				}
 
-				// An eligibility turn is the card and nothing else, for the same
-				// reason and by the same mechanism as a game turn: no assistant
-				// message is created, so there is no text beside the card, no
-				// typewriter, and no copy / Play / Ask again row — those belong to
-				// `Answer` and it never mounts.
-				//
-				// `onAnswer` never fires either, which is what keeps read-aloud
-				// silent here. That matters more than on a game: "Ask again" would
-				// restart a flow someone is part-way through, and speaking a turn
-				// with no prose would read out nothing at all. The card speaks its
-				// own question and its own verdict, on request.
+				// An eligibility turn is the card and nothing else, for the same reason and by the same mechanism as a game tur…
 				if (result.startedEligibility) {
 					setIsThinking(false);
 					setMessages((current) => [
@@ -1082,13 +661,7 @@ export function useConversation({
 						{ id: nextId.current++, role: "eligibility" },
 					]);
 
-					// Name the chat now, while we know what it is. With no prose on
-					// this turn the title effect never fires, so without this a chat
-					// that opened with the check would keep the truncated question
-					// ("Am I too old for ASPIRE?") as its name for good.
-					//
-					// "generated" rather than "manual", so an explicit regenerate can
-					// still improve it once the conversation has more to name it after.
+					// Name the chat now, while we know what it is.
 					const named = eligibilityTitle(result.startedEligibility.language);
 					if (!titledThreads.current.has(result.threadId)) {
 						titledThreads.current.add(result.threadId);
@@ -1102,10 +675,7 @@ export function useConversation({
 					return;
 				}
 
-				// The payload is authoritative, not the accumulated deltas: on a
-				// card turn the service deliberately sends an empty reply, and the
-				// final blocks must come from it rather than from whatever text
-				// escaped down the wire.
+				// The payload is authoritative, not the accumulated deltas: on a card turn the service deliberately sends an em…
 				const finalAnswer: Answer = {
 					blocks: parseAnswer(result.reply),
 					followUps: result.followUps,
@@ -1114,32 +684,20 @@ export function useConversation({
 
 				const live = cursor.current;
 				if (live && live.id === streamingId) {
-					// A reveal is already running. Hand it the finished answer and
-					// let it play out to the end at its own pace.
+					// A reveal is already running.
 					live.answer = finalAnswer;
 					live.sources = result.sources;
 					live.ended = true;
-					// Usually already true, from `TEXT_MESSAGE_END`. Not always:
-					// the service may end a turn without one — a card turn, or an
-					// older deployment that does not send it.
+					// Usually already true, from `TEXT_MESSAGE_END`.
 					live.textEnded = true;
 				} else {
-					// Nothing was ever revealed -- a reply with no newline in it, or
-					// the non-streaming fallback inside `streamAspire`. Start whole.
+					// Nothing was ever revealed -- a reply with no newline in it, or the non-streaming fallback inside `streamAspir…
 					streamingId = beginStream(finalAnswer, result.sources, true);
 				}
 				onAnswerRef.current?.(streamingId, result.reply);
 			};
 
-			/**
-			 * The chips, which arrive after the turn has already settled.
-			 *
-			 * Two places to put them, because it is genuinely a race: a long answer
-			 * may still be revealing when they land, and a short one will have joined
-			 * the transcript already. The cursor settles with whatever it holds, so
-			 * handing them over there is enough; once it is gone the settled message
-			 * is the only copy and has to be patched.
-			 */
+			/** The chips, which arrive after the turn has already settled. */
 			const applyFollowUps = (followUps: Array<string>) => {
 				if (turnToken.current !== token || followUps.length === 0) return;
 
@@ -1161,52 +719,31 @@ export function useConversation({
 			try {
 				const result: AskResult = await streamAspire({
 					message: question,
-					// Present only on a widget turn. It rides on `safety_flags`
-					// server-side rather than in `messages`, so the model never
-					// reads `widget_interaction {...}` back as dialogue.
+					// Present only on a widget turn.
 					interaction,
-					// Present only on the turn that answers a paused upload. It
-					// rides beside `message` rather than replacing it, because the
-					// chat endpoint reads both.
+					// Present only on the turn that answers a paused upload.
 					uploadResult,
+					// Present only on the turn that reports a finished game.
+					gameResult,
 					onDelta,
 					onTextEnd,
 					onTurn: settleTurn,
 					signal: controller.signal,
-					// Read now, not closed over: see `threadRef`. This is also why
-					// `ask` no longer depends on `threadId` — the send pipeline used
-					// to be rebuilt on every turn for a value it can read directly.
+					// Read now, not closed over: see `threadRef`.
 					threadId: threadRef.current,
 					simpleMode,
 					persona,
-					// Read at call time for the same reason the title call does: the
-					// voice layer that owns this setting is built after this hook.
-					// It decides which language the eligibility card opens in.
+					// Read at call time for the same reason the title call does: the voice layer that owns this setting is built af…
 					language: getLanguageRef.current(),
 				});
 
-				// Usually a no-op by now: `onTurn` settled this when the service
-				// announced the turn, which on a streamed reply is seconds earlier.
+				// Usually a no-op by now: `onTurn` settled this when the service announced the turn, which on a streamed reply…
 				settleTurn(result);
 				applyFollowUps(result.followUps);
 			} catch (error) {
 				if (turnToken.current !== token) return;
 
 				// A reveal may still be running against a stream that has died.
-				// Nothing more is coming, so the typewriter would tick forever
-				// waiting for words that will never arrive -- and because the
-				// composer is busy for as long as something is being revealed,
-				// that left it stuck with no way to ask anything again.
-				//
-				// Settled rather than dropped, for the same reason `stop` settles
-				// it: the words are already on screen and taking them back as the
-				// error appears is worse than leaving them.
-				//
-				// This could not happen before the reveal began mid-line. A
-				// dropped connection almost always cut in before the first
-				// newline, so there was never anything running to leave behind --
-				// the bug was real, and unreachable, and starting sooner is what
-				// reached it.
 				if (cursor.current) settleRevealed();
 				setIsThinking(false);
 				setMessages((current) => [
@@ -1223,10 +760,7 @@ export function useConversation({
 				]);
 			}
 		},
-		// `nameConversation`, `queryClient` and `settleRevealed` are all stable
-		// references, so naming them here does not rebuild the send pipeline every
-		// turn — which is the property these dependency lists have always been
-		// protecting.
+		// `nameConversation`, `queryClient` and `settleRevealed` are all stable references, so naming them here does no…
 		[beginStream, persona, nameConversation, settleRevealed],
 	);
 
@@ -1234,43 +768,21 @@ export function useConversation({
 		(raw: string, simpleMode = false) => {
 			const text = raw.trim();
 			if (!text) return;
-			// A second question while the first is still in flight used to bump
-			// the turn token, so the first reply was discarded on arrival and its
-			// user bubble sat in the transcript forever with no answer and no
-			// error. The composer disables send while busy; this is the guard
-			// behind it.
+			// A second question while the first is still in flight used to bump the turn token, so the first reply was disc…
 			if (isThinkingRef.current || cursor.current) return;
 
 			dropStream();
 			lastQuestion.current = text;
 			const token = ++turnToken.current;
 
-			// The first message of a conversation is the moment it becomes real:
-			// it gets an id, an address, and a row in the sidebar, all in this one
-			// synchronous block, before a single byte has gone to the server.
-			//
-			// Everything below the branch is deliberately ordered so that one
-			// React commit carries the whole change — the user's bubble, the
-			// phase morph, the history entry and the URL land together, and the
-			// 560ms transition runs through it without a stutter.
+			// The first message of a conversation is the moment it becomes real: it gets an id, an address, and a row in th…
 			const opening = !threadRef.current;
 			if (opening) {
 				const minted = newThreadId();
 				threadRef.current = minted;
 				setThreadId(minted);
 
-				// Committed now, not when the answer settles. It used to be
-				// written by the persist effect below, which waits for a settled
-				// assistant turn — so the sidebar row for a brand-new chat did not
-				// appear until the request had returned *and* the typewriter had
-				// finished revealing it, seconds after the message was sent.
-				//
-				// The label is the truncated question, which is exactly the
-				// provisional title the generated one crossfades over later.
-				// Optimistic, and that is the whole point: the row has always
-				// appeared in the same commit as the user's own bubble, before a
-				// byte has gone to the server. The completion handoff invalidates
-				// the list a moment later, so the service's version wins.
+				// Committed now, not when the answer settles.
 				upsertConversation(queryClient, {
 					threadId: minted,
 					title: titleFor(text),
@@ -1293,23 +805,13 @@ export function useConversation({
 		[ask, dropStream, queryClient],
 	);
 
-	/**
-	 * Re-asks the question behind one specific answer, replacing that answer.
-	 *
-	 * Takes the id of the message the button was rendered next to. It used to
-	 * take no argument at all: it re-asked `lastQuestion` — whatever was asked
-	 * most recently — and dropped `messages.at(-1)`. Since the same handler is
-	 * rendered under every answer, pressing "Try again" on the first of three
-	 * silently destroyed the third and re-ran the third question. There is no
-	 * undo, so that was unrecoverable.
-	 */
+	/** Re-asks the question behind one specific answer, replacing that answer. */
 	const regenerate = useCallback(
 		(messageId: number, simpleMode = false) => {
 			const index = messages.findIndex((m) => m.id === messageId);
 			if (index === -1) return;
 
-			// The question this answer came from is the nearest user turn above
-			// it, not the newest one in the transcript.
+			// The question this answer came from is the nearest user turn above it, not the newest one in the transcript.
 			let question = "";
 			for (let i = index - 1; i >= 0; i -= 1) {
 				const previous = messages[i];
@@ -1324,8 +826,7 @@ export function useConversation({
 			const token = ++turnToken.current;
 			lastQuestion.current = question;
 
-			// Re-found inside the updater so a turn that settled between the
-			// click and this point cannot make the index cut in the wrong place.
+			// Re-found inside the updater so a turn that settled between the click and this point cannot make the index cut…
 			setMessages((current) => {
 				const at = current.findIndex((m) => m.id === messageId);
 				return at === -1 ? current : current.slice(0, at);
@@ -1337,27 +838,17 @@ export function useConversation({
 		[ask, dropStream, messages],
 	);
 
-	/**
-	 * Abandons the turn in flight.
-	 *
-	 * Bumping the token makes `ask` discard the reply when it lands. A partly
-	 * revealed answer is settled rather than thrown away — the words are already
-	 * on screen and deleting them as you read is its own small betrayal.
-	 */
+	/** Abandons the turn in flight. */
 	const stop = useCallback(() => {
 		turnToken.current += 1;
 		// The half that was missing. Without this, Stop only hid the answer.
 		abortInFlight();
 
-		// Keep whatever is already on screen — the words are there to be read,
-		// and deleting them as you read is its own small betrayal — but keep only
-		// those, not the rest of the reply.
+		// Keep whatever is already on screen — the words are there to be read, and deleting them as you read is its own…
 		if (cursor.current) settleRevealed();
 		setIsThinking(false);
 
-		// Then say what happened, in both branches. Without this a stop before
-		// the first word left the question sitting there forever with no answer
-		// and no explanation: the same orphan this control exists to prevent.
+		// Then say what happened, in both branches.
 		setMessages((current) => {
 			if (current.at(-1)?.role === "error") return current;
 			return [
@@ -1373,24 +864,12 @@ export function useConversation({
 		});
 	}, [settleRevealed, abortInFlight]);
 
-	/**
-	 * Keep the rail's row in step with the exchange that just settled.
-	 *
-	 * This no longer *persists* anything -- the service wrote the turn as it
-	 * answered, which is why a transcript survives a browser being cleared now.
-	 * What is left is the optimistic half: move the row to the top with the
-	 * turns it has, so the rail is right in the same commit rather than after a
-	 * round trip. The completion handoff refetches immediately behind it.
-	 */
+	/** Keep the rail's row in step with the exchange that just settled. */
 	useEffect(() => {
 		if (!threadId) return;
 
 		const tail = messages.at(-1);
-		// A game or eligibility turn settles the exchange just as an answer
-		// does. Without it here, a conversation that opened with one was never
-		// written at all beyond its first user message -- so reopening it found
-		// a question with nothing after it and decorated it with the
-		// never-got-an-answer retry, for a card that was running fine.
+		// A game or eligibility turn settles the exchange just as an answer does.
 		if (
 			tail?.role !== "assistant" &&
 			tail?.role !== "game" &&
@@ -1401,9 +880,7 @@ export function useConversation({
 		const firstQuestion = messages.find((m) => m.role === "user");
 		if (firstQuestion?.role !== "user") return;
 
-		// Whatever this conversation is already called wins over a fresh
-		// truncation: a generated or hand-typed title must survive every later
-		// turn, and this effect runs on all of them.
+		// Whatever this conversation is already called wins over a fresh truncation: a generated or hand-typed title mu…
 		const existing = readConversation(queryClient, threadId);
 
 		upsertConversation(queryClient, {
@@ -1415,15 +892,7 @@ export function useConversation({
 		});
 	}, [messages, threadId, queryClient]);
 
-	/**
-	 * Name the conversation, once, after its first answer has landed.
-	 *
-	 * Fire-and-forget by construction: nothing awaits it, nothing renders
-	 * differently until it resolves, and every failure path ends in the title
-	 * staying exactly as it was. `titledThreads` is a ref rather than state so a
-	 * re-render cannot fire a second call, and it is keyed by thread so
-	 * reopening a past conversation never re-titles it.
-	 */
+	/** Name the conversation, once, after its first answer has landed. */
 	useEffect(() => {
 		if (!threadId || titledThreads.current.has(threadId)) return;
 
@@ -1433,8 +902,7 @@ export function useConversation({
 		const firstQuestion = messages.find((m) => m.role === "user");
 		if (firstQuestion?.role !== "user") return;
 
-		// Only the opening exchange names the chat, so a conversation that
-		// already has more than one answer was restored, not just started.
+		// Only the opening exchange names the chat, so a conversation that already has more than one answer was restore…
 		const answers = messages.filter((m) => m.role === "assistant");
 		if (answers.length !== 1) return;
 
@@ -1448,19 +916,13 @@ export function useConversation({
 			answer: answerToText(tail.blocks),
 			language: getLanguageRef.current(),
 		}).then((title) => {
-			// Null means the service declined — a greeting, gibberish, or a
-			// failed call. The truncated first message stays.
+			// Null means the service declined — a greeting, gibberish, or a failed call.
 			if (!title) return;
 			nameConversation(threadId, title, "generated");
 		});
 	}, [messages, threadId, queryClient, nameConversation]);
 
-	/**
-	 * Renames a conversation by hand.
-	 *
-	 * Marks it "manual", which is what stops a generated title from ever
-	 * replacing it — including a title already in flight for this thread.
-	 */
+	/** Renames a conversation by hand. */
 	const renameChat = useCallback(
 		(id: string, title: string) => {
 			titledThreads.current.add(id);
@@ -1469,19 +931,10 @@ export function useConversation({
 		[nameConversation],
 	);
 
-	/**
-	 * Asks for a fresh title for one conversation.
-	 *
-	 * Clears the manual lock first, so an explicit regenerate is the one thing
-	 * that may overwrite a hand-typed name — and only for the chat it was asked
-	 * for. Reads that conversation's own opening exchange from storage, so it
-	 * works on any row in the rail, not just the one that is open.
-	 */
+	/** Asks for a fresh title for one conversation. */
 	const regenerateTitle = useCallback(
 		(id: string) => {
-			// The rail's rows carry no transcripts, so the opening exchange is
-			// fetched rather than read off the row. Cached afterwards, so asking
-			// twice costs one round trip.
+			// The rail's rows carry no transcripts, so the opening exchange is fetched rather than read off the row.
 			void queryClient
 				.ensureQueryData(conversationQuery(id))
 				.then((stored) => {
@@ -1534,14 +987,7 @@ export function useConversation({
 									},
 			);
 
-			// A conversation whose last stored turn is the question is one whose
-			// first send failed: the chat was committed the moment it was sent, so
-			// it is in the sidebar, but no answer ever arrived to go under it.
-			// Reopening it used to show the question alone, with nothing to say
-			// what happened and no way to ask again — a committed chat with no
-			// route out, which is exactly what must not exist. This puts the retry
-			// back. `regenerate` walks up to the nearest user turn, which is the
-			// orphaned question, so the button re-asks the right thing.
+			// A conversation whose last stored turn is the question is one whose first send failed: the chat was committed…
 			if (conversation.messages.at(-1)?.role === "user") {
 				restored.push({
 					id: nextId.current++,
@@ -1562,24 +1008,12 @@ export function useConversation({
 			setIsThinking(false);
 			setMessages(restored);
 			// Everything just restored is older than this, so none of it animates.
-			// The next message sent will be.
 			setAnimateAfterId(nextId.current);
 		},
 		[dropStream, abortInFlight],
 	);
 
-	/**
-	 * A widget interaction, sent as a turn.
-	 *
-	 * No user bubble: the child moved a slider, they did not say anything, and a
-	 * transcript that reported "widget_interaction {...}" as something they said
-	 * would be both wrong and unreadable. The agent's reply lands as an ordinary
-	 * assistant turn referencing their actual numbers.
-	 *
-	 * Dropped silently while a turn is in flight. An interaction that settles
-	 * during someone else's answer is a comment on the wrong thing, and the
-	 * emitter's own debounce already coalesces the frames it came from.
-	 */
+	/** A widget interaction, sent as a turn. */
 	const sendInteraction = useCallback(
 		(interaction: WidgetInteraction) => {
 			if (isThinkingRef.current || cursor.current) return;
@@ -1591,24 +1025,24 @@ export function useConversation({
 		[ask],
 	);
 
-	/**
-	 * Continue a registration that is paused on a document.
-	 *
-	 * No user bubble, for the same reason a widget interaction has none: the
-	 * parent took a photo, they did not say anything, and "I uploaded
-	 * guardian.id_document: 7f3a..." is not a sentence anybody typed.
-	 *
-	 * Sent even while a turn is in flight, which is where this differs from
-	 * `sendInteraction`. The graph is SUSPENDED waiting for exactly this reply;
-	 * dropping it because something else looked busy would leave the form stuck
-	 * with no way to unstick it, and the upload it reports has already happened.
-	 */
+	/** Continue a registration that is paused on a document. */
 	const sendUploadResult = useCallback(
 		(uploadResult: UploadResult) => {
 			if (!threadRef.current) return;
 			const token = ++turnToken.current;
 			setIsThinking(true);
 			void ask("", false, token, undefined, uploadResult);
+		},
+		[ask],
+	);
+
+	/** A finished game's score, sent as a turn. */
+	const sendGameResult = useCallback(
+		(gameResult: GameResultPayload) => {
+			if (!threadRef.current) return;
+			const token = ++turnToken.current;
+			setIsThinking(true);
+			void ask("", false, token, undefined, undefined, gameResult);
 		},
 		[ask],
 	);
@@ -1625,8 +1059,7 @@ export function useConversation({
 		setIsThinking(false);
 	}, [dropStream, abortInFlight]);
 
-	// Follow-ups belong to the answer that has settled — never to one still
-	// being revealed, where they would appear before the text they follow.
+	// Follow-ups belong to the answer that has settled — never to one still being revealed, where they would appear…
 	const tail = messages.at(-1);
 	const followUps =
 		!streaming && tail?.role === "assistant" ? tail.followUps : [];
@@ -1644,6 +1077,7 @@ export function useConversation({
 		send,
 		sendInteraction,
 		sendUploadResult,
+		sendGameResult,
 		regenerate,
 		stop,
 		openPast,

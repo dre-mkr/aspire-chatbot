@@ -18,30 +18,9 @@ import {
 } from "#/lib/aspire/games";
 import { useMediaQuery } from "#/lib/use-media-query";
 
-/**
- * True or false, played in the thread.
- *
- * A statement, two buttons, and then the part that matters: what the answer
- * means. The card never knows the verdict — pressing True asks the server,
- * which is the only thing that grades. That is worth more here than on the
- * scramble: a fifty-fifty guess is valuable to anyone who works out that the
- * interface will confirm it, so the verdict is structurally absent rather than
- * hidden.
- *
- * Three states below the header: the statement, the statement resolved with its
- * explanation, and the round finished.
- */
+/** True or false, played in the thread. */
 
-/* Counts come from the round, never from the copy.
-   These read "5 statements", "See the five" and "…all five" while the body
-   renders `Statement {position} of {total}` and draws `total` pips — so a
-   four-item round said "5 statements" directly above "STATEMENT 1 OF 4". The
-   closing lines are phrased without a number so they stay true at any length
-   without spelling one out.
-
-   There was a second `stella` dictionary here, in simpler words, selected by a
-   `persona` prop that nothing ever passed. Every player read this one. Removed
-   rather than left as copy no reader could reach. */
+/* Counts come from the round, never from the copy. */
 const COPY = {
 	sub: (total: number) =>
 		`${total} ${total === 1 ? "statement" : "statements"}`,
@@ -78,9 +57,16 @@ interface TrueFalseProps {
 	threadId: string;
 	state: GameState;
 	onChanged: (state: GameState | null) => void;
+	/** Fires once, with the final numbers, the moment the set resolves. */
+	onSummary?: (summary: GameSummary) => void;
 }
 
-export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
+export function TrueFalse({
+	threadId,
+	state,
+	onChanged,
+	onSummary,
+}: TrueFalseProps) {
 	const copy = COPY;
 
 	const [settled, setSettled] = useState<Settled | null>(null);
@@ -122,11 +108,12 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 			setCovered((current) => [...current, entry]);
 			setSettled(entry);
 			setSummary(done);
-			// Null means the round is over. The parent is deliberately not told:
-			// telling it would unmount this card before the explanation was read.
+			// The final numbers go up the moment they exist; `onChanged(null)` only fires on leave, after the wrap-up has b…
+			if (done) onSummary?.(done);
+			// Null means the round is over.
 			if (next) onChanged(next);
 		},
-		[onChanged],
+		[onChanged, onSummary],
 	);
 
 	const choose = useCallback(
@@ -139,8 +126,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 					return;
 				}
 				if (!result.reveal) {
-					// Cannot happen for true/false — a wrong answer resolves the
-					// item — but the type allows it, so say something honest.
+					// Cannot happen for true/false — a wrong answer resolves the item — but the type allows it, so say something ho…
 					setFailure("That did not settle the statement. Try again.");
 					return;
 				}
@@ -178,23 +164,11 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 	const advance = () => setSettled(null);
 
 	// T and F answer the statement, as the design specifies.
-	//
-	// Scoped to the card rather than bound to the window. A bare single-key
-	// shortcut listening on the whole document is a WCAG 2.1.4 failure — it
-	// fires wherever focus happens to be, and skipping TEXTAREA/INPUT is not
-	// enough: after clicking a follow-up chip, a starter, or any button on the
-	// page, typing "t" answered a game question. Keeping it on the card means
-	// the shortcut only exists where it is advertised, and moving focus away is
-	// the off switch the rule asks for.
 	const asking = settled === null && !complete;
 	const cardRef = useRef<HTMLElement>(null);
-	// Whether the shortcut can actually fire right now, so the hint can stop
-	// claiming otherwise.
+	// Whether the shortcut can actually fire right now, so the hint can stop claiming otherwise.
 	const [keyboardArmed, setKeyboardArmed] = useState(false);
-	// And never on a device with no keys to press. Naming T and F on a phone is
-	// the same mistake the composer's Space hint used to make, and showing it
-	// there also wrapped the action row, growing the card by ~30px the moment
-	// the child touched it.
+	// And never on a device with no keys to press.
 	const touch = useMediaQuery("(hover: none)");
 
 	useEffect(() => {
@@ -202,8 +176,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 		if (!card) return;
 
 		const onIn = () => setKeyboardArmed(true);
-		// `focusout` fires before focus lands, so `document.activeElement` is
-		// still <body> here — `relatedTarget` is where it is actually going.
+		// `focusout` fires before focus lands, so `document.activeElement` is still <body> here — `relatedTarget` is wh…
 		const onOut = (event: FocusEvent) =>
 			setKeyboardArmed(card.contains(event.relatedTarget as Node | null));
 
@@ -238,9 +211,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 	const label = `Statement ${state.prompt.position} of ${state.prompt.total}`;
 
 	return (
-		// tabIndex -1 so a click anywhere on the card puts focus inside it, which
-		// is what arms the T/F shortcut scoped above. Not reachable by Tab —
-		// the answer buttons already are.
+		// tabIndex -1 so a click anywhere on the card puts focus inside it, which is what arms the T/F shortcut scoped…
 		<section className="game tf" aria-label={label} ref={cardRef} tabIndex={-1}>
 			<header className="game__head">
 				<span className="game__badge" aria-hidden="true">
@@ -309,9 +280,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 
 						<p className="tf__statement">{state.prompt.text}</p>
 
-						{/* No wrapper role: the section's own label already announces
-						    which statement this is, and each button says what it
-						    does. A group label on top of both just repeats. */}
+						{/* No wrapper role: the section's own label already announces which statement this is, and each button says what… */}
 						<div className="tf__choices">
 							{choices.map((choice) => (
 								<button
@@ -335,10 +304,7 @@ export function TrueFalse({ threadId, state, onChanged }: TrueFalseProps) {
 							>
 								{copy.skip}
 							</button>
-							{/* Only claimed while it is true. The shortcut lives on the
-							    card, so before anything here has focus the composer has
-							    it and "t" just types a letter — advertising the key in
-							    that state is a promise the code does not keep. */}
+							{/* Only claimed while it is true. */}
 							{keyboardArmed && !touch ? (
 								<span className="game__count tf__hint">{copy.inputHint}</span>
 							) : null}
@@ -356,13 +322,7 @@ function ResultIcon({ outcome }: { outcome: Outcome }) {
 	return <EyeIcon />;
 }
 
-/**
- * The two verdicts, side by side.
- *
- * Showing both is the teaching move: the right one is marked, and if they
- * picked the other it is marked too — so the correction is visible without a
- * sentence having to say "you were wrong".
- */
+/** The two verdicts, side by side. */
 function VerdictPills({
 	choices,
 	answer,
@@ -427,8 +387,7 @@ function SettledPanel({
 				? copy.wrong(reveal.answer)
 				: copy.shown(reveal.answer);
 
-	// Laid-out content when the set has it, the flat explanation when it does
-	// not. Either way the whole teaching is shown.
+	// Laid-out content when the set has it, the flat explanation when it does not.
 	const paragraphs = reveal.paragraphs.length
 		? reveal.paragraphs
 		: [reveal.explanation];

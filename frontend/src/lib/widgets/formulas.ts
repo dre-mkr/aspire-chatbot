@@ -1,41 +1,4 @@
-/**
- * A hand-verified mirror of `backend/app/widgets/formulas/registry.py`.
- *
- * ## Why a mirror at all
- *
- * A slider has to recompute on every drag frame. Round-tripping that to the
- * server would put 60 requests a second behind a child's thumb, so the client
- * computes for display.
- *
- * ## The client is never the source of truth
- *
- * Every number that MATTERS -- the one the agent quotes back, the one that goes
- * into mastery, the one on a projection the parent reads -- is computed on the
- * server. This module exists so the slider feels immediate, and its output is
- * thrown away the moment the interaction settles and the server answers.
- *
- * That is why a divergence here is a display bug rather than a correctness bug,
- * and it is also why the parity test still fails the build: a display that
- * disagrees with the sentence underneath it is how a child learns the app is
- * unreliable.
- *
- * ## Mirror rather than generated
- *
- * The alternative was generating this file from the Python. It was rejected
- * because the generator would have to understand `Decimal`, `ROUND_HALF_UP` and
- * `ROUND_CEILING` well enough to emit correct JavaScript for each -- which is
- * the whole difficulty, moved into a tool nobody reads. A hand-written mirror
- * plus `formulas.parity.test.ts` puts the difficulty where it can be checked.
- *
- * ## Money is integer cents here too
- *
- * Every amount in and out is an integer count of cents. The intermediate
- * arithmetic is in doubles, which is exact for integers below 2^53 and has
- * ~15 significant digits for the exponentials -- comfortably inside a cent at
- * the magnitudes this product deals in. `roundHalfUp` carries an epsilon to
- * absorb the last-bit error so a value that Python's `Decimal` puts exactly on
- * a .5 boundary rounds the same way here.
- */
+/** A hand-verified mirror of `backend/app/widgets/formulas/registry.py`. */
 
 /** The peg. One US dollar is 2.70 East Caribbean dollars. */
 export const XCD_PER_USD = 2.7;
@@ -44,15 +7,7 @@ export const MAX_PERIODS = 600;
 
 const SYMBOL: Record<string, string> = { XCD: "EC$", USD: "US$" };
 
-/**
- * Half up, with an epsilon.
- *
- * `Math.round` is half-up for positives and half-DOWN for negatives, which
- * would disagree with Python on any negative amount. The epsilon absorbs the
- * ~1e-10 relative error a chain of exponentials accumulates, so a value the
- * server computes as exactly `x.5` rounds up here too rather than down by one
- * cent because the double landed at `x.4999999999`.
- */
+/** Half up, with an epsilon. */
 export function roundHalfUp(value: number): number {
 	const sign = value < 0 ? -1 : 1;
 	return sign * Math.floor(Math.abs(value) + 0.5 + 1e-9);
@@ -106,9 +61,7 @@ export function compoundInterest(
 	const periods = Math.trunc(years * n);
 	const perPeriod = rate / n;
 
-	// The zero-rate branch is not an edge case to tolerate -- a savings account
-	// paying nothing is the comparison the whole lesson turns on, and the
-	// general formula divides by `r`.
+	// The zero-rate branch is not an edge case to tolerate -- a savings account paying nothing is the comparison th…
 	const total =
 		perPeriod === 0
 			? principal + contribution * periods
@@ -132,14 +85,7 @@ export function compoundInterest(
 	};
 }
 
-/**
- * Simulated period by period, exactly as the server does.
- *
- * The closed form needs a logarithm and disagrees with the simulation at the
- * boundary. The simulation is the one that matches what a child sees in a
- * passbook -- "after how many weeks does the counter pass EC$100?" -- so it is
- * the one both sides implement.
- */
+/** Simulated period by period, exactly as the server does. */
 export function savingsGoalTime(
 	goal: number,
 	perPeriod: number,
@@ -186,13 +132,7 @@ export function savingsGoalAmount(
 	};
 }
 
-/**
- * Largest remainder, so the parts add EXACTLY to the total.
- *
- * Rounding each share independently loses or gains a cent, and an allocator
- * whose buckets do not sum to the money on screen is something a child notices
- * before an adult does.
- */
+/** Largest remainder, so the parts add EXACTLY to the total. */
 export function budgetSplit(
 	total: number,
 	allocations: Record<string, number>,
@@ -397,14 +337,7 @@ const INTEGERS = new Set([
 	"compounds_per_year",
 ]);
 
-/**
- * Run a named formula from a control-value map.
- *
- * Returns null for an unknown formula rather than throwing: a widget naming one
- * this build does not have is a deployment-skew problem, and the right answer
- * is to render the widget without a live number rather than to crash the
- * transcript.
- */
+/** Run a named formula from a control-value map. */
 export function evaluate(
 	name: string,
 	values: Record<string, number>,

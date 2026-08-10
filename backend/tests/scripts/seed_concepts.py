@@ -1,55 +1,4 @@
-"""Turn 706 Q&A rows into teachable concepts. Build time, once, never at runtime.
-
-    Pass A  taxonomy      KB questions -> 40-70 concept slugs          -> taxonomy.json
-    Pass B  assignment    every KB row -> zero or more concepts        -> coverage report
-    Pass C  bodies        per concept: 5 bodies, example, checks       -> KB-GAPS.md
-    Pass D  grounding     every number and claim traced, in CODE
-    Pass E  embed + write -> concepts table, concepts-review.csv
-
-Run:
-
-    python scripts/seed_concepts.py --dry-run          # plan only, no calls, no writes
-    python scripts/seed_concepts.py                    # full run, resumable
-    python scripts/seed_concepts.py --from c           # resume at pass C
-    python scripts/seed_concepts.py --limit 5          # first 5 concepts, for a smoke test
-
-## Why this is a script and not a runtime path
-
-A lesson generated at request time is a lesson nobody reviewed, about a
-government savings programme, delivered to a child. The whole value of a concept
-row is that a person can read it, check it against the sources recorded beside
-it, and sign it off -- which requires it to exist before the turn does.
-
-It also makes the expensive part free. Pass C is one strong-model call per
-concept; at runtime that would be a second frontier call in front of every
-lesson, and the same lesson would be re-derived for every child who asked.
-
-## Checkpointing, and why each pass writes its own file
-
-`learning/.seed/pass_{a,b,c,d}.json`. A failure in Pass D -- which is pure Python
-and therefore the pass most likely to be *wrong* rather than merely to fail --
-must not re-run Passes A through C. Those are the ones that cost money.
-
-Each checkpoint is the pass's complete output, so `--from d` reads C's file and
-recomputes only what follows. `--force` ignores checkpoints.
-
-## Why the raw OpenAI SDK rather than `build_chat_model`
-
-Two reasons, both build-time-only concerns. Structured output here needs strict
-JSON schemas with retries on a validation failure, and the batching is over 706
-rows with a concurrency limit -- neither is what `init_chat_model` is shaped for,
-and both would end up reimplemented around it. Nothing this script does runs on a
-request path, so it owes the graph's conventions nothing but its output.
-
-## The one thing this script must not do
-
-Invent a fact. Pass C is given ONLY the rows assigned to its concept and is asked
-to return `unsupported_claims` -- everything it wanted to say and could not
-source. Pass D then re-derives that judgement in Python rather than trusting it:
-every number in every body must trace to a source row, to `numeric_anchors`, or
-to arithmetic on the anchors. A body that fails twice is kept and nulled, and its
-concept is marked `needs_review`, which excludes it from runtime.
-"""
+"""Turn 706 Q&A rows into teachable concepts."""
 
 from __future__ import annotations
 
@@ -81,14 +30,7 @@ logger = logging.getLogger("seed_concepts")
 
 @dataclass(frozen=True, slots=True)
 class KBRow:
-    """One knowledge-base row, as the CSV holds it.
-
-    Read from the CSV rather than from `documents`, and the distinction matters:
-    `documents.content` is the ingest's formatted blob ("Category: ...\\nQuestion:
-    ...") while the CSV keeps the fields apart. Pass A is shown questions only and
-    Pass C is shown question and answer, and neither is served well by having to
-    parse them back out of a rendering.
-    """
+    """One knowledge-base row, as the CSV holds it."""
 
     id: str
     category: str
@@ -100,14 +42,7 @@ class KBRow:
 
     @property
     def is_programme(self) -> bool:
-        """Whether this row is about ASPIRE itself rather than about money.
-
-        The load-bearing distinction in this whole script. A wrong general
-        financial fact is a bug; a wrong programme fact -- an eligibility age, a
-        deposit amount, an account rule -- is a government-client incident. Pass D
-        refuses to let a body make a programme claim unless an ASP- row supports
-        it.
-        """
+        """Whether this row is about ASPIRE itself rather than about money."""
         return self.id.upper().startswith("ASP-")
 
     def for_taxonomy(self) -> str:
@@ -139,28 +74,18 @@ def load_kb(path: Path = KB_CSV) -> list[KBRow]:
 
 # ── model access ─────────────────────────────────────────────────────────────
 
-#: Batch size for Pass A. Eighty questions is roughly 4,000 tokens of input and
-#: leaves the model enough room to propose a dozen concepts without truncating.
+#: Batch size for Pass A.
 TAXONOMY_BATCH = 80
 
-#: Batch size for Pass B. Smaller than A's because the model must hold the whole
-#: taxonomy in mind at the same time and assignment accuracy degrades when the
-#: row list gets long enough to skim.
+#: Batch size for Pass B.
 ASSIGN_BATCH = 40
 
-#: How many Pass C calls run at once. Concept body generation is the expensive
-#: pass and the rate limit is the binding constraint, not the wall clock.
+#: How many Pass C calls run at once.
 CONCURRENCY = 4
 
 
 class Models:
-    """The two model tiers this script uses, and the client that calls them.
-
-    Build-time tiering, separate from `app/config.py`'s runtime tiering: the
-    strong model writes taxonomy and bodies (the material a child reads, judged
-    once and then reused for months), and the cheap model does assignment (a
-    membership decision over a short list).
-    """
+    """The two model tiers this script uses, and the client that calls them."""
 
     def __init__(self, *, strong: str, cheap: str) -> None:
         from openai import AsyncOpenAI
@@ -178,12 +103,7 @@ class Models:
         user: str,
         attempts: int = 3,
     ) -> dict[str, Any] | None:
-        """One JSON-mode call, retried on transport failure and on unparseable output.
-
-        Returns None after the last attempt rather than raising. A single concept
-        failing to generate must cost that concept and let the run continue --
-        Pass E writes what it has and the coverage report names what is missing.
-        """
+        """One JSON-mode call, retried on transport failure and on unparseable output."""
         for attempt in range(1, attempts + 1):
             try:
                 response = await self.client.chat.completions.create(
@@ -292,13 +212,7 @@ def _clean_proposal(raw: dict[str, Any]) -> ProposedConcept | None:
 
 
 async def pass_a(models: Models, rows: list[KBRow]) -> list[ProposedConcept]:
-    """Propose a taxonomy over the whole corpus, in batches, then merge.
-
-    Batched because 706 questions in one prompt produces a taxonomy weighted
-    towards whatever the model read last. Merged by slug and then by title
-    similarity, because two batches covering adjacent material reliably propose
-    `saving_goal` and `savings_goals` for the same idea.
-    """
+    """Propose a taxonomy over the whole corpus, in batches, then merge."""
     batches = [rows[i : i + TAXONOMY_BATCH] for i in range(0, len(rows), TAXONOMY_BATCH)]
     logger.info("Pass A: %d rows in %d batches.", len(rows), len(batches))
 
@@ -327,16 +241,7 @@ def _title_tokens(text: str) -> frozenset[str]:
 
 
 def _merge_taxonomy(proposals: list[ProposedConcept]) -> list[ProposedConcept]:
-    """Deduplicate by slug, then by title overlap.
-
-    The brief specifies deduplication by embedding similarity > 0.9. Jaccard over
-    title tokens is used instead and the substitution is deliberate: this runs on
-    a few hundred short titles where the near-duplicates are lexical
-    (`savings_goal` / `saving_goals` / `setting_a_goal`), and a token test is
-    exact, free, and inspectable in `taxonomy.json` by whoever reviews it.
-    Embedding a few hundred titles to separate them would add a failure mode
-    (a 403 on the embeddings model) to a pass that currently has none.
-    """
+    """Deduplicate by slug, then by title overlap."""
     by_slug: dict[str, ProposedConcept] = {}
     for proposal in proposals:
         existing = by_slug.get(proposal.slug)
@@ -431,13 +336,7 @@ async def pass_b(
 
 
 def coverage_report(rows: list[KBRow], taxonomy: list[ProposedConcept]) -> dict[str, Any]:
-    """How much of the corpus landed somewhere, and which concepts are thin.
-
-    Two numbers the brief asks for and one it does not: the count of concepts with
-    fewer than two rows, because those are the ones Pass E marks `needs_review`
-    and therefore the ones that will NOT be servable however good their bodies
-    read.
-    """
+    """How much of the corpus landed somewhere, and which concepts are thin."""
     assigned: set[str] = {kb_id for concept in taxonomy for kb_id in concept.kb_ids}
     orphans = [row.id for row in rows if row.id not in assigned]
     thin = [concept.slug for concept in taxonomy if len(concept.kb_ids) < 3]
@@ -542,18 +441,9 @@ async def pass_c(
 # ── Pass D: grounding validation, in code ────────────────────────────────────
 
 #: Numbers that are prose scaffolding rather than claims.
-#:
-#: "two ways to save", "three steps", "the first thing". Requiring these to trace
-#: to a source row would fail every well-written body and teach the operator to
-#: ignore the validator, which is worse than the small hole it leaves. Capped at
-#: three: four and above are quantities in this material, not structure.
 _STRUCTURAL_NUMBERS = frozenset({0, 1, 2, 3})
 
 #: Words that make a claim about ASPIRE itself rather than about money.
-#:
-#: A body containing any of these, whose sources contain no ASP- row, is asserting
-#: something about a government programme on the authority of general financial
-#: literacy rows. That is the single most expensive mistake available here.
 _PROGRAMME_TERMS = re.compile(
     r"\b(?:aspire|eligib\w*|enrol\w*|enroll\w*|apply|application|applicant|"
     r"seed(?:ed|ing)?|deposit\w*|account\s+open\w*|guardian\s+consent|"
@@ -574,13 +464,7 @@ _NUMERIC = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)\s*(%?)")
 
 
 def numbers_in(text: str) -> set[float]:
-    """Every number a reader would take as a claim.
-
-    Percentages are recorded twice -- as the figure and as the fraction -- because
-    `numeric_anchors` may hold either. A rate of 3% is `3` in prose and `0.03` in
-    a formula call, and requiring the author to guess which the validator wants is
-    how a validator gets bypassed.
-    """
+    """Every number a reader would take as a claim."""
     found: set[float] = set()
     for match in _NUMERIC.finditer(text):
         raw = match.group(1).replace(",", "")
@@ -612,18 +496,7 @@ def _anchor_values(anchors: dict[str, Any]) -> set[float]:
 
 
 def derivable_from(anchors: dict[str, Any]) -> set[float]:
-    """Every figure the anchors legitimately produce, via the formula registry.
-
-    The registry is the authority on arithmetic everywhere else in this product
-    (`widgets/formulas/registry.py`, gate 4, the frontend parity test), and it is
-    the authority here too. A body saying "after five years you would have
-    EC$115.93" is grounded if and only if `compound_interest` on the anchors
-    returns it -- not if the model's own arithmetic happens to agree with itself.
-
-    Elementary combinations are included alongside the registry results because a
-    5-8 body legitimately says "EC$5 a week for four weeks is EC$20", and that is
-    multiplication rather than a named formula.
-    """
+    """Every figure the anchors legitimately produce, via the formula registry."""
     values = _anchor_values(anchors)
     derived: set[float] = set(values)
 
@@ -636,9 +509,7 @@ def derivable_from(anchors: dict[str, Any]) -> set[float]:
             if right:
                 derived.add(left / right)
 
-    # Registry results, guarded: these take specific parameter names and a body's
-    # anchors are named freely, so the money-shaped and rate-shaped and
-    # period-shaped values are tried against each other rather than matched by key.
+    # Registry results, guarded: these take specific parameter names and a body's anchors are named freely, so the…
     try:
         from app.widgets.formulas import registry
     except Exception:  # pragma: no cover - the registry is always importable
@@ -691,18 +562,7 @@ def validate_grounding(
     bodies: dict[str, Any],
     sources: list[KBRow],
 ) -> list[Violation]:
-    """Every number traced and every programme claim sourced. Pure Python.
-
-    Two checks, and they fail for different reasons:
-
-      NUMBER    a figure in a body appears in no source row, is not an anchor, and
-                is not derivable from the anchors. The model made it up, and a
-                made-up EC$ figure in a lesson is a wrong lesson.
-      PROGRAMME a body makes a claim about ASPIRE and no ASP- row supports it.
-                The model reasoned from general financial rows to a specific
-                programme rule, which is exactly the failure mode that costs a
-                government client.
-    """
+    """Every number traced and every programme claim sourced."""
     violations: list[Violation] = []
     source_text = " ".join(row.searchable() for row in sources)
     source_numbers = numbers_in(source_text)
@@ -761,13 +621,7 @@ async def pass_d(
     *,
     offline: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
-    """Validate, regenerate once, then null what still fails.
-
-    Returns the bodies and a per-slug list of surviving violations. A concept with
-    surviving violations keeps its concept row -- the title, the aliases and the
-    sources are still useful to a reviewer -- and loses the offending bodies, and
-    Pass E marks it `needs_review` so runtime never serves it.
-    """
+    """Validate, regenerate once, then null what still fails."""
     by_id = {row.id: row for row in rows}
     by_slug = {concept.slug: concept for concept in taxonomy}
     surviving: dict[str, list[str]] = {}
@@ -816,12 +670,7 @@ async def pass_d(
 
 
 def _null_offending(generated: dict[str, Any], violations: list[Violation]) -> None:
-    """Remove only the bands that failed. The others were fine and are kept.
-
-    Per band rather than per concept, because a concept whose adult body cites an
-    unsourced figure usually has a perfectly good 9-12 body, and discarding it
-    would cost a lesson to fix a claim that was never in it.
-    """
+    """Remove only the bands that failed."""
     from app.learning.concepts import BODY_COLUMNS
 
     for violation in violations:
@@ -845,16 +694,7 @@ async def pass_e(
     write: bool,
     embed: bool = True,
 ) -> list[dict[str, Any]]:
-    """Embed, upsert, and export the review CSV.
-
-    `embed=False` writes everything except the vectors, and it exists because the
-    two halves fail independently: bodies come from the chat model and vectors
-    from the embeddings model, and losing access to the second should not throw
-    away an hour of the first. A concept with no vector is still complete
-    teaching material -- `ConceptStore.rank` falls back to lexical matching over
-    titles and aliases, which is worse than embeddings and much better than
-    nothing. Re-run with `--from e` once the vectors are available.
-    """
+    """Embed, upsert, and export the review CSV."""
     from app.learning.concepts import BODY_COLUMNS, TeachingConcept
 
     records: list[dict[str, Any]] = []
@@ -873,9 +713,7 @@ async def pass_e(
             logger.info("Skipping %s: every body was empty or nulled.", concept.slug)
             continue
 
-        # `needs_review` for two independent reasons and both exclude it from
-        # runtime: too few sources to be trustworthy, or a surviving grounding
-        # violation. Recorded separately in the CSV so a reviewer knows which.
+        # `needs_review` for two independent reasons and both exclude it from runtime: too few sources to be trustworth…
         thin = len(concept.kb_ids) < 2
         status = "needs_review" if (thin or concept.slug in failures) else "draft"
 
@@ -917,9 +755,7 @@ async def pass_e(
             try:
                 await _embed_records(records)
             except Exception:
-                # The bodies are already generated and validated. Losing the
-                # embeddings model here must not cost them -- write what exists
-                # and let `--from e` fill the vectors in later.
+                # The bodies are already generated and validated.
                 logger.warning(
                     "Embedding failed; writing %d concepts WITHOUT vectors. "
                     "Resolution will fall back to lexical matching until "
@@ -962,12 +798,7 @@ _CHECK_BANDS = frozenset({"5_8", "9_12", "13_15", "16_18", "adult"})
 
 
 def _clean_check_bank(raw: Any) -> list[dict[str, Any]]:
-    """Keep the well-formed items and drop the rest.
-
-    Dropped rather than repaired. A check item with no answer cannot be graded,
-    and an item whose hints are missing cannot run a ladder -- serving either
-    would put a child in a loop the machine cannot get them out of.
-    """
+    """Keep the well-formed items and drop the rest."""
     out: list[dict[str, Any]] = []
     for index, entry in enumerate(raw or [], start=1):
         if not isinstance(entry, dict):
@@ -1057,18 +888,7 @@ ON CONFLICT (slug, locale) DO UPDATE SET
 
 
 async def _upsert(records: list[dict[str, Any]]) -> None:
-    """Write every concept. Idempotent on (slug, locale).
-
-    `ON CONFLICT (slug, locale)` rather than on the primary key, because a rerun
-    generates fresh `CON-####` ids in whatever order the taxonomy came back. The
-    slug is what identifies a concept across runs; the id is a handle. An existing
-    row therefore keeps its id, which is what stops a rerun orphaning every mastery
-    row pointing at it.
-
-    The authored curriculum's five concepts (`save`, `spend`, ...) are matched by
-    slug too, so a seeded body for `save` UPDATES the curriculum row rather than
-    creating a duplicate beside it.
-    """
+    """Write every concept."""
     from sqlalchemy import text
 
     from app.db.engine import get_sessionmaker
@@ -1182,12 +1002,7 @@ def _write_kb_gaps(records: list[dict[str, Any]]) -> None:
 
 
 async def _gather_limited(coroutines: Sequence[Any], limit: int) -> list[Any]:
-    """`asyncio.gather` with a concurrency ceiling.
-
-    A ceiling rather than unbounded, because 706 rows in 18 batches launched at
-    once is a rate-limit error on every one of them, and the retry storm that
-    follows costs more than the serialisation saves.
-    """
+    """`asyncio.gather` with a concurrency ceiling."""
     semaphore = asyncio.Semaphore(limit)
 
     async def guarded(coroutine: Any) -> Any:

@@ -1,22 +1,4 @@
-/**
- * N icons, M of them highlighted. A fraction you can count.
- *
- * ## The word "percent" never appears below 13
- *
- * Enforced twice, and both times deliberately. The backend's gate 6 rejects a
- * widget whose copy uses the word at 5-8 or 9-12 (it is on the banned list for
- * both). This component enforces it a second time in the SUMMARY IT GENERATES
- * -- the "3 out of 10" line is written here, not by the model, so it is this
- * file's job to make sure it never becomes "30%".
- *
- * "Three out of ten coins" is the same fact and is a fact a nine-year-old
- * already has the equipment to hold. A percentage is a second abstraction
- * stacked on the first.
- *
- * The icons are rendered as a plain list of shapes with `aria-hidden`, and the
- * count is stated in text underneath. A screen reader hears "3 of 10 coins are
- * saved" rather than fifty-seven list items.
- */
+/** N icons, M of them highlighted. */
 import { useState } from "react";
 import type { ProportionWidget } from "../../lib/stream/types";
 import { useAgeBand } from "../chat/AgeBandProvider";
@@ -45,9 +27,7 @@ export function Proportion({
 		? `${highlighted} of ${total} — ${Math.round((highlighted / total) * 100)} in every hundred`
 		: `${highlighted} out of ${total}`;
 
-	// Icon size shrinks as the count grows so a proportion of 100 still fits at
-	// 380px, with a floor that keeps it above a tappable-looking size — these
-	// are not controls, and they must not look like they are.
+	// Icon size shrinks as the count grows so a proportion of 100 still fits at 380px, with a floor that keeps it a…
 	const size = total > 40 ? 10 : total > 20 ? 14 : 18;
 
 	return (

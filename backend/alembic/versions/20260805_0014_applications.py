@@ -1,45 +1,4 @@
-"""Applications, encrypted PII, documents, review events and the audit log
-
-Revision ID: 0014_applications
-Revises: 0013_concept_widgets
-Create Date: 2026-08-05
-
-## Why PII is a separate table and not columns on `applications`
-
-Two reasons, and the second is the one that matters.
-
-The obvious one: `application_pii.value_encrypted` is bytea and the key lives in
-the environment, so a leaked database dump is not a list of children's national
-ID numbers.
-
-The one that decides the design: a reviewer's queue query, a status report, an
-export and a count all read `applications` and never join `application_pii`.
-Access to the values is therefore a separate, loggable act rather than a side
-effect of looking at a list -- which is what makes "who read this child's date
-of birth, and when?" an answerable question.
-
-## `documents` holds no bytes and no public URL
-
-`storage_key` is the object key in a PRIVATE bucket. Admins get short-lived
-signed URLs, minted per access and audited. There is no column here that could
-be pasted into a browser.
-
-`scan_status` has no default of `clean`. A document nobody scanned must be
-distinguishable from a scanned one, forever.
-
-## `pending_corrections` is on the application, not in a queue table
-
-F2's info-requested loop writes the specific slot paths a reviewer flagged, and
-`register_agent.resume_or_start` reads them. Keeping it as a column on the row
-the parent is already resuming means the correction cannot be orphaned from the
-application it belongs to.
-
-## `audit_log` is append-only by convention and by grant
-
-No update, no delete. The migration creates it; the deployment grants only
-INSERT and SELECT to the application role. A table the application can rewrite
-is not an audit log.
-"""
+"""Applications, encrypted PII, documents, review events and the audit log Revision ID: 0014_applications Revise…"""
 
 from __future__ import annotations
 
@@ -67,19 +26,15 @@ def upgrade() -> None:
         sa.Column("owner_user_id", sa.Text(), nullable=True),
         sa.Column("status", sa.Text(), nullable=False, server_default="draft"),
         # How a parent gets back in three days later, from another device.
-        # Random, single-purpose, and the only thing that resumes a draft.
         sa.Column("resume_token", sa.Text(), nullable=False),
-        # Non-sensitive answers only. Parish, relationship, sex, school,
-        # existing_account. Everything in `sensitive_paths()` goes to
-        # `application_pii` instead.
+        # Non-sensitive answers only.
         sa.Column(
             "answers",
             sa.dialects.postgresql.JSONB(),
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        # The slot paths a reviewer flagged. F2's loop reads this and walks ONLY
-        # these, so the parent never refills the form.
+        # The slot paths a reviewer flagged.
         sa.Column(
             "pending_corrections",
             sa.ARRAY(sa.Text()),
@@ -107,9 +62,7 @@ def upgrade() -> None:
             "'approved','rejected')",
             name="ck_applications_status",
         ),
-        # An attested application must know what it attested to. Enforced in
-        # the schema because "we lost the consent version" is unrecoverable
-        # after the fact.
+        # An attested application must know what it attested to.
         sa.CheckConstraint(
             "attested_at is null or consent_version is not null",
             name="ck_applications_consent_version",
@@ -131,8 +84,7 @@ def upgrade() -> None:
         # The slot path: "guardian.national_id", "child.0.date_of_birth".
         sa.Column("slot", sa.Text(), primary_key=True),
         sa.Column("value_encrypted", sa.LargeBinary(), nullable=False),
-        # Which key version encrypted it, so a key rotation is a background
-        # re-encrypt rather than a data loss.
+        # Which key version encrypted it, so a key rotation is a background re-encrypt rather than a data loss.
         sa.Column("key_version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column(
             "created_at",
@@ -179,9 +131,7 @@ def upgrade() -> None:
         sa.Column("uploaded_by", sa.Text(), nullable=True),
         # No `clean` default. Unscanned must not look scanned.
         sa.Column("scan_status", sa.Text(), nullable=False, server_default="pending"),
-        # doc_check's advisory verdict. It never rejects anything -- these
-        # columns exist so its agreement with the human decision can be
-        # MEASURED before anybody trusts it further.
+        # doc_check's advisory verdict.
         sa.Column("check_confidence", sa.Float(), nullable=True),
         sa.Column("check_notes", sa.Text(), nullable=True),
         sa.Column("retakes_requested", sa.Integer(), nullable=False, server_default="0"),
@@ -219,9 +169,7 @@ def upgrade() -> None:
         sa.Column("actor", sa.Text(), nullable=False),
         sa.Column("from_status", sa.Text(), nullable=True),
         sa.Column("to_status", sa.Text(), nullable=False),
-        # NOT NULL and no default. Every transition requires a reason note --
-        # a status machine whose transitions can be unexplained is a status
-        # machine nobody can audit.
+        # NOT NULL and no default.
         sa.Column("reason", sa.Text(), nullable=False),
         sa.Column(
             "slots_flagged",
@@ -251,8 +199,7 @@ def upgrade() -> None:
         ),
         sa.Column("actor", sa.Text(), nullable=False),
         sa.Column("actor_role", sa.Text(), nullable=True),
-        # "application.view", "document.download", "widget.approve",
-        # "application.transition".
+        # "application.view", "document.download", "widget.approve", "application.transition".
         sa.Column("action", sa.Text(), nullable=False),
         sa.Column("subject_type", sa.Text(), nullable=False),
         sa.Column("subject_id", sa.Text(), nullable=False),
@@ -270,8 +217,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    # Document access is queried separately from record views, because the two
-    # answer different questions and only one of them is about a child's papers.
+    # Document access is queried separately from record views, because the two answer different questions and only…
     op.create_index(
         "ix_audit_documents",
         "audit_log",

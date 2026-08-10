@@ -1,29 +1,4 @@
-/**
- * One large button. Hold it, or tap it, and talk.
- *
- * ## Both gestures, because children use both
- *
- * A five-year-old holds a button down the way they hold a walkie-talkie. A
- * ten-year-old taps it once, talks, and taps it again. Supporting only one
- * leaves half the audience pressing something that appears not to work.
- *
- * Implementation: pointerdown starts, pointerup within `TAP_MS` latches it on,
- * and anything longer treats the release as the end. Nobody has to be told
- * which mode they are in.
- *
- * ## The recording state is visible and it is not a colour change
- *
- * A ring that pulses with the actual input level, plus the word "Listening".
- * Colour alone would fail for a colour-blind child and would say nothing at all
- * to a child who cannot read yet -- the moving ring is the part that reads as
- * "it can hear me".
- *
- * ## Size
- *
- * 88 CSS pixels for band 5-8, from `AgeBandProvider.micSize`. This is the
- * primary input for that band and is sized as a primary control rather than as
- * an icon beside a text field.
- */
+/** One large button. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	microphoneAvailable,
@@ -65,8 +40,7 @@ export function PushToTalk({
 		active?.stop();
 	}, []);
 
-	// A component unmounting mid-recording must release the microphone, or the
-	// browser keeps showing the recording indicator for a page that is gone.
+	// A component unmounting mid-recording must release the microphone, or the browser keeps showing the recording…
 	useEffect(() => {
 		return () => {
 			session.current?.cancel();
@@ -153,8 +127,7 @@ export function PushToTalk({
 					cursor: disabled ? "default" : "pointer",
 					display: "grid",
 					placeItems: "center",
-					// Scale only -- it cannot reflow anything around it, so a
-					// pulsing ring never moves the layout under a child's thumb.
+					// Scale only -- it cannot reflow anything around it, so a pulsing ring never moves the layout under a child's t…
 					transform: `scale(${listening ? ring : 1})`,
 					transition: "transform 90ms linear, background-color 160ms ease",
 					touchAction: "none",
@@ -192,9 +165,7 @@ export function PushToTalk({
 
 			{listening ? (
 				<p style={{ display: "none" }}>
-					{/* Documented rather than rendered: recording ends itself after
-					    {SILENCE_TIMEOUT_MS}ms of quiet, so a child who wanders off
-					    never leaves a microphone open. */}
+					{/* Documented rather than rendered: recording ends itself after {SILENCE_TIMEOUT_MS}ms of quiet, so a child who… */}
 					{SILENCE_TIMEOUT_MS}
 				</p>
 			) : null}

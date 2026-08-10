@@ -1,42 +1,4 @@
-"""What a lesson must be, checked in code rather than asked for in a prompt.
-
-A prompt that says "40 to 90 words" produces 30-word replies often enough that
-the instruction is decorative. This module is the same requirement expressed as a
-predicate, so a lesson that misses it is *detected* rather than merely
-discouraged -- which is the difference between the three-tier guarantee in
-`render.py` and a hopeful adjective.
-
-## The numbers, and why they differ from `safety_out.WORD_CAPS`
-
-`WORD_CAPS` is a reading-stamina ceiling for a mascot's conversational turn:
-thirty-five words at 5-8, which is three short sentences. That is correct for a
-chat turn and it is *below the floor of a lesson*. A concept explained in
-thirty-five words to a six-year-old is a definition read aloud, which is the
-reported symptom of this whole workstream stated as a specification.
-
-So a learning turn has its own band contract with a FLOOR as well as a ceiling,
-and `safety_out` reads the lesson caps for learning agents (`LESSON_WORD_CAPS`).
-The two are reconciled in one place, here, rather than left to disagree -- a
-prompt asking for more words than the outbound gate permits produces a re-prompt
-on every single turn, which is a second model call forever caused by two
-constants drifting apart.
-
-## Sentence caps are about clause count, not about style
-
-Twelve words is roughly one clause. A six-year-old reading a twenty-word sentence
-loses the subject before the verb arrives, and the failure is silent -- they do
-not report confusion, they disengage. Checked as a maximum over sentences rather
-than as a mean, because one long sentence in a short paragraph is the whole
-paragraph for a reader who stalls on it.
-
-## Exactly one question, and it is the check question
-
-A lesson that ends with two questions asks a child to choose which to answer,
-and a lesson that ends with none has not checked anything. The count is over `?`
-in the prose, which also catches the model's habit of asking a rhetorical
-question mid-explanation -- fine for an adult, an invitation to answer for a
-seven-year-old.
-"""
+"""What a lesson must be, checked in code rather than asked for in a prompt."""
 
 from __future__ import annotations
 
@@ -45,10 +7,6 @@ from dataclasses import dataclass
 from typing import Iterable
 
 #: The lesson contract, per band.
-#:
-#: `min_words` is the number this whole workstream is about. `max_words` matches
-#: `safety_out.LESSON_WORD_CAPS` exactly; see the module docstring on why the two
-#: must not drift.
 @dataclass(frozen=True, slots=True)
 class BandContract:
     band: str
@@ -111,9 +69,7 @@ CONTRACTS: dict[str, BandContract] = {
     ),
 }
 
-#: The band used when the reader's is unknown. The MIDDLE of the ladder, matching
-#: `state.FALLBACK_BAND`: defaulting to 5-8 would serve a teenager baby talk, and
-#: defaulting to adult would serve a child an unbounded lesson.
+#: The band used when the reader's is unknown.
 FALLBACK_BAND = "9-12"
 
 
@@ -123,16 +79,13 @@ def contract_for(band: str) -> BandContract:
 
 # ── measurement ──────────────────────────────────────────────────────────────
 
-#: Sentence terminators. Mirrors `safety_out._SENTENCE_END` so that "how many
-#: sentences is this?" has one answer in the product.
+#: Sentence terminators.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])[\"')\]]*\s+")
 
 _MARKDOWN_HEADING = re.compile(r"^\s{0,3}#{1,6}\s", re.MULTILINE)
 _MARKDOWN_LIST = re.compile(r"^\s{0,3}[-*•]\s+|^\s{0,3}\d+[.)]\s+", re.MULTILINE)
 
-#: Emoji and pictographs, by block. Not exhaustive and does not need to be -- the
-#: rule is "at most one", and the blocks below cover everything a model reaches
-#: for when writing warmly to a child.
+#: Emoji and pictographs, by block.
 _EMOJI = re.compile(
     "[\U0001f300-\U0001faff\U00002600-\U000027bf\U0001f000-\U0001f0ff⬀-⯿]"
 )
@@ -167,18 +120,7 @@ class ContractViolation:
         return f"{self.code}: {self.detail}"
 
 
-#: Violations that mean this is not a lesson. Only these trigger a regeneration.
-#:
-#: The split is a cost decision made deliberately. A regeneration is a second
-#: frontier call on a turn a learner is waiting through, and it is worth paying
-#: when the lesson is absent, thin, ungrounded or unanswerable -- the four ways a
-#: turn fails to teach. It is not worth paying because one sentence ran three
-#: words long: the lesson is correct, complete and on-topic, and a fresh
-#: generation is as likely to introduce a different blemish as to fix this one.
-#:
-#: Advisory violations are still recorded and still logged, so their rates are
-#: visible on the health surface and a prompt that produces them constantly can
-#: be fixed at the prompt rather than at runtime.
+#: Violations that mean this is not a lesson.
 BLOCKING: frozenset[str] = frozenset(
     {"EMPTY", "TOO_SHORT", "UNGROUNDED", "NO_QUESTION", "TOO_MANY_QUESTIONS"}
 )
@@ -186,13 +128,7 @@ BLOCKING: frozenset[str] = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class ContractResult:
-    """Whether a rendered lesson may be served, and if not, precisely why.
-
-    The violations are quoted back to the model on the retry. "Be more thorough"
-    moves a word count by ten percent; "that was 22 words and this band needs at
-    least 60, structured as hook / idea / EC$ example / check question" produces
-    one that fits, because the model can count.
-    """
+    """Whether a rendered lesson may be served, and if not, precisely why."""
 
     ok: bool
     violations: tuple[ContractViolation, ...] = ()
@@ -205,12 +141,7 @@ class ContractResult:
 
     @property
     def servable(self) -> bool:
-        """Whether this may be served as it stands.
-
-        `ok` means flawless. `servable` means it teaches -- which is the question
-        the renderer actually has to answer, and the difference between the two
-        is a regeneration nobody needed.
-        """
+        """Whether this may be served as it stands."""
         return not self.blocking
 
     def quoted(self) -> str:
@@ -224,16 +155,7 @@ def check_lesson(
     expect_question: bool = True,
     grounding_terms: Iterable[str] = (),
 ) -> ContractResult:
-    """Whether this is a lesson. Deterministic, and the only judge that matters.
-
-    `grounding_terms` is the concept body's vocabulary. Its absence is the
-    brief's "contains no sentence from the concept body's semantic neighbourhood"
-    check, implemented as term overlap rather than as an embedding comparison --
-    the failure being caught is a model that ignored the body and wrote from its
-    own knowledge, and that failure shows up as *none of the concept's words
-    appearing*, which lexical overlap detects exactly and an embedding comparison
-    detects fuzzily at the cost of a network call inside a validator.
-    """
+    """Whether this is a lesson."""
     contract = contract_for(band)
     violations: list[ContractViolation] = []
     body = text.strip()
@@ -319,11 +241,6 @@ def check_lesson(
 # ── TTS safety ───────────────────────────────────────────────────────────────
 
 #: What a text-to-speech voice reads badly, and what to say instead.
-#:
-#: "EC$25" is read as "E C dollar sign twenty five" by every engine this was
-#: tested against. The substitution happens on the VOICE channel only -- the
-#: screen keeps "EC$25", which is what a reader expects to see and what the
-#: currency actually looks like.
 _TTS_SUBSTITUTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"EC\$\s?([\d,]+(?:\.\d{2})?)"), r"\1 EC dollars"),
     (re.compile(r"XCD\s?([\d,]+(?:\.\d{2})?)"), r"\1 EC dollars"),
@@ -331,8 +248,7 @@ _TTS_SUBSTITUTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"([\d.]+)\s?%"), r"\1 percent"),
     (re.compile(r"\s*&\s*"), " and "),
     (re.compile(r"\s*/\s*"), " or "),
-    # Parentheticals are an aside a reader skims and a listener cannot. Removed
-    # rather than reordered: an aside that mattered belongs in a sentence.
+    # Parentheticals are an aside a reader skims and a listener cannot.
     (re.compile(r"\s*\([^)]*\)"), ""),
     (re.compile(r"\s*--\s*"), ", "),
     (re.compile(r"\s*—\s*"), ", "),
@@ -340,12 +256,7 @@ _TTS_SUBSTITUTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
 
 
 def tts_safe(text: str) -> str:
-    """The lesson as a voice should read it.
-
-    Applied on the voice channel only. The screen and the audio are the same
-    lesson said two ways, not two lessons -- so this is a rendering of one string
-    rather than a second generation, which is also what keeps them from drifting.
-    """
+    """The lesson as a voice should read it."""
     out = text
     for pattern, replacement in _TTS_SUBSTITUTIONS:
         out = pattern.sub(replacement, out)

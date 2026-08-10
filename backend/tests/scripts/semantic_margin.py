@@ -1,23 +1,4 @@
-"""Does the semantic cache's 0.95 threshold separate paraphrases from neighbours?
-
-The layer-2 cache (P14-B) serves question A's answer to question B when their
-embeddings sit within `SEMANTIC_CACHE_THRESHOLD` cosine. That is only safe if,
-at the chosen threshold and the chosen shelf dimensionality, three populations
-separate cleanly:
-
-  * PARAPHRASES of one question (should HIT: same answer wanted);
-  * DISTINCT questions from the same corpus (should MISS: different answers);
-  * ADVERSARIAL near-pairs -- one changed fact, e.g. an age or a direction of
-    money -- which are the pairs a wrong hit harms most (must MISS).
-
-This script measures all three, at full 3072 dims and at the truncated shelf
-dims, so the threshold defaults are chosen against numbers rather than vibes.
-
-    python -m scripts.semantic_margin
-
-Uses the live embeddings backend (network). Results land on stdout as three
-distributions plus the verdict at the configured threshold.
-"""
+"""Does the semantic cache's 0.95 threshold separate paraphrases from neighbours?"""
 
 from __future__ import annotations
 

@@ -1,39 +1,4 @@
-"""What counts as evidence that a child has learned something.
-
-The scale is four values and the transitions are five rules. Both are short on
-purpose: this is the number that decides what a child is taught next, and a
-scoring system nobody can hold in their head is a scoring system nobody
-notices going wrong.
-
-    0 unseen | 1 exposed | 2 practised | 3 mastered
-
-    widget interaction        →  0 to 1 only. NEVER above 1.
-    correct check, no hints   →  +1
-    correct after hints       →  no change
-    wrong twice               →  -1, floor 0
-    explain_back accepted     →  +1, cap 3
-
-## The rule that matters: a widget is exposure, not mastery
-
-A child can move a slider forty times. It is engagement, it is often the moment
-the idea lands, and it is not evidence that they hold it -- because moving a
-slider requires no recall, no articulation and no decision. If widget
-interaction could raise mastery, the fastest route to every badge in the product
-would be to drag things, and children optimise for badges faster than adults
-expect.
-
-So `WIDGET` saturates at 1. `apply` enforces it as a hard ceiling on that
-transition rather than as a "+1 with a cap", which is a distinction that
-matters when a concept is already at 2: a widget touch must not move it to 3,
-and must not move it *down* either.
-
-## Down is possible, and gentle
-
-Two wrong attempts costs a point, floored at 0. It has to be possible -- a
-scale that only rises stops meaning anything after a fortnight -- and it has to
-be small, because the child never sees it and the only effect they experience
-is the concept coming back round sooner.
-"""
+"""What counts as evidence that a child has learned something."""
 
 from __future__ import annotations
 
@@ -52,9 +17,7 @@ MAX_SCORE = 3
 #: The ceiling a widget interaction may raise a concept to. Not a step size.
 WIDGET_CEILING = 1
 
-#: How many wrong attempts before a point is lost. Matches the hint ladder's
-#: hard cap: the third attempt does not happen, so "wrong twice" is the most
-#: that can be observed.
+#: How many wrong attempts before a point is lost.
 WRONG_ATTEMPTS_TO_DROP = 2
 
 
@@ -66,9 +29,7 @@ class Evidence(str, Enum):
     CORRECT_AFTER_HINTS = "correct_after_hints"
     WRONG = "wrong"
     EXPLAINED = "explain_back_accepted"
-    #: A game result. Deliberately mapped to exposure, never to mastery: a game
-    #: score is a mix of understanding, reading speed and luck, and letting one
-    #: push a concept to 3 would make the scale mean "played a game".
+    #: A game result.
     GAME = "game_completed"
 
 
@@ -87,13 +48,7 @@ class MasteryRow:
 
 
 def apply(row: MasteryRow, evidence: Evidence, *, now: datetime | None = None) -> MasteryRow:
-    """The new standing after one piece of evidence.
-
-    Pure, and takes `now` rather than reading the clock, so a scheduling
-    decision made last Tuesday can be re-derived exactly. A function that reads
-    `datetime.now()` cannot be tested at a boundary and cannot be explained to a
-    parent asking why a concept came back.
-    """
+    """The new standing after one piece of evidence."""
     moment = now or datetime.now(timezone.utc)
     score = row.score
     attempts = row.attempts
@@ -103,10 +58,7 @@ def apply(row: MasteryRow, evidence: Evidence, *, now: datetime | None = None) -
 
     if evidence in (Evidence.WIDGET, Evidence.GAME):
         touches += 1
-        # A CEILING, not an increment. At 0 this lifts to 1; at 2 it leaves the
-        # score alone. Writing it as `min(score + 1, 1)` would silently DROP a
-        # concept already at 2 or 3 back to 1, which is the same bug in the
-        # opposite direction.
+        # A CEILING, not an increment.
         score = max(score, WIDGET_CEILING) if score <= WIDGET_CEILING else score
 
     elif evidence is Evidence.CORRECT:
@@ -118,8 +70,7 @@ def apply(row: MasteryRow, evidence: Evidence, *, now: datetime | None = None) -
         attempts += 1
         hinted += 1
         wrong_streak = 0
-        # No change. They arrived, and they arrived with help -- which is
-        # exposure to the idea rather than evidence they hold it.
+        # No change.
 
     elif evidence is Evidence.WRONG:
         attempts += 1
@@ -148,10 +99,6 @@ def apply(row: MasteryRow, evidence: Evidence, *, now: datetime | None = None) -
 # ── spaced repetition ────────────────────────────────────────────────────────
 
 #: Days until a concept is due again, by score.
-#:
-#: 1, 3, 7, 21 -- roughly doubling-and-a-bit, which is the shape every spaced
-#: repetition schedule converges on. Something unseen (0) comes back tomorrow;
-#: something mastered (3) comes back in three weeks to check it stayed.
 INTERVAL_DAYS: dict[int, int] = {0: 1, 1: 3, 2: 7, 3: 21}
 
 
@@ -162,12 +109,7 @@ def due_after(score: int, moment: datetime) -> datetime:
 
 
 def is_due(row: MasteryRow, *, now: datetime | None = None) -> bool:
-    """Whether this concept should come back round.
-
-    A row that has never been seen is due. That is what makes placement work
-    without a separate "unseen" query: a new learner's concepts are all due,
-    and the scheduler simply orders them.
-    """
+    """Whether this concept should come back round."""
     if row.next_due is None:
         return True
     return (now or datetime.now(timezone.utc)) >= row.next_due
@@ -184,10 +126,7 @@ def mastered(row: MasteryRow) -> bool:
 class Badge:
     id: str
     name: str
-    #: The real ASPIRE event that earns it, where there is one. Badges tied to
-    #: something that happened at a branch mean more than badges tied to app
-    #: activity -- a child showing a parent "I got this for my first deposit" is
-    #: a different conversation from "I got this for opening the app".
+    #: The real ASPIRE event that earns it, where there is one.
     milestone: str | None = None
 
 
@@ -216,20 +155,7 @@ def badge_for_streak(streak: int) -> Badge | None:
 
 
 def is_persistable(learner_id: str | None) -> bool:
-    """Whether this id can be written to `mastery.learner_id`, a UUID column.
-
-    Asked by `PostgresMasteryStore` only. The in-memory store keys on whatever
-    string it is given and is right to -- its ids are test ids and session ids,
-    and inventing a UUID requirement for a dict would break every test that
-    writes `"learner-1"`.
-
-    What this guards is the boundary. The graph used to derive a learner as
-    `user_id or session_id or "anonymous"` and hand the result straight to
-    asyncpg; a session id is not a UUID, asyncpg raised, the exception escaped
-    the node, and a child who had moved a slider was told the assistant was
-    unavailable. Falling back to memory keeps the turn's arithmetic correct and
-    writes nothing, which is the honest outcome for a learner with no account.
-    """
+    """Whether this id can be written to `mastery.learner_id`, a UUID column."""
     if not learner_id:
         return False
     try:
@@ -243,14 +169,7 @@ def is_persistable(learner_id: str | None) -> bool:
 
 
 class MasteryStore:
-    """Persistence for mastery rows, with an in-memory default.
-
-    The in-memory implementation is not a test double -- it is what a
-    deployment without a database uses, and it is what `learning_sample` uses
-    for an anonymous visitor who has no learner row to write to. A lesson that
-    refuses to run without Postgres would be a lesson nobody without an account
-    can try.
-    """
+    """Persistence for mastery rows, with an in-memory default."""
 
     def __init__(self) -> None:
         self._rows: dict[tuple[str, str], MasteryRow] = {}
@@ -261,10 +180,7 @@ class MasteryStore:
     async def put(
         self, learner_id: str, row: MasteryRow, *, age_band: str = "9-12"
     ) -> None:
-        # `age_band` is accepted and ignored. The Postgres store needs it to
-        # create the learner row; in memory there is no learner row to create,
-        # and the two stores must take the same arguments or `record` cannot
-        # call either.
+        # `age_band` is accepted and ignored.
         self._rows[(learner_id, row.concept_id)] = row
 
     async def all_for(self, learner_id: str) -> list[MasteryRow]:
@@ -283,20 +199,7 @@ class MasteryStore:
         now: datetime | None = None,
         age_band: str = "9-12",
     ) -> MasteryRow:
-        """Read, apply, write. The only method callers should need.
-
-        `learner_id` may be None, and that is a supported turn rather than a
-        caller mistake: an anonymous visitor playing with a widget in
-        `learning_sample` has no account for a mastery row to belong to.
-        Nothing is written, the in-memory result is returned so the caller's
-        arithmetic still works, and the turn proceeds.
-
-        This used to take a fallback string -- the session id, or the literal
-        "anonymous" -- and hand it to a UUID column. asyncpg rejected it
-        (`invalid UUID 'wi-anonymous'`), the exception escaped `widget_result`,
-        and the whole turn died with "the assistant is temporarily unavailable"
-        for a child who had done nothing but move a slider.
-        """
+        """Read, apply, write."""
         if not learner_id:
             row = apply(MasteryRow(concept_id=concept_id), evidence, now=now)
             logger.info(
@@ -322,21 +225,14 @@ class MasteryStore:
 
 
 class PostgresMasteryStore(MasteryStore):
-    """The same interface, against the `mastery` table.
-
-    Falls back to the in-memory rows whenever there is no session, rather than
-    raising. A lesson interrupted by a database blip should carry on and lose
-    the scoring, not stop mid-sentence in front of a child.
-    """
+    """The same interface, against the `mastery` table."""
 
     async def get(self, learner_id: str, concept_id: str) -> MasteryRow:
         from sqlalchemy import text as sql
 
         from app.db import session
 
-        # A learner id that is not a UUID cannot be a `mastery.learner_id`, so
-        # it is served from memory rather than handed to asyncpg to raise on.
-        # See `is_persistable`.
+        # A learner id that is not a UUID cannot be a `mastery.learner_id`, so it is served from memory rather than han…
         if not is_persistable(learner_id):
             return await super().get(learner_id, concept_id)
 
@@ -385,20 +281,7 @@ class PostgresMasteryStore(MasteryStore):
                 await super().put(learner_id, row)
                 return
 
-            # The learner row first, because `mastery.learner_id` references it
-            # and NOTHING ELSE CREATES ONE. Without this every mastery write for
-            # a signed-in child raised `mastery_learner_id_fkey`, which killed
-            # the node and made the whole C4 track -- mastery, scheduling,
-            # spaced repetition -- unreachable in production. Found by running a
-            # widget interaction, not by a test: the tests use the in-memory
-            # store, which has no foreign keys to violate.
-            #
-            # `id` IS the account's uuid rather than a fresh one. `learners.id`
-            # defaults to `gen_random_uuid()` and carries a nullable `user_id`,
-            # so the schema allows either -- but every caller in the graph
-            # passes `state["user_id"]` as the learner, and giving the two
-            # different values would mean a lookup table nobody consults and a
-            # class of bug where mastery is written under an id no reader knows.
+            # The learner row first, because `mastery.learner_id` references it and NOTHING ELSE CREATES ONE.
             await db.execute(
                 sql(
                     """

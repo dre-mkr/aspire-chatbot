@@ -1,13 +1,4 @@
-"""A handoff carries facts, and the receiver cannot re-ask what it was given.
-
-C.3. The QA-to-registration handoff passed `active_agent` and nothing else
-(`agents/qa/tools.py:308`), so the receiving agent restarted its slot walk from
-the top with no knowledge of anything already said.
-
-The enforcement tests are the ones that matter. `do_not_reask` is required to be
-structural: not an instruction in a prompt that the slot loop never reads, but a
-value the loop cannot produce.
-"""
+"""A handoff carries facts, and the receiver cannot re-ask what it was given."""
 
 from __future__ import annotations
 
@@ -63,8 +54,7 @@ class TestTheContract:
         assert from_state(state) == handoff
 
     def test_an_unusable_payload_is_discarded_rather_than_raised(self):
-        """A handoff that has been through a checkpoint has not been through the
-        validator. A malformed one must not kill the turn."""
+        """A handoff that has been through a checkpoint has not been through the validator."""
         assert from_state({"safety_flags": {"handoff": {"nonsense": True}}}) is None
         assert from_state({"safety_flags": {}}) is None
 
@@ -124,10 +114,7 @@ class TestDoNotReaskIsStructural:
         assert "guardian.relationship" in paths
 
     def test_the_walk_continues_past_a_barred_slot(self):
-        """A withheld slot must not end the application. The first draft of this
-        filtered after the walk and wrote a sentinel into `draft.values` to get
-        past one -- which `_persist_state` would have checkpointed and `submit`
-        would have sent as a real answer."""
+        """A withheld slot must not end the application."""
         draft = _draft()
         handoff = _handoff(do_not_reask=["guardian.relationship"])
 
@@ -149,8 +136,7 @@ class TestDoNotReaskIsStructural:
         draft = _draft()
         slot = pick_slot(draft, handoff=_handoff(do_not_reask=every))
 
-        # Guardian section exhausted, so the walk moves to the child section
-        # rather than returning None or looping.
+        # Guardian section exhausted, so the walk moves to the child section rather than returning None or looping.
         assert slot is None or slot.path.startswith("child.")
 
     def test_next_missing_takes_the_barred_set_directly(self):
@@ -162,9 +148,7 @@ class TestDoNotReaskIsStructural:
         assert barred_first.path != first.path
 
     def test_filter_slots_passes_through_objects_with_no_path(self):
-        """Its job is removing named slots, not filtering arbitrary objects.
-        Silently dropping something it did not understand would be the worse bug.
-        """
+        """Its job is removing named slots, not filtering arbitrary objects."""
         sentinel = object()
         assert filter_slots([sentinel], _handoff(do_not_reask=["anything"])) == [sentinel]
 

@@ -1,18 +1,4 @@
-/**
- * Conversations, read back from the service.
- *
- * History used to be whatever this browser had written into localStorage, which
- * made a conversation a property of a device rather than of a person. The
- * transcripts were already in Postgres — written on every turn since the
- * persistence step — but nothing recorded whose they were, so nothing could
- * read them back.
- *
- * This module is the client for that read path. It deliberately returns the
- * same `StoredConversation` shape the rail and the transcript already consume:
- * the point of the change is where history comes from, not what a message looks
- * like, and a component that has to be rewritten to read its own history is a
- * migration nobody finishes.
- */
+/** Conversations, read back from the service. */
 
 import type { Source } from "./api";
 import type { StoredConversation, StoredMessage } from "./history";
@@ -45,14 +31,7 @@ interface WireConversation {
 	messages?: Array<WireMessage>;
 }
 
-/**
- * A failed request that still knows what the server said.
- *
- * The plain `Error` this replaces put the status in a message string, which
- * meant nothing could act on it: Query's retry policy could not tell a 401 from
- * a 503, so it retried both. Retrying a 404 for a deleted conversation is three
- * round trips to be told the same thing.
- */
+/** A failed request that still knows what the server said. */
 export class HttpError extends Error {
 	readonly status: number;
 
@@ -66,13 +45,7 @@ export class HttpError extends Error {
 async function call<T>(
 	path: string,
 	init?: RequestInit,
-	/**
-	 * Checked before the value is handed back, where a shape matters.
-	 *
-	 * Same reasoning as `isChatResponseBody` in `api.ts`: `as T` is a claim
-	 * nothing verifies, and a backend shape change would surface as a rail full
-	 * of blank rows rather than as an error.
-	 */
+	/** Checked before the value is handed back, where a shape matters. */
 	guard?: (value: unknown) => value is T,
 ): Promise<T> {
 	const response = await fetch(`${API_URL}${path}`, {
@@ -117,32 +90,8 @@ function isConversationList(
 	);
 }
 
-/**
- * The prose a turn is rendered from.
- *
- * Parsed here rather than on the server, because the parser already exists here
- * and a second implementation over the wire is two implementations to keep in
- * agreement. A game or eligibility turn carries no prose at all — the card is
- * the whole turn — so it is reconstructed as the marker it is.
- */
-/**
- * Give a stored citation the shape the renderer expects.
- *
- * The two producers disagreed. A STREAMED source is assembled by
- * `stream.ts` as `{ content, metadata: { kb_id, title } }`. A source loaded
- * from history is whatever `turn.py` persisted, which is the `Citation` model
- * itself -- `{ kb_id, title }`, with no `metadata` at all.
- *
- * `Source.metadata` is not optional in the type, so nothing warned, and
- * `Transcript.tsx` reads `source.metadata.question` directly. Reopening any
- * past conversation that had citations therefore threw "Cannot read properties
- * of undefined (reading 'question')" and React tore down the whole <Sources>
- * subtree.
- *
- * Normalising here rather than loosening the type keeps one shape flowing
- * through the renderer, which is what let the type be non-optional in the
- * first place.
- */
+/** The prose a turn is rendered from. */
+/** Give a stored citation the shape the renderer expects. */
 function normaliseSource(source: Source | Record<string, unknown>): Source {
 	if (
 		source &&
@@ -232,32 +181,14 @@ export async function renameConversation(
 	});
 }
 
-/**
- * Delete one conversation, permanently.
- *
- * There is nothing to undo afterwards and no archive to fish it back out of,
- * which is why the rail asks before calling this. The service removes the
- * transcript, the messages, and the copies that live outside the conversations
- * table — the model's own checkpoint most of all.
- *
- * A 404 is not treated as an error by the caller: the conversation is not
- * there, which is the state that was being asked for.
- */
+/** Delete one conversation, permanently. */
 export async function deleteConversation(threadId: string): Promise<void> {
 	await call<void>(`/api/conversations/${encodeURIComponent(threadId)}`, {
 		method: "DELETE",
 	});
 }
 
-/**
- * Adopt conversations this browser started before ownership was recorded.
- *
- * Every transcript written before the owner column existed is readable by
- * nobody. This browser still has their ids in localStorage, and presenting an
- * id it could only have if it created the conversation is the strongest claim
- * available in a product with no accounts. The service only ever adopts rows
- * that are currently unowned, so replaying somebody else's ids takes nothing.
- */
+/** Adopt conversations this browser started before ownership was recorded. */
 export async function claimConversations(
 	threadIds: Array<string>,
 ): Promise<number> {

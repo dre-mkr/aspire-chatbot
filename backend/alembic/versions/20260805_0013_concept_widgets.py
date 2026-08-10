@@ -1,40 +1,4 @@
-"""Generated concept widgets and their review state
-
-Revision ID: 0013_concept_widgets
-Revises: 0012_mastery
-Create Date: 2026-08-05
-
-## The unique index is the whole safety property
-
-    UNIQUE (concept_id, age_band, locale) WHERE status = 'approved'
-
-All three columns, and the partial predicate. Two approved widgets for the same
-concept and band in different languages are fine and necessary; two for the same
-concept, band AND language is an ambiguity the lookup would resolve by whichever
-row the planner happened to return -- which is to say, differently on different
-days.
-
-Scoped to `approved` because candidates legitimately accumulate: a concept can
-have a rejected row from March and a candidate from August, and forcing those to
-be unique would make rejecting anything impossible without deleting the history
-of why.
-
-## `payload` is jsonb, not a set of columns
-
-Nine widget kinds with disjoint fields is not a table. The schema lives in
-`app/widgets/schemas.py` and is validated on the way IN -- by the time a row
-exists it has passed seven gates, so the database's job is storage rather than
-validation.
-
-jsonb rather than json so a reviewer's edit can be a targeted update and the
-admin queue can filter on `payload->>'kind'` without deserialising every row.
-
-## `source_question` is kept, and it is the most useful column here
-
-It is what a reviewer reads first: not "is this widget correct" in the abstract
-but "does this widget answer THAT question". A queue without it is a queue of
-context-free JSON.
-"""
+"""Generated concept widgets and their review state Revision ID: 0013_concept_widgets Revises: 0012_mastery Crea…"""
 
 from __future__ import annotations
 
@@ -60,9 +24,7 @@ def upgrade() -> None:
             primary_key=True,
             server_default=sa.text("gen_random_uuid()"),
         ),
-        # No foreign key to `concepts`, deliberately. A widget can legitimately
-        # be about a concept the curriculum later renames or retires, and a
-        # cascade would delete the reviewer's work along with the concept row.
+        # No foreign key to `concepts`, deliberately.
         sa.Column("concept_id", sa.Text(), nullable=False),
         sa.Column("age_band", sa.Text(), nullable=False),
         sa.Column("locale", sa.Text(), nullable=False),
@@ -81,11 +43,9 @@ def upgrade() -> None:
         ),
         sa.Column("reviewed_by", sa.Text(), nullable=True),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
-        # Bumped on every review, so an edit-then-approve is distinguishable
-        # from an approve, and a served payload can be traced to a decision.
+        # Bumped on every review, so an edit-then-approve is distinguishable from an approve, and a served payload can…
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
-        # How often the triggering concept has been asked about. The review
-        # queue sorts by it, so the most-served widgets get reviewed first.
+        # How often the triggering concept has been asked about.
         sa.Column("serve_count", sa.Integer(), nullable=False, server_default="0"),
         sa.CheckConstraint(
             "status in ('candidate','approved','rejected')",
@@ -105,8 +65,7 @@ def upgrade() -> None:
         unique=True,
         postgresql_where=sa.text("status = 'approved'"),
     )
-    # One live candidate per key, so a regeneration replaces rather than
-    # accumulates. The cache's upsert targets this index by name.
+    # One live candidate per key, so a regeneration replaces rather than accumulates.
     op.create_index(
         "uq_concept_widgets_candidate",
         "concept_widgets",

@@ -1,30 +1,4 @@
-/**
- * The graph session token, and where it comes from.
- *
- * Two tokens exist in this client and they authorise different things:
- *
- *   `lib/aspire/session`  — the ACCOUNT token. Proves who you are. Sent to the
- *                           REST endpoints, which ask "may this caller read
- *                           this row?".
- *   this module           — the GRAPH token. Carries persona, age band and
- *                           account status, which decide which agents may run
- *                           and how a reply is gated.
- *
- * The second is minted from the first by `POST /v2/session`, server-side, from
- * the account record. Nothing here chooses any of those claims — the endpoint
- * ignores a body field that tries, and the only two it honours are `locale`
- * (which grants nothing) and a persona that is *narrower* than the derived one.
- *
- * ## One token per thread, held in memory only
- *
- * Keyed by thread id because the token names the conversation: `session_id` is
- * the checkpointer's thread key, so a token minted for one conversation cannot
- * be reused to turn in another.
- *
- * Deliberately NOT in `localStorage` or `sessionStorage`. It is short-lived,
- * cheap to re-mint, and carries an age band — the one claim in this product
- * worth the least effort to steal off a shared school tablet.
- */
+/** The graph session token, and where it comes from. */
 import { authHeaders } from "../aspire/session";
 
 const API_URL = (
@@ -64,18 +38,7 @@ export interface PersonaRefusal {
 	granted: string;
 }
 
-/**
- * Told when the server declines a persona request.
- *
- * This exists because the refusal used to be invisible on this side. The picker
- * writes `?persona=aurora`, `mint` sends it, the server derives Orion for a
- * 16-18 account and returns Orion — and nothing reconciled the two, so the
- * control went on claiming a persona the session did not have. The reader then
- * followed advice to "choose Aurora", which is what they had already done.
- *
- * A single listener rather than a set: there is one persona control on screen,
- * and a broadcast would invite two of them to both try to correct the URL.
- */
+/** Told when the server declines a persona request. */
 let refusedListener: ((refusal: PersonaRefusal) => void) | null = null;
 
 export function onPersonaRefused(
@@ -87,14 +50,7 @@ export function onPersonaRefused(
 	};
 }
 
-/**
- * The token for this thread, minting one if there is not one already.
- *
- * `persona` is a REQUEST, not an instruction. The server grants it only when it
- * is no broader than what the account record implies, so passing the picker's
- * current value here is safe by construction: a six-year-old's client asking
- * for Aurora gets Stella and a line in the server log.
- */
+/** The token for this thread, minting one if there is not one already. */
 export async function graphSession(
 	threadId: string,
 	options: { locale?: string; persona?: string | null; deviceId?: string } = {},
@@ -149,8 +105,7 @@ async function mint(
 
 	const granted = body.persona ?? "stella";
 
-	// Announced before the session is returned, so the control is corrected in
-	// the same tick the token arrives rather than a render later.
+	// Announced before the session is returned, so the control is corrected in the same tick the token arrives rath…
 	if (body.persona_refused && options.persona && refusedListener) {
 		refusedListener({ requested: options.persona, granted });
 	}
@@ -158,10 +113,7 @@ async function mint(
 	return {
 		token: body.token,
 		sessionId: body.session_id,
-		// Defaulted to the NARROWEST values, not the widest. These only decide
-		// what the client draws — the server re-reads its own claims from the
-		// token on every request — but a client that guessed "adult" would draw
-		// an adult's interface for a child while the server served a child's.
+		// Defaulted to the NARROWEST values, not the widest.
 		persona: granted,
 		ageBand: body.age_band ?? "5-8",
 		accountStatus: body.account_status ?? "prospect",

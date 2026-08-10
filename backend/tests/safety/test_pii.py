@@ -1,9 +1,4 @@
-"""What the redactor catches, and -- as importantly -- what it leaves alone.
-
-A redactor is judged on both. Every false positive here is a lesson with a hole
-in it: "[a phone number]" where the answer said "EC$5 a week" teaches nothing
-and looks broken.
-"""
+"""What the redactor catches, and -- as importantly -- what it leaves alone."""
 
 from __future__ import annotations
 
@@ -38,8 +33,7 @@ class TestDetection:
     @pytest.mark.parametrize(
         "text",
         [
-            # A year alone is age information, not a date of birth. The product
-            # already holds an age band and the learning agent reasons about it.
+            # A year alone is age information, not a date of birth.
             "I was born in 2015 and I am 10 now.",
             # Money, in every form the curriculum uses.
             "Save EC$5 a week and you will have EC$260 in a year.",
@@ -59,12 +53,7 @@ class TestDetection:
         assert pii.kinds_in(text) == [], f"false positive in {text!r}"
 
     def test_overlaps_are_reported_once(self):
-        """"my national id is 869 555 0123" is one fact, not two.
-
-        Without the overlap sweep this reports both a national ID and a phone
-        number, which would put two different `[collected: ...]` markers in the
-        summary for one collected field.
-        """
+        """"my national id is 869 555 0123" is one fact, not two."""
         spans = pii.detect("my national id is 8695550123")
         assert len(spans) == 1
         assert spans[0].kind == "national_id"
@@ -85,12 +74,7 @@ class TestRedaction:
         assert "[collected: national_id]" in out
 
     def test_multiple_spans_do_not_corrupt_each_others_offsets(self):
-        """Replacement runs back-to-front; this is the test that proves it.
-
-        Front-to-back replacement shifts every subsequent offset by the
-        difference in length, so the second redaction lands in the wrong place
-        and leaves half a value behind.
-        """
+        """Replacement runs back-to-front; this is the test that proves it."""
         text = (
             "a@b.com then 869-555-0123 then 14/03/2015 then "
             "c@d.com then 12 Main Street"

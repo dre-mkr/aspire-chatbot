@@ -1,30 +1,4 @@
-/**
- * The whole application, grouped, editable, before it is submitted.
- *
- * ## "Change item 4" edits item 4 and nothing else
- *
- * Tapping edit sends the graph to that slot, collects it, and returns HERE.
- * The flow is not restarted, no other answer is cleared, and the parent does
- * not walk the form again.
- *
- * That is the single most important behaviour on this card. A form that
- * restarts on a correction is a form parents abandon -- and the correction they
- * were making was usually a spelling, which means the abandonment is caused
- * entirely by the interface.
- *
- * ## Values arrive already masked
- *
- * `fields` carries `[slot, label, displayValue]` and the display value is what
- * the server decided a reader may see. A national ID reads as `••••5678`. This
- * card renders a transcript entry, the transcript is persisted, and neither of
- * those is a place for a full ID number.
- *
- * ## Attestation is explicit and cannot be pre-ticked
- *
- * The submit button is disabled until the box is checked. The consent TEXT and
- * its VERSION are rendered from the server's own copy, so the thing agreed to
- * is the thing recorded -- see `review_events` and `consent_version`.
- */
+/** The whole application, grouped, editable, before it is submitted. */
 import { useState } from "react";
 import type { ReviewCardDirective } from "../../lib/stream/types";
 import { useAgeBand } from "./AgeBandProvider";
@@ -45,8 +19,7 @@ export function ReviewCard({
 	const band = useAgeBand();
 	const [attested, setAttested] = useState(false);
 
-	// A running number across sections, so "change item 4" means the fourth
-	// thing on screen rather than the fourth thing in section two.
+	// A running number across sections, so "change item 4" means the fourth thing on screen rather than the fourth…
 	let item = 0;
 
 	return (
@@ -109,9 +82,7 @@ export function ReviewCard({
 									<button
 										type="button"
 										onClick={() => onEdit(slot)}
-										// The accessible name has to name the field. Nine
-										// buttons all called "Change" is a screen-reader
-										// user guessing.
+										// The accessible name has to name the field.
 										aria-label={`Change ${label}`}
 										style={{
 											minHeight: `${Math.max(44, band.touchTarget - 8)}px`,
@@ -157,13 +128,7 @@ export function ReviewCard({
 										color: "var(--quiet)",
 									}}
 								>
-									{/*
-									 * A placeholder rather than the document itself.
-									 * Rendering it needs a short-lived signed URL, which
-									 * is fetched on demand -- a thumbnail grid that
-									 * pre-fetches nine of them is nine live URLs sitting
-									 * in a page a parent may leave open.
-									 */}
+									{/* A placeholder rather than the document itself. */}
 									Document
 								</div>
 							))}
@@ -206,8 +171,6 @@ export function ReviewCard({
 				<button
 					type="button"
 					// Disabled, not hidden, and not "submit anyway with a warning".
-					// An application submitted without explicit attestation is an
-					// application with no consent record behind it.
 					disabled={!attested}
 					onClick={onSubmit}
 					style={{

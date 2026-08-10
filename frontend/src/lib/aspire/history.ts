@@ -1,12 +1,4 @@
-/**
- * Conversation history for the rail.
- *
- * Phase 1 of the backend has no database, so history lives in this browser.
- * The thread id is stored alongside the transcript, so reopening a conversation
- * continues the same server-side thread when the backend is still running.
- * The backend keeps conversation memory in process: after it restarts, an old
- * transcript still reads back correctly but the agent no longer remembers it.
- */
+/** Conversation history for the rail. */
 
 import type { Source } from "./api";
 import type { AnswerBlock } from "./knowledge";
@@ -24,57 +16,18 @@ export type StoredMessage =
 			sources: Array<Source>;
 			followUps: Array<string>;
 	  }
-	/**
-	 * A turn that started a game.
-	 *
-	 * Carries no text because there is none: the card is the turn. Stored anyway,
-	 * and this is not bookkeeping — without it a reopened conversation ends on a
-	 * user message, which the orphan check reads as "this question never got an
-	 * answer" and decorates with a retry that would re-ask a game already in
-	 * progress. It also keeps the card in its right place in the transcript when
-	 * the conversation carries on past it.
-	 */
+	/** A turn that started a game. */
 	| { role: "game"; gameType: string }
-	/**
-	 * A turn that opened the eligibility check.
-	 *
-	 * Carries no text and, deliberately, no answers and no verdict — those live
-	 * in `aspire.eligibility.results.v1`, keyed by thread, so a transcript
-	 * exported or copied out of here cannot carry a minor's age band with it.
-	 *
-	 * Stored for the same reason a game turn is: without it a reopened
-	 * conversation ends on a user message, which the orphan check reads as
-	 * "this question never got an answer" and decorates with a retry.
-	 */
+	/** A turn that opened the eligibility check. */
 	| { role: "eligibility" };
 
 export interface StoredConversation {
 	threadId: string;
-	/**
-	 * What this conversation is called, everywhere.
-	 *
-	 * The single source of truth for both the top bar and the rail — they never
-	 * derive their own. Falls back through: generated title → truncated first
-	 * message → "New chat".
-	 */
+	/** What this conversation is called, everywhere. */
 	title: string;
-	/**
-	 * Where the title came from, which decides whether it may be replaced.
-	 *
-	 * Absent means it is still the truncated first message and generation is
-	 * welcome to improve it. "generated" means the model named it, and it is
-	 * only replaced on an explicit regenerate. "manual" means a person typed it,
-	 * and generation must never touch it again.
-	 */
+	/** Where the title came from, which decides whether it may be replaced. */
 	titleSource?: "generated" | "manual";
-	/**
-	 * The language it was held in, and who it was answered for.
-	 *
-	 * Both are stored server-side and were never sent, so reopening a French
-	 * conversation reopened it in whatever the device happened to be set to.
-	 * Only present on a conversation loaded whole — the rail's list does not
-	 * carry them, because the rail does not need them.
-	 */
+	/** The language it was held in, and who it was answered for. */
 	language?: "en" | "es" | "fr";
 	persona?: string;
 	updatedAt: number;
@@ -101,8 +54,7 @@ export function loadConversations(): Array<StoredConversation> {
 		const parsed: unknown = JSON.parse(raw);
 		if (!Array.isArray(parsed)) return [];
 
-		// Storage is shared with older builds and with hand-editing, so nothing
-		// out of it is trusted structurally.
+		// Storage is shared with older builds and with hand-editing, so nothing out of it is trusted structurally.
 		return (parsed as Array<StoredConversation>)
 			.filter(
 				(item) =>
@@ -130,27 +82,14 @@ export function saveConversation(
 		try {
 			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 		} catch {
-			// Private browsing and full quotas both throw here. History is a
-			// convenience; losing it must never interrupt the conversation.
+			// Private browsing and full quotas both throw here.
 		}
 	}
 
 	return next;
 }
 
-/**
- * Drops one conversation from this browser's copy of history.
- *
- * Nothing writes that copy any more — history is the service's now, and
- * `saveConversation` above has no callers. What is still there is everything
- * written by a build that predates the change, transcripts included, and it
- * outlives a delete unless something removes it.
- *
- * So this is not bookkeeping: it is the difference between deleting a
- * conversation and deleting the copy of it somebody can see. A reader who
- * deletes a chat and finds it still in their browser's storage was told
- * something untrue.
- */
+/** Drops one conversation from this browser's copy of history. */
 export function forgetLocalConversation(threadId: string) {
 	if (!canStore()) return;
 	const next = loadConversations().filter(
@@ -159,23 +98,14 @@ export function forgetLocalConversation(threadId: string) {
 	try {
 		window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 	} catch {
-		// Same reasoning as saveConversation: storage is a convenience, and a
-		// quota or a private window must not turn a successful delete into an
-		// error the reader has to act on.
+		// Same reasoning as saveConversation: storage is a convenience, and a quota or a private window must not turn a…
 	}
 }
 
 /** Shown when there is nothing better — never "Untitled", never empty. */
 export const FALLBACK_TITLE = "New chat";
 
-/**
- * The middle rung of the fallback ladder: the first question, truncated.
- *
- * Only ever a placeholder. Nearly every conversation here opens with a question
- * about ASPIRE, so a list built from these reads as a column of near-identical
- * entries — which is the problem generated titles exist to solve. An opening
- * message with no words in it gets the fallback instead.
- */
+/** The middle rung of the fallback ladder: the first question, truncated. */
 export function titleFor(question: string) {
 	const clean = question.trim().replace(/\s+/g, " ");
 	if (!clean) return FALLBACK_TITLE;
@@ -216,16 +146,7 @@ export function groupByRecency(
 	return groups.filter((group) => group.items.length > 0);
 }
 
-/**
- * Renames one conversation in place.
- *
- * Separate from `saveConversation` because a rename must not touch the
- * transcript or the timestamp — reordering the rail because a title arrived
- * would move a row out from under the reader's cursor.
- *
- * A manual title is never overwritten by a generated one; that is the whole
- * point of the flag. An explicit regenerate clears it first.
- */
+/** Renames one conversation in place. */
 export function retitleConversation(
 	threadId: string,
 	title: string,

@@ -1,29 +1,4 @@
-/**
- * A fixed sum split across buckets. There is no wrong answer, ever.
- *
- * ## Nothing here grades
- *
- * `no_wrong_answer` is fixed `true` on the schema and this component contains
- * no comparison, no target and no "ideal split". The agent's reply names the
- * TRADE-OFF the child chose — more of this, less of that — and never says
- * whether it was right, because it is a values question.
- *
- * That is not softness. A child who learns that there is a correct answer to
- * "how should you split your money" learns to guess what an adult wants, which
- * is the opposite of the thing being taught.
- *
- * ## Steppers, not sliders
- *
- * Three sliders that have to add to a fixed total is a puzzle: moving one moves
- * the others, and a six-year-old cannot form a mental model of that. Plus and
- * minus buttons move one bucket by one step and take the difference from the
- * largest other one, which is a rule a child can watch happen.
- *
- * The remainder is shown, always, so the money on screen adds up to the money
- * they were given. `budget_split` does the arithmetic in integer cents so the
- * parts add EXACTLY — rounding each share independently loses a cent, and a
- * child notices that before an adult does.
- */
+/** A fixed sum split across buckets. */
 import { useMemo, useState } from "react";
 import type { AllocatorWidget } from "../../lib/stream/types";
 import { budgetSplit, moneyDisplay } from "../../lib/widgets/formulas";
@@ -54,22 +29,13 @@ export function Allocator({
 				number
 			>;
 		} catch {
-			// Only reachable if the shares stop summing to 100, which `move`
-			// prevents. Falling back to an even split keeps something on screen
-			// rather than blanking the widget mid-interaction.
+			// Only reachable if the shares stop summing to 100, which `move` prevents.
 			const even = Math.floor(widget.total_cents / widget.buckets.length);
 			return Object.fromEntries(widget.buckets.map((b) => [b.id, even]));
 		}
 	}, [shares, widget.total_cents, widget.buckets]);
 
-	/**
-	 * Move one bucket, and take the difference from the biggest other one.
-	 *
-	 * "The biggest other" rather than "spread across the others" because the
-	 * child can see it happen: one bar grows, one shrinks. Spreading a change
-	 * over two other bars moves three things at once for one tap, which reads
-	 * as the widget deciding rather than them.
-	 */
+	/** Move one bucket, and take the difference from the biggest other one. */
 	const move = (id: string, delta: number) => {
 		setShares((current) => {
 			const next = { ...current };
@@ -82,8 +48,7 @@ export function Allocator({
 				.filter((other) => other !== id)
 				.sort((a, b) => next[b] - next[a]);
 
-			// Take from the largest, or give to the smallest, whichever the move
-			// requires. A donor that cannot cover it passes the rest along.
+			// Take from the largest, or give to the smallest, whichever the move requires.
 			let remaining = actual;
 			const order = actual > 0 ? others : [...others].reverse();
 			for (const other of order) {
@@ -163,11 +128,7 @@ export function Allocator({
 							>
 								−
 							</button>
-							{/*
-							 * The MONEY, not the percentage. "Percent" is a banned
-							 * term below 13 and an unnecessary abstraction above it
-							 * when the actual amount is the thing being decided.
-							 */}
+							{/* The MONEY, not the percentage. */}
 							<output
 								aria-live="polite"
 								style={{
@@ -206,8 +167,7 @@ export function Allocator({
 					color: "var(--quiet)",
 				}}
 			>
-				{/* Stated outright. A child looking for the right answer should
-				    find this sentence instead. */}
+				{/* Stated outright. */}
 				There is no wrong way to split it.
 			</p>
 		</Panel>

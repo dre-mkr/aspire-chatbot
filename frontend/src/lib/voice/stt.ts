@@ -1,29 +1,4 @@
-/**
- * Push-to-talk transcription. Never always-listening.
- *
- * ## The microphone is open only while a button is held or toggled on
- *
- * There is no wake word, no ambient listening, and no "start recording when the
- * page loads". A microphone that a child does not know is open is a microphone
- * recording their household, and no product feature is worth that.
- *
- * The permission prompt therefore appears when they first press the button,
- * which is also the moment it makes sense to them.
- *
- * ## Audio is not stored
- *
- * The recorder holds chunks in memory, posts them once, and drops the
- * reference. Nothing is written to IndexedDB, nothing to localStorage, nothing
- * to a file. The server's transcription endpoint holds the bytes for the length
- * of the request and no longer.
- *
- * ## Auto-stop after 15 seconds of silence
- *
- * A child who wanders off mid-sentence, or who presses the button and forgets,
- * must not leave a microphone open. Silence is measured with an analyser node
- * on the live stream rather than by transcribing and checking for words --
- * which would mean sending the silence somewhere to find out it was silence.
- */
+/** Push-to-talk transcription. */
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -64,13 +39,7 @@ export function microphoneAvailable(): boolean {
 	);
 }
 
-/**
- * Start recording. The stream is released the moment it stops.
- *
- * Releasing the track matters visibly: a browser shows a recording indicator
- * for as long as ANY track is live, so a stream left open tells the child they
- * are still being listened to when they are not.
- */
+/** Start recording. */
 export async function record(options: RecorderOptions): Promise<Recording> {
 	const stream = await navigator.mediaDevices.getUserMedia({
 		audio: {
@@ -116,8 +85,7 @@ export async function record(options: RecorderOptions): Promise<Recording> {
 			return;
 		}
 		const blob = new Blob(chunks, { type: recorder.mimeType });
-		// The chunks array is dropped with this closure; nothing else holds a
-		// reference to the audio once the request completes.
+		// The chunks array is dropped with this closure; nothing else holds a reference to the audio once the request c…
 		chunks.length = 0;
 		try {
 			settle(await transcribe(blob, options));
@@ -171,13 +139,7 @@ export async function record(options: RecorderOptions): Promise<Recording> {
 	};
 }
 
-/**
- * The first container the browser will actually record.
- *
- * Safari records mp4 and refuses webm; Chrome and Firefox do the opposite. A
- * hardcoded type works in development and produces an empty recording on an
- * iPhone, which is most of the audience.
- */
+/** The first container the browser will actually record. */
 function pickMimeType(): MediaRecorderOptions {
 	for (const type of [
 		"audio/webm;codecs=opus",

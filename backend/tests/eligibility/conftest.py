@@ -7,8 +7,7 @@ import pytest
 from app.eligibility.engine import EligibilityEngine, set_engine
 from app.eligibility.store import InMemorySessionStore, set_store
 
-# Fixed so the reminder-year assertions do not rot. The audit was taken on this
-# date and every "which year can they register" expectation is relative to it.
+# Fixed so the reminder-year assertions do not rot.
 TODAY = date(2026, 8, 2)
 
 

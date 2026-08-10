@@ -1,10 +1,4 @@
-"""An unmigrated database must not become a 500 on the first message.
-
-Reachable is not the same as ready. `DATABASE_URL` being set turns the
-persistence path on, and nothing checked that the tables existed until the first
-`INSERT INTO conversations` failed -- in front of a user, on the happy path, for
-a deployment step that had never been mentioned.
-"""
+"""An unmigrated database must not become a 500 on the first message."""
 
 import asyncio
 
@@ -53,12 +47,7 @@ class TestSchemaLatch:
         assert db_engine.database_enabled() is False
 
     def test_session_yields_none_rather_than_a_doomed_one(self, monkeypatch):
-        # The important half. Without this an unmigrated database still hands
-        # out a usable-looking session, and every statement on it raises
-        # UndefinedTableError.
-        #
-        # Driven with asyncio.run rather than pytest.mark.asyncio: the project
-        # does not depend on pytest-asyncio and one await does not justify one.
+        # The important half.
         monkeypatch.setattr(db_engine, "get_engine", lambda: object())
         monkeypatch.setattr(db_engine, "get_sessionmaker", lambda: _FakeSession)
         db_engine._SCHEMA_MISSING = True
@@ -79,12 +68,10 @@ class TestSchemaLatch:
 
         db = asyncio.run(check())
         assert isinstance(db, _FakeSession)
-        # The happy path still commits, so the guard did not quietly turn every
-        # write into a no-op.
+        # The happy path still commits, so the guard did not quietly turn every write into a no-op.
         assert db.committed is True
 
 
 def test_the_tables_we_require_are_the_ones_the_request_path_writes():
-    # `documents` is deliberately absent: it is only read, and a service with an
-    # empty corpus still answers questions.
+    # `documents` is deliberately absent: it is only read, and a service with an empty corpus still answers questio…
     assert set(db_engine.REQUIRED_TABLES) == {"conversations", "messages"}

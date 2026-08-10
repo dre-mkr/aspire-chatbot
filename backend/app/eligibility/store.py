@@ -1,15 +1,4 @@
-"""Where a half-finished eligibility check lives.
-
-Server-side, keyed by the conversation's thread id, never in the client. Same
-shape and same reasoning as `app.games.store`: a refresh mid-flow finds the flow
-where it was, because the browser was never holding it.
-
-What is different here is what expiry means. A game session going stale loses a
-word puzzle. This one holds a minor's answers, so the TTL is a retention policy
-as much as a cleanup: the answers are gone within the hour whether or not the
-flow was finished, and a finished flow deletes its session the moment the result
-is produced.
-"""
+"""Where a half-finished eligibility check lives."""
 
 from __future__ import annotations
 
@@ -31,11 +20,7 @@ class SessionStore(Protocol):
 
 
 class InMemorySessionStore:
-    """Dict with a TTL, guarded by a lock.
-
-    The lock is not optional: uvicorn runs handlers on a threadpool, so two taps
-    in quick succession can overlap.
-    """
+    """Dict with a TTL, guarded by a lock."""
 
     def __init__(self, ttl_seconds: float) -> None:
         self._ttl = ttl_seconds
@@ -53,9 +38,7 @@ class InMemorySessionStore:
                 return None
             if self._expired(session, now):
                 del self._sessions[session_id]
-                # No session id in the message: it is the conversation id, and
-                # this line would otherwise be the one place a log ties a
-                # thread to an eligibility flow.
+                # No session id in the message: it is the conversation id, and this line would otherwise be the one place a log…
                 logger.info("An eligibility session expired and was discarded.")
                 return None
             return session
@@ -65,8 +48,7 @@ class InMemorySessionStore:
         session.updated_at = now
         with self._lock:
             self._sessions[session.session_id] = session
-            # Opportunistic sweep, so abandoned answers are cleared by the next
-            # writer rather than by a background task nobody remembers to run.
+            # Opportunistic sweep, so abandoned answers are cleared by the next writer rather than by a background task nob…
             if len(self._sessions) > 1:
                 for key in [
                     k

@@ -1,20 +1,4 @@
-/**
- * P1 regression tests — written BEFORE any fix existed.
- *
- * Each one states the behaviour the renderer should have; the assertion message
- * names the ledger id and what used to happen instead. They were `{ todo: true }`
- * while the findings were open so a documented defect did not block CI; the flag
- * came off with the fix, which is what makes them regression tests now.
- *
- * Run with:  node --test src/lib/aspire/*.test.ts
- *
- * No test framework was added. Node 26 runs TypeScript directly and ships
- * `node:test`, so these cost nothing in the dependency tree.
- *
- * These are pure-function tests over the LIVE render path. `parseAnswer` is
- * called on every settled reply (`use-conversation.ts:717`) and `parseInline`
- * on every rendered run, so a defect here is on screen for every user.
- */
+/** P1 regression tests — written BEFORE any fix existed. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -101,12 +85,6 @@ test("P1-005: numbering survives the flatten used for clipboard and speech", () 
 // ── P1-006 — duplicate list items collide as React keys ────────────────────
 
 // The original form of this test asserted `parseAnswer` returns unique items.
-// That was the wrong assertion: "- Yes\n- No\n- Yes" is a correct answer and
-// three items is the correct parse. Deduplicating would delete content.
-//
-// The defect was never in the parser, it was `<li key={item}>` in Transcript.
-// So what this pins is the premise the renderer has to survive — duplicates are
-// normal output — and the fix lives at the key, which is now positional.
 test("P1-006: duplicate item text is legitimate parser output", () => {
 	const blocks = parseAnswer("- Yes\n- No\n- Yes");
 	const list = blocks[0];
@@ -139,12 +117,7 @@ test("P1-007: a stray ** does not bold the remainder of a settled answer", () =>
 	);
 });
 
-// ── The reveal still gets its optimism ──────────────────────────────────────
-//
-// P1-004 and P1-007 are both fixed by making optimistic markup conditional
-// rather than by deleting it. These prove the mid-reveal half survived — a
-// "fix" that made half-typed markdown flash raw brackets at every reader would
-// trade one visible defect for another.
+// ── The reveal still gets its optimism ────────────────────────────────────── P1-004 and P1-007 are both fixed…
 
 test("revealing: a half-typed link still renders as its label", () => {
 	assert.equal(

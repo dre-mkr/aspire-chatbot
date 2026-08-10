@@ -1,16 +1,4 @@
-"""The layer-2 semantic cache and the query-embedding cache (P14-B / P14-D).
-
-Everything pure is tested pure: packing, truncation, cosine, key isolation.
-The lookup itself runs against the namespaced test Valkey, exactly as the
-layer-1 tests do since P13-006 -- and is skipped, not faked, when none answers.
-
-The layer ships DISABLED (`semantic_cache_enabled=False`) on the strength of
-`scripts/semantic_margin.py`: at the 0.95 threshold an adversarial near-pair
-("aged 5 to 18" ~ "aged 5 to 12") measured 0.9645 cosine and would be served
-the wrong answer, while every real paraphrase measured below 0.95. These tests
-therefore exercise the machinery with the flag forced on, so the day somebody
-flips it the behaviour is already pinned.
-"""
+"""The layer-2 semantic cache and the query-embedding cache (P14-B / P14-D)."""
 
 from __future__ import annotations
 
@@ -56,8 +44,7 @@ class TestVectorPlumbing:
         assert sum(v * v for v in shelf) == pytest.approx(1.0, abs=1e-6)
 
     def test_cosine_refuses_mismatched_shapes(self):
-        # A dims change must read as "no match", never as a comparison of
-        # prefixes that happen to align.
+        # A dims change must read as "no match", never as a comparison of prefixes that happen to align.
         assert cache._cosine([1.0, 0.0], [1.0]) == -1.0
 
 
@@ -77,9 +64,7 @@ class TestKeys:
         assert base != semantic_shelf_key(language="en", persona=None, account_status="holder")
 
     def test_shelf_key_isolates_the_age_band(self):
-        """P15-009, layer 2. `orion` is the persona for 9-12, 13-15 AND 16-18,
-        whose word caps are 70, 180 and 180 -- so persona cannot stand in for
-        band, and a hit here never reaches `safety_out` to be cut down."""
+        """P15-009, layer 2."""
         nine = semantic_shelf_key(
             language="en", persona="orion", account_status="holder", age_band="9-12"
         )
@@ -89,11 +74,7 @@ class TestKeys:
         assert nine != sixteen
 
     def test_the_shelf_entry_points_at_a_key_of_the_same_band(self):
-        """The pointer and the shelf must agree, or the layer is dead on arrival.
-
-        A band in the shelf key but not in the `cache_key` it stores would aim
-        every entry at a key layer 1 never wrote -- a permanent, silent miss.
-        """
+        """The pointer and the shelf must agree, or the layer is dead on arrival."""
         assert cache.cache_key(
             "q", language="en", persona="orion", account_status="holder", age_band="9-12"
         ) != cache.cache_key(
@@ -102,12 +83,7 @@ class TestKeys:
 
 
 def _valkey_answers() -> bool:
-    """Probe with a THROWAWAY client on a throwaway loop.
-
-    Pinging the shared client here would bind one of its pooled connections to
-    this temporary loop, and the first test to reuse that connection on the
-    real loop would die with "Event loop is closed".
-    """
+    """Probe with a THROWAWAY client on a throwaway loop."""
     url = cache.valkey_url()
     if not url:
         return False
@@ -137,10 +113,7 @@ needs_valkey = pytest.mark.skipif(
 
 @pytest.fixture(autouse=True)
 def _fresh_client_per_loop():
-    """Each async test runs on its own event loop, and a redis connection made
-    on one loop cannot be reused on the next -- it dies with "Event loop is
-    closed". Clearing the process-wide client between tests makes every loop
-    build its own."""
+    """Each async test runs on its own event loop, and a redis connection made on one loop cannot be reused on the n…"""
     cache.get_client.cache_clear()
     yield
     cache.get_client.cache_clear()
@@ -179,8 +152,7 @@ async def test_a_close_paraphrase_hits_and_a_distant_question_does_not(monkeypat
 @needs_valkey
 @pytest.mark.anyio
 async def test_the_shelf_never_crosses_a_language(monkeypatch):
-    """The layer-1 property, carried over: an English answer must be
-    unreachable from a Spanish session however close the embedding."""
+    """The layer-1 property, carried over: an English answer must be unreachable from a Spanish session however clos…"""
     _force_on(monkeypatch)
 
     query = f"cross-lang {uuid.uuid4().hex[:6]}"
@@ -200,13 +172,7 @@ async def test_the_shelf_never_crosses_a_language(monkeypatch):
 @needs_valkey
 @pytest.mark.anyio
 async def test_the_shelf_never_crosses_an_age_band(monkeypatch):
-    """P15-009 on layer 2, end to end rather than as a key comparison.
-
-    A 180-word answer written for a sixteen-year-old, reachable by paraphrase
-    from a nine-year-old's session, is the exact failure the band closes -- and
-    `safety_out` cannot catch it, because a cache hit never reaches the gate.
-    Registered at 16-18, looked up at 9-12 with an all-but-identical vector.
-    """
+    """P15-009 on layer 2, end to end rather than as a key comparison."""
     _force_on(monkeypatch)
 
     query = f"cross-band {uuid.uuid4().hex[:6]}"

@@ -1,26 +1,4 @@
-/**
- * The widget review queue. The RENDERED widget, not JSON.
- *
- * A reviewer is being asked "is this a good explanation for a nine-year-old?".
- * That question can only be answered by looking at the thing a nine-year-old
- * would see. Showing them `{"kind":"growth_stack","principal_cents":0,...}` is
- * asking them to approve something they cannot read, which means they will
- * approve everything.
- *
- * So the real `WidgetRenderer` renders it, inside an `AgeBandProvider` set to
- * the band it was generated for — the same components, the same type sizes, the
- * same tap targets.
- *
- * ## Edit writes an override
- *
- * A caption that reads badly to somebody who speaks the language is a
- * five-second fix by that person and an afternoon of prompt engineering by
- * somebody who does not. The edit is re-validated through all seven gates
- * server-side, so a fix cannot introduce a banned word for the band.
- *
- * Sorted by how often the concept has been served, so the widget a thousand
- * children saw is reviewed before the one that ran twice.
- */
+/** The widget review queue. */
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AgeBandProvider } from "#/components/chat/AgeBandProvider";
@@ -154,8 +132,7 @@ function Candidate({
 					{row.kind} · {row.concept_id} · {row.age_band} · {row.locale} · served{" "}
 					{row.serve_count}×
 				</p>
-				{/* The source question is what a reviewer reads first: not "is this
-				    widget correct" in the abstract, but "does it answer THAT". */}
+				{/* The source question is what a reviewer reads first: not "is this widget correct" in the abstract, but "does i… */}
 				<p
 					style={{
 						margin: "0.25rem 0 0",

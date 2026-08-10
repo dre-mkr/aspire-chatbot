@@ -1,41 +1,4 @@
-"""The sustainability layer: generate a widget once, serve it forever.
-
-A concept widget costs two model calls and seven validation gates. The same
-question -- "why does the bank give me money for saving?" -- arrives from a
-different nine-year-old every day. Generating it every time is the largest
-avoidable line on the bill and, worse, means the widget a child sees is a fresh
-generation nobody has looked at.
-
-So: generate once, have a person review it, and serve the approved one from
-then on.
-
-## The lookup order is the whole design
-
-    approved  -> serve instantly, NEVER regenerate
-    rejected  -> serve prose only, do NOT generate
-    candidate -> serve, do not regenerate within 30 days
-    miss      -> generate -> validate -> serve -> insert as candidate
-
-`rejected` is the one that is easy to get wrong. A rejected concept must not
-fall through to "generate a new one" -- that is how a widget a reviewer removed
-comes back next week, generated slightly differently, with the same problem.
-Rejected means prose, permanently, until somebody changes the row.
-
-## The key is concept, band AND locale. All three.
-
-Never two of them. A growth stack written for a nine-year-old is wrong for a
-six-year-old and wrong in French; caching across either axis serves one child
-another child's lesson. The unique index on
-`(concept_id, age_band, locale)` for approved rows enforces it in the schema
-rather than in a query anybody could write wrongly.
-
-## Editing an approved widget writes an override
-
-Staff correct a caption without touching a prompt. That is the point of the
-review queue: a label that reads badly to somebody who speaks the language is a
-five-second fix by that person, and an afternoon of prompt engineering by
-somebody who does not.
-"""
+"""The sustainability layer: generate a widget once, serve it forever."""
 
 from __future__ import annotations
 
@@ -78,13 +41,7 @@ class Entry:
         return self.status in (APPROVED, CANDIDATE) and self.payload is not None
 
     def stale(self, *, now: datetime | None = None) -> bool:
-        """Whether a CANDIDATE is old enough to regenerate.
-
-        An approved entry is never stale. That is not an optimisation -- it is
-        the promise the review queue rests on: a reviewer who approved a widget
-        has approved THAT widget, and a background job replacing it with a fresh
-        generation would silently un-review it.
-        """
+        """Whether a CANDIDATE is old enough to regenerate."""
         if self.status != CANDIDATE:
             return False
         if self.generated_at is None:
@@ -101,8 +58,7 @@ class Stats:
     misses: int = 0
     rejected_served: int = 0
     generated: int = 0
-    #: Per-gate validation failures, so a rising `copy` count is a prompt to fix
-    #: the copy instructions rather than a mystery.
+    #: Per-gate validation failures, so a rising `copy` count is a prompt to fix the copy instructions rather than a…
     gate_failures: dict[str, int] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -121,8 +77,7 @@ class Stats:
             "hit_rate": round(self.hit_rate, 3),
             "rejected_served": self.rejected_served,
             "generated": self.generated,
-            # Two model calls per generation, so this is the number the
-            # sustainability case is made from.
+            # Two model calls per generation, so this is the number the sustainability case is made from.
             "generations_avoided": self.hits,
             "gate_failures": dict(self.gate_failures),
         }
@@ -132,14 +87,7 @@ STATS = Stats()
 
 
 class WidgetCache:
-    """Postgres for the record, Valkey in front of it for approved payloads.
-
-    The Valkey layer only ever holds APPROVED entries. A candidate is served
-    from Postgres every time, which costs a query and buys the property that a
-    reviewer's approve/reject takes effect on the next request rather than
-    whenever a cache expires -- and a stale reject is the one failure this
-    system must not have.
-    """
+    """Postgres for the record, Valkey in front of it for approved payloads."""
 
     async def get(self, key: CacheKey) -> Entry | None:
         cached = await self._from_valkey(key)
@@ -164,11 +112,7 @@ class WidgetCache:
     async def put_candidate(
         self, key: CacheKey, payload: dict[str, Any], *, source_question: str
     ) -> None:
-        """Record a freshly generated widget for review.
-
-        Never overwrites an approved row -- the `ON CONFLICT` clause is scoped
-        to candidates. A generation racing an approval must lose.
-        """
+        """Record a freshly generated widget for review."""
         STATS.generated += 1
         from sqlalchemy import text as sql
 
@@ -215,12 +159,7 @@ class WidgetCache:
         reviewed_by: str,
         payload: dict[str, Any] | None = None,
     ) -> None:
-        """Approve, reject, or approve-with-an-edit.
-
-        `payload` is the override: a reviewer who fixed a caption approves the
-        FIXED version, and nothing regenerates it afterwards. That is what lets
-        a non-technical member of staff correct a label without an engineer.
-        """
+        """Approve, reject, or approve-with-an-edit."""
         if status not in (APPROVED, REJECTED):
             raise ValueError(f"{status!r} is not a review outcome")
 
@@ -257,9 +196,7 @@ class WidgetCache:
             )
             await db.commit()
 
-        # Dropped rather than updated. A reject that leaves a stale approved
-        # payload in Valkey is the one failure this system must not have, and
-        # deleting is the only operation that cannot half-succeed.
+        # Dropped rather than updated.
         await self._drop_valkey(key)
         logger.info(
             "widget %s/%s/%s -> %s by %s",
@@ -323,8 +260,7 @@ class WidgetCache:
                 return None
             raw = await client.get(response_cache.namespace() + key.valkey())
         except Exception:
-            # Never raises. A widget cache that cannot reach Valkey is a widget
-            # cache that missed, exactly as `app/cache.py` treats every failure.
+            # Never raises.
             return None
         if not raw:
             return None
@@ -345,9 +281,7 @@ class WidgetCache:
             await client.set(
                 response_cache.namespace() + key.valkey(),
                 json.dumps(entry.payload),
-                # A long TTL is safe here BECAUSE a review drops the key
-                # explicitly. Expiry is a backstop, not the invalidation
-                # mechanism.
+                # A long TTL is safe here BECAUSE a review drops the key explicitly.
                 ex=7 * 86_400,
             )
         except Exception:
@@ -371,12 +305,7 @@ CACHE = WidgetCache()
 async def lookup(
     concept_id: str, age_band: str, locale: str
 ) -> tuple[str, dict[str, Any] | None]:
-    """The lookup order, as one call. Returns `(action, payload)`.
-
-        ("serve", payload)   -- an approved or fresh candidate; do not generate
-        ("prose", None)      -- rejected; do NOT generate
-        ("generate", None)   -- a miss, or a candidate past its window
-    """
+    """The lookup order, as one call."""
     key = CacheKey(concept_id, age_band, locale)
     entry = await CACHE.get(key)
 
@@ -390,12 +319,7 @@ async def lookup(
 
 
 def stats() -> dict[str, Any]:
-    """Cache hit rate, generations avoided, per-gate failure counts.
-
-    Surfaced on `/health` alongside the response cache's numbers. These are the
-    figures that decide the next round of prompt fixes: a `copy` gate failing
-    forty times a week is a copy instruction to rewrite, not a mystery.
-    """
+    """Cache hit rate, generations avoided, per-gate failure counts."""
     return STATS.payload()
 
 

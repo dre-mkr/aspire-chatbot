@@ -1,9 +1,4 @@
-"""Alembic environment, wired to the app's own settings and async engine.
-
-The URL is never read from alembic.ini: it comes from `Settings`, which loads
-`backend/.env`. One source of truth for which database is being touched, no
-credential in a tracked file, and no dependence on the shell environment.
-"""
+"""Alembic environment, wired to the app's own settings and async engine."""
 
 from __future__ import annotations
 
@@ -35,12 +30,7 @@ def _url() -> str:
 
 
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:
-    """Keep autogenerate away from things it does not own.
-
-    The vector indexes are expression indexes over a `halfvec` cast, which
-    autogenerate cannot represent -- left to itself it proposes dropping them on
-    every revision.
-    """
+    """Keep autogenerate away from things it does not own."""
     if type_ == "index" and name and name.startswith("ix_documents_embedding"):
         return False
     return True
@@ -73,9 +63,7 @@ def _run(connection) -> None:
 async def run_migrations_online() -> None:
     engine = create_async_engine(
         _url(),
-        # Migrations go through the pooled host like everything else, so they
-        # need the same setting: pgbouncer in transaction mode cannot hold
-        # prepared statements across checkouts.
+        # Migrations go through the pooled host like everything else, so they need the same setting: pgbouncer in trans…
         connect_args={"statement_cache_size": 0, "ssl": "require"},
     )
     async with engine.connect() as connection:

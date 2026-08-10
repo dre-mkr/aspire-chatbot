@@ -1,25 +1,4 @@
-"""The agent's only route into the games.
-
-Two properties this module exists to hold:
-
-1. **The session is not an argument.** Every tool reads `thread_id` from the
-   injected `RunnableConfig`, which LangChain keeps out of the schema the model
-   sees. The model cannot name a session, so it cannot reach another child's
-   game, and it cannot fabricate one.
-
-2. **The answer is not in the return value.** These functions return a verdict —
-   `correct`, a hint, a count. The single exception is a reveal, and a reveal is
-   only ever produced by an engine call that has already moved past the item it
-   names. There is no prompt that extracts an answer the model was never given,
-   because there is no code path that gives it one.
-
-   This matters more on true/false than on the scramble. A fifty-fifty guess is
-   worth a great deal to a child who has worked out that the model will confirm
-   it, so the verdict has to be structurally absent rather than prompt-defended.
-
-Tool descriptions are prompt text: the agent reasons over them when deciding
-what to call, so they are written for the model, not for a developer.
-"""
+"""The agent's only route into the games."""
 
 from __future__ import annotations
 
@@ -177,7 +156,7 @@ def submit_answer(answer: str, config: RunnableConfig) -> dict[str, Any]:
 
     Three outcomes:
 
-    - `correct` true. You also get `teaching_note` — for a scramble the word's
+    - `correct` true. You also get `teaching_note` â€” for a scramble the word's
       meaning, for true/false ECCB's own explanation. Deliver it in your own
       voice as what the idea means inside ASPIRE, not a dictionary definition.
       Never rewrite or shorten an explanation you are given; it is the point of
@@ -185,11 +164,11 @@ def submit_answer(answer: str, config: RunnableConfig) -> dict[str, Any]:
     - `correct` false with a `reveal`. The item is finished and the answer is in
       `reveal.answer`. Say so kindly, teach from the explanation, move on. Never
       frame it as failing.
-    - `correct` false with NO `reveal`. The item is still open — a scramble they
+    - `correct` false with NO `reveal`. The item is still open â€” a scramble they
       can retry. You do not know the answer, so do not guess at it, hint at its
       letters, or say how close they were. Encourage another go, or offer a clue.
 
-    If `unreadable` comes back, the answer could not be read at all — say what
+    If `unreadable` comes back, the answer could not be read at all â€” say what
     it says and ask again. That is not a wrong answer and nothing was spent.
     """
     try:
@@ -227,14 +206,14 @@ def submit_answer(answer: str, config: RunnableConfig) -> dict[str, Any]:
 def get_hint(config: RunnableConfig) -> dict[str, Any]:
     """Get the next clue for the current item.
 
-    Only some games have clues. True or false does not — a clue on a
+    Only some games have clues. True or false does not â€” a clue on a
     true-or-false statement would be the answer, so this declines with
     `hints_not_available`. Say that plainly and offer `skip_word` instead; do
     not invent a clue of your own, and do not hint at the verdict.
 
     Where clues exist they step up: the first letter, then the length and a
     category, then the word's meaning. Pass the clue on warmly in your own
-    words. Never add a stronger one and never name the answer — you are not
+    words. Never add a stronger one and never name the answer â€” you are not
     told it.
 
     Asking again past the last clue gives up on the item: you will get

@@ -1,10 +1,4 @@
-"""One object, resolved before routing, read everywhere after.
-
-The diagnosis counted seven fields recomputed downstream of a graph that already
-knew them, with three independent defaults for `age_band` alone. These tests hold
-the replacement: the object is complete, it is built from the token rather than
-the body, and it cannot carry a slot value into a checkpoint.
-"""
+"""One object, resolved before routing, read everywhere after."""
 
 from __future__ import annotations
 
@@ -87,8 +81,7 @@ class TestEveryCellIsPresent:
         assert context.now.tzinfo is not None
 
     async def test_the_clock_is_st_kitts_not_utc(self):
-        """A deadline question answered in UTC is answered wrong by four hours,
-        and the diagnosis found no prompt receiving the date at all."""
+        """A deadline question answered in UTC is answered wrong by four hours, and the diagnosis found no prompt receiv…"""
         context = await _resolve()
 
         assert context.now.utcoffset() == ST_KITTS.utcoffset(context.now.replace(tzinfo=None))
@@ -112,17 +105,10 @@ class TestEveryCellIsPresent:
 
 
 class TestIdentityComesFromTheTokenOnly:
-    """`hydrate` discards body-supplied identity (`graph/nodes/hydrate.py:122`).
-    The resolver must add no second way in.
-
-    Asserted as behaviour rather than by grepping the source -- the first version
-    of this test searched the module text for "body" and failed on its own
-    docstring, which is the kind of test that measures prose.
-    """
+    """`hydrate` discards body-supplied identity (`graph/nodes/hydrate.py:122`)."""
 
     async def test_identity_is_copied_from_state_verbatim(self):
-        """Copied, not derived. No defaulting, no normalising, no second lookup:
-        whatever `hydrate` validated is what the context reports."""
+        """Copied, not derived."""
         context = await _resolve(
             persona="aurora", age_band="adult", account_status="guardian", locale="fr"
         )
@@ -135,8 +121,7 @@ class TestIdentityComesFromTheTokenOnly:
         )
 
     async def test_the_loader_cannot_override_identity(self):
-        """The DB read supplies `display_name` and learning state. If it could
-        also supply persona or band, the account would outrank the token."""
+        """The DB read supplies `display_name` and learning state."""
 
         async def hostile(user_id):
             payload = await loader(user_id)
@@ -153,12 +138,7 @@ class TestIdentityComesFromTheTokenOnly:
 
 class TestItCannotCarryPII:
     async def test_a_registration_draft_contributes_only_pointers(self):
-        """The F1 failure, prevented by shape.
-
-        `_persist_state` copies `draft.values` wholesale into checkpointed state.
-        The context is built from the same draft and must take the step pointer
-        and nothing else.
-        """
+        """The F1 failure, prevented by shape."""
         context = await _resolve(
             registration={
                 "application_id": "APP-9",
@@ -193,8 +173,7 @@ class TestItCannotCarryPII:
 
 class TestMasteryIsAFraction:
     async def test_the_raw_scale_is_refused(self):
-        """The bug this validator exists for. An injected loader passed `{"save": 3}`
-        and it sailed through as `3.0`, making every mastery threshold true."""
+        """The bug this validator exists for."""
         with pytest.raises(ValidationError, match="outside 0.0-1.0"):
             SessionContext(
                 persona="stella",
@@ -216,8 +195,7 @@ class TestMasteryIsAFraction:
 
 class TestItRunsBeforeRouting:
     async def test_the_node_is_wired_between_safety_in_and_cards(self):
-        """The whole value of the object is that the router and every agent read
-        the same one, which requires it to be resolved first."""
+        """The whole value of the object is that the router and every agent read the same one, which requires it to be r…"""
         import inspect
 
         from app.graph import main_graph

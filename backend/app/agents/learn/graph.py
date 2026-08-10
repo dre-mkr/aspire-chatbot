@@ -1,60 +1,4 @@
-"""The lesson machine.
-
-    resume_or_place → plan_widget → teach → check → branch
-                       ↑                              │
-                       │   got_it / partial / lost
-                       │      │        │       │
-                       │    game   hint_ladder reteach
-                       │      │        │       │
-                       └──────┴────────┴───────┘
-                                  │
-                        mastery_update → next_lesson | wrap_session
-
-Every path in that diagram ends at `mastery_update`, and that is the property
-worth stating: there is no way to answer a check question -- rightly, wrongly,
-with hints, by playing a game -- that does not record what happened.
-
-## Two nodes think; the rest of the machine does not
-
-`teach` and `reteach` live in `teach.py` and are the only nodes here that call
-a model. They write the words, ground them in the knowledge base, and decide
-whether an interactive widget would help. Everything defined in THIS file is
-deterministic, and the split is meant to be checkable by looking: placement,
-grading, the hint ladder's rung count and the mastery write are arithmetic and
-table lookups, and they stay that way.
-
-The reason is not caution about models generally. It is that `grade_answer`
-deciding "wrong" the same way every time is what makes a hint ladder a ladder,
-and a lesson chosen by a scheduler rather than by a conversation is what makes
-spaced repetition happen at all. What a model is genuinely better at is the one
-thing a fixed string cannot do: say the same idea a different way to a child
-who has already heard it once.
-
-## Open-ended chat is not the mode
-
-A lesson is a sequence of nodes with quick replies at every step. A child CAN
-type -- the input is never removed -- but the primary interaction is tapping,
-and every node that speaks emits chips. `safety_out` enforces that as a
-backstop; these nodes generate them properly rather than relying on the
-re-prompt, because a re-prompt costs a model call and produces chips that were
-not authored.
-
-## Digressions
-
-An off-curriculum question gets a real answer in at most two sentences, then a
-warm steer back: "Good question! Now -- back to our snow cone money." Two
-consecutive digressions is the cap; after that the line is held, still warmly.
-
-The cap counts CONSECUTIVE digressions and any on-topic turn resets it. A child
-who asks two questions, does a lesson step, then asks another has not used up
-anything.
-
-## Sessions end at a natural break
-
-`should_wrap` is only ever consulted between nodes, so a session cannot end
-mid-explanation. Eight to twelve minutes is the target and fifteen is the
-ceiling; a lesson that finishes in six minutes ends in six.
-"""
+"""The lesson machine."""
 
 from __future__ import annotations
 
@@ -123,10 +67,7 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
             rows,
             last_lesson_id=learning.get("lesson_id"),
             last_seen_at=max((row.last_seen for row in rows if row.last_seen), default=None),
-            # A wrong answer does not raise mastery, so without this the
-            # lesson just revealed is still "the first unmastered one" and the
-            # session teaches it again immediately, forever. The reveal already
-            # retaught it; spaced repetition brings it back tomorrow.
+            # A wrong answer does not raise mastery, so without this the lesson just revealed is still "the first unmastere…
             covered_this_session=set(learning.get("concepts_touched") or []),
         )
         logger.info(
@@ -153,15 +94,6 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
                 attempts=0,
                 hint_rung=0,
                 # The only signal the teaching turn gets that CROSSES sessions.
-                #
-                # `recent_openings` lives in the checkpoint, so it is per
-                # conversation, and the case it therefore misses is the common
-                # one: a learner comes back tomorrow, starts a new chat, and
-                # spaced repetition brings the same concept round again with an
-                # empty history behind it. The mastery row is the thing that
-                # persists per learner, and `resume_or_place` has already paid
-                # for it -- so whether they have met this idea before is free
-                # here and unavailable anywhere else in the machine.
                 concept_seen_before=any(
                     row.concept_id == placement.lesson.concept_id and row.last_seen
                     for row in rows
@@ -175,44 +107,12 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
     return resume_or_place
 
 
-#: Learning agents whose turns are watched rather than taken, and therefore
-#: score nobody.
-#:
-#: `learning_sample` because a signed-out visitor has no account for a row to
-#: reference. `learning_preview` because the person at the keyboard is not the
-#: learner: a guardian looking in at their child's curriculum was writing
-#: `save`, `spend` and `goal` into their OWN mastery row, which then drove
-#: spaced repetition for them -- the scheduler would bring a nine-year-old's
-#: lesson back to an adult on a fortnightly interval, and their progress
-#: figures counted concepts they had watched rather than learned.
+#: Learning agents whose turns are watched rather than taken, and therefore score nobody.
 NON_SCORING_AGENTS: frozenset[str] = frozenset({"learning_preview", "learning_sample"})
 
 
 def _learner(state: AspireState) -> str | None:
-    """The learner this session writes mastery against, or None for nobody.
-
-    None for an anonymous visitor, and that is the honest answer rather than a
-    refusal. `mastery.learner_id` is a UUID referencing an account; a
-    `learning_sample` visitor has none, so there is no row for their progress to
-    live in and nothing for it to mean when they come back.
-
-    None for a guardian preview too, and for a different reason: there IS an
-    account, and it is not the learner's. `access.py` describes the preview as
-    letting a parent see what their child is being taught, and until this was
-    fixed it did so by teaching the parent and grading them. The lesson itself
-    is unchanged -- real teaching, real widgets, real check questions -- and
-    nothing it produces is recorded against anybody.
-
-    This used to fall back to the session id, reasoning that a sample session
-    should "score normally for its own length". It does -- the hint ladder and
-    the reply arithmetic run on the turn's own state and never touch the
-    database. What the fallback actually did was hand a non-UUID string to
-    asyncpg, which raised, killed the node, and told a child who had moved a
-    slider that the assistant was unavailable.
-
-    `MasteryStore.record` accepts None and returns the applied row without
-    writing, so every caller's arithmetic is unchanged.
-    """
+    """The learner this session writes mastery against, or None for nobody."""
     if state.get("active_agent") in NON_SCORING_AGENTS:
         return None
     user_id = state.get("user_id")
@@ -222,9 +122,7 @@ def _learner(state: AspireState) -> str | None:
 # ── teach ────────────────────────────────────────────────────────────────────
 
 
-# `plan_widget`, `teach` and `reteach` live in `teach.py`. They are the only
-# nodes in this machine that call a model, and keeping them together is what
-# makes that easy to check -- every node defined in THIS file is deterministic.
+# `plan_widget`, `teach` and `reteach` live in `teach.py`.
 from app.agents.learn.teach import (  # noqa: E402
     make_plan_widget,
     make_reteach,
@@ -254,9 +152,7 @@ def make_check(curriculum=None):
 
         return {
             "messages": [AIMessage(content=prompt)],
-            # The options ARE the interaction. Generated here rather than left
-            # to `safety_out`'s re-prompt, which would cost a model call and
-            # produce chips nobody authored.
+            # The options ARE the interaction.
             "quick_replies": list(question.options) or _chips(band, ["Tell me"]),
             "learning": merge(learning, question_id=question.id, phase="checking"),
         }
@@ -268,25 +164,6 @@ def make_check(curriculum=None):
 
 
 #: A learner asking for a different lesson, rather than answering this one.
-#:
-#: Deliberately narrow, and the narrowness is the point: a false positive
-#: abandons a lesson somebody was halfway through, which is worse than the
-#: digression it replaces. Every alternative here names the change explicitly --
-#: "something else", "another topic", "different lesson". Anything vaguer is
-#: left to the graders and the digression handler.
-#:
-#: Bare "next" is deliberately ABSENT even though it reads like a match. It is
-#: an authored chip on the wrap-up and the reteach turns, where it means
-#: "continue", and `_LESSON_REPLY` in `safety_in` already treats it as an
-#: on-topic reply. Capturing it here would turn a tap meaning "carry on" into an
-#: abandoned lesson.
-#: "something else" must be ATTACHED to a teaching verb, never bare.
-#:
-#: Bare, it matches "i want to buy something else with my money" -- a lesson
-#: answer about spending, and one of the better ones a child could give. That
-#: turn would have discarded the lesson they were halfway through, which is the
-#: exact false positive this pattern is written to avoid rather than an
-#: acceptable cost of catching it.
 _WANTS_ANOTHER = re.compile(
     r"""
     \b(?:
@@ -305,22 +182,12 @@ _WANTS_ANOTHER = re.compile(
 
 
 def wants_a_different_lesson(text: str) -> bool:
-    """Whether this message asks to be taught something other than this.
-
-    Consulted in `branch` before the digression check -- see there for why the
-    order is the whole fix.
-    """
+    """Whether this message asks to be taught something other than this."""
     return bool(_WANTS_ANOTHER.search(text or ""))
 
 
 def grade_answer(question: CheckQuestion, answer: str) -> bool:
-    """Whether the child got it. Deterministic, in Python.
-
-    Not a model call, and the reason is the hint ladder: a rung count only
-    means something if "wrong" is decided the same way every time. A model that
-    grades leniently on Tuesday gives a child two nudges for the same answer
-    that got them a reveal on Monday.
-    """
+    """Whether the child got it."""
     text = (answer or "").strip().lower()
     if not text:
         return False
@@ -328,8 +195,7 @@ def grade_answer(question: CheckQuestion, answer: str) -> bool:
         correct = question.options[question.answer].strip().lower()
         if text == correct or correct in text:
             return True
-        # A tapped chip sends the option text; a typed answer might be the
-        # option's first word, or its index.
+        # A tapped chip sends the option text; a typed answer might be the option's first word, or its index.
         if text in {str(question.answer), str(question.answer + 1)}:
             return True
         return False
@@ -337,16 +203,7 @@ def grade_answer(question: CheckQuestion, answer: str) -> bool:
 
 
 def make_branch(curriculum=None):
-    """Decide what happens after the child answers.
-
-    Three outcomes and two that are not outcomes at all:
-
-      got_it   -> a game if one fits, otherwise straight to mastery
-      partial  -> the hint ladder
-      lost     -> the hint ladder, which reveals on the second miss
-      move on  -> place a different lesson, in this turn
-      digressed-> answer briefly, steer back, do not count it as an attempt
-    """
+    """Decide what happens after the child answers."""
 
     def branch(state: AspireState) -> dict[str, Any]:
         book = curriculum or load_all()
@@ -358,17 +215,6 @@ def make_branch(curriculum=None):
         from app.graph.nodes.safety_in import latest_user_text
 
         # BEFORE the digression check, and that order is the fix.
-        #
-        # `is_off_topic` asks whether the message contains a money word, and
-        # "teach me something else" does not -- so the single most on-topic
-        # thing a learner can say inside a lesson was being answered with "Good
-        # question! Now, back to what we were doing." They asked to move on and
-        # were told they could not, which is also the one steer the digression
-        # cap is not meant to cover.
-        #
-        # Placement handles the rest: `concepts_touched` already carries the
-        # concept just taught, so `resume_or_place` skips it and picks the next
-        # unmastered lesson rather than re-teaching the one being abandoned.
         if wants_a_different_lesson(latest_user_text(state)):
             logger.info(
                 "Learner asked to move on from %s; placing another lesson.", lesson.id
@@ -422,25 +268,13 @@ def make_branch(curriculum=None):
 
 
 def _digress(state: AspireState, learning: dict, lesson: Lesson) -> dict[str, Any]:
-    """Answer the off-topic question briefly, then steer back.
-
-    Two sentences at most, then the steer. The steer names what they were doing
-    -- "back to our snow cone money" -- because "let's get back on track" is a
-    reprimand and naming the thing is an invitation.
-
-    Past the cap the line is held, still warmly. Note what "held" means here: it
-    is one more friendly sentence and the same question again, not a refusal.
-    """
+    """Answer the off-topic question briefly, then steer back."""
     band = _band(state)
     count = int(learning.get("digression_count") or 0) + 1
     example = (lesson.examples_for(band) or ["what we were doing"])[0]
     subject = example.split(".")[0][:60]
 
-    # Every band names the subject, INCLUDING the fallback. The two fallbacks
-    # used not to -- "Good question! Now, back to what we were doing." -- which
-    # is precisely the reprimand this function's docstring says to avoid, served
-    # to the two bands that were missing from the table. `16-18` and `adult`
-    # both landed there, and `adult` is the band a guardian previews in.
+    # Every band names the subject, INCLUDING the fallback.
     if count > MAX_DIGRESSIONS:
         text = {
             "5-8": f"Ooh, let us hold that one for the end! Back to {subject}.",
@@ -460,8 +294,7 @@ def _digress(state: AspireState, learning: dict, lesson: Lesson) -> dict[str, An
         "learning": merge(
             learning,
             digression_count=count,
-            # NOT an attempt. A child asking a question has not answered wrongly,
-            # and counting it would run the hint ladder on curiosity.
+            # NOT an attempt.
             phase="checking",
         ),
     }
@@ -485,12 +318,7 @@ _EVIDENCE = {
 
 
 def make_mastery_update(curriculum=None, store: MasteryStore | None = None):
-    """Record the evidence, then decide whether to continue or wrap.
-
-    The only writer of mastery in the product. `main_graph.persist` deliberately
-    does not recompute it -- two writers for one row is how two subsystems come
-    to disagree about what a child has learned.
-    """
+    """Record the evidence, then decide whether to continue or wrap."""
 
     async def mastery_update(state: AspireState) -> dict[str, Any]:
         book = curriculum or load_all()
@@ -534,11 +362,7 @@ def make_mastery_update(curriculum=None, store: MasteryStore | None = None):
 
 
 def make_wrap_session(store: MasteryStore | None = None):
-    """End at a natural stopping point, with a progress directive.
-
-    Never mid-explanation: this node is only reachable from `mastery_update`,
-    which is between steps by construction.
-    """
+    """End at a natural stopping point, with a progress directive."""
 
     async def wrap_session(state: AspireState) -> dict[str, Any]:
         learning = state.get("learning") or {}
@@ -586,12 +410,7 @@ def _all_done(band: str) -> str:
 
 
 def _chips(band: str, options: list[str]) -> list[str]:
-    """Chips, capped at four and at four words each.
-
-    Trimmed here rather than left to `safety_out`, because a chip that arrives
-    too long triggers a re-prompt -- a model call to fix something the author
-    could simply have written shorter.
-    """
+    """Chips, capped at four and at four words each."""
     return [" ".join(option.split()[:4]) for option in options[:4]]
 
 
@@ -604,13 +423,7 @@ def _after_place(state: AspireState) -> str:
 
 
 def _after_check(state: AspireState) -> str:
-    """The graph pauses here on a real turn, waiting for the child's answer.
-
-    On a resumed turn -- the child has replied -- `phase` is still `checking`
-    and there IS a new human message, so `branch` runs. The distinction is the
-    message count, not the phase, because the phase is what the previous turn
-    left behind.
-    """
+    """The graph pauses here on a real turn, waiting for the child's answer."""
     return END
 
 
@@ -623,9 +436,6 @@ def _after_branch(state: AspireState) -> str:
         return "explain_back"
     if phase == "placing":
         # A move-on request, answered in THIS turn rather than the next one.
-        # Ending here and waiting for `_entry` to route `placing` would leave
-        # the learner who just asked for a different lesson looking at nothing
-        # until they typed again.
         return "resume_or_place"
     return END
 
@@ -646,26 +456,6 @@ def _after_mastery(state: AspireState) -> str:
 
 
 #: Whether a message is a question about a topic rather than a lesson reply.
-#:
-#: The gate between the two machines in this subgraph. `resume_or_place` teaches
-#: what the learner is DUE; `tutor` teaches what they ASKED FOR. Before the tutor
-#: existed there was only the first, so "What is compound interest?" was answered
-#: with the next unmastered lesson -- which is the defect Track L was opened for.
-#:
-#: Every clause requires a SUBJECT, and that requirement is the whole design.
-#:
-#: "Teach me" is a request to start a lesson and belongs to placement -- the
-#: learner has named no topic, so there is nothing for a topic resolver to
-#: resolve, and routing it here would replace a curriculum with a shrug. "Teach
-#: me about compound interest" names one. The difference is `\w{3,}` after the
-#: verb, and it is why every alternative below carries one.
-#:
-#: Narrow in one more place: a message arriving while a check question is
-#: outstanding is an ANSWER, whatever it looks like. "What is a dollar worth?"
-#: typed in reply to "how much after four weeks?" is still a reply, and routing
-#: it as a new topic abandons a question the child was in the middle of. That
-#: check lives in `_entry` rather than in the pattern, because it is about the
-#: conversation's state and not about the words.
 _ASKS_ABOUT = re.compile(
     r"""\b(?:
         what(?:'?s|\s+is|\s+are|\s+does|\s+do)\s+(?:\w+\s+){0,3}\w{3,}
@@ -681,12 +471,7 @@ _ASKS_ABOUT = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-#: Verbs that ask for a lesson without naming one. These belong to PLACEMENT.
-#:
-#: Listed explicitly and checked first, because the pattern above is generous
-#: enough to match "teach me something" on the `\w{4,}` tail, and "something" is
-#: the learner declining to choose -- which is exactly the case the scheduler
-#: exists for.
+#: Verbs that ask for a lesson without naming one.
 _NAMES_NOTHING = re.compile(
     r"""^\s*(?:
         (?:teach|show|tell)\s+me\s*(?:something|anything|a\s+lesson|more)?
@@ -701,12 +486,7 @@ _NAMES_NOTHING = re.compile(
 
 
 def asks_about_a_topic(text: str) -> bool:
-    """Whether this message names something specific the learner wants explained.
-
-    False for "teach me" and true for "teach me about compound interest". The
-    distinction routes between the two machines in this subgraph, so it is
-    written to be read rather than inferred from behaviour.
-    """
+    """Whether this message names something specific the learner wants explained."""
     body = (text or "").strip()
     if not body or _NAMES_NOTHING.match(body):
         return False
@@ -714,16 +494,8 @@ def asks_about_a_topic(text: str) -> bool:
 
 
 def _entry(state: AspireState) -> str:
-    """Where this turn starts, from the phase the last one left behind.
-
-    A lesson spans many turns and langgraph runs the graph once per turn, so
-    the entry point IS the resumption logic. Reading it from `phase` rather
-    than from an interrupt keeps the machine legible: the phase in a checkpoint
-    tells you exactly which node runs next.
-    """
+    """Where this turn starts, from the phase the last one left behind."""
     # A widget interaction or a game result is a TURN and it jumps the queue.
-    # The agent must answer it referencing the child's own numbers, in this
-    # turn -- so it runs before the lesson machine resumes wherever it was.
     flags = state.get("safety_flags") or {}
     if flags.get("widget_interaction"):
         return "widget_result"
@@ -732,25 +504,10 @@ def _entry(state: AspireState) -> str:
 
     learning = state.get("learning") or {}
 
-    # ── the tutor's claim on the turn ───────────────────────────────────────
-    #
-    # Three ways in, and the first two are what fix the reported defect:
-    #
-    #   * they asked about a topic, and there is no check outstanding;
-    #   * the tutor was already running -- a conversation about a concept
-    #     continues as a conversation about that concept, so a bare "20" or "why?"
-    #     reaches EVALUATE rather than being re-routed into placement;
-    #   * a check the TUTOR asked is outstanding.
-    #
-    # The authored curriculum keeps everything else. A learner working through a
-    # module is working through a module, and placement, the hint ladder, games
-    # and the wrap-up are all better at that than a topic resolver is.
+    # ── the tutor's claim on the turn ─────────────────────────────────────── Three ways in, and the first two are…
     from app.graph.nodes.safety_in import latest_user_text
 
-    # An empty concept store means nothing has been seeded, and the tutor would
-    # decline every turn. Falling back to the authored curriculum is the correct
-    # behaviour then, not a degraded one -- and it is what keeps a deployment
-    # that has not run `seed_concepts.py` working exactly as it did before.
+    # An empty concept store means nothing has been seeded, and the tutor would decline every turn.
     from app.learning.concepts import get_store
 
     if len(get_store()):
@@ -763,11 +520,7 @@ def _entry(state: AspireState) -> str:
     phase = str(learning.get("phase") or "placing")
     return {
         "placing": "resume_or_place",
-        # `plan_widget`, never `teach` directly. A turn that resumes straight
-        # into the teaching node has no grounding and no planned primitive in
-        # state, so the lesson would be written from the curriculum alone and
-        # the widget silently skipped -- on exactly the turns a resumed lesson
-        # makes most likely.
+        # `plan_widget`, never `teach` directly.
         "teaching": "plan_widget",
         "checking": "branch",
         "hinting": "hint_ladder",
@@ -792,37 +545,11 @@ def build_learn_graph(
     widget_plan=None,
     widget_compose=None,
 ):
-    """Compile the lesson machine.
-
-    `retrieve`, `plan` and `invoke` are the teaching turn's three optional
-    capabilities -- knowledge-base grounding, widget planning, and the model
-    that writes the words. Injected rather than constructed here for the reason
-    the Q&A subgraph gives: each has a different availability story, and a
-    subgraph that built them itself could not start when one was missing.
-
-    Every one defaults to None, which is the configuration every existing test
-    uses: the lesson falls back to the curriculum's authored text and the
-    machine behaves exactly as it did before there was a model in it.
-
-    The five arguments after `invoke` belong to the topic tutor:
-
-        embed             an utterance to a vector, for concept resolution
-        teach_retrieve    knowledge-base rows for the RAG-teach fallback
-        disambiguate      one structured call between two candidate concepts
-        widget_plan       which primitive, if any
-        widget_compose    that primitive's JSON
-
-    Kept separate from `retrieve` and `plan` rather than reusing them, because the
-    two paths ask different questions of the same capability: `retrieve` searches
-    on a placed LESSON'S objective, and `teach_retrieve` searches on what the
-    learner actually said. Sharing one argument would have meant one of the two
-    silently searching for the wrong thing.
-    """
+    """Compile the lesson machine."""
     graph = StateGraph(AspireState)
 
     graph.add_node("resume_or_place", make_resume_or_place(curriculum, store))
-    # The name is load-bearing: `INTERNAL_NODES` suppresses this node's model
-    # call by name, and without that the planner's JSON streams to the child.
+    # The name is load-bearing: `INTERNAL_NODES` suppresses this node's model call by name, and without that the pl…
     graph.add_node("plan_widget", make_plan_widget(curriculum, retrieve=retrieve, plan=plan))
     graph.add_node("teach", make_teach(curriculum, invoke=invoke))
     graph.add_node("check", make_check(curriculum))
@@ -839,9 +566,7 @@ def build_learn_graph(
     graph.add_node("widget_result", make_widget_result(store))
     graph.add_node("game_result", make_game_result_node(store))
 
-    # The topic tutor. Named `tutor` and the name is load-bearing twice over:
-    # `INTERNAL_NODES` suppresses its raw model tokens by name so that nothing
-    # unvalidated reaches a reader, and `evals/learning_agent.py` asserts on it.
+    # The topic tutor.
     from app.agents.learn.tutor import make_tutor
 
     graph.add_node(
@@ -856,9 +581,7 @@ def build_learn_graph(
             mastery=store,
         ),
     )
-    # Straight to END. The tutor emits its own prose and its own widget directive
-    # and has nothing to hand on -- routing it into `check` would ask a second
-    # question after the one it already asked.
+    # Straight to END.
     graph.add_edge("tutor", END)
 
     graph.add_conditional_edges(
@@ -878,9 +601,7 @@ def build_learn_graph(
             "game_result",
         ],
     )
-    # Both end the turn. The child interacted with something and got an answer
-    # about it; continuing into the next teach point in the same turn would
-    # bury the response they were owed.
+    # Both end the turn.
     graph.add_edge("widget_result", END)
     graph.add_edge("game_result", END)
     graph.add_conditional_edges("resume_or_place", _after_place, ["plan_widget", END])
@@ -902,18 +623,7 @@ def build_learn_graph(
 
 
 async def _retrieve(query: str, k: int, audience: str):
-    """Dense knowledge-base search, filtered to what this audience may see.
-
-    Deliberately the SAME retriever the Q&A subgraph uses -- one knowledge base,
-    one ingestion, one embedding model. A second retrieval path over the same
-    corpus is a second place for the audience filter to be got wrong, and the
-    one that gets forgotten is always the one serving children.
-
-    Dense only, with no BM25 half and no fusion. Q&A needs the lexical retriever
-    because a question can name an exact term the embedding misses; a lesson is
-    grounded in a concept the curriculum already named, so there is no rare term
-    to catch and nothing for fusion to reconcile.
-    """
+    """Dense knowledge-base search, filtered to what this audience may see."""
     from app.agents.qa.graph import _search
     from app.agents.qa.nodes import _permitted
 
@@ -922,12 +632,7 @@ async def _retrieve(query: str, k: int, audience: str):
 
 
 async def _teach_invoke(messages):
-    """The answer model, writing the lesson.
-
-    The answer model rather than the classifier's, unlike `rewrite_query`: this
-    is the prose a child reads, and it is the one call in the lesson where the
-    quality of the writing IS the product.
-    """
+    """The answer model, writing the lesson."""
     from app.agent import build_chat_model
 
     response = await build_chat_model().ainvoke(messages)
@@ -944,20 +649,7 @@ async def _teach_invoke(messages):
 
 
 async def _teach_retrieve(query: str):
-    """Knowledge-base rows for the RAG-teach fallback, searched on the UTTERANCE.
-
-    The other retriever searches on a placed lesson's objective, which is right
-    for a lesson the scheduler chose and wrong for a question the learner asked.
-    That distinction is not a nicety: the RAG-teach path exists precisely because
-    no concept covered the question, so searching for anything other than the
-    question would return rows about something else and teach from them.
-
-    Youth-filtered, like every other learner-facing retrieval. `audience_for`
-    cannot be used here because it reads the agent name off graph state and this
-    is called from the resolver, which is deliberately given no state -- the
-    narrow slice is the safe default and the preview path pays a little recall
-    for it.
-    """
+    """Knowledge-base rows for the RAG-teach fallback, searched on the UTTERANCE."""
     from app.agents.qa.graph import _search
     from app.agents.qa.nodes import _permitted
 
@@ -966,29 +658,14 @@ async def _teach_retrieve(query: str):
 
 
 async def _embed(text: str):
-    """The utterance as a vector, through the product's cached embedder.
-
-    `embed_query_cached` rather than a fresh call: the four landing starter chips
-    are the highest-collision strings in the product and every one of them is a
-    learning question, so the cache hit rate here is high and each hit is a
-    network round trip a child does not wait through.
-    """
+    """The utterance as a vector, through the product's cached embedder."""
     from app.rag import embed_query_cached
 
     return await embed_query_cached(text)
 
 
 def _structured(model_setting: str):
-    """A `(system, user) -> dict` caller on a named model tier.
-
-    One factory for the three cheap structured jobs -- concept disambiguation,
-    widget planning, widget composition -- so that "which model does this?" is
-    answered by one line of config rather than by three call sites that drifted.
-
-    Returns `{}` rather than raising on any failure. Every caller treats a falsy
-    answer as "no decision", which degrades to no widget or to the RAG-teach
-    fallback: both are outcomes the lesson survives.
-    """
+    """A `(system, user) -> dict` caller on a named model tier."""
 
     async def call(*, system: str, user: str) -> dict:
         import json as _json
@@ -1009,9 +686,7 @@ def _structured(model_setting: str):
             return {}
 
         text = _text_of_response(response).strip()
-        # The composer returns a widget object; the planner and the disambiguator
-        # return a small decision object. Both are JSON, and both arrive fenced
-        # often enough that unwrapping here is cheaper than a retry.
+        # The composer returns a widget object; the planner and the disambiguator return a small decision object.
         from app.agents.learn.widgets import _unfence
 
         try:
@@ -1024,12 +699,7 @@ def _structured(model_setting: str):
 
 
 def _compose_caller():
-    """The widget composer. Returns the raw JSON string, not a dict.
-
-    Raw because `widgets.validate` parses it itself -- gate 1 exists to reject
-    malformed JSON with a named gate, and parsing it here would turn that into a
-    silent empty return with no gate attached to the failure.
-    """
+    """The widget composer."""
 
     async def call(*, system: str, user: str) -> str:
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -1069,15 +739,10 @@ def build_production_learn():
     return build_learn_graph(
         store=PostgresMasteryStore(),
         retrieve=_retrieve,
-        # The planner runs on the small model. It picks one name from a list of
-        # at most nine -- see `widgets/planner.py` on why that is deliberately
-        # not a job for the answer model.
+        # The planner runs on the small model.
         plan=make_planner(default_invoke),
         invoke=_teach_invoke,
-        # The topic tutor's five. Every model here is named in `Settings`
-        # (`learn_*_model`) and nowhere else, which is the whole of the brief's
-        # model-tiering requirement: swapping the model that writes lessons is a
-        # config change, and it cannot silently re-tune the widget planner.
+        # The topic tutor's five.
         embed=_embed,
         teach_retrieve=_teach_retrieve,
         disambiguate=_structured("learn_resolve_model"),
@@ -1087,14 +752,7 @@ def build_production_learn():
 
 
 def register() -> None:
-    """Register the lesson machine for all three learning agent names.
-
-    `learning_preview` (a guardian looking at what their child is taught) and
-    `learning_sample` (a signed-out visitor trying one) run the same machine.
-    The difference is the learner id -- see `_learner` -- so a preview scores
-    against the adult's own row and a sample scores against a session id that
-    is thrown away.
-    """
+    """Register the lesson machine for all three learning agent names."""
     from app.graph.main_graph import register_agent
 
     for name in ("learn_agent", "learning_preview", "learning_sample"):

@@ -1,10 +1,4 @@
-"""The escalation contract: a reason is required, and four old reasons are gone.
-
-The measurement this exists to change: 23 of 58 live tickets were retrieval
-failures -- `no_context`, `below_relevance_floor`, `unattributed_figure`,
-`uncited_policy_claim`. None of the four has a member in the new enum, and
-`from_legacy` maps each to None. That is the whole point of the type.
-"""
+"""The escalation contract: a reason is required, and four old reasons are gone."""
 
 from __future__ import annotations
 
@@ -26,8 +20,7 @@ class TestAReasonIsRequired:
             EscalationRequest(summary="something went wrong")  # type: ignore[call-arg]
 
     def test_an_empty_summary_is_refused(self):
-        """A ticket with no summary is one somebody must reopen the transcript
-        to understand."""
+        """A ticket with no summary is one somebody must reopen the transcript to understand."""
         with pytest.raises(ValidationError):
             EscalationRequest(reason=EscalationReason.COMPLAINT, summary="   ".strip())
 
@@ -93,9 +86,7 @@ class TestImmediacy:
 
 class TestSafetyKeepsItsSubKind:
     def test_safeguarding_and_distress_triage_differently(self):
-        """Both high, different queues. Only safeguarding pages somebody, so
-        collapsing them would downgrade child protection into a wellbeing inbox.
-        """
+        """Both high, different queues."""
         safeguarding = EscalationRequest(
             reason=EscalationReason.SAFETY_OR_DISTRESS,
             summary="x",
@@ -110,9 +101,7 @@ class TestSafetyKeepsItsSubKind:
         assert distress.triage() == ("high", "wellbeing")
 
     def test_an_unspecified_kind_fails_towards_safeguarding(self):
-        """A caller that detected a safety signal but not which kind has told us
-        something is wrong and not what. Misrouting an upset child to the
-        safeguarding queue is recoverable; the reverse is not."""
+        """A caller that detected a safety signal but not which kind has told us something is wrong and not what."""
         request = EscalationRequest(reason=EscalationReason.SAFETY_OR_DISTRESS, summary="x")
         assert request.safety_kind is SafetyKind.SAFEGUARDING
         assert request.triage() == ("high", "safeguarding")
@@ -126,8 +115,7 @@ class TestSafetyKeepsItsSubKind:
             )
 
     def test_every_reason_triages(self):
-        """No reason may fall through to a default, because a default is how a
-        complaint ends up in the general queue."""
+        """No reason may fall through to a default, because a default is how a complaint ends up in the general queue."""
         for reason in EscalationReason:
             kind = (
                 SafetyKind.DISTRESS

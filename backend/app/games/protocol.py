@@ -1,21 +1,4 @@
-"""The contract a game type implements.
-
-Everything above this line — the engine, the tools, the agent, the routing —
-talks to `Game` and never to a particular game. Two of them exist: word scramble
-and true/false.
-
-A `Game` is stateless. It knows its content and its rules; the engine owns the
-session, the cursor and the scoring.
-
-Two capabilities are declared rather than assumed, because true/false proved
-that assuming them was wrong:
-
-- `supports_hints`. A hint on a binary choice *is* the answer, so true/false
-  declines rather than returning something useless. The engine checks the flag
-  and refuses the request itself; a game that says no never has `hint` called.
-- `round_size`. A bank of eighteen is not a warm-up. A game may serve a short
-  shuffled round instead of its whole set.
-"""
+"""The contract a game type implements."""
 
 from __future__ import annotations
 
@@ -62,45 +45,21 @@ class Game(Protocol):
         ...
 
     def check(self, entry: Entry, answer: str) -> bool | None:
-        """Whether the answer is correct. Pure — never calls a model.
-
-        Returns None when the answer could not be read as an answer at all —
-        an ambiguous `yes` on a true/false statement, say. That is not the same
-        as wrong: the engine leaves the item open and asks again rather than
-        spending it and showing the explanation.
-        """
+        """Whether the answer is correct."""
         ...
 
     def reveal(self, entry: Entry) -> Reveal:
-        """The answer and its teaching, for an item being resolved.
-
-        The only place a game hands its answer back. The engine pairs this with
-        advancing the cursor, so the answer is never live. Games whose teaching
-        runs longer than a sentence fill the optional layout fields too.
-        """
+        """The answer and its teaching, for an item being resolved."""
         ...
 
     def unreadable_message(self, answer: str) -> str:
-        """What to say when `check` returned None.
-
-        Lives with the content because the right wording depends on what went
-        wrong — a yes/no on a true/false statement needs a different sentence
-        from an empty box.
-        """
+        """What to say when `check` returned None."""
         ...
 
     def teaching(self, entry: Entry) -> str:
-        """What to say once the item is resolved, right or wrong.
-
-        The reason the games exist. For a scramble it is the word's meaning; for
-        true/false it is ECCB's own explanation, reproduced rather than written.
-        """
+        """What to say once the item is resolved, right or wrong."""
         ...
 
     def hint(self, entry: Entry, level: int) -> str:
-        """A nudge at 1..max_hint_level, progressively more revealing.
-
-        Only called when `supports_hints` is True. Must never return the answer
-        at any level — giving up is the engine's job, through `Reveal`.
-        """
+        """A nudge at 1..max_hint_level, progressively more revealing."""
         ...

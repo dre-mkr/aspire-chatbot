@@ -1,36 +1,4 @@
-"""The application form, as Pydantic. The single source of truth.
-
-The model phrases the question and extracts the answer. It does not decide what
-is required, what order things come in, or what counts as valid. Those come from
-here, and only from here.
-
-That division is not a stylistic preference. A model that decides which fields
-are required decides differently on different turns: it skips the parish because
-the conversation flowed past it, it accepts a partial date because the parent
-sounded confident, and the application that reaches a reviewer is missing
-something nobody can point at. A schema does not have moods.
-
-## Slots, not fields
-
-A `Slot` is a field plus everything the conversation needs around it: how to ask
-for it, how to say it came back wrong, whether it holds PII, and whether it is a
-document. `SLOTS` is the ordered walk -- guardian section complete, then child,
-then another child if there is one.
-
-## PII is marked at the slot, and that marking is load-bearing
-
-`Slot.sensitive` decides two things at once: the value goes to
-`application_pii` encrypted rather than to `applications`, and the transcript
-gets `[collected: date_of_birth]` instead of the value. Both follow from one
-flag, so there is no way to store a national ID correctly and still leak it into
-the summary.
-
-## Re-asks are specific
-
-"That didn't work" tells a parent nothing and they will try the same thing
-again. Every validator returns the format it wanted, with an example:
-"I need the date as day/month/year -- like 14/03/2015."
-"""
+"""The application form, as Pydantic."""
 
 from __future__ import annotations
 
@@ -41,9 +9,7 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-#: St Kitts and Nevis parishes. A closed list, because "which parish?" answered
-#: freely produces fourteen spellings of Basseterre and a reviewer who cannot
-#: filter a queue.
+#: St Kitts and Nevis parishes.
 PARISHES: tuple[str, ...] = (
     "Christ Church Nichola Town",
     "Saint Anne Sandy Point",
@@ -74,21 +40,14 @@ RELATIONSHIPS: tuple[str, ...] = (
 
 
 class DocumentRef(BaseModel):
-    """A document that lives in object storage. Never bytes.
-
-    The graph receives an id and a scan status; the file itself went
-    browser-to-bucket via a presigned URL and never passed through this process.
-    See `app/storage/presign.py`.
-    """
+    """A document that lives in object storage."""
 
     model_config = ConfigDict(extra="forbid")
 
     document_id: str
     mime: str = ""
     size_bytes: int = 0
-    #: Never `clean` by default. A document nobody scanned is not a clean
-    #: document, and defaulting it to clean would mean an unscanned file is
-    #: indistinguishable from a scanned one in the admin queue.
+    #: Never `clean` by default.
     scan_status: Literal["pending", "clean", "infected", "failed"] = "pending"
     #: `doc_check`'s advisory verdict. Never blocks anything -- see E3.
     check_confidence: float = 0.0
@@ -128,13 +87,7 @@ class GuardianSection(BaseModel):
     @field_validator("date_of_birth")
     @classmethod
     def _guardian_is_an_adult(cls, value: date) -> date:
-        """Eighteen or over.
-
-        Checked here rather than left to a reviewer because the whole legal
-        basis of the account is that an adult opened it, and an application that
-        reaches submission with a sixteen-year-old guardian has wasted
-        everybody's time including the family's.
-        """
+        """Eighteen or over."""
         today = date.today()
         age = today.year - value.year - ((today.month, today.day) < (value.month, value.day))
         if age < 18:
@@ -174,8 +127,7 @@ class Application(BaseModel):
 
     guardian: GuardianSection | None = None
     children: list[ChildSection] = Field(default_factory=list)
-    #: The consent text VERSION agreed to, not the text. The text changes and
-    #: the record has to say which one was on screen.
+    #: The consent text VERSION agreed to, not the text.
     consent_version: str | None = None
     attested_at: datetime | None = None
     attested_ip: str | None = None
@@ -194,8 +146,7 @@ class Slot:
     label: str
     #: How to ask, per locale.
     prompt: dict[str, str]
-    #: What to say when the answer did not parse. Names the FORMAT and gives an
-    #: example -- see the module docstring.
+    #: What to say when the answer did not parse.
     reask: dict[str, str]
     #: Parses and validates. Returns `(value, None)` or `(None, reason)`.
     parse: Callable[[str], tuple[Any, str | None]]
@@ -224,9 +175,7 @@ def _text(minimum: int = 2, maximum: int = 160):
     return parse
 
 
-#: Day-first, because that is how the date is written and said here. A
-#: month-first reading of 03/04/2015 is a different child's birthday, and
-#: nothing downstream would notice.
+#: Day-first, because that is how the date is written and said here.
 _DATE_PATTERNS = ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d")
 
 
@@ -276,27 +225,14 @@ def _parse_national_id(raw: str) -> tuple[Any, str | None]:
 
 
 def _fold(text: str) -> str:
-    """One spelling, out of the many people actually use.
-
-    Case, punctuation and spacing all vary. So does `St.` against `Saint`,
-    which on a St Kitts and Nevis form is not an edge case: it is how most
-    people write most of the fourteen, and a plain substring test misses every
-    one of them for the sake of a full stop.
-    """
+    """One spelling, out of the many people actually use."""
     text = text.lower().replace("'", "").replace("’", "")
     text = re.sub(r"[^a-z0-9]+", " ", text).strip()
     return re.sub(r"\b(st|ste|snt)\b", "saint", text)
 
 
 def _tokens_fit(answer: str, option: str) -> bool:
-    """Whether every word typed corresponds to a word in the option.
-
-    Prefixes count in either direction, so `Saint Peter`, `st peter basseterre`
-    and `saint peters basseterre` all reach `Saint Peter Basseterre`. Order is
-    not required either, because `Cayon Saint Mary` is the same answer as
-    `Saint Mary Cayon` and a parent should not have to know which way round we
-    wrote it.
-    """
+    """Whether every word typed corresponds to a word in the option."""
     words = option.split()
     return all(
         any(
@@ -316,11 +252,7 @@ def _one_of(options: tuple[str, ...]):
             if text == option.lower():
                 return option, None
 
-        # Everything below is the loose path, because a parent types "Cayon"
-        # for "Saint Mary Cayon" -- or "St. Peter Basseterre", which differs
-        # from the stored name by one full stop -- and refusing the right
-        # answer on a technicality strands them on this question with a chip
-        # list that only shows four of the fourteen.
+        # Everything below is the loose path, because a parent types "Cayon" for "Saint Mary Cayon" -- or "St.
         answer = _fold(raw)
         if not answer:
             return None, "not one of the options"
@@ -333,17 +265,13 @@ def _one_of(options: tuple[str, ...]):
         matches = [
             option
             for option, name in folded.items()
-            # `name in answer` catches the other direction: the official list
-            # writes two of the Nevis parishes with a "(Nevis)" suffix, and
-            # "I live in Saint Mary Cayon" is a sentence, not a mistake.
+            # `name in answer` catches the other direction: the official list writes two of the Nevis parishes with a "(Nev…
             if answer in name or name in answer or _tokens_fit(answer, name)
         ]
         if len(matches) == 1:
             return matches[0], None
         if len(matches) > 1:
             # "Basseterre" is two parishes and "Saint George" is two more.
-            # Guessing between them would put the wrong parish on a form that
-            # nobody reads back to the parent.
             return None, f"matches more than one of: {', '.join(matches)}"
         return None, "not one of the options"
 
@@ -360,11 +288,7 @@ def _parse_yes_no(raw: str) -> tuple[Any, str | None]:
 
 
 def _parse_document(raw: str) -> tuple[Any, str | None]:
-    """A document slot never parses typed text. See `nodes/upload.py`.
-
-    Present so the slot table is uniform; reaching it means the graph routed a
-    document slot to the typing path, which is a wiring bug worth naming.
-    """
+    """A document slot never parses typed text."""
     return None, "this one needs a photo, not typing"
 
 
@@ -493,11 +417,7 @@ GUARDIAN_SLOTS: tuple[Slot, ...] = (
             "fr": "Et quelle paroisse ?",
         },
         reask={
-            # Not "tap one of the options": there are fourteen parishes and the
-            # chips only ever show four, so for ten of them tapping is not
-            # something the parent can do. It also has to cover the answer that
-            # was understood but is ambiguous -- "Saint George" is two parishes,
-            # and "I did not recognise that" is the wrong thing to say about it.
+            # Not "tap one of the options": there are fourteen parishes and the chips only ever show four, so for ten of th…
             "en": "I need the full parish name — like Saint Mary Cayon. You can type it, or tap one of the options.",
             "es": "Necesito el nombre completo de la parroquia — por ejemplo Saint Mary Cayon. Puedes escribirlo o tocar una de las opciones.",
             "fr": "Il me faut le nom complet de la paroisse — par exemple Saint Mary Cayon. Tu peux l'écrire ou toucher une des options.",
@@ -655,8 +575,7 @@ CHILD_SLOTS: tuple[Slot, ...] = (
     ),
 )
 
-#: The whole walk. Guardian first, completely, then the child section -- which
-#: repeats per additional child.
+#: The whole walk.
 SLOTS: tuple[Slot, ...] = GUARDIAN_SLOTS + CHILD_SLOTS
 
 BY_PATH: dict[str, Slot] = {slot.path: slot for slot in SLOTS}
@@ -678,51 +597,7 @@ def next_missing(
     allow_sensitive: bool = True,
     barred: frozenset[str] | set[str] | None = None,
 ) -> Slot | None:
-    """The next slot to ask for, in order. None when the section is complete.
-
-    Guardian slots are keyed by their own path; child slots are keyed
-    `child.<n>.<field>` so a second child does not overwrite the first. The
-    ordering is the tuple's order and nothing else -- there is no branch here
-    that could reorder the form based on what the conversation happened to
-    cover, which is exactly the freedom the model does not get.
-
-    `allow_sensitive=False` is the anonymous walk, and it is a safety control
-    rather than a convenience. `access.py` grants an unauthenticated caller
-    `register_agent_step1` on the stated grounds that it collects "nothing that
-    would be PII about a minor" -- and an unauthenticated caller is band `5-8`,
-    because that is the conservative default `account.claims_for` returns when
-    there is no account to read. Nothing enforced that. The two agent names were
-    registered to the same zero-argument factory, so `step1` WAS `register_agent`,
-    and a child typing "I want to join ASPIRE" was asked for their full name and
-    then, repeatedly, for their national ID number.
-
-    Skipping `sensitive` slots is what makes the guarantee true, and it reuses
-    the flag that already decides encryption and transcript redaction rather
-    than introducing a second, driftable list of what counts as PII. What
-    survives the filter is the shape of an application -- relationship, parish,
-    whether the child already has an account -- which is exactly what can be
-    collected before anyone has proven who they are.
-
-    ## `optional` means "may be skipped", not "is never asked"
-
-    This walk used to test `not slot.optional`, so an optional slot could never
-    be returned and was therefore never asked. That made three fields
-    unreachable -- `guardian.email`, `child.school`, `child.photo` -- each with a
-    prompt and a reask authored in all three locales, and it made dead code of
-    the skip affordance that already existed: `_skip_chip` builds a localised
-    Skip chip, `extract` recognises "skip"/"saltar"/"passer", and `collect`
-    honours `{"skipped": true}` on an upload resume. Every part of skipping
-    worked except being offered the chance.
-
-    It also quietly broke the confirmation. `review.confirm` notifies the
-    guardian at `guardian.email` and falls back to the phone number, so the
-    promise "I have sent a copy of this to you" always ran on the fallback.
-
-    A skipped slot is excluded through `barred`, which the caller assembles --
-    see `graph.pick_slot`. Deliberately not by writing a sentinel into `filled`:
-    the comment there explains that an earlier attempt did exactly that and the
-    sentinel reached `submit` as a real answer.
-    """
+    """The next slot to ask for, in order."""
     withheld = set(barred or ())
 
     for slot in GUARDIAN_SLOTS:
@@ -746,23 +621,14 @@ def next_missing(
 
 
 def child_key(path: str, index: int) -> str:
-    """`child.full_name` for child 2 is `child.1.full_name`.
-
-    Indexed rather than suffixed with a name, because the name is itself a slot
-    and is not known when the key is first needed.
-    """
+    """`child.full_name` for child 2 is `child.1.full_name`."""
     if not path.startswith("child."):
         return path
     return f"child.{index}.{path[len('child.'):]}"
 
 
 def display_value(slot: Slot, value: Any) -> str:
-    """What a review card shows. Sensitive values are MASKED, never full.
-
-    The review card renders inside a chat transcript and the transcript is
-    persisted. A parent checking their own ID number needs to recognise it, not
-    to read it back -- the last four digits does that.
-    """
+    """What a review card shows."""
     if value in (None, ""):
         return ""
     if isinstance(value, date):

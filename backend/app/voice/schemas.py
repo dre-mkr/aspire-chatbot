@@ -16,11 +16,9 @@ class SpeakRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     persona: Persona
     language: Language
-    # Only mp3 is offered for now; the field exists so the client can ask and
-    # get a clean 400 rather than silently receiving something it cannot play.
+    # Only mp3 is offered for now; the field exists so the client can ask and get a clean 400 rather than silently…
     format: str = "mp3"
-    # Optional, used only for rate-limit bucketing. See limiter.py on why this
-    # is not a security boundary.
+    # Optional, used only for rate-limit bucketing.
     thread_id: str | None = None
 
 

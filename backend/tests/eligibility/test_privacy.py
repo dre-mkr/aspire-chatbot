@@ -1,14 +1,4 @@
-"""What must never leave the engine, and what must never reach Postgres.
-
-This flow asks a minor for an age band, an island, a citizenship status and a
-school status. Saint Kitts and Nevis has a population of about fifty thousand,
-so "Nevis, under 5, not in school" is not an anonymous record there however it
-is stored.
-
-These tests are the enforcement. They walk the actual rendered JSON and the
-actual ORM object rather than reading the code, because the failure mode is
-somebody adding a field in good faith six months from now.
-"""
+"""What must never leave the engine, and what must never reach Postgres."""
 
 from __future__ import annotations
 
@@ -22,8 +12,7 @@ from app.eligibility.models import Criterion, Language, Outcome, Verdict
 from app.eligibility.router import _envelope
 from app.eligibility.tools import start_eligibility_check
 
-# Every answer token a person can tap. None of these may appear in an outcome
-# row, in a history line, or in anything the chat response carries.
+# Every answer token a person can tap.
 ANSWER_TOKENS = (
     "under5",
     "5to18",
@@ -65,8 +54,7 @@ def test_the_outcome_row_has_no_field_an_answer_could_occupy():
 
 
 def test_the_outcome_row_has_no_link_back_to_a_conversation():
-    """A join key would tie a verdict to a transcript, and a transcript
-    identifies a person far better than an age band does."""
+    """A join key would tie a verdict to a transcript, and a transcript identifies a person far better than an age b…"""
     assert EligibilityOutcome.__table__.foreign_keys == set()
     columns = {column.name for column in EligibilityOutcome.__table__.columns}
     for identifying in ("conversation_id", "thread_id", "session_id", "user_id"):
@@ -107,11 +95,7 @@ def test_the_outcome_is_only_ever_one_of_the_declared_values(
 
 
 def test_the_agent_tool_returns_nothing_about_the_person(wired: EligibilityEngine):
-    """The model's whole view of this feature.
-
-    It gets "a check started" and no more -- not the question, not the options,
-    and above all nothing anyone taps afterwards.
-    """
+    """The model's whole view of this feature."""
     result = start_eligibility_check.invoke(
         {},
         config={"configurable": {"thread_id": "privacy-3", "language": "en"}},
@@ -123,13 +107,8 @@ def test_the_agent_tool_returns_nothing_about_the_person(wired: EligibilityEngin
 
 
 def test_the_history_line_carries_no_answer_and_no_verdict():
-    """It is written into a transcript that identifies a conversation.
-
-    The anonymised outcome row exists precisely so the two never sit together,
-    so the verdict must not be here either.
-    """
-    # Moved to `app/turn.py` with the rest of the persistence when `/chat`
-    # went. The line itself is unchanged, and so is what it must not say.
+    """It is written into a transcript that identifies a conversation."""
+    # Moved to `app/turn.py` with the rest of the persistence when `/chat` went.
     from app.turn import eligibility_history_line
 
     line = eligibility_history_line().lower()
@@ -144,8 +123,7 @@ def test_the_history_line_carries_no_answer_and_no_verdict():
 def test_a_question_response_carries_only_the_answer_to_its_own_question(
     engine: EligibilityEngine,
 ):
-    """`answered_with` is the one place an answer appears, and it is scoped to
-    the question being shown -- never the set."""
+    """`answered_with` is the one place an answer appears, and it is scoped to the question being shown -- never the…"""
     engine.start("privacy-4", Language.EN)
     engine.answer("privacy-4", "under5")
     engine.answer("privacy-4", "4")
@@ -153,8 +131,7 @@ def test_a_question_response_carries_only_the_answer_to_its_own_question(
 
     body = json.loads(_envelope(snapshot, Language.EN).model_dump_json())
     rendered = json.dumps(body)
-    # The current question is `residence`; nothing from the three answered
-    # before it may be in the payload.
+    # The current question is `residence`; nothing from the three answered before it may be in the payload.
     assert "under5" not in rendered
     assert "by_descent" not in rendered
     assert body["question"]["id"] == "residence"
@@ -175,10 +152,7 @@ def test_going_back_shows_only_that_question_s_own_answer(engine: EligibilityEng
 
 
 def test_a_finished_flow_leaves_nothing_on_the_server(engine: EligibilityEngine):
-    """The retention guarantee, from the outside.
-
-    After the result there is no request that can recover what was tapped.
-    """
+    """The retention guarantee, from the outside."""
     walk(engine, "privacy-6", DISTINCTIVE)
     assert engine.state("privacy-6") is None
     envelope = _envelope(engine.state("privacy-6"), Language.EN)
@@ -187,11 +161,7 @@ def test_a_finished_flow_leaves_nothing_on_the_server(engine: EligibilityEngine)
 
 
 def test_the_result_payload_holds_no_raw_answer(engine: EligibilityEngine):
-    """The verdict and the checklist are derived from the answers.
-
-    Derived is fine; the tokens themselves must not travel, because a payload
-    that carries them is one bug away from being stored.
-    """
+    """The verdict and the checklist are derived from the answers."""
     snapshot = walk(engine, "privacy-7", DISTINCTIVE)
     rendered = json.dumps(json.loads(_envelope(snapshot, Language.EN).model_dump_json()))
     for token in ANSWER_TOKENS:
@@ -209,11 +179,7 @@ def test_the_result_payload_holds_no_raw_answer(engine: EligibilityEngine):
 def test_no_log_line_names_a_thread_alongside_an_answer(
     engine: EligibilityEngine, answers: dict[str, str], caplog
 ):
-    """No PII in logs.
-
-    The flow is expected to be silent. Anything it does log must not pair a
-    conversation with something someone tapped.
-    """
+    """No PII in logs."""
     with caplog.at_level("DEBUG"):
         walk(engine, "privacy-8", answers)
 

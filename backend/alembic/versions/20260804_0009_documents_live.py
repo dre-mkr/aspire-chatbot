@@ -1,45 +1,4 @@
-"""Recreate `documents` -- this time as the corpus retrieval actually reads
-
-Revision ID: 0009_documents_live
-Revises: 0008_drop_documents
-Create Date: 2026-08-04
-
-0008 dropped this table because it had always held 0 rows: the pgvector schema
-was built and indexed in 0001/0002, never written to, and retrieval ran on Chroma
-the whole time. This recreates it for the opposite reason -- it is now the source
-of truth, ingestion writes to it, and `app/rag.py` reads it on every turn.
-
-The two migrations are not a mistake and a correction of that mistake. 0008
-removed a table nothing used; this adds a table something uses. Keeping both in
-the chain is what makes that sequence legible to anyone reading the history, and
-0008's `downgrade()` is deliberately NOT what this reuses.
-
-## No vector index, on purpose
-
-0002 built an HNSW index over `(embedding::halfvec(3072))`. This does not, and
-the reasoning is the whole design:
-
-* **332 rows.** A sequential scan computes 332 dot products of 3072 floats --
-  about a million multiply-adds, which Postgres does in single-digit
-  milliseconds. HNSW exists to avoid scanning millions of rows; at this size the
-  graph traversal has nothing to save and would examine most of the corpus
-  regardless.
-* **It would cost exactness twice.** HNSW is approximate by construction, and
-  pgvector cannot index `vector` beyond 2000 dimensions, so 3072 forces a
-  `halfvec` cast -- float16, which perturbs scores in the fourth decimal place.
-  The retrieval floor this corpus is served with sits at cosine similarity
-  0.434315 (see `app/rag.py`), and a chunk within float16 noise of that boundary
-  would be admitted or dropped by rounding rather than by relevance.
-* **The equivalence test demands it.** `tests/test_retriever_equivalence.py`
-  asserts this retriever returns the same top-5 as the Chroma one it replaces.
-  An approximate index turns any failure there into an argument about tolerance
-  instead of a bug report.
-
-If the corpus ever outgrows a scan, 0002 is the recipe -- and note its warning
-that the query must cast identically or the planner silently ignores the index.
-
-The b-tree on `language` stays. It is in the WHERE clause of every search.
-"""
+"""Recreate `documents` -- this time as the corpus retrieval actually reads Revision ID: 0009_documents_live Rev…"""
 
 from __future__ import annotations
 
@@ -87,9 +46,7 @@ def upgrade() -> None:
         ),
         sa.Column("source_url", sa.Text(), nullable=True),
         sa.Column("chunk_index", sa.Integer(), nullable=False, server_default="0"),
-        # The knowledge-base row this chunk came from ("ASP-042"), so a served
-        # answer can be traced to a line in the CSV without matching on prose.
-        # Not unique: a long row splits into several chunks that share it.
+        # The knowledge-base row this chunk came from ("ASP-042"), so a served answer can be traced to a line in the CS…
         sa.Column("kb_id", sa.Text(), nullable=True),
         sa.Column(
             "metadata",
@@ -113,5 +70,4 @@ def downgrade() -> None:
     op.drop_index("ix_documents_kb_id", table_name="documents")
     op.drop_index("ix_documents_language", table_name="documents")
     op.drop_table("documents")
-    # The extension stays: another table in this database may use it, and
-    # dropping it would take their columns with it.
+    # The extension stays: another table in this database may use it, and dropping it would take their columns with…

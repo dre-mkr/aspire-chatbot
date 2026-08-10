@@ -1,19 +1,4 @@
-"""An unauthenticated caller must never be asked for PII.
-
-`access.py` grants an anonymous caller `register_agent_step1` on a stated
-guarantee: it "collects only what can be collected before an account exists, and
-nothing that would be PII about a minor". Nothing enforced that guarantee. Both
-registration names were bound to a zero-argument factory, so `step1` WAS
-`register_agent` -- and an anonymous caller is band `5-8`, because that is the
-conservative default `account.claims_for` returns when there is no account to
-read.
-
-A child typing "I want to join ASPIRE" was asked for their full name, and then
-for their national ID number, repeatedly, with a format hint.
-
-These tests are the guarantee, written down. They are pure -- no model, no
-database, no network -- because the property is a property of the slot walk.
-"""
+"""An unauthenticated caller must never be asked for PII."""
 
 from __future__ import annotations
 
@@ -29,11 +14,7 @@ from app.agents.register.schema import (
 
 
 def _walk(*, allow_sensitive: bool) -> list[str]:
-    """Every slot the walk asks for, filling each as it goes.
-
-    Bounded by the slot count so a filter bug that stops the walk advancing
-    fails as an assertion rather than hanging the suite.
-    """
+    """Every slot the walk asks for, filling each as it goes."""
     filled: dict[str, object] = {}
     asked: list[str] = []
     for _ in range(len(SLOTS) + 5):
@@ -83,11 +64,7 @@ def test_the_anonymous_walk_still_collects_something():
 
 
 def test_the_two_agent_names_are_bound_to_different_graphs():
-    """The mechanism, not just the outcome.
-
-    The original defect was not a wrong slot list -- it was that one factory
-    served both names and could not tell them apart.
-    """
+    """The mechanism, not just the outcome."""
     from app.graph.main_graph import AGENT_BUILDERS, register_all
 
     register_all()

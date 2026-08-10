@@ -1,15 +1,4 @@
-"""Where a game session lives while it is being played.
-
-Server-side, keyed by the conversation's `thread_id`, never in the client and
-never in conversation history. A child who reloads the page finds the game where
-they left it, because the browser was never holding it in the first place.
-
-The in-memory backend matches this service as deployed: one uvicorn worker,
-because conversation memory is already an in-process `InMemorySaver`. Game state
-therefore has exactly the lifetime conversations already have — it survives a
-reload, and it does not survive a restart. Everything here is behind
-`SessionStore` so swapping in Redis is one class and no caller changes.
-"""
+"""Where a game session lives while it is being played."""
 
 from __future__ import annotations
 
@@ -31,11 +20,7 @@ class SessionStore(Protocol):
 
 
 class InMemorySessionStore:
-    """Dict with a TTL, guarded by a lock.
-
-    The lock is not optional: uvicorn runs request handlers on a threadpool, so
-    two turns of the same conversation can overlap if a child double-taps send.
-    """
+    """Dict with a TTL, guarded by a lock."""
 
     def __init__(self, ttl_seconds: float) -> None:
         self._ttl = ttl_seconds
@@ -62,8 +47,7 @@ class InMemorySessionStore:
         session.updated_at = now
         with self._lock:
             self._sessions[session.session_id] = session
-            # Opportunistic sweep: abandoned sessions are cleared by the next
-            # writer rather than by a background task nobody remembers to run.
+            # Opportunistic sweep: abandoned sessions are cleared by the next writer rather than by a background task nobod…
             if len(self._sessions) > 1:
                 for key in [
                     k

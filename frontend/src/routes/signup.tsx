@@ -7,46 +7,7 @@ import { AuthError, register } from "#/lib/aspire/auth";
 import { asPersonaId } from "#/lib/aspire/personas";
 import { keys } from "#/lib/aspire/queries";
 
-/**
- * Creating an account, at `/signup`.
- *
- * A wizard in the browser rather than a request per step: a half-finished
- * account is not a useful thing to have in the table, and somebody who gives up
- * part-way should leave nothing behind.
- *
- * ## Who the account is for is asked FIRST, and that is the whole redesign
- *
- * This form used to open on "Let us start with you" and ask for one date of
- * birth in the second person. Everything downstream was derived from it —
- * including, through `DEFAULT_PERSONA` on the server, which assistant the
- * account gets.
- *
- * That has exactly one correct reading, and the form never said which. A parent
- * filling it in for a child entered the child's date, which is the obvious
- * reading of a page headed "Let us start with you" when the reason you are on
- * it is your daughter. The account then landed in a child band, and the parent
- * could not get out: `register_agent` lives on Aurora alone, Aurora is wider
- * than a child band's persona, and the server refuses a request to widen —
- *
- *     WARNING app.api.stream: Refused a request for persona 'aurora'
- *     on a 16-18 band session.
- *
- * — so the picker went on showing Aurora while the session ran as Orion, and
- * "I want to register my daughter" came back with advice to ask their parent.
- * Nothing inside the product could repair it. Only a second account could.
- *
- * So the question is asked instead of inferred, and the date of birth goes back
- * to meaning one thing: the age of whoever holds the account.
- *
- * ## The persona is not computed here
- *
- * Deliberately, even though this file now knows the role and the date of birth
- * and could. The server returns the derived persona on the sign-up response and
- * this navigates with it. A second copy of `DEFAULT_PERSONA` in the browser is
- * what locked the whole 9-12 band out of the product once already — the note in
- * `personas.ts` has that history — and a copy that lived in a form nobody reads
- * after submitting would be the worst place yet to keep one.
- */
+/** Creating an account, at `/signup`. */
 
 const ISLANDS = ["St. Kitts", "Nevis"];
 
@@ -78,13 +39,7 @@ const MONTHS = [
 
 type Role = "participant" | "guardian" | "educator";
 
-/**
- * The three answers, in the order somebody scans them.
- *
- * Participant first because it is the common case and the programme's subject.
- * The other two are adults acting in a capacity, which is the distinction the
- * server draws in `accounts.ADULT_ROLES`.
- */
+/** The three answers, in the order somebody scans them. */
 const ROLES: ReadonlyArray<{ id: Role; label: string; blurb: string }> = [
 	{
 		id: "participant",
@@ -106,15 +61,7 @@ const ROLES: ReadonlyArray<{ id: Role; label: string; blurb: string }> = [
 /** Old enough to hold an account alone. Mirrors `MINOR_AGE` in the service. */
 const MINOR_AGE = 13;
 
-/**
- * Above this, `band_for` returns `adult`. Mirrors the band table in
- * `backend/app/graph/account.py`, which puts 18 in the `16-18` band.
- *
- * A mirror, not the authority — `accounts._role_problem` refuses the same
- * combination server-side and this cannot let anything past it. It exists so a
- * guardian who typed their child's date finds out on the step where the field
- * is, rather than after filling in a password.
- */
+/** Above this, `band_for` returns `adult`. */
 const ADULT_ABOVE = 18;
 
 const ADULT_ROLES: ReadonlySet<Role> = new Set<Role>(["guardian", "educator"]);
@@ -124,8 +71,7 @@ type StepId = "role" | "about" | "place" | "contact" | "credentials";
 
 function stepsFor(role: Role | null): StepId[] {
 	const base: StepId[] = ["role", "about", "place"];
-	// An adult role has no separate adult to name — they are the adult, and the
-	// server drops anything that arrives in those fields anyway.
+	// An adult role has no separate adult to name — they are the adult, and the server drops anything that arrives…
 	if (role === "participant") base.push("contact");
 	base.push("credentials");
 	return base;
@@ -138,12 +84,7 @@ function safeNext(value: unknown): string | undefined {
 }
 
 export const Route = createFileRoute("/signup")({
-	// Full-document SSR, stated rather than inherited. This form is entirely
-	// client-interactive, but it is also the first paint a signed-out visitor
-	// gets, so the shell should arrive as HTML rather than after the bundle.
-	// It was rendering this way already -- by inheriting `defaultSsr` from a
-	// declaration that lived in a generated file. Saying so here means the mode
-	// is a decision on the record and survives the next regeneration.
+	// Full-document SSR, stated rather than inherited.
 	ssr: true,
 	validateSearch: (search: Record<string, unknown>) => {
 		const next = safeNext(search.next);
@@ -197,8 +138,7 @@ function SignUp() {
 	const age = useMemo(() => ageFrom(day, month, year), [day, month, year]);
 	const isMinor = role === "participant" && age !== null && age < MINOR_AGE;
 	const adultRole = role !== null && ADULT_ROLES.has(role);
-	// Only meaningful once the date is complete; `age === null` is "not finished
-	// typing", not "too young", and must not turn the hint red while they type.
+	// Only meaningful once the date is complete; `age === null` is "not finished typing", not "too young", and must…
 	const tooYoungForRole = adultRole && age !== null && age <= ADULT_ABOVE;
 
 	const LABELS: Record<StepId, string> = {
@@ -227,8 +167,7 @@ function SignUp() {
 			if (age < 0 || age > 120)
 				return fail("dob", "Check that date — it looks wrong.");
 			if (tooYoungForRole) {
-				// The check that closes the trap this redesign exists for. Refused
-				// here and again by the service, which is the authority.
+				// The check that closes the trap this redesign exists for.
 				return fail(
 					"dob",
 					role === "guardian"
@@ -239,8 +178,7 @@ function SignUp() {
 			return true;
 		}
 		if (step === "contact" && isMinor) {
-			// Refused here as well as by the service. An under-13 account without
-			// a named adult is the one shape this form must not be able to send.
+			// Refused here as well as by the service.
 			if (!gName.trim())
 				return fail("gName", "Name the adult who will hold this account.");
 			if (!gEmail.trim())
@@ -267,8 +205,7 @@ function SignUp() {
 		try {
 			const result = await register({
 				role,
-				// Under 13 the adult's address is the account's, so the last step
-				// collects theirs and this sends it as the credential either way.
+				// Under 13 the adult's address is the account's, so the last step collects theirs and this sends it as the cred…
 				email: email.trim(),
 				password,
 				firstName: first.trim(),
@@ -289,12 +226,7 @@ function SignUp() {
 				queryKey: keys.allConversations(),
 			});
 
-			// The persona the account actually resolved to, as the SERVER derived
-			// it, carried into the app so the picker opens on the right assistant
-			// instead of "Everyone". Narrowed through `asPersonaId` like any other
-			// value that reaches the search string: this one is trusted, but the
-			// param it lands in is not, and one gate for it is easier to keep true
-			// than two rules about which writers may skip it.
+			// The persona the account actually resolved to, as the SERVER derived it, carried into the app so the picker op…
 			const persona = asPersonaId(result.persona);
 
 			// Re-validated at the point of use; see the note in signin.tsx.
@@ -467,9 +399,7 @@ function SignUp() {
 									{errors.dob}
 								</span>
 							) : adultRole ? (
-								// Said before the field is filled in, not after it is
-								// rejected. This is the exact confusion the role step
-								// exists to remove, so it is worth saying twice.
+								// Said before the field is filled in, not after it is rejected.
 								<span className="field__hint">
 									{role === "guardian"
 										? "Yours, not your child's. Their date of birth is part of the application."

@@ -1,40 +1,4 @@
-"""A vision model looks at the document and says what it thinks. Advisory only.
-
-Four questions:
-
-    is this the expected document type?
-    is it legible?
-    is the whole page visible?
-    does the name roughly match the one entered?
-
-## It never rejects anything
-
-Not "rarely". Never. There is no code path here that fails an application, and
-`block_submission` does not exist. The verdict is a confidence number and a note
-for the admin queue, and a human decides.
-
-The reason is not modesty about the model. It is that the cost of a false
-negative falls entirely on a family: a birth certificate that photographs badly
-because the paper is old, a name that transliterates differently, a page whose
-corner is cut off by a cracked phone screen. Every one of those is a real
-document and a real child, and an automated rejection turns them into a family
-who tried and was told no by something that cannot be argued with.
-
-## One retake request per document, and the cap is in the schema
-
-    CHECK (retakes_requested <= 1)
-
-Asking twice is how a parent learns the app cannot be satisfied. After one
-retake the document is ACCEPTED and flagged, and a reviewer sees both the flag
-and the note.
-
-## The verdict is logged next to the human decision
-
-That is the only way anybody earns the right to trust this later. `verdicts` and
-the eventual `review_events` row are joined by application; agreement rate is a
-query, not an impression. Until that number exists, this changes nothing about
-what gets approved.
-"""
+"""A vision model looks at the document and says what it thinks."""
 
 from __future__ import annotations
 
@@ -45,8 +9,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 #: Below this the note says "hard to read" and a retake may be offered ONCE.
-#: Above it the document passes silently -- a parent who took a good photo
-#: should not be told anything at all.
 RETAKE_THRESHOLD = 0.55
 
 #: Below this the flag is raised for the reviewer regardless of retakes.
@@ -83,7 +45,6 @@ class Verdict:
     confidence: float = 1.0
     notes: str = ""
     #: True when the model could not be reached or its answer was unusable.
-    #: Treated as "no opinion", which means the document proceeds.
     unavailable: bool = False
 
     @property
@@ -101,13 +62,7 @@ class Verdict:
 
     @property
     def retake_worth_asking(self) -> bool:
-        """Whether a retake would plausibly help.
-
-        Legibility and framing are fixable by taking another photo. A wrong
-        document type or a mismatched name are NOT -- asking a parent to
-        re-photograph a document that is simply the wrong one wastes their time
-        and tells them nothing.
-        """
+        """Whether a retake would plausibly help."""
         if self.unavailable:
             return False
         return (not self.legible or not self.whole_page) and self.confidence < RETAKE_THRESHOLD
@@ -142,8 +97,7 @@ def _parse(raw: str) -> Verdict:
     )
 
 
-#: Retake copy. Names the specific problem and stays cheerful -- a parent who
-#: reads this as criticism of their photography stops taking photos.
+#: Retake copy.
 _RETAKE: dict[str, str] = {
     "en": "That photo's a bit hard to read at the bottom — mind taking it again?",
     "es": "Esa foto cuesta un poco de leer abajo — ¿la tomas otra vez?",
@@ -164,13 +118,7 @@ def retake_message(verdict: Verdict, locale: str) -> str:
 
 
 def make_doc_check(invoke=None):
-    """Build the node. `invoke` is `async (system, image_url, context) -> str`.
-
-    Injected, and `None` is a supported configuration rather than a test-only
-    one: a deployment without a vision model runs registration unchanged, with
-    every document passing silently to the human queue. That is exactly the
-    behaviour before this node existed, which is what makes turning it on safe.
-    """
+    """Build the node."""
 
     async def doc_check(state: Any) -> dict[str, Any]:
         registration = state.get("registration") or {}
@@ -192,13 +140,11 @@ def make_doc_check(invoke=None):
             raw = await invoke(_SYSTEM, url, _context(state, slot_path))
             verdict = _parse(raw)
         except Exception:
-            # No opinion. The document proceeds exactly as it would have without
-            # this node -- a vision outage must not stop a family applying.
+            # No opinion.
             logger.warning("doc_check unavailable; proceeding.", exc_info=True)
             verdict = Verdict(unavailable=True, notes="check unavailable")
 
-        # Logged alongside the document so agreement with the eventual human
-        # decision can be MEASURED. Nothing here acts on the verdict.
+        # Logged alongside the document so agreement with the eventual human decision can be MEASURED.
         logger.info(
             "doc_check document=%s slot=%s confidence=%.2f flag=%s notes=%r",
             document.get("document_id"),
@@ -215,9 +161,7 @@ def make_doc_check(invoke=None):
             "flagged": verdict.should_flag,
         }
 
-        # Written to the document row whatever the outcome. The whole point of
-        # an advisory check is that its verdict can be compared against the
-        # human decision later, and a verdict that was never stored cannot be.
+        # Written to the document row whatever the outcome.
         try:
             await record_verdict(str(document["document_id"]), verdict)
         except Exception:
@@ -231,10 +175,7 @@ def make_doc_check(invoke=None):
             from langchain_core.messages import AIMessage
 
             updated["retakes_requested"] = retakes + 1
-            # The slot is CLEARED so the loop asks for it again. Without this
-            # the retake request would be a sentence with nothing behind it --
-            # the slot is already filled, so the walk would move on and the
-            # parent would be asked to retake a document nobody was waiting for.
+            # The slot is CLEARED so the loop asks for it again.
             values = dict(registration.get("values") or {})
             if slot_path:
                 index = registration.get("child_index", 0)
@@ -262,8 +203,7 @@ def make_doc_check(invoke=None):
         return {
             "registration": {
                 **registration,
-                # Cleared so the next slot's `_after_doc_check` does not read a
-                # stale retake flag and end the turn again.
+                # Cleared so the next slot's `_after_doc_check` does not read a stale retake flag and end the turn again.
                 "__last_document": None,
                 "__last_verdict": {
                     "document_id": document.get("document_id"),
@@ -277,12 +217,7 @@ def make_doc_check(invoke=None):
 
 
 def _context(state: Any, slot_path: str) -> str:
-    """What the model is told about what it is looking at.
-
-    The expected NAME is included because question 4 needs it. Nothing else
-    from the application is -- the model does not need the address, the ID
-    number or the date of birth to say whether a page is in focus.
-    """
+    """What the model is told about what it is looking at."""
     registration = state.get("registration") or {}
     values = registration.get("values") or {}
     expected_name = (
@@ -304,20 +239,7 @@ def _context(state: Any, slot_path: str) -> str:
 
 
 def vision_invoke():
-    """The real vision call, or None if no vision model is configured.
-
-    `async (system, image_url, context) -> str`. None is a first-class return
-    and the caller treats it as "no opinion" -- every document then passes
-    silently to the human queue, which is exactly the behaviour before this node
-    existed. That is what makes enabling it a safe change rather than a leap.
-
-    The image is passed as a SHORT-LIVED SIGNED URL rather than as base64. Two
-    reasons and the second is the one that matters: a 10MB base64 blob in a
-    request body is a 13MB request, and -- far worse -- it would put the bytes
-    of a child's birth certificate into a model prompt, a request log and
-    whatever the provider retains. A URL that expires in two minutes puts a
-    pointer there instead.
-    """
+    """The real vision call, or None if no vision model is configured."""
     from app.config import get_settings
 
     settings = get_settings()

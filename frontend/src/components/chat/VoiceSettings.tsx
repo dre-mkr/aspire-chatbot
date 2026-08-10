@@ -4,22 +4,7 @@ import { InfoIcon, SlidersIcon } from "#/components/icons";
 import type { VoiceLanguage } from "#/lib/aspire/voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 
-/**
- * Voice and language settings, and the control that opens them.
- *
- * Lifted out of the top bar unchanged. It used to hang off a pill labelled
- * "ASPIRE AI" — the product's own name — which is the last place anyone looks
- * for read-aloud, speed and language. It now opens from the composer, beside
- * the tools it belongs with.
- *
- * The panel's contents are the originals: same sections, same order, same
- * copy, same controls. Only the anchor changed, so it opens upward from the
- * composer instead of downward from a bar that no longer exists.
- *
- * The trigger is deliberately a sliders glyph and never a microphone. The mic
- * is two controls to the right and does something else entirely; two
- * microphone-ish buttons in one row would leave neither meaning anything.
- */
+/** Voice and language settings, and the control that opens them. */
 
 const SPEEDS = ["0.75", "1", "1.25", "1.5"] as const;
 const LANGUAGES: Array<{ code: VoiceLanguage; name: string }> = [
@@ -52,15 +37,13 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 	const panelRef = useRef<HTMLDivElement>(null);
 	const compact = useMediaQuery(COMPACT);
 
-	// The portal only exists on the client; rendering it during SSR would look
-	// for a document that is not there.
+	// The portal only exists on the client; rendering it during SSR would look for a document that is not there.
 	const [mounted, setMounted] = useState(false);
 	useEffect(() => setMounted(true), []);
 
 	const close = () => setOpen(false);
 
-	// Escape closes and hands focus back; a pointer outside closes without
-	// stealing it. Both were true in the top bar and both still have to be.
+	// Escape closes and hands focus back; a pointer outside closes without stealing it.
 	useEffect(() => {
 		if (!open) return;
 
@@ -74,8 +57,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 
 			if (event.key !== "Tab") return;
 
-			// Focus stays inside while it is open. Without this, Tab walks out of
-			// the panel and into the composer underneath it.
+			// Focus stays inside while it is open.
 			const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
 				'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
 			);
@@ -91,8 +73,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 			}
 		};
 
-		// The sheet is portalled out of this subtree, so "inside" has to mean
-		// either the trigger's wrapper or the panel itself.
+		// The sheet is portalled out of this subtree, so "inside" has to mean either the trigger's wrapper or the panel…
 		const onPointer = (event: PointerEvent) => {
 			const target = event.target as Node;
 			if (wrapRef.current?.contains(target)) return;
@@ -108,22 +89,13 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 		};
 	}, [open]);
 
-	// Move focus in when it opens, so the trap has something to hold and a
-	// keyboard user is not left behind on the trigger.
+	// Move focus in when it opens, so the trap has something to hold and a keyboard user is not left behind on the…
 	useEffect(() => {
 		if (!open) return;
 		panelRef.current?.querySelector<HTMLElement>("button")?.focus();
 	}, [open]);
 
-	/*
-	 * A plain group, not role="menu". An ARIA menu promises its children are
-	 * menuitems and that arrow keys move between them; these are a switch, two
-	 * sets of toggle buttons and a link, and announcing them as a menu describes
-	 * a structure that is not there. The heading names the group instead.
-	 *
-	 * Defined once and rendered in one of two places, so the desktop popover and
-	 * the mobile sheet can never drift apart.
-	 */
+	/* A plain group, not role="menu". */
 	const panel = (
 		// biome-ignore lint/a11y/useSemanticElements: a positioned panel, not a form control group (see Rail.tsx)
 		<div
@@ -223,16 +195,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 			{/* Desktop: anchored to the trigger, so it stays in the subtree. */}
 			{open && !compact ? panel : null}
 
-			{/* Sheet: portalled to the body.
-			    `.composer` carries `backdrop-filter: blur(20px)`, which makes it
-			    the containing block for every `position: fixed` descendant — so a
-			    sheet declaring `inset: auto 0 0 0` resolved against the composer's
-			    366px box instead of the viewport. It floated 47px above the bottom
-			    edge, 26px narrow, with square unbordered corners in mid-air, and
-			    its scrim covered 14.4% of the screen instead of all of it. The
-			    composer is also the backdrop root, so the sheet's own blur did
-			    nothing and the transcript ghosted through it sharp. Leaving the
-			    subtree fixes all of that at once. */}
+			{/* Sheet: portalled to the body. */}
 			{open && compact && mounted
 				? createPortal(
 						<>

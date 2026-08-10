@@ -1,12 +1,4 @@
-"""On-disk MP3 cache for synthesised speech.
-
-Greetings, affirmations, quiz prompts and error lines are fixed strings played
-over and over. Synthesising them on every play is money spent to get the same
-bytes back.
-
-The cache is per-process for its size bookkeeping but the files are shared, so
-several workers can read each other's entries safely.
-"""
+"""On-disk MP3 cache for synthesised speech."""
 
 from __future__ import annotations
 
@@ -44,17 +36,6 @@ def cache_key(
 
 
 #: How long a full sweep is trusted for.
-#:
-#: Eviction used to run on every `put`: a `glob` across the cache directory and
-#: a `stat` on every entry, on the event loop, per synthesis. That is O(entries)
-#: syscalls for one write, growing as the cache fills -- the opposite of what a
-#: cache should do -- and under `--workers 1` it serialised against live chat
-#: turns.
-#:
-#: The size is tracked incrementally between sweeps instead, and a sweep only
-#: happens when the running total says the cap is breached or the estimate has
-#: gone stale. Sixty seconds because the estimate drifts: another worker sharing
-#: this directory can add or remove files this process never saw.
 _SWEEP_INTERVAL_SECONDS = 60.0
 
 
@@ -63,16 +44,11 @@ class VoiceCache:
         self._settings = settings or get_voice_settings()
         self.directory = self._settings.resolved(self._settings.voice_cache_dir)
         self.directory.mkdir(parents=True, exist_ok=True)
-        #: Bytes on disk as far as this process knows. `-1` means "never
-        #: measured", which forces a sweep on the first write.
+        #: Bytes on disk as far as this process knows.
         self._known_bytes = -1
         self._last_sweep = 0.0
 
-    # ── async wrappers ────────────────────────────────────────────────────
-    #
-    # `speak` is an async handler, so every blocking call below would otherwise
-    # run on the event loop. Reading a whole MP3 and writing one are both real
-    # I/O; a thread costs far less than stalling every other request behind it.
+    # ── async wrappers ──────────────────────────────────────────────────── `speak` is an async handler, so every…
 
     async def aget(self, key: str) -> bytes | None:
         return await asyncio.to_thread(self.get, key)
@@ -106,8 +82,7 @@ class VoiceCache:
     def put(self, key: str, audio: bytes) -> None:
         path = self.path_for(key)
         try:
-            # Write to a temp file in the same directory and replace, so a reader
-            # never sees a half-written MP3.
+            # Write to a temp file in the same directory and replace, so a reader never sees a half-written MP3.
             with tempfile.NamedTemporaryFile(
                 dir=self.directory, suffix=".part", delete=False
             ) as handle:
@@ -124,12 +99,7 @@ class VoiceCache:
         self.evict_if_needed()
 
     def _sweep_due(self) -> bool:
-        """Whether the directory is worth walking again.
-
-        Three reasons to look: nothing has ever been measured, the running total
-        says the cap is breached, or the total is old enough that another worker
-        sharing this directory could have changed it underneath us.
-        """
+        """Whether the directory is worth walking again."""
         if self._known_bytes < 0:
             return True
         if self._known_bytes > self._settings.voice_cache_max_bytes:
@@ -148,9 +118,7 @@ class VoiceCache:
             return
 
         total = sum(stat.st_size for _, stat in entries)
-        # Recorded whether or not anything is dropped: a sweep that finds the
-        # cache comfortably under the cap is exactly the one worth remembering,
-        # because it is the one that buys the next minute of not sweeping.
+        # Recorded whether or not anything is dropped: a sweep that finds the cache comfortably under the cap is exactl…
         self._known_bytes = total
         self._last_sweep = time.monotonic()
         if total <= limit:

@@ -1,6 +1,4 @@
-"""speakable() is the highest-leverage piece of the voice layer, so it carries
-the most tests. Every case here is something the knowledge base actually contains.
-"""
+"""speakable() is the highest-leverage piece of the voice layer, so it carries the most tests."""
 
 import pytest
 

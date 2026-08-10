@@ -1,17 +1,4 @@
-"""`plan_move` is pure, its state space is small, and it is walked exhaustively.
-
-Every input is a bounded integer or a small enum, so there is no excuse for an
-untested branch. The cross-product test at the bottom asserts the two properties
-that matter more than any individual case:
-
-  * every reachable combination returns a Move and none of them raises;
-  * the precedence order holds -- an outstanding check outranks a wrong answer,
-    which outranks mastery, and so on down.
-
-The individual tests above it exist because a cross-product test tells you
-something broke and not what, and each names the failure it is protecting
-against.
-"""
+"""`plan_move` is pure, its state space is small, and it is walked exhaustively."""
 
 from __future__ import annotations
 
@@ -97,12 +84,7 @@ class TestEachMove:
         assert plan_move(snapshot(turns_since_check=TURNS_BEFORE_CHECK - 1)) is Move.RECAP
 
     def test_a_concept_with_no_check_bank_is_never_checked(self):
-        """A CHECK turn on a concept with no items asks nothing at all.
-
-        The failure this prevents is a lesson that ends with "so, what do you
-        think?" and no question behind it -- the learner answers, the grader has
-        no item to grade against, and the turn stalls.
-        """
+        """A CHECK turn on a concept with no items asks nothing at all."""
         move = plan_move(snapshot(turns_since_check=9, has_check_item=False))
         assert move is Move.RECAP
 
@@ -110,8 +92,7 @@ class TestEachMove:
         assert plan_move(snapshot(mastery=MASTERED)) is Move.ADVANCE
 
     def test_beyond_mastered_still_advances(self):
-        """Scores above 3 should not fall through. They cannot arise, and a
-        planner that silently re-taught on one would be a bug nobody could see."""
+        """Scores above 3 should not fall through."""
         assert plan_move(snapshot(mastery=9)) is Move.ADVANCE
 
 
@@ -140,12 +121,7 @@ class TestTheHintLadder:
         assert hint_level(snapshot(consecutive_wrong=3)) == 3
 
     def test_the_rung_is_capped(self):
-        """There is no fourth rung. Past the third the concept is retaught.
-
-        Rung 3 already gives the method, so a fourth would either repeat it or
-        give the answer -- and a child nudged four times towards something they
-        have not got is being told something about themselves.
-        """
+        """There is no fourth rung."""
         assert hint_level(snapshot(consecutive_wrong=9)) == MAX_HINT_LEVEL
 
     def test_the_rung_is_at_least_one(self):
@@ -246,7 +222,5 @@ class TestExhaustively:
             count += 1
 
         assert count == 5 * 5 * 2 * 5 * 6 * 4 * 2 * 2
-        # Every move except GAME is reachable from any band; GAME needs a child
-        # band, which the product includes. All seven must appear or a branch is
-        # dead.
+        # Every move except GAME is reachable from any band; GAME needs a child band, which the product includes.
         assert seen == set(Move)

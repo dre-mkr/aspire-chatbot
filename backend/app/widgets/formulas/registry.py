@@ -1,38 +1,4 @@
-"""Every number a learner sees, computed here. The model never calculates.
-
-Ten named functions, each tested against hand-verified values. A widget names
-one of them; the planner cannot invent a new one; the LLM cannot do the
-arithmetic itself. That is the entire arrangement, and it exists because a
-language model doing compound interest in its head is a language model that is
-right most of the time on a government product teaching children about money.
-
-## Money is integer cents. Always.
-
-Not "usually", not "except in intermediate steps". `0.1 + 0.2 != 0.3` in binary
-floating point, and a savings projection is thousands of additions -- the error
-compounds exactly as the interest does. Every amount in and out of this module
-is an integer count of cents.
-
-Where a calculation genuinely needs fractions -- an exponent, a rate -- it goes
-through `Decimal` at 28 significant digits and comes back to an integer at the
-boundary, once, with an explicit rounding mode. `ROUND_HALF_UP` rather than
-Python's default banker's rounding, because a child comparing our number to the
-one on the bank slip should find them equal, and the bank rounds half up.
-
-## Every function carries a band
-
-`band_min` is the youngest band the formula may serve, and gate 5 enforces it.
-`compound_interest` is 13-15 and up not because a nine-year-old cannot benefit
-from the idea -- `growth_stack` exists precisely to give them the idea -- but
-because a *formula with a rate in it* is the wrong representation for them.
-
-## Currency
-
-XCD is pegged at 2.70 to the US dollar and has been since 1976. It is a
-constant, not a rate to fetch: a conversion that silently changed between two
-turns of the same lesson would be worse than one that is occasionally out of
-date, and this one is not out of date.
-"""
+"""Every number a learner sees, computed here."""
 
 from __future__ import annotations
 
@@ -51,8 +17,7 @@ CURRENCIES: frozenset[str] = frozenset({"XCD", "USD"})
 
 _SYMBOL = {"XCD": "EC$", "USD": "US$"}
 
-#: Absolute ceilings. Anything beyond these is not a lesson, it is a bug that
-#: rendered -- and gate 5's domain probe uses them to decide that.
+#: Absolute ceilings.
 MAX_MONEY_CENTS = 100_000_000_000  # EC$1bn
 MAX_PERIODS = 600  # fifty years of months
 
@@ -66,20 +31,12 @@ def money_display(cents: int, currency: str = "XCD") -> str:
 
 @dataclass(frozen=True, slots=True)
 class Result:
-    """A computed number and the string a reader should see.
-
-    Both, always. Handing a renderer a bare integer means the renderer formats
-    it, which means every renderer formats it, which means they disagree -- and
-    a lesson where the chart says EC$1,234.5 and the caption says EC$1234.50 is
-    a lesson about our formatting.
-    """
+    """A computed number and the string a reader should see."""
 
     value: int | float
     display: str
     unit: str
     #: The parts the answer is made of, when showing them is the lesson.
-    #: `compound_interest` puts `contributed` and `earned` here, which is what
-    #: `growth_stack` colours differently.
     breakdown: dict[str, Any] = field(default_factory=dict)
 
 
@@ -99,21 +56,12 @@ class FormulaSpec:
 
 
 def _cents(value: Decimal) -> int:
-    """A Decimal amount to whole cents, half up.
-
-    The single place rounding happens. Every function below computes in Decimal
-    and calls this once, at the end -- rounding in the middle of a projection is
-    how a fifty-period sum drifts by a dollar.
-    """
+    """A Decimal amount to whole cents, half up."""
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def simple_interest(principal: int, rate: float, years: float) -> Result:
-    """Interest that does not itself earn interest. `P x r x t`.
-
-    The 9-12 formula, and the one worth teaching first: it is the baseline that
-    makes compounding visible when the two are put side by side.
-    """
+    """Interest that does not itself earn interest."""
     interest = Decimal(int(principal)) * Decimal(str(rate)) * Decimal(str(years))
     total = int(principal) + _cents(interest)
     return Result(
@@ -135,17 +83,7 @@ def compound_interest(
     years: float,
     compounds_per_year: int = 1,
 ) -> Result:
-    """Principal plus a regular contribution, compounding.
-
-    `contribution` is paid once per compounding period, at the END of it --
-    an ordinary annuity. That is the conservative convention and it matches how
-    a standing order into a savings account actually behaves; assuming payment
-    at the start would overstate every projection by one period of growth.
-
-    The zero-rate case is handled separately rather than by letting the general
-    formula divide by `r`. It is not an edge case to tolerate -- a savings
-    account paying nothing is the comparison the whole lesson turns on.
-    """
+    """Principal plus a regular contribution, compounding."""
     n = max(1, int(compounds_per_year))
     periods = int(Decimal(str(years)) * n)
     per_period = Decimal(str(rate)) / n
@@ -177,19 +115,7 @@ def compound_interest(
 
 
 def savings_goal_time(goal: int, per_period: int, rate: float = 0.0) -> Result:
-    """How many periods of saving `per_period` reach `goal`.
-
-    Computed by *simulating* the periods rather than by solving a logarithm, and
-    that is a deliberate choice. The closed form needs `ln`, which needs floats,
-    on a quantity denominated in cents -- and the answer a child checks is
-    "after how many weeks does the counter pass EC$100?", which is exactly what
-    the simulation answers. The two disagree at the boundary; the simulation is
-    the one that matches the passbook.
-
-    Returns `MAX_PERIODS` and marks `reached=False` when the goal is
-    unreachable, rather than looping. Saving nothing forever is a legitimate
-    thing for a slider to be set to.
-    """
+    """How many periods of saving `per_period` reach `goal`."""
     goal = int(goal)
     per_period = int(per_period)
     if goal <= 0:
@@ -217,12 +143,7 @@ def savings_goal_time(goal: int, per_period: int, rate: float = 0.0) -> Result:
 
 
 def savings_goal_amount(goal: int, periods: int, rate: float = 0.0) -> Result:
-    """How much per period reaches `goal` in `periods`.
-
-    Rounded UP, always. Rounding to nearest would produce an amount that lands
-    a cent short of the goal, and "save this much and you will *almost* have
-    your bicycle" is not the lesson.
-    """
+    """How much per period reaches `goal` in `periods`."""
     goal = int(goal)
     periods = max(1, int(periods))
     r = Decimal(str(rate))
@@ -242,13 +163,7 @@ def savings_goal_amount(goal: int, periods: int, rate: float = 0.0) -> Result:
 
 
 def budget_split(total: int, allocations: Mapping[str, int]) -> Result:
-    """Split `total` cents by whole-percent shares that must add to 100.
-
-    Uses largest-remainder, so the parts add EXACTLY to the total. Rounding each
-    share independently loses or gains a cent or two, and an allocator widget
-    whose buckets do not sum to the money on screen is a widget a child will
-    notice before an adult does.
-    """
+    """Split `total` cents by whole-percent shares that must add to 100."""
     total = int(total)
     shares = {name: int(share) for name, share in allocations.items()}
     if sum(shares.values()) != 100:
@@ -258,8 +173,7 @@ def budget_split(total: int, allocations: Mapping[str, int]) -> Result:
     floors = {name: int(value) for name, value in exact.items()}
     remainder = total - sum(floors.values())
 
-    # Biggest fractional part first; ties broken by name so the result is
-    # deterministic rather than dict-order dependent.
+    # Biggest fractional part first; ties broken by name so the result is deterministic rather than dict-order depe…
     order = sorted(
         exact,
         key=lambda name: (-(exact[name] - floors[name]), name),
@@ -279,12 +193,7 @@ def budget_split(total: int, allocations: Mapping[str, int]) -> Result:
 
 
 def inflation_erosion(amount: int, rate: float, years: float) -> Result:
-    """What `amount` will buy after `years` of `rate` inflation, in today's money.
-
-    The number that makes "money under the mattress" concrete. 13-15 and up:
-    below that the idea that a dollar can shrink without anybody taking it is
-    genuinely hard, and `compare` teaches it better than a number does.
-    """
+    """What `amount` will buy after `years` of `rate` inflation, in today's money."""
     factor = (Decimal(1) + Decimal(str(rate))) ** Decimal(str(years))
     real = Decimal(int(amount)) / factor
     real_cents = _cents(real)
@@ -326,12 +235,7 @@ def currency_convert(amount: int, from_ccy: str, to_ccy: str) -> Result:
 
 
 def loan_payment(principal: int, rate: float, months: int) -> Result:
-    """The level monthly payment that clears `principal` over `months`.
-
-    16-18 only. Borrowing is not on a younger band's ladder at all -- "loan" is
-    a banned term below 13-15 -- and this exists so that a seventeen-year-old
-    being offered credit can see what it costs.
-    """
+    """The level monthly payment that clears `principal` over `months`."""
     principal = int(principal)
     months = max(1, int(months))
     monthly = Decimal(str(rate)) / 12
@@ -359,12 +263,7 @@ def loan_payment(principal: int, rate: float, months: int) -> Result:
 
 
 def percentage_of(amount: int, pct: float) -> Result:
-    """`pct` percent of `amount` cents.
-
-    13-15 and up, because "percent" is a banned term below it. The idea is
-    taught at 9-12 as `proportion` -- three coins out of ten -- which is the
-    same fact in equipment a nine-year-old already has.
-    """
+    """`pct` percent of `amount` cents."""
     value = Decimal(int(amount)) * Decimal(str(pct)) / 100
     cents = _cents(value)
     return Result(
@@ -378,13 +277,7 @@ def percentage_of(amount: int, pct: float) -> Result:
 def difference_over_time(
     path_a: Sequence[int], path_b: Sequence[int], periods: int
 ) -> Result:
-    """The gap between two savings paths, period by period.
-
-    The comparison primitive: "saving EC$5 a week" against "saving EC$5 a week
-    somewhere it earns", drawn as the widening space between two lines. Shorter
-    paths are padded with their own last value rather than with zero -- a path
-    that stopped being recorded did not stop existing.
-    """
+    """The gap between two savings paths, period by period."""
     periods = max(0, min(int(periods), MAX_PERIODS))
 
     def at(path: Sequence[int], index: int) -> int:
@@ -505,19 +398,7 @@ _ABSURD = MAX_MONEY_CENTS
 
 
 def probe_domain(spec: FormulaSpec, controls: Mapping[str, Any]) -> str | None:
-    """Evaluate the formula across the control box. Returns a problem or None.
-
-    Every corner plus every midpoint -- 3^k points for k controls, so at most 81
-    evaluations for a four-control simulator. Cheap, and it is the check that
-    catches the widget which is fine until a child drags one slider to its end,
-    which is the first thing a child does.
-
-    Parameters the controls do not supply are filled from a conservative
-    default, so a formula that takes five arguments can be driven by two
-    sliders. Those defaults are chosen to be *inert* -- zero contribution, one
-    compounding period a year -- so the probe is testing the sliders rather than
-    a scenario nobody configured.
-    """
+    """Evaluate the formula across the control box."""
     axes: list[list[Any]] = []
     ordered: list[str] = []
     for name in spec.parameters:
@@ -576,8 +457,7 @@ _DEFAULTS: dict[str, Any] = {
     "path_b": [0],
 }
 
-#: Which parameters must be whole numbers. A slider hands back a float even when
-#: its step is 1, and `range()` does not take a float.
+#: Which parameters must be whole numbers.
 _INTEGER_PARAMS = frozenset(
     {
         "principal",

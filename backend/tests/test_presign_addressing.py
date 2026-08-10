@@ -1,27 +1,4 @@
-"""The signed URL must point at the key the database will record.
-
-`storage_key_for` decides where the row says the object is. `_sign` decides
-where the browser actually PUTs it. Nothing checks that those agree, and when
-they disagree BOTH halves still succeed -- the upload returns 200, the row is
-inserted -- so the only symptom is a 404 much later, when an admin opens the
-document or `doc_check` reads it.
-
-The configuration that breaks it is the obvious one. `S3_ENDPOINT_URL` copied
-from the AWS console is virtual-hosted:
-
-    https://<bucket>.s3.<region>.amazonaws.com
-
-Signed path-style, that names the bucket twice, and S3 reads the extra segment
-as part of the key. The object lands at `<bucket>/applications/...` while the
-row says `applications/...`.
-
-Measured against the real bucket before this was fixed: a GET signed the old
-way returned `400 AuthorizationQueryParametersError` on the region, and once
-the region was corrected the URL still carried `/aspire-chatbot/aspire-chatbot/`.
-
-No network here. What is under test is URL CONSTRUCTION, which is decided
-before any request is made.
-"""
+"""The signed URL must point at the key the database will record."""
 
 from __future__ import annotations
 
@@ -85,13 +62,7 @@ class TestTheUrlPointsWhereTheRowPoints:
         ],
     )
     def test_the_object_key_s3_derives_is_the_recorded_key(self, endpoint):
-        """The invariant that actually matters, stated once for every style.
-
-        Reads the key back the way S3 does, which depends on the style and is
-        the whole point: with the bucket in the HOST every path segment is key,
-        so a bucket left in the path there is not a duplicate to be stripped --
-        it is a real extra prefix on a real object.
-        """
+        """The invariant that actually matters, stated once for every style."""
         bucket = "aspire-chatbot"
         host = urlparse(_sign(
             method="GET",

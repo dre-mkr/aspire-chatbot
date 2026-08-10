@@ -1,30 +1,4 @@
-/**
- * Sliders driving a number that recomputes as they move.
- *
- * The causal primitive: the learner changes an input and watches an output
- * respond. Everything else in the widget set explains; this one lets them poke.
- *
- * ## The client computes for feel; the server is the authority
- *
- * `formulas.ts` mirrors the Python registry so a drag recomputes at 60fps
- * without a round trip. The number shown here is display only -- what the agent
- * quotes back, and what mastery records, comes from the server after the
- * interaction settles. `formulas.parity.test.ts` fails the build if the two
- * disagree by a cent.
- *
- * ## Settle, not tick
- *
- * `emitInteraction` is debounced to ~800ms. Emitting on every slider frame
- * would send a hundred events per drag, and the agent's reply would be about
- * whichever frame arrived last rather than about where the child stopped.
- *
- * ## Band caps are enforced by the server, and observed here
- *
- * Gate 4 rejects a simulator with more controls than the band allows (four at
- * 16-18, two at 13-15 and 9-12, none at 5-8). This component renders what it
- * is given; it does not re-check, because two places enforcing one rule is two
- * places for the rule to differ.
- */
+/** Sliders driving a number that recomputes as they move. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SimulatorWidget } from "../../lib/stream/types";
 import { evaluate, moneyDisplay } from "../../lib/widgets/formulas";
@@ -56,8 +30,7 @@ export function Simulator({
 		[widget.formula, values],
 	);
 
-	// Debounced settle. Cleared on every change, so a drag produces exactly one
-	// event -- the one describing where the child stopped.
+	// Debounced settle.
 	useEffect(() => {
 		if (touched === 0) return;
 		if (timer.current) clearTimeout(timer.current);
@@ -117,9 +90,7 @@ export function Simulator({
 						max={control.max}
 						step={control.step}
 						value={values[control.id]}
-						// Both are stated: a screen reader reads `aria-valuetext`
-						// where it exists and the raw number where it does not, and
-						// "2500" is not what this control means.
+						// Both are stated: a screen reader reads `aria-valuetext` where it exists and the raw number where it does not,…
 						aria-valuetext={formatControl(control.unit, values[control.id])}
 						onChange={(event) => {
 							const next = Number(event.target.value);
@@ -128,8 +99,7 @@ export function Simulator({
 						}}
 						style={{
 							width: "100%",
-							// The thumb is the tap target; the track is not. 44px of
-							// height on the input is what makes the thumb reachable.
+							// The thumb is the tap target; the track is not.
 							minHeight: "var(--band-target, 44px)",
 							accentColor: "var(--plum)",
 						}}
@@ -138,10 +108,7 @@ export function Simulator({
 			))}
 
 			<output
-				// `aria-live="polite"` rather than `assertive`: the number changes on
-				// every drag frame, and assertive would interrupt the reader
-				// continuously. Polite announces when they pause, which is when it
-				// matters.
+				// `aria-live="polite"` rather than `assertive`: the number changes on every drag frame, and assertive would int…
 				aria-live="polite"
 				style={{
 					display: "block",
@@ -209,13 +176,7 @@ function formatControl(unit: string, value: number): string {
 	return String(value);
 }
 
-/**
- * A minimal inline chart. SVG, no library, no external request.
- *
- * The points come from the same mirrored formula the output does, evaluated at
- * each period. Drawing a curve the number underneath it disagrees with is the
- * failure worth avoiding here, and one source for both is how it is avoided.
- */
+/** A minimal inline chart. */
 function LineChart({
 	widget,
 	values,

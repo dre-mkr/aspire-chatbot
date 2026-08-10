@@ -1,13 +1,4 @@
-/**
- * The games half of the ASPIRE backend client.
- *
- * The card talks to these directly rather than through `/chat`. A child taps
- * letters into place and presses Check; the verdict has to land now, not after
- * a model round trip — and the model is deliberately not the thing deciding it.
- *
- * The answer is not in any of these types. `Reveal` is the exception, and the
- * server only produces one for a word it has already moved past.
- */
+/** The games half of the ASPIRE backend client. */
 
 const API_URL = (
 	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
@@ -21,12 +12,7 @@ export type GamePersona = "stella" | "orion" | "aurora" | "nova";
 /** How an item is put to the player. */
 export type PromptKind = "scramble" | "statement";
 
-/**
- * An item as the player sees it.
- *
- * `kind` says how to render `text` — letters to arrange, or a statement to
- * judge. `choices` is empty when the player composes their own answer.
- */
+/** An item as the player sees it. */
 export interface GamePrompt {
 	kind: PromptKind;
 	text: string;
@@ -75,13 +61,7 @@ export interface Bullet {
 	text: string;
 }
 
-/**
- * A resolved item's answer and its teaching.
- *
- * `explanation` is always the whole thing as flat text. Everything after it is
- * the same words laid out, for content that has been — a line to lead with, the
- * paragraphs it breaks into, a numbered list where one belongs.
- */
+/** A resolved item's answer and its teaching. */
 export interface Reveal {
 	answer: string;
 	explanation: string;
@@ -97,11 +77,7 @@ export interface SubmitResult {
 	correct: boolean;
 	attempts: number;
 	teaching_note: string | null;
-	/**
-	 * Present only when this answer RESOLVED the item — right, or wrong in a
-	 * game that moves on. An unresolved wrong answer carries none, which keeps
-	 * a scramble's word secret while it is still being guessed at.
-	 */
+	/** Present only when this answer RESOLVED the item — right, or wrong in a game that moves on. */
 	reveal: Reveal | null;
 	/** The answer could not be read at all. Not wrong: nothing was spent. */
 	unreadable: string | null;
@@ -127,13 +103,7 @@ export interface SkipResult {
 	summary: GameSummary | null;
 }
 
-/**
- * A refusal the UI is expected to handle.
- *
- * `reason` is the machine-readable half — the server sends a code so the
- * interface can choose its own wording rather than surfacing a sentence written
- * for a developer.
- */
+/** A refusal the UI is expected to handle. */
 export class GameError extends Error {
 	readonly reason: string;
 	readonly status: number;
@@ -179,14 +149,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 	return (await response.json()) as T;
 }
 
-/**
- * The running game, or null.
- *
- * Called on mount and after every assistant turn. The browser holds no game
- * state of its own, which is what makes a mid-word refresh a non-event — and
- * it is also how the card learns the assistant just started a game through its
- * own tools, without the chat response needing a field for it.
- */
+/** The running game, or null. */
 export async function fetchGameState(
 	threadId: string,
 ): Promise<GameState | null> {
@@ -201,11 +164,7 @@ export async function startGame(
 	options: {
 		persona?: GamePersona | null;
 		language?: string;
-		/**
-		 * The engine's own identifier — `word_scramble`, not `scramble`. The
-		 * directive's names are mapped at the call site so the two spellings
-		 * meet in exactly one place.
-		 */
+		/** The engine's own identifier — `word_scramble`, not `scramble`. */
 		game_type?: string;
 	} = {},
 ): Promise<GameState | null> {

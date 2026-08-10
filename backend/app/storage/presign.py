@@ -1,37 +1,4 @@
-"""Presigned URLs, so document bytes never touch this process.
-
-The browser asks for a URL, PUTs the file straight to the bucket, and hands the
-graph a `document_id`. FastAPI sees a few hundred bytes of JSON; the file itself
-never enters a request body we parse, graph state, a log line, or a model
-context.
-
-## Why not just accept the upload
-
-Because a 10MB birth certificate posted to this service is a birth certificate
-in the request log, in the APM trace, in whatever a crash reporter captured, and
-in the worker's memory for the length of the request. Three of those four are
-places nobody audited for children's identity documents. Removing the hop
-removes all four.
-
-## The signature is the authorisation
-
-The PUT carries no cookie and no bearer token -- deliberately. Sending our
-session credential to a storage host would be sending it somewhere it has no
-business being, and the signature already scopes the grant to one key, one
-method, one content type and a few minutes.
-
-## Private bucket, always
-
-There is no code path here that produces a public URL. Reads go through
-`presign_download`, which mints a short-lived signed GET and writes an audit
-row -- so "who looked at this child's papers?" is answerable.
-
-## Without S3 credentials this refuses rather than degrades
-
-A registration flow that cannot store a document must say so. The alternative --
-accepting the upload through FastAPI as a fallback -- would mean the safe path
-is the one that silently stops being used the moment a key is missing.
-"""
+"""Presigned URLs, so document bytes never touch this process."""
 
 from __future__ import annotations
 
@@ -49,8 +16,7 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-#: What a document slot will accept. Checked here as well as in the client,
-#: because the client's check is a courtesy and this one is the control.
+#: What a document slot will accept.
 ALLOWED_MIME: frozenset[str] = frozenset(
     {"image/jpeg", "image/png", "image/heic", "image/webp", "application/pdf"}
 )
@@ -90,23 +56,13 @@ def _config() -> tuple[str, str, str, str, str]:
 
 
 def storage_key_for(application_id: str, slot: str, document_id: str) -> str:
-    """Where the object lives.
-
-    Application-scoped and slot-scoped, so a bucket listing is legible and a
-    single application's documents can be removed together when retention says
-    so. The document id is last and is a UUID, so the key is not guessable from
-    the application id alone.
-    """
+    """Where the object lives."""
     safe_slot = slot.replace("/", "_").replace("..", "_")
     return f"applications/{application_id}/{safe_slot}/{document_id}"
 
 
 def check_upload(mime: str, size_bytes: int) -> str | None:
-    """Why this upload is refused, or None.
-
-    Runs before a URL is minted. A signature handed out for a 40MB video is a
-    signature that will be used for a 40MB video.
-    """
+    """Why this upload is refused, or None."""
     if mime not in ALLOWED_MIME:
         return f"{mime or 'that file type'} is not one we can accept"
     if size_bytes <= 0:
@@ -117,37 +73,10 @@ def check_upload(mime: str, size_bytes: int) -> str | None:
 
 
 async def owns_application(application_id: str, claims: Any) -> bool:
-    """Whether this caller may upload into this application.
-
-    The counterpart to `turn.owns_thread`, and written to the same rules,
-    because the failure it prevents is the same one: a resource identifier that
-    arrives in a request body and is trusted.
-
-    `applications` carries both halves of an identity -- `session_id` for a draft
-    started anonymously and `owner_user_id` once an account is attached -- so a
-    caller matches if either matches.
-
-    Fail-closed only where there is something to be closed against:
-
-      * an application id that is the caller's OWN session id is theirs by
-        definition; that is the default the endpoint has always used, and it is
-        allowed before any row exists;
-      * a row that is not there yet belongs to whoever is starting it, exactly as
-        a new thread does;
-      * a row stored with neither a session nor an owner is unowned and stays
-        open, matching `owns_thread`'s treatment of an anonymous thread;
-      * a row belonging to somebody ELSE is refused.
-
-    A database that cannot be read does NOT fail open here, and that is the one
-    place this deliberately differs from `owns_thread`. Being unable to check
-    conversation ownership costs a reader their own history; being unable to
-    check application ownership would hand out a signed write into a stranger's
-    identity-document folder. The safe default is opposite in the two cases.
-    """
+    """Whether this caller may upload into this application."""
     from app.db import database_enabled, session
 
-    # No database means no applications table, so there is nothing this could be
-    # granting access to beyond the caller's own session-scoped prefix.
+    # No database means no applications table, so there is nothing this could be granting access to beyond the call…
     if not database_enabled():
         return application_id == str(getattr(claims, "session_id", ""))
 
@@ -182,8 +111,7 @@ async def owns_application(application_id: str, claims: Any) -> bool:
         return False
 
     if row is None:
-        # Not created yet. Only the caller's own session id reaches here, and
-        # that was allowed above, so anything else is a guess at somebody's id.
+        # Not created yet.
         return False
 
     row_session, row_owner = row
@@ -204,12 +132,7 @@ def presign_upload(
     size_bytes: int,
     ttl_seconds: int | None = None,
 ) -> Presigned:
-    """A URL the browser may PUT one file to, once, soon.
-
-    The content type is part of the signature, so a caller who asked for a JPEG
-    upload cannot use the URL to store an executable -- the storage host
-    rejects the mismatch.
-    """
+    """A URL the browser may PUT one file to, once, soon."""
     problem = check_upload(mime, size_bytes)
     if problem:
         raise ValueError(problem)
@@ -251,12 +174,7 @@ def presign_upload(
 
 
 def presign_download(storage_key: str, *, ttl_seconds: int | None = None) -> str:
-    """A short-lived signed GET, for an admin viewing a document.
-
-    Minted per access rather than stored, and the caller is expected to write an
-    audit row alongside -- see `api/admin`. A URL that lives longer than the
-    look at it is a URL that outlives the reason it existed.
-    """
+    """A short-lived signed GET, for an admin viewing a document."""
     endpoint, bucket, region, key_id, secret = _config()
     ttl = ttl_seconds or get_settings().s3_url_ttl_seconds
     return _sign(
@@ -271,13 +189,7 @@ def presign_download(storage_key: str, *, ttl_seconds: int | None = None) -> str
     )
 
 
-# ── SigV4 ────────────────────────────────────────────────────────────────────
-#
-# Implemented rather than pulled in with boto3, and the trade is worth naming:
-# boto3 is 50MB of dependency for two signatures, and this is the query-string
-# form of SigV4, which is about forty lines and is specified precisely. The
-# canonical-request construction is the part that has to be exactly right; the
-# comments below mark the two places it is easy to get wrong.
+# ── SigV4 ──────────────────────────────────────────────────────────────────── Implemented rather than pulled…
 
 
 def _sign(
@@ -312,35 +224,17 @@ def _sign(
         "X-Amz-Expires": str(ttl),
         "X-Amz-SignedHeaders": header_names,
     }
-    # Sorted, and each part percent-encoded with `safe=""`. Both matter: the
-    # canonical query string is sorted by encoded key, and a `/` left unescaped
-    # in the credential makes the signature differ from the server's.
+    # Sorted, and each part percent-encoded with `safe=""`.
     canonical_query = "&".join(
         f"{quote(name, safe='')}={quote(query[name], safe='')}"
         for name in sorted(query)
     )
 
-    # Path-style (`endpoint/bucket/key`) or virtual-hosted (`bucket.endpoint/key`),
-    # decided by whether the endpoint already names the bucket.
-    #
-    # This is not a nicety. `S3_ENDPOINT_URL` copied from the AWS console is the
-    # virtual-hosted form -- `https://<bucket>.s3.<region>.amazonaws.com` -- and
-    # signing that path-style puts the bucket in the URL TWICE. S3 then reads the
-    # first path segment as part of the key and the PUT succeeds, writing a real
-    # object at `<bucket>/applications/...` while the database row says
-    # `applications/...`. Every read of it 404s.
-    #
-    # That is the same failure `UploadDirective.application_id` exists to prevent,
-    # arriving by configuration instead of by code, and it is worse here because
-    # nothing in the request fails: only addressing the bucket correctly avoids it.
-    #
-    # The host may carry a port (MinIO is `localhost:9000`), which is why this
-    # tests the leading label rather than the whole host.
+    # Path-style (`endpoint/bucket/key`) or virtual-hosted (`bucket.endpoint/key`), decided by whether the endpoint…
     bucket_in_host = host.split(":", 1)[0].startswith(f"{bucket}.")
     path = key if bucket_in_host else f"{bucket}/{key}"
 
-    # The path is encoded WITHOUT escaping `/`, unlike the query. Getting this
-    # backwards produces a signature mismatch that reads as an auth failure.
+    # The path is encoded WITHOUT escaping `/`, unlike the query.
     canonical_uri = "/" + quote(path, safe="/")
 
     canonical_request = "\n".join(
@@ -350,9 +244,7 @@ def _sign(
             canonical_query,
             canonical_headers,
             header_names,
-            # Unsigned payload: the body is the file, and hashing 10MB in this
-            # process to sign a URL the browser will use would defeat the point
-            # of not handling the file here.
+            # Unsigned payload: the body is the file, and hashing 10MB in this process to sign a URL the browser will use w…
             "UNSIGNED-PAYLOAD",
         ]
     )
@@ -403,12 +295,7 @@ def document_record(
     size_bytes: int,
     uploaded_by: str | None,
 ) -> dict[str, Any]:
-    """The row to insert once the client says the PUT succeeded.
-
-    `scan_status` is `pending` and there is no argument to override it. A
-    document nobody scanned must never be recordable as clean, and the way to
-    guarantee that is to make it unsayable here.
-    """
+    """The row to insert once the client says the PUT succeeded."""
     return {
         "id": document_id,
         "application_id": application_id,
