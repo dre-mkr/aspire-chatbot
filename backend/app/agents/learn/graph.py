@@ -544,6 +544,7 @@ def build_learn_graph(
     disambiguate=None,
     widget_plan=None,
     widget_compose=None,
+    grade=None,
 ):
     """Compile the lesson machine."""
     graph = StateGraph(AspireState)
@@ -579,6 +580,11 @@ def build_learn_graph(
             plan=widget_plan,
             compose=widget_compose,
             mastery=store,
+            grade=grade,
+            # The authored prerequisite graph, which the teachable-concept rows
+            # inherit through their slugs. A tutor that cannot see what comes
+            # first can only ever reteach what came second.
+            curriculum=curriculum,
         ),
     )
     # Straight to END.
@@ -748,6 +754,10 @@ def build_production_learn():
         disambiguate=_structured("learn_resolve_model"),
         widget_plan=_structured("learn_widget_plan_model"),
         widget_compose=_compose_caller(),
+        # `learn_evaluate_model` has been in the settings since Track L and had
+        # no call site: the grader it was tiered for was specified and never
+        # built, so no learning turn ever looked at what the learner answered.
+        grade=_structured("learn_evaluate_model"),
     )
 
 

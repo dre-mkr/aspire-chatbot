@@ -37,7 +37,12 @@ lesson; there is a serious penalty for an invented fact about the ASPIRE program
 Never compute. Numbers are given to you. Use them exactly.
 
 End with the check question you were given, rendered in your voice. Exactly one question.
-Nothing after it.
+Nothing after it. The exception is a MOVE that tells you to ask nothing -- follow the
+MOVE.
+
+You are teaching a person, not filling a slot. What you say is shaped by what they have
+already shown you: build on what they have demonstrated, and do not re-explain from the
+beginning something they have just answered correctly.
 
 HOW TO WRITE
 - Plain prose. No headings, no markdown, no links, no reference numbers like [ASP-042].
@@ -94,7 +99,45 @@ _MOVE_INSTRUCTIONS: dict[Move, str] = {
         "MOVE: EVALUATE. Tell them how their answer went using the explanation you were "
         "given, warmly and without flattery, then ask the check question that follows."
     ),
+    Move.RETEACH: (
+        "MOVE: RETEACH. The way you explained this did not work for them. Do NOT explain "
+        "it that way again and do not simply reword it. Follow the DIFFERENT APPROACH "
+        "below exactly, then ask the check question."
+    ),
+    Move.CORRECT_MISCONCEPTION: (
+        "MOVE: CORRECT A MISCONCEPTION. They are holding one specific wrong idea, named "
+        "below. Do not re-explain the whole concept. Show them the one place their idea "
+        "breaks -- ideally with the numbers you were given -- then say what happens "
+        "instead, then ask the check question. Address the idea, never the learner: say "
+        "what is true, not that they were wrong."
+    ),
+    Move.ANSWER: (
+        "MOVE: ANSWER. They asked for the answer, so give it to them plainly and without "
+        "making them work for it further. Then, and this is the part that matters, show "
+        "WHY it is that answer, step by step, using the numbers you were given. Ask no "
+        "question at the end."
+    ),
+    Move.GAME: (
+        "MOVE: GAME. They have been on this idea for a while and more prose will not "
+        "help. In two or three sentences say what the game will ask them to do and why "
+        "it is worth a go, then ask them if they want to play it. Do not teach the idea "
+        "again and do not ask a check question."
+    ),
+    Move.STEP_BACK: (
+        "MOVE: STEP BACK. What is missing sits underneath this idea, so you are teaching "
+        "the earlier idea named below instead. Say in one sentence that you are going to "
+        "come at it from further back -- do not say they failed, and do not diagnose them "
+        "out loud -- then teach the earlier idea properly and ask its check question."
+    ),
 }
+
+#: Moves whose prose is not followed by the concept's check question. GAME asks
+#: a question of its own ("want to play?"), so it is not silent -- it simply
+#: does not end on the bank's item.
+_SILENT_MOVES: frozenset[Move] = frozenset({Move.ANSWER})
+
+#: Moves that end on something other than the concept's check question.
+_NO_CHECK_QUESTION: frozenset[Move] = frozenset({Move.ANSWER, Move.GAME})
 
 
 # ── the per-turn context block ───────────────────────────────────────────────
@@ -126,6 +169,17 @@ class TeachContext:
     recent_openings: tuple[str, ...] = ()
     #: The grader's verdict, on an EVALUATE move.
     verdict: str = ""
+    #: What to do differently, from `strategy.instruction_for`, on a RETEACH.
+    approach: str = ""
+    #: The wrong model to take apart, on a CORRECT_MISCONCEPTION move.
+    misconception: str = ""
+    #: What is actually true, as the concept's author wrote it.
+    correction: str = ""
+    #: The answer to give, on an ANSWER move.
+    answer: str = ""
+    #: What the learner has demonstrated they can already do, so the tutor
+    #: neither re-teaches it nor talks down to them.
+    demonstrated: tuple[str, ...] = ()
 
     @property
     def body(self) -> str:
@@ -197,6 +251,15 @@ def build_teach_context(context: TeachContext) -> str:
         state_lines.append(
             f"They have already mastered: {', '.join(context.mastered[:8])}."
         )
+    if context.demonstrated:
+        # §7. Level is evidence, not a label applied on the strength of one
+        # message, so what is passed here is what they DID.
+        state_lines.append(
+            "They have answered correctly and unaided on: "
+            + ", ".join(context.demonstrated[:6])
+            + ". Do not re-explain those from the beginning, and use the proper "
+            "terms for them rather than talking around them."
+        )
     if context.prior_wrong:
         state_lines.append(
             "On this idea they have previously answered: "
@@ -212,7 +275,7 @@ def build_teach_context(context: TeachContext) -> str:
     if state_lines:
         parts.append("THE LEARNER:\n" + "\n".join(state_lines))
 
-    if context.check_item is not None:
+    if context.check_item is not None and context.move not in _NO_CHECK_QUESTION:
         parts.append(
             "THE CHECK QUESTION -- ask exactly this, in your own voice, at the very end, "
             f"and nothing after it:\n{context.check_item.question}"
@@ -221,6 +284,15 @@ def build_teach_context(context: TeachContext) -> str:
         parts.append(f"THE HINT to give, and nothing beyond it:\n{context.hint}")
     if context.verdict:
         parts.append(f"HOW THEIR ANSWER WENT, to say in your own voice:\n{context.verdict}")
+    if context.approach:
+        parts.append(f"THE DIFFERENT APPROACH to take this time:\n{context.approach}")
+    if context.misconception:
+        block = f"THE WRONG IDEA they are holding:\n{context.misconception}"
+        if context.correction:
+            block += f"\n\nWhat is actually true:\n{context.correction}"
+        parts.append(block)
+    if context.answer:
+        parts.append(f"THE ANSWER to give them, and then explain:\n{context.answer}")
 
     contract = contract_for(context.band)
     shape = [
@@ -359,7 +431,9 @@ async def render_teach(
     """Write the lesson."""
     role = LEARN_ROLE if context.concept is not None else RAG_TEACH_ROLE
     turn_block = build_teach_context(context)
-    expect_question = context.move is not Move.HINT or context.check_item is not None
+    expect_question = context.move not in _SILENT_MOVES and (
+        context.move is not Move.HINT or context.check_item is not None
+    )
     terms = context.grounding_terms()
 
     # ── tier 1 ──────────────────────────────────────────────────────────────
@@ -430,7 +504,11 @@ async def render_teach(
     # ── tier 3: the deterministic floor ─────────────────────────────────────
     if context.concept is not None:
         floor = template_lesson(
-            context.concept, band=context.band, check_item=context.check_item, rng=rng
+            context.concept,
+            band=context.band,
+            # A move that asks nothing gets no question, even from the floor.
+            check_item=None if context.move in _NO_CHECK_QUESTION else context.check_item,
+            rng=rng,
         )
         if floor.strip():
             logger.warning(

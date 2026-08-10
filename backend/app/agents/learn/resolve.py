@@ -61,6 +61,24 @@ _NEW_ENQUIRY = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+#: A request to work on the CURRENT concept -- practice, another question, an
+#: example. It names no topic, so semantic resolution scores it against nothing
+#: and the turn used to decline; but a learner mid-lesson asking to practise is
+#: continuing that lesson, and §10 turns exactly this request into a widget.
+_ASKS_TO_PRACTISE = re.compile(
+    r"""^\s*(?:(?:can\s+)?(?:you\s+|i\s+)?(?:have|get|give|do|try|want|let'?s|lets)\s+)?
+    (?:me\s+)?(?:a|an|some|another|more)?\s*
+    (?:practice|practise|quiz|question|problem|exercise|example|go|try|test)
+    (?:\s+(?:question|problem|one|it|please))?\s*[.!?]*\s*$""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def asks_to_practise(utterance: str) -> bool:
+    """Whether this message asks to work on what is already being taught."""
+    return bool(_ASKS_TO_PRACTISE.match((utterance or "").strip()))
+
+
 #: How many tokens a message may have and still be read as a reply on its own.
 CONTINUATION_MAX_TOKENS = 3
 
@@ -72,6 +90,11 @@ def is_continuation(utterance: str, *, awaiting_answer: bool = False) -> bool:
         return True
 
     if text in _CONTINUATION_WORDS:
+        return True
+
+    # Checked before `_NEW_ENQUIRY`, which reads "give me a practice question"
+    # as an enquiry about the word "practice".
+    if asks_to_practise(text):
         return True
 
     # A bare number, an amount, or a number with a unit.

@@ -84,6 +84,36 @@ class LearningState(TypedDict, total=False):
     #: Turns since a check question was last asked.
     turns_since_check: int
 
+    # ── the teaching loop's own memory ──────────────────────────────────────── Everything below is written by `evalu…
+
+    #: How the last explanation was PUT ACROSS, from `strategy.Strategy`. A
+    #: second failure moves down the ladder rather than round it.
+    teaching_strategy: str
+    #: The last verdict, from `evaluate.Verdict`.
+    last_verdict: str
+    #: The last diagnosis, from `evaluate.Diagnosis`.
+    last_diagnosis: str
+    #: Misconceptions this learner has demonstrated, as the concept authored
+    #: them, most recent last. The evidence behind `RETEACH` and the reason a
+    #: repeated conceptual error is treated differently from a repeated slip.
+    misconceptions: list[str]
+    #: How many times each concept has been answered wrongly, across the session.
+    wrong_by_concept: dict[str, int]
+    #: The concept a step back interrupted. Cleared when the tutor returns to
+    #: it, which is what stops a step back from silently changing the subject.
+    deferred_concept_id: str | None
+    #: Something outside the conversation showed this has not landed -- a poor
+    #: game score, say. Read once by the next teaching turn and then cleared.
+    reteach_pending: bool
+    #: Which rung of assistance has been given on the outstanding question, 0
+    #: being none. Climbs on each hint and resets on any other move, because a
+    #: new question -- or a new explanation -- is a fresh piece of scaffolding.
+    hint_rung_now: int
+    #: Whether the learner has ever answered a check on the active concept
+    #: without needing a hint first. The difference between §15's "correct with
+    #: support" and "correct independently".
+    independent_correct: list[str]
+
 
 def new_session(*, learner_id: str | None = None, now: datetime | None = None) -> LearningState:
     """A fresh lesson state. Every field populated, none left to a `.get` default."""
@@ -117,7 +147,48 @@ def new_session(*, learner_id: str | None = None, now: datetime | None = None) -
         prior_wrong_answers=[],
         turns_on_concept={},
         turns_since_check=0,
+        teaching_strategy="",
+        last_verdict="",
+        last_diagnosis="",
+        misconceptions=[],
+        wrong_by_concept={},
+        deferred_concept_id=None,
+        reteach_pending=False,
+        hint_rung_now=0,
+        independent_correct=[],
     )
+
+
+def remember_misconception(state: LearningState, wrong: str, *, keep: int = 8) -> list[str]:
+    """The demonstrated misconceptions, most recent last, without duplicates.
+
+    A repeat moves to the end rather than being dropped: the same wrong model
+    surfacing twice is the signal §13 exists to catch, and it should read as
+    the most recent thing this learner did.
+    """
+    held = [item for item in (state.get("misconceptions") or []) if item]
+    text = (wrong or "").strip()
+    if not text:
+        return held[-keep:]
+    held = [item for item in held if item != text]
+    held.append(text)
+    return held[-keep:]
+
+
+def wrong_again(state: LearningState, concept_id: str | None) -> dict[str, int]:
+    """`wrong_by_concept` with this concept's tally incremented."""
+    counts = dict(state.get("wrong_by_concept") or {})
+    if concept_id:
+        counts[concept_id] = counts.get(concept_id, 0) + 1
+    return counts
+
+
+def with_independent(state: LearningState, concept_id: str | None) -> list[str]:
+    """`independent_correct` with this concept added once."""
+    earned = [item for item in (state.get("independent_correct") or []) if item]
+    if concept_id and concept_id not in earned:
+        earned.append(concept_id)
+    return earned
 
 
 def on_concept(state: LearningState, concept_id: str | None) -> dict[str, int]:

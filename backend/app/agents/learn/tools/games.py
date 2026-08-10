@@ -198,9 +198,49 @@ def make_game_result_node(store: MasteryStore | None = None):
             "quick_replies": _chips(band),
             # Keep whichever learning agent the router picked for this caller; hardcoding `learn_agent` broke stickiness fo…
             "active_agent": state.get("active_agent") or "learn_agent",
+            "learning": _learning_after(state, result),
         }
 
     return game_result
+
+
+#: Below this fraction, a game result is evidence the concept has not landed.
+STRUGGLED_BELOW = 0.5
+
+
+def _learning_after(state: Any, result: GameResult) -> dict[str, Any]:
+    """What the tutor's next turn should know about this score.
+
+    §11. A game is retrieval practice under a scoreboard, and its result is the
+    cleanest evidence the tutor gets. It was being written to the mastery scale
+    and thrown away everywhere else, so a learner could score 2 out of 10 and
+    the next turn would carry on as though nothing had been observed.
+    """
+    from app.agents.learn.state import merge, touched, wrong_again
+
+    learning = state.get("learning") or {}
+    concept_id = result.concept_id
+    struggled = result.completed and result.fraction < STRUGGLED_BELOW
+
+    return merge(
+        learning,
+        active_concept_id=concept_id,
+        resolution_source="game",
+        concepts_touched=touched(learning, concept_id),
+        turns_since_check=0,
+        awaiting_check_answer=False,
+        pending_check_id=None,
+        # A poor score is a miss on this concept, and it counts towards the
+        # step-back threshold exactly as a wrong check answer would.
+        wrong_by_concept=(
+            wrong_again(learning, concept_id) if struggled else learning.get("wrong_by_concept") or {}
+        ),
+        # So the next teaching turn comes at it differently rather than
+        # re-running the explanation that preceded the score. The strategy rung
+        # is kept where it is precisely so that turn advances FROM it.
+        teaching_strategy=str(learning.get("teaching_strategy") or "") if struggled else "",
+        reteach_pending=struggled,
+    )
 
 
 def _chips(band: str) -> list[str]:
