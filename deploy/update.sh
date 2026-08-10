@@ -3,7 +3,7 @@
 # Bring the running app up to match origin/main. Invoked by GitHub Actions over
 # SSH (see .github/workflows/deploy.yml), and safe to run by hand on the box:
 #
-#   sudo -u aspire /srv/aspire/deploy/update.sh
+#   sudo /aspire/deploy/update.sh
 #
 # Configuration lives in /etc/aspire-deploy.env, deliberately outside the git
 # checkout so a deploy can never rewrite the settings that drive the deploy.
@@ -34,7 +34,7 @@ export PATH=/usr/local/bin:/usr/bin:/bin
 # `pm2 start`, pm2 silently talks to a SECOND daemon: the deploy reports success
 # having reloaded an empty process list, while the apps serving traffic are
 # owned by the first one and keep running the old code. Name it explicitly.
-export PM2_HOME=${PM2_HOME:-/srv/aspire/.pm2}
+export PM2_HOME=${PM2_HOME:-/aspire/.pm2}
 
 CONFIG_FILE=${ASPIRE_DEPLOY_CONFIG:-/etc/aspire-deploy.env}
 if [ -r "$CONFIG_FILE" ]; then
@@ -42,11 +42,11 @@ if [ -r "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
 fi
 
-REPO_DIR=${REPO_DIR:-/srv/aspire}
-WEB_ROOT=${WEB_ROOT:-/srv/aspire-web}
+REPO_DIR=${REPO_DIR:-/aspire}
+WEB_ROOT=${WEB_ROOT:-/aspire-web}
 BRANCH=${BRANCH:-main}
 # What to check out. Overridable so a rollback can name a commit directly:
-#   sudo -u aspire env TARGET=<sha> /srv/aspire/deploy/update.sh
+#   sudo env TARGET=<sha> /aspire/deploy/update.sh
 TARGET=${TARGET:-origin/$BRANCH}
 
 # Baked into the JavaScript at build time, not read at runtime. Getting this

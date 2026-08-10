@@ -18,7 +18,7 @@ Four processes and one datastore behind one hostname, plus Postgres off-box:
 | `aspire-web` | 127.0.0.1:3000 | Node — server-renders the app's HTML |
 | `aspire-worker` | — | arq — nightly retention, summarisation |
 | `valkey` | 127.0.0.1:6380 | arq's queue and the response cache |
-| `nginx` | 443 | TLS, serves `/srv/aspire-web/client/`, routes the rest |
+| `nginx` | 443 | TLS, serves `/aspire-web/client/`, routes the rest |
 | Neon Postgres | (remote) | Conversations, accounts, applications, graph state |
 
 Only nginx is exposed. Everything else binds to loopback.
@@ -68,8 +68,8 @@ is a supported test configuration and not a production one.)
 ## 1. Server preparation
 
 ```bash
-sudo adduser --system --group --home /srv/aspire aspire
-sudo mkdir -p /srv/aspire && sudo chown aspire:aspire /srv/aspire
+sudo adduser --system --group --home /aspire aspire
+sudo mkdir -p /aspire && sudo chown aspire:aspire /aspire
 
 sudo apt update
 sudo apt install -y nginx git curl
@@ -129,7 +129,7 @@ would take the worker down; evicting the coldest key does not.
 ```bash
 # The repository is public, so this needs no credentials. If you ever make it
 # private, switch to the SSH remote and add a deploy key — see section 9.
-sudo -u aspire git clone https://github.com/fraimerdev/aspire-chatbot.git /srv/aspire
+sudo git clone https://github.com/fraimerdev/aspire-chatbot.git /aspire
 ```
 
 ## 3. Database
@@ -146,10 +146,10 @@ does not look pooled.
 ## 4. Backend
 
 ```bash
-cd /srv/aspire/backend
-sudo -u aspire uv sync --frozen           # creates .venv from uv.lock
-sudo -u aspire cp .env.example .env
-sudo -u aspire nano .env
+cd /aspire/backend
+sudo uv sync --frozen           # creates .venv from uv.lock
+sudo cp .env.example .env
+sudo nano .env
 sudo chmod 600 .env
 ```
 
@@ -199,8 +199,8 @@ boot if the store is empty, but doing it by hand surfaces a bad API key now
 rather than as a failed startup:
 
 ```bash
-sudo -u aspire .venv/bin/alembic upgrade head
-sudo -u aspire .venv/bin/python -m app.ingest
+sudo .venv/bin/alembic upgrade head
+sudo .venv/bin/python -m app.ingest
 ```
 
 `data/` must stay writable — it holds `chroma/` and `voice_cache/`.
@@ -212,15 +212,15 @@ first reviewer from the shell; it prints a generated password once and forces a
 change at first sign-in:
 
 ```bash
-sudo -u aspire .venv/bin/python -m app.api.admin.staff create you@example.com --role admin
+sudo .venv/bin/python -m app.api.admin.staff create you@example.com --role admin
 ```
 
 ## 5. Frontend
 
 ```bash
-cd /srv/aspire/frontend
-sudo -u aspire bun install --frozen-lockfile
-sudo -u aspire env VITE_ASPIRE_API_URL="https://aspire.eccugenai.app" bun run build
+cd /aspire/frontend
+sudo bun install --frozen-lockfile
+sudo env VITE_ASPIRE_API_URL="https://aspire.eccugenai.app" bun run build
 ```
 
 Confirm the URL was baked in:
@@ -232,14 +232,14 @@ grep -o 'https://aspire.eccugenai.app' dist/client/assets/*.js | head -1
 Empty output means the build used the default `http://localhost:8000` and the
 deployed app will try to call the visitor's own machine.
 
-nginx does not serve `dist/client` directly — it serves `/srv/aspire-web/client`,
+nginx does not serve `dist/client` directly — it serves `/aspire-web/client`,
 a symlink that only moves once a build has succeeded. Publish this first build
 by hand; from then on `deploy/update.sh` does it:
 
 ```bash
-sudo mkdir -p /srv/aspire-web && sudo chown aspire:aspire /srv/aspire-web
-sudo -u aspire cp -a dist/client /srv/aspire-web/client.a
-sudo -u aspire ln -sfn /srv/aspire-web/client.a /srv/aspire-web/client
+sudo mkdir -p /aspire-web && sudo chown aspire:aspire /aspire-web
+sudo cp -a dist/client /aspire-web/client.a
+sudo ln -sfn /aspire-web/client.a /aspire-web/client
 ```
 
 ## 6. Start the processes
@@ -253,27 +253,27 @@ value talks to a second, empty daemon — reporting success while the processes
 actually serving traffic keep running the old code.
 
 ```bash
-echo 'export PM2_HOME=/srv/aspire/.pm2' | sudo -u aspire tee -a /srv/aspire/.bashrc
+echo 'export PM2_HOME=/aspire/.pm2' | sudo tee -a /aspire/.bashrc
 
-cd /srv/aspire
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 start deploy/ecosystem.config.cjs
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 save
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 status
+cd /aspire
+sudo env PM2_HOME=/aspire/.pm2 pm2 start deploy/ecosystem.config.cjs
+sudo env PM2_HOME=/aspire/.pm2 pm2 save
+sudo env PM2_HOME=/aspire/.pm2 pm2 status
 ```
 
 Bring them back after a reboot. `pm2 startup` prints one command; run it exactly
 as printed — it embeds the user and `PM2_HOME`:
 
 ```bash
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 startup systemd -u aspire --hp /srv/aspire
+sudo env PM2_HOME=/aspire/.pm2 pm2 startup systemd --hp /aspire
 ```
 
 Log rotation is not on by default and a small VPS will fill its disk:
 
 ```bash
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 install pm2-logrotate
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 set pm2-logrotate:max_size 10M
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 set pm2-logrotate:retain 7
+sudo env PM2_HOME=/aspire/.pm2 pm2 install pm2-logrotate
+sudo env PM2_HOME=/aspire/.pm2 pm2 set pm2-logrotate:max_size 10M
+sudo env PM2_HOME=/aspire/.pm2 pm2 set pm2-logrotate:retain 7
 ```
 
 `pm2 restart` does **not** rebuild. After a `git pull` the frontend must be
@@ -285,13 +285,13 @@ Check all three answer:
 ```bash
 curl -s localhost:8000/health          # {"status":"ok"}
 curl -sI localhost:3000/ | head -1     # HTTP/1.1 200 OK
-sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 status   # three apps, "online"
+sudo env PM2_HOME=/aspire/.pm2 pm2 status   # three apps, "online"
 ```
 
 ## 7. nginx and TLS
 
 ```bash
-sudo cp /srv/aspire/deploy/nginx-aspire.conf /etc/nginx/sites-available/aspire
+sudo cp /aspire/deploy/nginx-aspire.conf /etc/nginx/sites-available/aspire
 sudo ln -s /etc/nginx/sites-available/aspire /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
@@ -343,7 +343,7 @@ One script does the whole sequence — fetch, dependencies, migrations, build,
 publish, restart, health check:
 
 ```bash
-sudo -u aspire /srv/aspire/deploy/update.sh
+sudo /aspire/deploy/update.sh
 ```
 
 It is written to be safe to interrupt and safe to re-run. Two properties worth
@@ -362,9 +362,9 @@ checkout so a deploy cannot rewrite what drives the deploy:
 ```ini
 SITE_URL=https://aspire.eccugenai.app
 # BRANCH=main
-# REPO_DIR=/srv/aspire
-# WEB_ROOT=/srv/aspire-web
-# PM2_HOME=/srv/aspire/.pm2
+# REPO_DIR=/aspire
+# WEB_ROOT=/aspire-web
+# PM2_HOME=/aspire/.pm2
 ```
 
 `SITE_URL` has no default. Without it the script refuses to build rather than
@@ -373,7 +373,7 @@ bake in a guess.
 To roll back, point the checkout at the last good commit and re-run:
 
 ```bash
-sudo -u aspire env TARGET=<good-sha> /srv/aspire/deploy/update.sh
+sudo env TARGET=<good-sha> /aspire/deploy/update.sh
 ```
 
 The next push to `main` will move it forward again, so revert the commit on
@@ -405,18 +405,18 @@ Give it one, and authorise a key that exists only for this purpose:
 
 ```bash
 sudo usermod -s /bin/bash aspire
-sudo -u aspire install -d -m 700 /srv/aspire/.ssh
+sudo install -d -m 700 /aspire/.ssh
 
 # Generate this on your own machine, not the server: the private half has to
 # leave the box exactly once, into GitHub's secret store.
 ssh-keygen -t ed25519 -N '' -f ~/.ssh/aspire_deploy -C 'github-actions -> aspire vps'
 ```
 
-Append the **public** half to `/srv/aspire/.ssh/authorized_keys`, restricted so
+Append the **public** half to `/aspire/.ssh/authorized_keys`, restricted so
 a leaked key cannot open an interactive session or forward ports:
 
 ```
-restrict,command="/srv/aspire/deploy/update.sh" ssh-ed25519 AAAA... github-actions
+restrict,command="/aspire/deploy/update.sh" ssh-ed25519 AAAA... github-actions
 ```
 
 That forced command is the whole authorisation story. Under pm2 there is **no
@@ -434,18 +434,18 @@ generate one owned by `aspire` and add the **public** half at *Settings → Depl
 keys → Add deploy key* (leave "Allow write access" unchecked):
 
 ```bash
-sudo -u aspire ssh-keygen -t ed25519 -N '' -f /srv/aspire/.ssh/id_github
-sudo -u aspire cat /srv/aspire/.ssh/id_github.pub
+sudo ssh-keygen -t ed25519 -N '' -f /aspire/.ssh/id_github
+sudo cat /aspire/.ssh/id_github.pub
 
-sudo -u aspire tee -a /srv/aspire/.ssh/config >/dev/null <<'EOF'
+sudo tee -a /aspire/.ssh/config >/dev/null <<'EOF'
 Host github.com
-    IdentityFile /srv/aspire/.ssh/id_github
+    IdentityFile /aspire/.ssh/id_github
     IdentitiesOnly yes
 EOF
 
 # the remote must be the SSH form for that key to be used
-sudo -u aspire git -C /srv/aspire remote set-url origin git@github.com:OWNER/REPO.git
-sudo -u aspire git -C /srv/aspire fetch origin      # accepts the host key, proves it works
+sudo git -C /aspire remote set-url origin git@github.com:OWNER/REPO.git
+sudo git -C /aspire fetch origin      # accepts the host key, proves it works
 ```
 
 ### Repository secrets
@@ -499,7 +499,7 @@ If the deploy is green but the site is wrong, the box is the place to look —
   immediately once, after checking what it would delete:
 
   ```sh
-  cd /srv/aspire/backend
+  cd /aspire/backend
   .venv/bin/python -c "import asyncio; from app.retention import sweep_anonymous; \
       print(asyncio.run(sweep_anonymous(dry_run=True)))"
   ```

@@ -9,7 +9,7 @@
  * this file with require().
  */
 
-const ROOT = "/srv/aspire";
+const ROOT = "/aspire";
 
 module.exports = {
   apps: [
