@@ -86,6 +86,22 @@ export interface EligibilityDirective {
 	language: "en" | "es" | "fr";
 }
 
+/**
+ * Open the account sign-up wizard.
+ *
+ * An account is not an application: applying through the assistant happens on a
+ * parent or guardian's own account, and this is how somebody who has not got one
+ * is offered the step that comes first.
+ *
+ * `role` is which branch the wizard opens on, derived server-side from the
+ * reader's own claims rather than from anything they typed. `null` means "no
+ * suggestion" and lands on the ordinary participant branch.
+ */
+export interface SignupDirective {
+	t: "signup";
+	role: "participant" | "guardian" | "educator" | null;
+}
+
 export interface UploadDirective {
 	t: "upload";
 	slot: string;
@@ -93,6 +109,16 @@ export interface UploadDirective {
 	accepts: Array<string>;
 	max_mb: number;
 	help: string;
+	/**
+	 * Which application this document belongs to.
+	 *
+	 * Sent on to `/v2/documents/presign`, which scopes the signed PUT to it. A
+	 * missing one makes the endpoint fall back to the caller's SESSION id, and
+	 * the row the graph writes afterwards names the APPLICATION id — so the
+	 * object lands at a key nothing ever reads back. Optional because an older
+	 * server does not send it; the card then omits it and gets the old default.
+	 */
+	application_id?: string;
 }
 
 export interface ReviewSection {
@@ -157,6 +183,7 @@ export type Directive =
 	| QuickRepliesDirective
 	| GameDirective
 	| EligibilityDirective
+	| SignupDirective
 	| UploadDirective
 	| ReviewCardDirective
 	| ChartDirective
@@ -336,4 +363,22 @@ export interface WidgetInteraction {
 	attempts: number;
 	dwell_ms: number;
 	completed: boolean;
+}
+
+/**
+ * What continues a registration that is paused on a document.
+ *
+ * Deliberately only the few fields the server allows through: the bytes went
+ * browser-to-bucket and this is the receipt, not the file. `document_id` is the
+ * one that must be present -- without it the paused node has nothing to record
+ * and treats the slot as skipped. Keys outside this set are dropped server-side
+ * with a warning (see `ALLOWED_RESUME_KEYS` in `nodes/upload.py`).
+ */
+export interface UploadResult {
+	document_id: string;
+	mime?: string;
+	size_bytes?: number;
+	checksum?: string;
+	storage_key?: string;
+	skipped?: boolean;
 }

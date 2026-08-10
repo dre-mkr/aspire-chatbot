@@ -52,6 +52,7 @@ import type {
 	EligibilityDirective,
 	GameDirective,
 	QuickRepliesDirective,
+	UploadResult,
 	WidgetInteraction,
 } from "../stream/types";
 import {
@@ -93,6 +94,19 @@ export async function streamAspire(
 		 * enters the transcript the model reads back.
 		 */
 		interaction?: WidgetInteraction;
+		/**
+		 * The answer to a document upload the graph is PAUSED on.
+		 *
+		 * Not prose, and it cannot be. A document slot suspends the graph inside
+		 * `interrupt()`, and the only thing that continues a suspended node is
+		 * `Command(resume=...)`. An ordinary message re-enters at START, re-runs
+		 * `resume_or_start` and asks for the first slot again -- so a parent who
+		 * answered every question reached the ID photo and was sent back to
+		 * "What is your full name?" forever. The server reads this off
+		 * `__upload_result` and hands it to the paused node; see the note in
+		 * `api/stream.py`.
+		 */
+		uploadResult?: UploadResult;
 	},
 ): Promise<AskResult> {
 	const {
@@ -101,6 +115,7 @@ export async function streamAspire(
 		persona,
 		language = "en",
 		interaction,
+		uploadResult,
 		onDelta,
 		onTextEnd,
 		onTurn,
@@ -141,6 +156,20 @@ export async function streamAspire(
 			? {
 					path: "/v2/widget/interaction",
 					body: interaction as unknown as Record<string, unknown>,
+				}
+			: {}),
+		// The ordinary chat path, unlike an interaction: this IS the turn that
+		// answers the upload the graph is waiting on, so it carries the message
+		// field the endpoint always reads, plus the resume payload beside it.
+		...(uploadResult
+			? {
+					body: {
+						message,
+						__upload_result: uploadResult as unknown as Record<
+							string,
+							unknown
+						>,
+					},
 				}
 			: {}),
 		onToken: (text) => onDelta?.(text),

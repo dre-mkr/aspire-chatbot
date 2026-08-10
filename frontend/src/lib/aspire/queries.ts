@@ -300,6 +300,62 @@ export function upsertConversation(
 }
 
 /**
+ * Takes one conversation out of the cache entirely.
+ *
+ * Both keys, because they are two separate records of the same thing and
+ * `readConversation` prefers the transcript over the list summary — dropping
+ * the row and leaving the transcript behind would leave the reconciler able to
+ * reopen a chat that no longer exists.
+ *
+ * `removeQueries` rather than `setQueryData(undefined)`: the entry is
+ * `gcTime: Infinity` and never mounted, so writing undefined would leave a
+ * permanent empty record where the transcript was.
+ */
+export function removeConversationFromCache(
+	queryClient: QueryClient,
+	threadId: string,
+): StoredConversation | undefined {
+	// A list fetch already in flight answers with the conversation still in it,
+	// and would land on top of this write. Same reasoning as the optimistic
+	// insert above, and it matters more here: the row would come back.
+	void queryClient.cancelQueries(
+		{ queryKey: keys.conversations(owner()) },
+		{ revert: false },
+	);
+
+	// Handed back so a failed delete can be undone. The list summary rather than
+	// the transcript, because the summary is what the rail draws.
+	const removed = readConversations(queryClient).find(
+		(conversation) => conversation.threadId === threadId,
+	);
+
+	queryClient.setQueryData<Conversations>(
+		keys.conversations(owner()),
+		(previous) =>
+			(previous ?? []).filter(
+				(conversation) => conversation.threadId !== threadId,
+			),
+	);
+	queryClient.removeQueries({
+		queryKey: keys.messages(owner(), threadId),
+		exact: true,
+	});
+	// Whatever the conversation was part-way through. Both are keyed by thread
+	// and neither is reachable from the list, so they would otherwise sit in the
+	// cache until the tab closed.
+	queryClient.removeQueries({
+		queryKey: keys.gameState(threadId, owner()),
+		exact: true,
+	});
+	queryClient.removeQueries({
+		queryKey: keys.eligibilityState(threadId, owner()),
+		exact: true,
+	});
+
+	return removed;
+}
+
+/**
  * Renames one conversation in the cache, without touching its timestamp.
  *
  * The timestamp is left alone on purpose and it is the same reason it was left

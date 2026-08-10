@@ -338,3 +338,136 @@ async def test_every_shipped_locale_has_its_own_copy(locale: str) -> None:
 
     assert update["messages"][0].content
     assert len(update["quick_replies"]) == 2
+
+
+# ── the fallback is addressed to whoever is actually reading it ──────────────
+#
+# Reported live. A 16-18 account selected Aurora in the picker, asked to
+# register a daughter, and was told to ask its parent to choose Aurora:
+#
+#     WARNING app.api.stream: Refused a request for persona 'aurora'
+#     on a 16-18 band session.
+#
+# Two failures, one sentence. It addressed a parent as a child, and it
+# instructed them to select a persona the server had just refused them -- so
+# following the advice produced the same paragraph again, indefinitely.
+
+
+from app.graph.nodes.cards import _REGISTRATION_HELP  # noqa: E402
+
+
+@pytest.mark.parametrize("audience", sorted(_REGISTRATION_HELP))
+@pytest.mark.parametrize("locale", ["en", "es", "fr"])
+def test_no_copy_tells_the_reader_to_pick_a_persona(audience: str, locale: str) -> None:
+    """The bug that made this a loop rather than a dead end.
+
+    Naming a persona here is only ever actionable for a reader who could select
+    it -- and a reader who could select Aurora has `register_agent` and never
+    reaches this node. So for everybody who DOES reach it, naming one is an
+    instruction that cannot be carried out.
+    """
+    text = _REGISTRATION_HELP[audience][locale].lower()
+
+    for persona in ("aurora", "stella", "orion", "nova"):
+        assert persona not in text, (
+            f"the {audience!r} copy in {locale!r} names {persona!r}; the reader "
+            f"cannot select it, so this is advice that cannot be followed"
+        )
+
+
+async def test_a_teenager_applying_for_a_child_is_not_told_to_ask_a_parent() -> None:
+    """The reported turn, verbatim."""
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    update = await gate(_for("orion", "16-18", "i want to register my daughter"))
+    text = update["messages"][0].content
+
+    assert "ask yours" not in text.lower()
+    assert "guardian account" in text.lower()
+
+
+async def test_a_child_is_still_told_to_ask_a_grown_up() -> None:
+    """The half of the old behaviour that was right, and must survive."""
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    update = await gate(_for("stella", "9-12", "i want to register my child"))
+
+    assert "ask yours" in update["messages"][0].content.lower()
+
+
+async def test_a_teacher_is_not_told_to_fetch_their_parent() -> None:
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    update = await gate(_for("nova", "adult", "i want to register my child"))
+    text = update["messages"][0].content.lower()
+
+    assert "ask yours" not in text
+    assert "school" in text
+
+
+# ── the account card ─────────────────────────────────────────────────────────
+
+
+async def test_the_offered_chip_actually_opens_the_wizard() -> None:
+    """The chip the fallback offers must be a route, not a phrase.
+
+    It is not a knowledge-base question and would not clear the grounding floor
+    if it were treated as one, so it has to be matched in this node -- and the
+    literal chip text is what a reader sends when they tap it.
+    """
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+    state = _for("orion", "16-18", "i want to register my daughter")
+    chip = (await gate(state))["quick_replies"][0]
+
+    update = await gate(_for("orion", "16-18", chip))
+
+    assert update["ui_directives"] == [{"t": "signup", "role": "guardian"}]
+
+
+async def test_a_child_asking_for_an_account_gets_no_guardian_branch() -> None:
+    """A suggested role is a shape of account. Never suggest one they cannot hold."""
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    update = await gate(_for("stella", "9-12", "i want to create an account"))
+
+    assert update["ui_directives"] == [{"t": "signup", "role": None}]
+
+
+async def test_a_guardian_asking_for_an_account_is_still_answered() -> None:
+    """Unlike the registration fallback, this one is not conditional on being
+    unable to register. Having `register_agent` does not answer "I want an
+    account" -- it answers a different question."""
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    update = await gate(_for("aurora", "adult", "i want to create an account"))
+
+    assert update["ui_directives"] == [{"t": "signup", "role": "guardian"}]
+
+
+async def test_registering_a_child_is_not_mistaken_for_making_an_account() -> None:
+    """The two matchers overlap in vocabulary and must not overlap in effect.
+
+    A guardian who can register must reach `register_agent`, not a sign-up form
+    for the account they are already signed in to.
+    """
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+
+    assert await gate(_for("aurora", "adult", "i want to register my daughter")) == {}
+
+
+async def test_the_signup_card_ends_the_turn_at_the_outbound_gate() -> None:
+    """A card turn must not fall through to the classifier.
+
+    `_after_cards` recognises it by `safety_flags["card"]`, not by the presence
+    of a directive — so a card that forgot the flag would be routed on to be
+    answered a second time by an agent.
+    """
+    from app.graph.main_graph import _after_cards
+
+    gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
+    state = _for("orion", "16-18", "i want to create an account")
+    update = await gate(state)
+    state["messages"] = list(state["messages"]) + update["messages"]
+    state["safety_flags"] = update["safety_flags"]
+
+    assert _after_cards(state) == "safety_out"

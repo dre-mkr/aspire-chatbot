@@ -1,9 +1,12 @@
 """The turns answered before anything else runs.
 
-Two cards, which are the two v1 handled with tools, and one plain sentence:
+Three cards -- two of them the ones v1 handled with tools -- and one plain
+sentence:
 
     eligibility  -- the audited six-question flow, `app/eligibility`
     game         -- one of the real game components, `app/games`
+    signup       -- the account wizard, for somebody who needs an account
+                    before they can have an application; see `_open_signup`
     registration -- for the personas that have no registration agent to route
                     to. Prose rather than a card, because there is nothing to
                     hand over to; see `_registration_help`.
@@ -53,13 +56,18 @@ from app.agents.escalation.contract import EscalationReason
 from app.graph.nodes.intents import (
     is_complaint,
     named_game,
+    wants_account,
     wants_eligibility,
     wants_game,
     wants_human,
     wants_registration,
 )
 from app.graph.state import AspireState
-from app.schemas.directives import EligibilityDirective, directive_payload
+from app.schemas.directives import (
+    EligibilityDirective,
+    SignupDirective,
+    directive_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,39 +78,147 @@ _CARD_LOCALES = frozenset({"en", "es", "fr"})
 #: Either of these means the caller has somewhere to register.
 _REGISTRATION_AGENTS = frozenset({"register_agent", "register_agent_step1"})
 
-#: What somebody who cannot register is told, by locale.
+#: Who is reading, for the purpose of answering "I want to register".
 #:
-#: Says who does it and what to do next, in two sentences. It does NOT say
-#: "you are not allowed", because the reader is usually a parent who picked the
-#: wrong assistant from a menu, and a refusal is a worse answer than a direction.
-_REGISTRATION_HELP: dict[str, str] = {
-    "en": (
-        "An ASPIRE application is completed by a parent or guardian. Ask yours "
-        "to open ASPIRE and choose Aurora, the assistant for parents and "
-        "guardians -- or start at aspire.gov.kn or any branch."
-    ),
-    "es": (
-        "La solicitud de ASPIRE la completa un padre, madre o tutor. Pide que "
-        "abran ASPIRE y elijan Aurora, el asistente para familias, o empiecen "
-        "en aspire.gov.kn o en una sucursal."
-    ),
-    "fr": (
-        "Une demande ASPIRE est remplie par un parent ou tuteur. Demande-lui "
-        "d'ouvrir ASPIRE et de choisir Aurora, l'assistant des familles, ou de "
-        "commencer sur aspire.gov.kn ou dans une agence."
-    ),
+#: Not the persona and not the band, but the one distinction the ANSWER turns
+#: on: whether the reader should be fetching an adult, or is one.
+def _audience(persona: str, age_band: str) -> str:
+    """`child`, `educator`, or `unaccompanied`.
+
+    `stella` and Orion's younger band are children and are told to ask a
+    grown-up. `nova` is a teacher, who is not going to fetch one. Orion 16-18 is
+    neither: old enough that "ask your parent" is the wrong sentence, not
+    granted registration on their own account.
+
+    Falls to `unaccompanied` for anything unrecognised, which is the reading
+    that assumes least about the person: it explains the situation and names
+    routes outside this chat, rather than instructing them to go and find an
+    adult.
+    """
+    if persona == "nova":
+        return "educator"
+    if persona == "stella" or age_band in ("5-8", "9-12", "13-15"):
+        return "child"
+    return "unaccompanied"
+
+
+#: What somebody who cannot register is told, by audience and locale.
+#:
+#: Says who does it and what to do next. It does NOT say "you are not allowed",
+#: because the reader is usually a parent who picked the wrong assistant from a
+#: menu, and a refusal is a worse answer than a direction.
+#:
+#: ## Why this is keyed on the reader and not only on the locale
+#:
+#: It used to be one paragraph for everybody, addressed to a child: "Ask YOURS
+#: to open ASPIRE and choose Aurora." Two things were wrong with sending that to
+#: everyone who lacks a registration agent, and the second is the serious one.
+#:
+#: It was addressed to the wrong person. The message a 16-18 account most often
+#: triggers it with is "i want to register my daughter" -- somebody speaking as
+#: a parent, told to go and ask their parent.
+#:
+#: And it instructed the reader to do something the server refuses. Aurora
+#: carries `register_agent`, so `account._narrowing` rejects a request for it
+#: from any child or teen band; the picker then silently keeps showing Aurora
+#: while the session runs as Orion. Observed:
+#:
+#:     WARNING app.api.stream: Refused a request for persona 'aurora'
+#:     on a 16-18 band session.
+#:
+#: So the reader followed the instruction, watched nothing happen, and got the
+#: same paragraph again. NOTHING here may name a persona the reader cannot
+#: select -- the only audience that could act on "choose Aurora" is one that
+#: already has `register_agent` and therefore never reaches this node.
+_REGISTRATION_HELP: dict[str, dict[str, str]] = {
+    "child": {
+        "en": (
+            "An ASPIRE application is filled in by a parent or guardian. Ask "
+            "yours to sign in with their own ASPIRE account and start it there "
+            "-- or they can go to aspire.gov.kn or any branch."
+        ),
+        "es": (
+            "La solicitud de ASPIRE la completa un padre, madre o tutor. Pídele "
+            "que inicie sesión con su propia cuenta de ASPIRE y la empiece ahí, "
+            "o que vaya a aspire.gov.kn o a una sucursal."
+        ),
+        "fr": (
+            "Une demande ASPIRE est remplie par un parent ou tuteur. Demande-lui "
+            "de se connecter avec son propre compte ASPIRE et de la commencer "
+            "là, ou d'aller sur aspire.gov.kn ou dans une agence."
+        ),
+    },
+    "unaccompanied": {
+        "en": (
+            "An application through this assistant is completed on a parent or "
+            "guardian's own account, and this one is not registered as one. If "
+            "you are applying for a child, create a guardian account and start "
+            "there. You can also apply at aspire.gov.kn or any branch."
+        ),
+        "es": (
+            "Una solicitud hecha con este asistente se completa desde la cuenta "
+            "de un padre, madre o tutor, y esta no lo es. Si solicitas para un "
+            "menor, crea una cuenta de tutor y empieza ahí. También puedes "
+            "solicitar en aspire.gov.kn o en una sucursal."
+        ),
+        "fr": (
+            "Une demande faite avec cet assistant se remplit depuis le compte "
+            "d'un parent ou tuteur, et celui-ci n'en est pas un. Si vous "
+            "postulez pour un enfant, créez un compte tuteur et commencez là. "
+            "Vous pouvez aussi postuler sur aspire.gov.kn ou dans une agence."
+        ),
+    },
+    "educator": {
+        "en": (
+            "A child is enrolled by their own parent or guardian rather than by "
+            "a school, so this cannot be completed from a teacher account. Point "
+            "the family at aspire.gov.kn or any branch, or ask them to start it "
+            "from their own ASPIRE account."
+        ),
+        "es": (
+            "A un menor lo inscribe su padre, madre o tutor, no la escuela, así "
+            "que esto no se puede completar desde una cuenta docente. Indica a "
+            "la familia aspire.gov.kn o una sucursal, o pídeles que la empiecen "
+            "desde su propia cuenta de ASPIRE."
+        ),
+        "fr": (
+            "Un enfant est inscrit par son parent ou tuteur et non par l'école, "
+            "donc cela ne peut pas se faire depuis un compte enseignant. "
+            "Orientez la famille vers aspire.gov.kn ou une agence, ou demandez-"
+            "leur de commencer depuis leur propre compte ASPIRE."
+        ),
+    },
 }
 
-#: Chips that lead somewhere the knowledge base can actually answer.
+#: Chips that lead somewhere the reader can actually get to.
 #:
 #: "Who registers a child?" is the highest-scoring registration question in the
 #: corpus at 0.759 cosine, which is the point: a chip that lands back on the
 #: grounding floor would send the reader round the same loop that brought them
 #: here.
-_REGISTRATION_CHIPS: dict[str, list[str]] = {
-    "en": ["Who registers a child?", "What documents are needed?"],
-    "es": ["¿Quién registra?", "¿Qué documentos?"],
-    "fr": ["Qui inscrit l'enfant ?", "Quels documents ?"],
+#:
+#: The adult audiences get "Create a guardian account" in its place, and that
+#: one is not a retrieval question at all -- `intents.wants_account` matches it
+#: in this same node and opens the sign-up flow, so it never reaches the
+#: grounding floor to be judged by it. It is offered ONLY to the audiences the
+#: copy above tells to create an account; a child tapping it would be starting
+#: an account this product will not give them.
+_REGISTRATION_CHIPS: dict[str, dict[str, list[str]]] = {
+    "child": {
+        "en": ["Who registers a child?", "What documents are needed?"],
+        "es": ["¿Quién registra?", "¿Qué documentos?"],
+        "fr": ["Qui inscrit l'enfant ?", "Quels documents ?"],
+    },
+    "unaccompanied": {
+        "en": ["Create a guardian account", "What documents are needed?"],
+        "es": ["Crear una cuenta de tutor", "¿Qué documentos?"],
+        "fr": ["Créer un compte tuteur", "Quels documents ?"],
+    },
+    "educator": {
+        "en": ["Who registers a child?", "What documents are needed?"],
+        "es": ["¿Quién registra?", "¿Qué documentos?"],
+        "fr": ["Qui inscrit l'enfant ?", "Quels documents ?"],
+    },
 }
 
 
@@ -158,6 +274,13 @@ def make_intent_gate(
         if asked is not None:
             return asked
 
+        # Before the registration help, because it is the more specific of the
+        # two: "create a guardian account" is an account request that also reads
+        # as registration intent, and the account is the step that comes first.
+        card = _open_signup(state, message)
+        if card is not None:
+            return card
+
         reply = _registration_help(state, message)
         if reply is not None:
             return reply
@@ -211,6 +334,80 @@ def _asked_for_a_person(message: str) -> dict[str, Any] | None:
     }
 
 
+def _open_signup(state: AspireState, message: str) -> dict[str, Any] | None:
+    """"Create a guardian account" -- open the sign-up wizard.
+
+    Unlike `_registration_help` this is offered to EVERY audience, including the
+    ones that can already register. An account request is not a registration
+    request and having `register_agent` does not answer it: an adult with a
+    participant account who wants a guardian one is asking a real question, and
+    routing them into the application flow would answer a different one.
+
+    ## The role is derived here, not asked for and not inferred by a model
+
+    From the reader's audience, which is itself derived from claims the server
+    minted. A teacher gets the educator branch, everybody else the guardian one
+    -- because the reason a chat produces this request is almost always the
+    sentence that could not be completed, and that sentence is "I want to
+    register my child".
+
+    A child asking to create an account gets the wizard with NO role
+    pre-selected, so they land on the ordinary participant branch and the
+    under-13 rules apply. Opening the guardian branch for them would be
+    suggesting a shape of account they cannot hold.
+
+    ## Prose, unlike the eligibility card
+
+    One short sentence, because unlike the eligibility card this directive
+    navigates away from the conversation. A card that silently replaces what
+    somebody was reading needs to have said why.
+    """
+    if not wants_account(message):
+        return None
+
+    persona = str(state.get("persona") or "")
+    age_band = str(state.get("age_band") or "")
+    audience = _audience(persona, age_band)
+
+    locale = str(state.get("locale") or "en")
+    if locale not in _SIGNUP_INTRO:
+        locale = "en"
+
+    role: str | None
+    if audience == "child":
+        role = None
+    elif audience == "educator":
+        role = "educator"
+    else:
+        role = "guardian"
+
+    logger.info(
+        "signup card opened persona=%s band=%s audience=%s role=%s",
+        persona,
+        age_band,
+        audience,
+        role,
+    )
+    return {
+        "messages": [AIMessage(content=_SIGNUP_INTRO[locale])],
+        "ui_directives": [
+            directive_payload(SignupDirective(role=role))  # type: ignore[arg-type]
+        ],
+        "active_agent": state.get("active_agent") or "qa_agent",
+        "safety_flags": {"card": "signup"},
+    }
+
+
+#: The one sentence that goes with the sign-up card.
+#:
+#: Under the 5-8 band's 35-word cap, so `safety_out` never re-prompts on it.
+_SIGNUP_INTRO: dict[str, str] = {
+    "en": "Let's set that up — the form is on screen.",
+    "es": "Vamos a crearla: el formulario está en pantalla.",
+    "fr": "Créons-le : le formulaire est à l'écran.",
+}
+
+
 def _registration_help(state: AspireState, message: str) -> dict[str, Any] | None:
     """"I want to register my child", from somebody who cannot.
 
@@ -252,18 +449,24 @@ def _registration_help(state: AspireState, message: str) -> dict[str, Any] | Non
     if not wants_registration(message):
         return None
 
+    persona = str(state.get("persona") or "")
+    age_band = str(state.get("age_band") or "")
+    audience = _audience(persona, age_band)
+
     locale = str(state.get("locale") or "en")
-    if locale not in _REGISTRATION_HELP:
+    if locale not in _REGISTRATION_HELP[audience]:
         locale = "en"
 
     logger.info(
-        "Registration intent from %s, which cannot register; answering directly "
-        "rather than escalating.",
-        state.get("persona"),
+        "Registration intent from persona=%s band=%s, which cannot register; "
+        "answering the %s audience directly rather than escalating.",
+        persona,
+        age_band,
+        audience,
     )
     return {
-        "messages": [AIMessage(content=_REGISTRATION_HELP[locale])],
-        "quick_replies": list(_REGISTRATION_CHIPS[locale]),
+        "messages": [AIMessage(content=_REGISTRATION_HELP[audience][locale])],
+        "quick_replies": list(_REGISTRATION_CHIPS[audience][locale]),
     }
 
 

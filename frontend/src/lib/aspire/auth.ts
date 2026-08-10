@@ -113,6 +113,8 @@ interface WireSession {
 	email: string | null;
 	display_name: string | null;
 	avatar_url: string | null;
+	role?: "participant" | "guardian" | "educator";
+	persona?: string;
 	claim?: { attempted: boolean; conversations: number; reason: string | null };
 }
 
@@ -124,6 +126,12 @@ function adopt(wire: WireSession): AuthResult {
 		email: wire.email ?? null,
 		displayName: wire.display_name ?? null,
 		avatarUrl: wire.avatar_url ?? null,
+		role: wire.role,
+		// Left undefined rather than defaulted when the service does not send it.
+		// "Not told" and "Stella" are different facts, and defaulting here would
+		// make an older service look like it had chosen the youngest persona for
+		// everybody.
+		persona: wire.persona,
 	};
 	// Stored before returning, so every surface is already agreed about who is
 	// signed in by the time the page reacts.
@@ -135,10 +143,20 @@ function adopt(wire: WireSession): AuthResult {
 }
 
 export interface SignUpFields {
+	/**
+	 * Who the account is for.
+	 *
+	 * The service defaults this to `participant` when it is absent, which is
+	 * what every account created before the role step already was. It is sent
+	 * explicitly regardless: a guardian account with the wrong date of birth on
+	 * it cannot be repaired from inside the product.
+	 */
+	role: "participant" | "guardian" | "educator";
 	email: string;
 	password: string;
 	firstName: string;
 	lastName: string;
+	/** The DOB of the person the account is for — a guardian's own, not their child's. */
 	dateOfBirth: string;
 	island?: string | null;
 	school?: string | null;
@@ -150,6 +168,7 @@ export interface SignUpFields {
 export async function register(fields: SignUpFields): Promise<AuthResult> {
 	return adopt(
 		await post<WireSession>("/api/auth/register", {
+			role: fields.role,
 			email: fields.email,
 			password: fields.password,
 			first_name: fields.firstName,

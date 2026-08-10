@@ -229,6 +229,57 @@ def wants_registration(message: str) -> bool:
     return any(pattern.search(folded) for pattern in _REGISTER)
 
 
+#: Somebody asking to create a SIGN-IN ACCOUNT, which is not an application.
+#:
+#: The two are a step apart and the product never had a way to say so. An
+#: application enrols a child; an account is how a person signs in, and applying
+#: through this assistant needs one first -- on a guardian's own account, which
+#: is exactly what the reader who triggers `cards._registration_help` has not
+#: got. Telling them "a guardian completes this" and leaving them to find the
+#: sign-up page was the gap.
+#:
+#: ## Kept out of `_REGISTER`'s way on purpose
+#:
+#: `_REGISTER` already matches `(start|begin|open) (an? )?(application|account)`,
+#: because "open an account" in a programme about savings accounts is an
+#: application. So this list does NOT use `open` or `start`: it takes the verbs
+#: that can only mean the sign-in credential -- create, make, set up -- and
+#: leaves the ambiguous ones where they were. Two matchers competing for "open
+#: an account" would be decided by whichever the gate happened to call first,
+#: which is not a decision to leave to statement order.
+_ACCOUNT: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\b(?:create|make|set\s+up|register\s+for)\s+(?:an?\s+|my\s+|the\s+)?"
+        r"(?:new\s+)?(?:guardian|parent|carer|teacher|educator|aspire|free)?\s*account\b",
+        r"\b(?:sign(?:ing)?\s+up)\s+for\s+(?:an?\s+)?account\b",
+        r"\b(?:i|we)\s+(?:want|need|would\s+like)\s+(?:an?\s+)?"
+        r"(?:guardian|parent|teacher|aspire)?\s*account\b",
+        r"\bcrear\s+(?:una\s+|mi\s+)?cuenta\b",
+        r"\bcreer\s+(?:un\s+|mon\s+)?compte\b",
+    )
+)
+
+
+def wants_account(message: str) -> bool:
+    """Whether this message asks to create a sign-in account.
+
+    Narrow, and narrower than `wants_registration` deliberately. A false
+    positive opens a sign-up wizard over a conversation somebody was in the
+    middle of, which is a worse interruption than the six-step eligibility card
+    -- it navigates away from the chat.
+    """
+    folded = _fold(message)
+    if not folded:
+        return False
+    if _ASKING_ABOUT.match(folded):
+        # "What account do I need?" is a question about the programme, not a
+        # request to make one. Same precedence rule the rest of this module
+        # applies: lookups win ties.
+        return False
+    return any(pattern.search(folded) for pattern in _ACCOUNT)
+
+
 #: Somebody asking, in as many words, for a person.
 #:
 #: Matched deterministically for the same reason eligibility and games are, and

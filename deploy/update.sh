@@ -29,6 +29,13 @@ case "$0" in /tmp/aspire-deploy.*) rm -f -- "$0" ;; esac
 # than depend on what sshd happens to hand us.
 export PATH=/usr/local/bin:/usr/bin:/bin
 
+# pm2 keeps its daemon socket and process list under PM2_HOME, defaulting to
+# $HOME/.pm2. If HOME is empty or different here from the shell you used to run
+# `pm2 start`, pm2 silently talks to a SECOND daemon: the deploy reports success
+# having reloaded an empty process list, while the apps serving traffic are
+# owned by the first one and keep running the old code. Name it explicitly.
+export PM2_HOME=${PM2_HOME:-/srv/aspire/.pm2}
+
 CONFIG_FILE=${ASPIRE_DEPLOY_CONFIG:-/etc/aspire-deploy.env}
 if [ -r "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
@@ -117,11 +124,25 @@ mv -Tf "$WEB_ROOT/.client.swap" "$WEB_ROOT/client"
 # The SSR process holds dist/server/server.js in memory from its last start, so
 # it keeps rendering the *old* HTML until this line.
 #
-# aspire-worker is in this list because the retention job lives in it. Note the
-# sudoers rule in /etc/sudoers.d/aspire-deploy matches the WHOLE command, so
-# adding a unit here without updating that file makes the deploy fail closed.
+# `startOrReload` rather than `restart`: it starts any app in the ecosystem file
+# that is not running yet, so adding an app to ecosystem.config.cjs is picked up
+# by the next deploy instead of needing a manual `pm2 start` on the box. Plain
+# `pm2 restart` errors on an app it has never seen.
+#
+# All three apps come from one file on purpose. aspire-worker is in it because
+# the retention job lives there and nothing else runs it -- see PRIVACY.md and
+# the note in ecosystem.config.cjs.
+#
+# This needs no sudo. pm2 runs as the `aspire` user that owns these processes,
+# which is why there is no /etc/sudoers.d rule any more: the deploy user cannot
+# restart anything except its own apps.
 log "Restarting services"
-sudo -n systemctl restart aspire-api aspire-web aspire-worker
+pm2 startOrReload "$REPO_DIR/deploy/ecosystem.config.cjs" --update-env
+
+# Persist the process list so `pm2 resurrect` brings back what is running NOW.
+# Without this a reboot restores whatever was saved last, which after a deploy
+# that added an app is the wrong set.
+pm2 save --force
 
 # --- verify ------------------------------------------------------------------
 wait_for() {
@@ -134,7 +155,8 @@ wait_for() {
         sleep 1
     done
     echo "ERROR: $name never came back on $url" >&2
-    echo "  journalctl -u aspire-api -u aspire-web -n 50 --no-pager" >&2
+    echo "  pm2 logs --lines 50 --nostream" >&2
+    echo "  pm2 status" >&2
     return 1
 }
 

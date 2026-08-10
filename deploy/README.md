@@ -5,26 +5,33 @@ Assumes Ubuntu 24.04 (Debian 12 works; note the Python step). The site is
 `nginx-aspire.conf`, so there is nothing to substitute.
 
 Point an `A` record (and `AAAA`, if the VPS has IPv6) at the server before
-starting section 6 — certbot proves control over the name by being reachable at
+starting section 7 — certbot proves control over the name by being reachable at
 it, so it fails until DNS resolves.
 
 ## What you are running
 
-Three processes behind one hostname:
+Four processes and one datastore behind one hostname, plus Postgres off-box:
 
 | Process | Port | What it is |
 | --- | --- | --- |
-| `aspire-api` | 127.0.0.1:8000 | FastAPI — `/chat`, `/api/voice/*` |
+| `aspire-api` | 127.0.0.1:8000 | FastAPI — `/v2/*`, `/api/*` |
 | `aspire-web` | 127.0.0.1:3000 | Node — server-renders the app's HTML |
+| `aspire-worker` | — | arq — nightly retention, summarisation |
+| `valkey` | 127.0.0.1:6380 | arq's queue and the response cache |
 | `nginx` | 443 | TLS, serves `/srv/aspire-web/client/`, routes the rest |
+| Neon Postgres | (remote) | Conversations, accounts, applications, graph state |
 
-Only nginx is exposed. Both app processes bind to loopback.
+Only nginx is exposed. Everything else binds to loopback.
 
-## Two things that will bite you
+Process management is **pm2**, defined once in `ecosystem.config.cjs`. The
+systemd units that used to live here were deleted: two ways to start the same
+three processes is a way to end up running six, fighting over two ports.
+
+## Four things that will bite you
 
 **1. The API URL is compiled into the JavaScript.** `VITE_ASPIRE_API_URL` is
 read by Vite at *build* time and the literal string is written into the client
-bundle. It is not read at runtime, and setting it in a systemd unit does
+bundle. It is not read at runtime, and setting it in `ecosystem.config.cjs` does
 nothing. Changing it means rebuilding. Verify after every build:
 
 ```bash
@@ -33,16 +40,30 @@ grep -o 'https://aspire.eccugenai.app' dist/client/assets/*.js | head -1
 
 Because nginx serves the API on the same hostname, this is just your site URL.
 
-**2. The backend must run exactly one worker.** Conversation memory is a
-langgraph `InMemorySaver` and the voice rate limiter is a process-local dict.
-With two workers, a follow-up question can land on the process that never saw
-the first one — the assistant loses the thread, intermittently, in a way that
-looks like a model problem. `--workers 1` in the unit file is load-bearing.
+**2. The admin API lives under `/api/admin`, and it must stay there.** The
+portal's *pages* are TanStack routes at `/admin`, `/admin/applications` and
+`/admin/widgets`. The backend serves the matching *data* endpoints. With both on
+one hostname and both at `/admin/applications`, nginx cannot tell a page request
+from a data request — whichever upstream wins, the other 404s. Keeping the API
+under `/api/` means the existing proxy rule catches it and there is nothing to
+disambiguate. If you ever move that router prefix, this config breaks.
 
-A corollary: **conversations do not survive a restart.** Memory is in-process,
-so every deploy drops in-flight threads. Users see a working app with no
-history; the rail's saved conversations are in the browser's localStorage and
-are unaffected.
+**3. The backend must run exactly one worker.** `--workers 1` in
+`ecosystem.config.cjs` is load-bearing. The rate limiter in `app/limits.py` is
+an in-process counter, by a documented decision: a per-process window IS the
+whole service's window only while there is one process. A second worker silently
+doubles every limit on the endpoints that spend model credits. Scaling past one
+process means moving those counters to Valkey *and* making them fail closed
+first — `app/limits.py` says so in its docstring.
+
+**4. Conversations survive a restart; in-flight turns do not.** Graph state is
+LangGraph's `AsyncPostgresSaver` in Neon, keyed by session, so a deploy does not
+lose anybody's history — a half-finished registration resumes days later. What a
+restart does drop is the turn currently streaming, and the rate-limit windows.
+Both are acceptable; neither is a data loss. (This is a change from an earlier
+in-process checkpointer. If `DATABASE_URL` is unset the app falls back to an
+in-memory saver and the old "history dies on restart" behaviour returns, which
+is a supported test configuration and not a production one.)
 
 ## 1. Server preparation
 
@@ -53,12 +74,13 @@ sudo mkdir -p /srv/aspire && sudo chown aspire:aspire /srv/aspire
 sudo apt update
 sudo apt install -y nginx git curl
 
-# Node 22 LTS — runs the SSR server
+# Node 22 LTS — runs the SSR server and pm2
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
+sudo npm install -g pm2
 
 # bun — the frontend's lockfile is bun.lock, so this is what installs and builds.
-# (There is no package-lock.json, so `npm ci` cannot work here.)
+# (package-lock.json is gitignored, so `npm ci` cannot work here.)
 curl -fsSL https://bun.sh/install | sudo BUN_INSTALL=/usr/local bash
 
 # uv, which also supplies Python 3.13 (the backend needs >=3.12; Ubuntu 24.04
@@ -66,16 +88,62 @@ curl -fsSL https://bun.sh/install | sudo BUN_INSTALL=/usr/local bash
 sudo curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 ```
 
+### Valkey
+
+The arq worker refuses to start without it (`app/jobs.py` raises naming
+`VALKEY_URL`), and the response cache uses the same instance. Ubuntu 24.04 does
+not package Valkey yet; Redis is wire-compatible with everything used here, so
+either is fine:
+
+```bash
+sudo apt install -y redis-server        # or valkey-server where packaged
+```
+
+Put it on **6380**, not the default 6379, to match `.env.example` and to avoid
+colliding with anything already on this box:
+
+```bash
+sudo sed -i 's/^port 6379/port 6380/' /etc/redis/redis.conf
+```
+
+Then give it a memory ceiling. `app/limits.py` records that the Valkey this
+project has used was shared with an unrelated application, uncapped and set to
+`noeviction` — which is how a cache fills a disk and starts refusing writes to
+everything sharing it:
+
+```bash
+sudo tee -a /etc/redis/redis.conf >/dev/null <<'EOF'
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+EOF
+sudo systemctl enable --now redis-server
+redis-cli -p 6380 ping        # PONG
+```
+
+`allkeys-lru` rather than `noeviction` is deliberate: everything stored here is
+a cache entry or a queued job that can be re-derived. Refusing writes when full
+would take the worker down; evicting the coldest key does not.
+
 ## 2. Get the code onto the box
 
 ```bash
 # The repository is public, so this needs no credentials. If you ever make it
-# private, switch to the SSH remote and add a deploy key — see section 8.
+# private, switch to the SSH remote and add a deploy key — see section 9.
 sudo -u aspire git clone https://github.com/fraimerdev/aspire-chatbot.git /srv/aspire
-# or: rsync -av --exclude node_modules --exclude .venv --exclude dist ./ user@vps:/srv/aspire/
 ```
 
-## 3. Backend
+## 3. Database
+
+Postgres is Neon, not local. Create a database, then take the **pooled**
+connection string — the host with `-pooler` in it. `.env.example` explains why
+at length: the direct endpoint holds one backend per connection and the app's
+per-request session pool will exhaust it. The app warns at startup if the URL
+does not look pooled.
+
+`pgvector` is installed per database, not per project; migration `0001` runs
+`CREATE EXTENSION IF NOT EXISTS vector`, so the migration step below covers it.
+
+## 4. Backend
 
 ```bash
 cd /srv/aspire/backend
@@ -85,12 +153,36 @@ sudo -u aspire nano .env
 sudo chmod 600 .env
 ```
 
-Set in `.env`:
+The values with no working default — the app either fails loudly or silently
+loses a feature without each of these:
 
 ```ini
 OPENAI_API_KEY=sk-...
+CHAT_MODEL=openai:gpt-5.6-luna
 CORS_ALLOW_ORIGINS=["https://aspire.eccugenai.app"]
 LOG_LEVEL=INFO
+
+DATABASE_URL=postgresql://user:pass@ep-xxxx-pooler.region.aws.neon.tech/aspire
+VALKEY_URL=redis://localhost:6380
+
+# Signs every session token. No default on purpose: a signing key with a
+# fallback is a signing key everyone who read the source also has. Without it
+# every /api/auth/* call answers 500.
+#   python -c "import secrets; print(secrets.token_urlsafe(48))"
+SESSION_SECRET=
+
+# Encrypts application_pii. Registration refuses to persist a national ID or a
+# date of birth without it, rather than writing plaintext.
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+PII_ENCRYPTION_KEY=
+
+# Registration document uploads go browser-to-bucket via a presigned URL and
+# never through FastAPI. Unset means uploads answer 503.
+S3_ENDPOINT_URL=
+S3_BUCKET=aspire-documents
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
 
 # Only if you want voice. All four ids are required when this is true —
 # a missing one is a deliberate hard startup failure.
@@ -102,18 +194,28 @@ VOICE_AURORA=...
 VOICE_NOVA=...
 ```
 
-Build the vector store. The service does this automatically on first boot if the
-store is empty, but doing it by hand surfaces a bad API key now rather than as a
-failed startup:
+Run the migrations, then build the vector store. The service ingests on first
+boot if the store is empty, but doing it by hand surfaces a bad API key now
+rather than as a failed startup:
 
 ```bash
+sudo -u aspire .venv/bin/alembic upgrade head
 sudo -u aspire .venv/bin/python -m app.ingest
 ```
 
-`data/` must stay writable — it holds `chroma/` and `voice_cache/`. It is the
-only path the unit file grants write access to.
+`data/` must stay writable — it holds `chroma/` and `voice_cache/`.
 
-## 4. Frontend
+### The first admin account
+
+There is no "register as staff" endpoint and there will not be one. Seed the
+first reviewer from the shell; it prints a generated password once and forces a
+change at first sign-in:
+
+```bash
+sudo -u aspire .venv/bin/python -m app.api.admin.staff create you@example.com --role admin
+```
+
+## 5. Frontend
 
 ```bash
 cd /srv/aspire/frontend
@@ -128,7 +230,7 @@ grep -o 'https://aspire.eccugenai.app' dist/client/assets/*.js | head -1
 ```
 
 Empty output means the build used the default `http://localhost:8000` and the
-deployed app will try to call the user's own machine.
+deployed app will try to call the visitor's own machine.
 
 nginx does not serve `dist/client` directly — it serves `/srv/aspire-web/client`,
 a symlink that only moves once a build has succeeded. Publish this first build
@@ -140,48 +242,53 @@ sudo -u aspire cp -a dist/client /srv/aspire-web/client.a
 sudo -u aspire ln -sfn /srv/aspire-web/client.a /srv/aspire-web/client
 ```
 
-## 5. Services
+## 6. Start the processes
 
-Two options. Use one, not both — they will fight over the ports.
+pm2 runs **as the `aspire` user**, not as root. That is what lets the deploy
+restart these processes over SSH without a sudo rule.
 
-### With pm2
+`PM2_HOME` is set explicitly for the same reason `update.sh` sets it: pm2
+resolves its daemon through that variable, and a deploy that sees a different
+value talks to a second, empty daemon — reporting success while the processes
+actually serving traffic keep running the old code.
 
 ```bash
+echo 'export PM2_HOME=/srv/aspire/.pm2' | sudo -u aspire tee -a /srv/aspire/.bashrc
+
 cd /srv/aspire
-pm2 start deploy/ecosystem.config.cjs
-pm2 save                # without this, nothing comes back after a reboot
-pm2 startup             # prints one command to run as root; run it
-pm2 status
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 start deploy/ecosystem.config.cjs
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 save
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 status
+```
+
+Bring them back after a reboot. `pm2 startup` prints one command; run it exactly
+as printed — it embeds the user and `PM2_HOME`:
+
+```bash
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 startup systemd -u aspire --hp /srv/aspire
 ```
 
 Log rotation is not on by default and a small VPS will fill its disk:
 
 ```bash
-pm2 install pm2-logrotate
-pm2 set pm2-logrotate:max_size 10M
-pm2 set pm2-logrotate:retain 7
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 install pm2-logrotate
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 set pm2-logrotate:max_size 10M
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 set pm2-logrotate:retain 7
 ```
 
 `pm2 restart` does **not** rebuild. After a `git pull` the frontend must be
-rebuilt before restarting, or you will serve the previous bundle.
+rebuilt before restarting, or you will serve the previous bundle. `update.sh`
+does both in the right order.
 
-### With systemd
-
-```bash
-sudo cp /srv/aspire/deploy/aspire-{api,web}.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now aspire-api aspire-web
-sudo systemctl status aspire-api aspire-web --no-pager
-```
-
-### Either way, check both answer on loopback
+Check all three answer:
 
 ```bash
 curl -s localhost:8000/health          # {"status":"ok"}
 curl -sI localhost:3000/ | head -1     # HTTP/1.1 200 OK
+sudo -u aspire env PM2_HOME=/srv/aspire/.pm2 pm2 status   # three apps, "online"
 ```
 
-## 6. nginx and TLS
+## 7. nginx and TLS
 
 ```bash
 sudo cp /srv/aspire/deploy/nginx-aspire.conf /etc/nginx/sites-available/aspire
@@ -202,15 +309,28 @@ Firewall, if you use one:
 sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
 ```
 
-## 7. Verify
+## 8. Verify
 
 ```bash
-curl -sI https://aspire.eccugenai.app/ | head -1                                  # 200
-curl -s https://aspire.eccugenai.app/ | grep -c 'learn about money'               # 1 → SSR works
-curl -sI https://aspire.eccugenai.app/assets/$(ls /srv/aspire-web/client/assets/index-*.js | xargs -n1 basename) | head -1
-curl -s -X POST https://aspire.eccugenai.app/chat -H 'Content-Type: application/json' \
-     -d '{"message":"What is ASPIRE?","thread_id":null,"simple_mode":false}' | head -c 300
-curl -s https://aspire.eccugenai.app/api/voice/config | head -c 200               # only if VOICE_ENABLED
+# The page renders
+curl -sI https://aspire.eccugenai.app/ | head -1                      # 200
+curl -s  https://aspire.eccugenai.app/ | grep -c 'learn about money'  # 1 → SSR works
+
+# A session mints
+curl -s -X POST https://aspire.eccugenai.app/v2/session | head -c 200
+
+# The chat route reaches FastAPI and not the renderer. This is the single most
+# important check on this page: unauthenticated, the API answers a JSON 401.
+# HTML back means nginx sent it to the SSR process and chat is broken.
+curl -s -X POST https://aspire.eccugenai.app/v2/chat/stream \
+     -H 'Content-Type: application/json' -d '{}' | head -c 200
+# expect: {"code":"unauthenticated","message":"Please sign in again to keep chatting."}
+
+# The admin API is reachable at /api/admin and the admin PAGE at /admin.
+curl -s -o /dev/null -w '%{http_code}\n' https://aspire.eccugenai.app/api/admin/applications   # 401
+curl -s -o /dev/null -w '%{content_type}\n' https://aspire.eccugenai.app/admin                 # text/html
+
+curl -s https://aspire.eccugenai.app/api/voice/config | head -c 200    # only if VOICE_ENABLED
 ```
 
 Then open the site and send a real message. If voice is on, record something —
@@ -244,6 +364,7 @@ SITE_URL=https://aspire.eccugenai.app
 # BRANCH=main
 # REPO_DIR=/srv/aspire
 # WEB_ROOT=/srv/aspire-web
+# PM2_HOME=/srv/aspire/.pm2
 ```
 
 `SITE_URL` has no default. Without it the script refuses to build rather than
@@ -263,7 +384,7 @@ Changing `EMBEDDINGS_MODEL` or `EMBEDDINGS_PROVIDER` changes the vector
 dimensions and makes the existing store unreadable — delete `data/chroma` and
 re-ingest.
 
-## 8. Deploying on every push
+## 9. Deploying on every push
 
 `.github/workflows/deploy.yml` runs on every push to `main`. It does no
 building of its own — it opens an SSH session and runs the script from the
@@ -275,27 +396,6 @@ One key is involved, in one direction — GitHub reaching the box:
 ```
 GitHub Actions  --ssh(DEPLOY_SSH_KEY)-->  VPS as `aspire`
 VPS             --https---------------->  github.com  (public repo, no credentials)
-```
-
-### If the repository ever becomes private
-
-Skip this while it is public. The VPS would then need its own read-only key:
-generate one owned by `aspire` and add the **public** half at *Settings → Deploy
-keys → Add deploy key* (leave "Allow write access" unchecked):
-
-```bash
-sudo -u aspire ssh-keygen -t ed25519 -N '' -f /srv/aspire/.ssh/id_github
-sudo -u aspire cat /srv/aspire/.ssh/id_github.pub
-
-sudo -u aspire tee -a /srv/aspire/.ssh/config >/dev/null <<'EOF'
-Host github.com
-    IdentityFile /srv/aspire/.ssh/id_github
-    IdentitiesOnly yes
-EOF
-
-# the remote must be the SSH form for that key to be used
-sudo -u aspire git -C /srv/aspire remote set-url origin git@github.com:OWNER/REPO.git
-sudo -u aspire git -C /srv/aspire fetch origin      # accepts the host key, proves it works
 ```
 
 ### GitHub needs to be able to reach the VPS
@@ -319,13 +419,33 @@ a leaked key cannot open an interactive session or forward ports:
 restrict,command="/srv/aspire/deploy/update.sh" ssh-ed25519 AAAA... github-actions
 ```
 
-Then let it restart the two units, and only those:
+That forced command is the whole authorisation story. Under pm2 there is **no
+sudoers rule at all**: the deploy restarts processes owned by the same user it
+logs in as, so a leaked deploy key cannot restart anything else on the box, and
+adding an app to `ecosystem.config.cjs` needs no privilege change. (If you are
+migrating a box that ran the old systemd units, delete
+`/etc/sudoers.d/aspire-deploy` and the units in `/etc/systemd/system/aspire-*`
+once pm2 is serving, or the two will fight for the ports.)
+
+### If the repository ever becomes private
+
+Skip this while it is public. The VPS would then need its own read-only key:
+generate one owned by `aspire` and add the **public** half at *Settings → Deploy
+keys → Add deploy key* (leave "Allow write access" unchecked):
 
 ```bash
-echo 'aspire ALL=(root) NOPASSWD: /usr/bin/systemctl restart aspire-api aspire-web' \
-  | sudo tee /etc/sudoers.d/aspire-deploy
-sudo chmod 440 /etc/sudoers.d/aspire-deploy
-sudo visudo -c
+sudo -u aspire ssh-keygen -t ed25519 -N '' -f /srv/aspire/.ssh/id_github
+sudo -u aspire cat /srv/aspire/.ssh/id_github.pub
+
+sudo -u aspire tee -a /srv/aspire/.ssh/config >/dev/null <<'EOF'
+Host github.com
+    IdentityFile /srv/aspire/.ssh/id_github
+    IdentitiesOnly yes
+EOF
+
+# the remote must be the SSH form for that key to be used
+sudo -u aspire git -C /srv/aspire remote set-url origin git@github.com:OWNER/REPO.git
+sudo -u aspire git -C /srv/aspire fetch origin      # accepts the host key, proves it works
 ```
 
 ### Repository secrets
@@ -352,43 +472,31 @@ from the built bundle, or if either service fails to answer on loopback within
 a minute, and the job goes red.
 
 If the deploy is green but the site is wrong, the box is the place to look —
-`journalctl -u aspire-api -u aspire-web -n 100 --no-pager`.
+`pm2 logs --lines 100 --nostream`.
 
 ### What this does not do
 
 - **Migrations run before the restart and are not rolled back.** A migration
   that drops something the previous version needs makes rollback-by-redeploy
   insufficient. Keep them additive.
-- **In-flight conversations are dropped on every deploy**, for the reason in
-  "Two things that will bite you". Auto-deploy means this now happens on every
-  push to `main` rather than when you chose it.
+- **The turn currently streaming is dropped on every deploy.** Saved history is
+  not: it is in Neon. Auto-deploy means this now happens on every push to
+  `main` rather than when you chose it.
 - **The deploy is gated on tests.** `.github/workflows/deploy.yml` runs a
   `verify` job — typecheck, lint, backend suite, production build — and the
   deploy job will not start unless it passes.
-- **It restarts three units.** `aspire-api`, `aspire-web` and `aspire-worker`.
-  The worker is not optional: `app/jobs.py` registers the retention cron that
-  enforces the 180-day deletion commitment in `backend/PRIVACY.md`, and nothing
-  else runs it. (It also hosts the summarisation job, which only has work when
-  `MEMORY_WINDOW_ENABLED` is on — that flag does not make the unit optional.)
+- **It restarts all three apps**, via `pm2 startOrReload` on
+  `ecosystem.config.cjs`. `aspire-worker` is not optional: `app/jobs.py`
+  registers the retention cron that enforces the 180-day deletion commitment in
+  `backend/PRIVACY.md`, and nothing else runs it. (It also hosts the
+  summarisation job, which only has work when `MEMORY_WINDOW_ENABLED` is on —
+  that flag does not make the app optional.)
 
-  The sudo rule in `/etc/sudoers.d/aspire-deploy` matches the **whole** command,
-  so it must name all three units or the deploy fails closed:
+  Because the deploy uses `startOrReload`, adding an app to the ecosystem file
+  is picked up on the next push with no action on the box.
 
-  ```
-  aspire ALL=(root) NOPASSWD: /usr/bin/systemctl restart aspire-api aspire-web aspire-worker
-  ```
-
-  Installing the worker on an existing box:
-
-  ```sh
-  sudo cp deploy/aspire-worker.service /etc/systemd/system/
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now aspire-worker
-  systemctl status aspire-worker
-  ```
-
-  It will not clear the existing backlog until 03:15. To sweep immediately once,
-  after checking what it would delete:
+  The retention job will not clear an existing backlog until 03:15. To sweep
+  immediately once, after checking what it would delete:
 
   ```sh
   cd /srv/aspire/backend
@@ -398,17 +506,20 @@ If the deploy is green but the site is wrong, the box is the place to look —
 
 ## Operating notes
 
-- **Logs:** `pm2 logs aspire-api` / `pm2 logs aspire-web`, or under systemd
-  `journalctl -u aspire-api -f`.
+- **Logs:** `pm2 logs aspire-api`, `pm2 logs aspire-worker`, `pm2 logs aspire-web`.
+  Remember `PM2_HOME` if you are not in the `aspire` user's shell.
 - **Cost:** every message is several model calls, and transcription is billed
-  per request with keyterms adding 20%. The per-session rate limits in `.env`
-  are abuse dampening, not authentication — there is no auth on this service, so
-  anyone with the URL can spend your API credits. Consider Cloudflare in front,
-  basic auth in nginx, or a private DNS name until that changes.
+  per request with keyterms adding 20%. The per-caller limits in `app/limits.py`
+  are abuse dampening, not authentication — anonymous chat is a supported path,
+  so anyone with the URL can spend your API credits. Consider Cloudflare in
+  front, or a private DNS name, until that changes.
 - **Backups:** `backend/.env` (secrets, not in git) and
-  `backend/data/knowledge_base.csv` (the source of truth). `data/chroma` is
-  derived and can be rebuilt; `data/voice_cache` is disposable.
-- **Memory:** Chroma plus the embedding client wants roughly 1 GB. A 2 GB VPS is
-  comfortable; 1 GB will be tight during ingest.
-- **Scaling past one box** means replacing the in-process checkpointer and rate
-  limiter with shared storage first. Until then, add CPU rather than workers.
+  `backend/data/knowledge_base.csv` (the source of truth). Neon holds the
+  conversations, accounts and applications and has its own backups — check its
+  retention setting. `data/chroma` is derived and can be rebuilt;
+  `data/voice_cache` is disposable.
+- **Memory:** Chroma plus the embedding client wants roughly 1 GB, and Valkey is
+  capped at 256 MB above. A 2 GB VPS is comfortable; 1 GB will be tight during
+  ingest.
+- **Scaling past one box** means moving the rate limiter to Valkey and making it
+  fail closed first. Until then, add CPU rather than workers.

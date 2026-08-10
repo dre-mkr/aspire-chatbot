@@ -54,7 +54,6 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 
-from app.agents.learn.contract import contract_for
 from app.agents.learn.planner import LearnerSnapshot, Move, hint_level, plan_move
 from app.agents.learn.render import RenderResult, TeachContext, decline_text, render_teach
 from app.agents.learn.resolve import ConceptResolution, enqueue_candidate, resolve_concept

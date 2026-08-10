@@ -138,6 +138,33 @@ export function saveConversation(
 	return next;
 }
 
+/**
+ * Drops one conversation from this browser's copy of history.
+ *
+ * Nothing writes that copy any more — history is the service's now, and
+ * `saveConversation` above has no callers. What is still there is everything
+ * written by a build that predates the change, transcripts included, and it
+ * outlives a delete unless something removes it.
+ *
+ * So this is not bookkeeping: it is the difference between deleting a
+ * conversation and deleting the copy of it somebody can see. A reader who
+ * deletes a chat and finds it still in their browser's storage was told
+ * something untrue.
+ */
+export function forgetLocalConversation(threadId: string) {
+	if (!canStore()) return;
+	const next = loadConversations().filter(
+		(conversation) => conversation.threadId !== threadId,
+	);
+	try {
+		window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+	} catch {
+		// Same reasoning as saveConversation: storage is a convenience, and a
+		// quota or a private window must not turn a successful delete into an
+		// error the reader has to act on.
+	}
+}
+
 /** Shown when there is nothing better — never "Untitled", never empty. */
 export const FALLBACK_TITLE = "New chat";
 

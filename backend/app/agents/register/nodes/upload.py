@@ -80,8 +80,21 @@ HELP: dict[str, dict[str, str]] = {
 }
 
 
-def upload_directive(slot: Slot, locale: str, *, label: str | None = None) -> Any:
-    """The card the client renders while the graph is paused."""
+def upload_directive(
+    slot: Slot,
+    locale: str,
+    *,
+    label: str | None = None,
+    application_id: str = "",
+) -> Any:
+    """The card the client renders while the graph is paused.
+
+    `application_id` decides which prefix the uploaded object lands in, so it is
+    the difference between a document that can be read back and one that cannot
+    -- see `UploadDirective.application_id`. It is an id the SERVER already
+    holds, passed down rather than looked up, because the only correct value is
+    the draft the calling node is working on.
+    """
     return UploadDirective(
         slot=slot.path,
         label=label or slot.label,
@@ -92,12 +105,21 @@ def upload_directive(slot: Slot, locale: str, *, label: str | None = None) -> An
         # documents `collect` will accept a skip for. Deriving it here rather
         # than listing paths in the client keeps one definition of optional.
         optional=slot.optional,
+        application_id=application_id,
     )
 
 
-def interrupt_payload(slot: Slot, locale: str, *, label: str | None = None) -> dict[str, Any]:
+def interrupt_payload(
+    slot: Slot,
+    locale: str,
+    *,
+    label: str | None = None,
+    application_id: str = "",
+) -> dict[str, Any]:
     """What `interrupt()` is handed. Mirrors the directive, plus a type tag."""
-    directive = upload_directive(slot, locale, label=label)
+    directive = upload_directive(
+        slot, locale, label=label, application_id=application_id
+    )
     return {"type": "upload_request", **directive_payload(directive)}
 
 
@@ -131,7 +153,20 @@ def make_collect_document(slot: Slot, locale: str, *, label: str | None = None):
     def collect_document(state: Any) -> dict[str, Any]:
         from langgraph.types import interrupt
 
-        raw = interrupt(interrupt_payload(slot, locale, label=label))
+        # The same id `graph._draft` rehydrates from, read straight out of state
+        # because this node holds no draft of its own. Missing it would sign the
+        # upload into the caller's session prefix instead of the application's,
+        # which is the mismatch `UploadDirective.application_id` documents.
+        registration = state.get("registration") if isinstance(state, dict) else None
+        application_id = ""
+        if isinstance(registration, dict):
+            application_id = str(registration.get("application_id") or "")
+
+        raw = interrupt(
+            interrupt_payload(
+                slot, locale, label=label, application_id=application_id
+            )
+        )
         payload = _assert_no_bytes(raw if isinstance(raw, dict) else {})
 
         if payload.get("skipped") and slot.optional:

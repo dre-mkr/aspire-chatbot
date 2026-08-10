@@ -21,6 +21,19 @@ persona grants.
 (Nova has no `servicing_agent`, so it is strictly narrower) and "let me be
 Aurora instead of Stella" does not, without either case being special-cased.
 
+## Age says how to talk to somebody. Role says who they are.
+
+`users.role` -- `participant`, `guardian` or `educator` -- is read here too, and
+it exists because age alone was answering a question it does not know. A teacher
+and a sixteen-year-old born the same week were the same account.
+
+It is a THIRD narrowing input and not a fourth grant. `ROLE_PERSONA` offers a
+persona, `_narrowing` decides whether the band will take it, and a role that
+asks for more than the band already gives is refused exactly as a client's
+request is. A self-declared "guardian" in a child band therefore buys nothing;
+what actually gates the guardian persona is an adult date of birth, refused at
+sign-up by `accounts._role_problem` rather than negotiated here.
+
 ## Not knowing somebody's age means treating them as the youngest
 
 `is_minor` with no `date_of_birth` resolves to `5-8`, the narrowest band in the
@@ -113,6 +126,44 @@ DEFAULT_PERSONA: dict[str, str] = {
     "adult": "aurora",
 }
 
+#: The persona each ROLE prefers -- offered to the band, never imposed on it.
+#:
+#: ## What this fixes
+#:
+#: The table above is keyed on age alone, which is right for a participant and
+#: has nothing to say about anybody else. A teacher and a sixteen-year-old with
+#: the same birthday were the same account, and the only way to be Nova was to
+#: ask for it by hand on every session.
+#:
+#: ## What it deliberately cannot do
+#:
+#: Widen. The preference is put through `_narrowing` exactly as a client's
+#: request is, so it is honoured only when it grants no more than the band's own
+#: persona already does. Worked through, because the whole safety of a
+#: self-declared role rests on it:
+#:
+#:   educator + adult   -> nova ⊂ aurora, honoured.
+#:   educator + 13-15   -> nova has full `qa_agent`, Orion 13-15 has
+#:                         `qa_agent_limited`. WIDER, so refused: a
+#:                         fourteen-year-old who ticks "teacher" still gets the
+#:                         band-filtered knowledge base.
+#:   guardian + adult   -> aurora is already the band's default. No change.
+#:   guardian + 16-18   -> aurora carries `register_agent`. WIDER, so refused.
+#:
+#: That last row is why `accounts._role_problem` refuses the sign-up outright
+#: rather than letting it through to be quietly downgraded here. An account in
+#: that state is not repairable from inside the product -- it is exactly the
+#: state that produced the refusal this change came from -- so it is better not
+#: to create it than to explain it afterwards.
+#:
+#: `participant` is absent rather than mapped to a persona: it has no preference
+#: of its own, and the band decides. A `.get` miss and an explicit "no
+#: preference" would be the same value, so only one of them is written down.
+ROLE_PERSONA: dict[str, str] = {
+    "guardian": "aurora",
+    "educator": "nova",
+}
+
 
 def _narrowing(
     requested: str, derived: str, *, age_band: str, account_status: str
@@ -134,17 +185,52 @@ def _narrowing(
     return bool(mine) and mine <= theirs
 
 
+def persona_for(
+    age_band: str, role: str | None, *, account_status: str = "prospect"
+) -> str:
+    """The persona this band and role resolve to, before any client request.
+
+    Split out of `derive` because two callers need the answer without needing
+    the rest of the claims: `sessions.to_session`, which tells the client which
+    persona its account will get so the picker can be right on first paint, and
+    `derive` itself.
+
+    `account_status` is asked for and passed through to `allowed_agents` rather
+    than assumed, even though no row in the matrix currently branches on it.
+    Defaulting it here would put a "status does not matter" assumption in a
+    second file, and it is not this function's assumption to make.
+    """
+    persona = DEFAULT_PERSONA.get(age_band, "aurora")
+    preferred = ROLE_PERSONA.get(str(role or "participant"))
+    if (
+        preferred
+        and preferred != persona
+        and _narrowing(
+            preferred, persona, age_band=age_band, account_status=account_status
+        )
+    ):
+        return preferred
+    return persona
+
+
 def derive(
     *,
     born: date | None,
     is_minor: bool,
     account_status: str,
+    role: str | None = None,
     requested_persona: str | None = None,
     today: date | None = None,
 ) -> DerivedClaims:
-    """The claims for one session, from the account record and nothing else."""
+    """The claims for one session, from the account record and nothing else.
+
+    Two narrowings happen here and they compose in this order: the account's
+    ROLE may narrow away from the band's default, and then the client's REQUEST
+    may narrow again from wherever that landed. Both go through `_narrowing`, so
+    neither can widen and the second cannot undo the first's limits.
+    """
     age_band = band_for(born, is_minor=is_minor, today=today)
-    persona = DEFAULT_PERSONA.get(age_band, "aurora")
+    persona = persona_for(age_band, role, account_status=account_status)
     refused = False
 
     if requested_persona and requested_persona != persona:
@@ -219,6 +305,7 @@ async def claims_for(
                         SELECT u.date_of_birth,
                                u.is_minor,
                                u.account_type,
+                               u.role,
                                (
                                  SELECT a.status
                                    FROM applications a
@@ -250,19 +337,26 @@ async def claims_for(
             persona="stella", age_band=YOUNGEST_BAND, account_status="prospect"
         )
 
-    born, is_minor, _account_type, application_status = row
+    born, is_minor, _account_type, role, application_status = row
     status = _STATUS_FROM_APPLICATION.get(str(application_status or ""), "prospect")
 
-    # An adult who has an application in flight is a guardian applying for a
-    # child, not an applicant for themselves: the registration schema collects
-    # a guardian and one or more children, and there is no self-application.
+    # Somebody with an application in flight who is not themselves the child is
+    # a guardian applying, not an applicant for themselves: the registration
+    # schema collects a guardian and one or more children, and there is no
+    # self-application.
+    #
+    # The stored role answers this directly now. The band test stays beside it
+    # and is not redundant: every account created before migration 0017 was
+    # backfilled to `participant`, so an existing guardian is recognisable only
+    # by their adult band. Dropping it would silently demote them.
     band = band_for(born, is_minor=bool(is_minor))
-    if band == "adult" and status in ("applicant", "beneficiary"):
+    if status in ("applicant", "beneficiary") and (role == "guardian" or band == "adult"):
         status = "guardian"
 
     return derive(
         born=born,
         is_minor=bool(is_minor),
         account_status=status,
+        role=role,
         requested_persona=requested_persona,
     )

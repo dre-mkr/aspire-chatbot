@@ -952,7 +952,14 @@ body {
 .row-menu {
 	position: fixed;
 	z-index: 40;
-	min-width: 168px;
+	/* Fixed rather than min-width, and that is about the confirmation. The menu
+	   has two faces — four actions, or a sentence and two answers — and a width
+	   that fitted each of them would slide the whole popover sideways at the
+	   moment somebody is being asked to confirm a delete, which is the worst
+	   possible moment to move a button. One width, wide enough to wrap the
+	   sentence at a readable measure and narrow enough to sit inside the rail.
+	   `Rail.tsx` measures the result rather than repeating the number. */
+	width: 236px;
 	padding: 6px;
 	border: 1px solid var(--wash-12);
 	border-radius: 14px;
@@ -989,6 +996,46 @@ body {
 .row-menu__item svg {
 	flex-shrink: 0;
 	color: var(--quiet);
+}
+
+/* Delete. Red, and fenced off by a rule above it: everything else in this menu
+   is reversible or additive, and this one is neither. The hairline is what
+   stops a slipped click on "Save chat" landing one item lower. */
+.row-menu__item--danger {
+	margin-top: 5px;
+	border-top: 1px solid var(--hairline);
+	border-radius: 0 0 10px 10px;
+	padding-top: 5px;
+	color: var(--danger);
+}
+
+.row-menu__item--danger:hover {
+	background: var(--danger-wash);
+}
+
+.row-menu__item--danger svg {
+	color: currentcolor;
+}
+
+/* While the question is up, the destructive answer is one of two ordinary
+   items and needs no separator of its own — the sentence above is the fence. */
+.row-menu__confirm + .row-menu__item--danger {
+	margin-top: 0;
+	border-top: 0;
+	border-radius: 10px;
+	padding-top: 0;
+}
+
+/* Says what is actually about to happen, in the words a reader would use. The
+   same shape as `.account__confirm`, deliberately: this product asks "are you
+   sure" in exactly two places and they should not look like two products. */
+.row-menu__confirm {
+	margin: 0;
+	padding: 4px 10px 8px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	color: var(--prose);
+	text-wrap: pretty;
 }
 
 .history-item {
@@ -5341,6 +5388,63 @@ body {
 	background: var(--wash-6);
 	color: var(--plum);
 	font-weight: 600;
+}
+
+/* The role picker: the first thing sign-up asks, and the answer the rest of
+   the form is shaped by.
+
+   Stacked full-width rather than the pill row above, because each option needs
+   a sentence under it. "I'm a parent or guardian" and "I'm joining ASPIRE" are
+   not distinguishable enough at pill size to be worth the horizontal saving —
+   and choosing wrong here produces an account that cannot be repaired from
+   inside the product. */
+.auth__roles {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.auth__role {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 14px 16px;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	background: #fff;
+	color: var(--ink);
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color 150ms var(--ease),
+		background 150ms var(--ease);
+}
+
+.auth__role:hover {
+	border-color: var(--plum);
+}
+
+.auth__role[data-selected] {
+	border-color: var(--plum);
+	background: var(--wash-6);
+}
+
+.auth__role-label {
+	font-size: 0.9375rem;
+	font-weight: 500;
+}
+
+.auth__role[data-selected] .auth__role-label {
+	color: var(--plum);
+	font-weight: 600;
+}
+
+.auth__role-blurb {
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--quiet);
+	text-wrap: pretty;
 }
 
 .auth__reqs {

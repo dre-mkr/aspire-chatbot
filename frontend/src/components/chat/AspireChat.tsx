@@ -9,7 +9,7 @@ import {
 	useState,
 } from "react";
 import { AccountControl } from "#/components/auth/AccountControl";
-import { MenuIcon } from "#/components/icons";
+import { CloseIcon, MenuIcon } from "#/components/icons";
 import {
 	clearEligibilityResult,
 	type EligibilityState,
@@ -23,7 +23,11 @@ import {
 	titleFor,
 } from "#/lib/aspire/history";
 import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
-import type { PersonaId } from "#/lib/aspire/personas";
+import {
+	asPersonaId,
+	type PersonaId,
+	personaById,
+} from "#/lib/aspire/personas";
 import {
 	conversationQuery,
 	eligibilityStateQuery,
@@ -32,7 +36,9 @@ import {
 	readConversation,
 } from "#/lib/aspire/queries";
 import { useConversation } from "#/lib/aspire/use-conversation";
+import { useSession } from "#/lib/aspire/use-session";
 import { useVoice } from "#/lib/aspire/use-voice";
+import { onPersonaRefused } from "#/lib/stream/session";
 import { useMediaQuery } from "#/lib/use-media-query";
 import type { ShellSearch } from "#/routes/_shell";
 import { ChatTitleBar } from "./ChatTitleBar";
@@ -118,7 +124,31 @@ export function AspireChat() {
 		persona: personaParam,
 		lang,
 	} = useSearch({ from: "/_shell" });
-	const persona = personaParam ?? null;
+
+	/**
+	 * The persona the signed-in account resolves to, derived server-side.
+	 *
+	 * Used as the default when the address does not name one, which is what
+	 * makes the control show the right assistant on arrival instead of
+	 * "Everyone". Sign-up asks for a date of birth and a role and then decides
+	 * this; leaving the reader to find the same answer in a menu afterwards was
+	 * asking them to guess something already known — and guessing wrong is how a
+	 * 16-18 account ends up requesting Aurora and being refused.
+	 *
+	 * An explicit `?persona=` still wins. Somebody who has chosen is not
+	 * overridden on the next render, and a shared link keeps meaning what it
+	 * said.
+	 *
+	 * REGISTERED accounts only. An anonymous session has no date of birth and no
+	 * role, so there is nothing to derive from — the service reports the
+	 * narrowest persona for such a row rather than guess, and adopting that here
+	 * would put every first-time visitor on the five-year-old's mascot. "Everyone"
+	 * is a real answer and the correct one until somebody has said who they are.
+	 */
+	const { session } = useSession();
+	const accountPersona =
+		session?.accountType === "registered" ? asPersonaId(session.persona) : null;
+	const persona = personaParam ?? accountPersona ?? null;
 	/**
 	 * The language each eligibility check opened in, by thread.
 	 *
@@ -145,12 +175,14 @@ export function AspireChat() {
 		animateAfterId,
 		send,
 		sendInteraction,
+		sendUploadResult,
 		regenerate,
 		stop,
 		openPast,
 		reset,
 		renameChat,
 		regenerateTitle,
+		deleteChat,
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
 		persona,
@@ -252,6 +284,38 @@ export function AspireChat() {
 		},
 		[navigate],
 	);
+
+	/**
+	 * A persona the server would not grant, said out loud and then corrected.
+	 *
+	 * The failure this replaces was silent. The picker wrote `?persona=aurora`,
+	 * the server derived Orion for a 16-18 account and logged a warning nobody
+	 * on this side saw, and the control kept displaying Aurora over a session
+	 * that was not Aurora. Asking to register then produced advice to select
+	 * Aurora — the thing that had just been refused, twice.
+	 *
+	 * So the address is corrected to what was actually granted, and the reason
+	 * is shown rather than left as a control that silently sprang back. Refusal
+	 * is a decision about the account, not a glitch, and it is the sort of thing
+	 * a reader has to be told once to stop retrying.
+	 */
+	const [personaNotice, setPersonaNotice] = useState<string | null>(null);
+	useEffect(() => {
+		return onPersonaRefused(({ requested, granted }) => {
+			const grantedId = asPersonaId(granted);
+			const requestedName =
+				personaById(asPersonaId(requested))?.name ?? requested;
+			const grantedName = personaById(grantedId)?.name ?? granted;
+			setPersonaNotice(
+				`${requestedName} is not available on this account, so answers stay with ${grantedName}.`,
+			);
+			// Corrected rather than left disagreeing with the session. Without
+			// this the control re-requests the refused persona on every new
+			// thread, and every one of them is refused again.
+			setPersona(grantedId);
+		});
+	}, [setPersona]);
+
 	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
 
@@ -611,12 +675,19 @@ export function AspireChat() {
 	 * interrupted registration with a document id -- and the transcript does not
 	 * own the conversation.
 	 *
-	 * `onUpload`, `onEditSlot` and `onSubmit` all send an ordinary message. That
-	 * is not a shortcut: the registration subgraph is a slot walk driven by what
-	 * the parent says, and the graph resumes an upload from the document id in
-	 * that message. A second, structured resume channel would be a second way to
-	 * advance a form, and forms with two ways to advance are how a slot gets
-	 * filled twice.
+	 * `onEditSlot` and `onSubmit` send an ordinary message, because the slots
+	 * they act on are a walk driven by what the parent says.
+	 *
+	 * `onUpload` CANNOT, and this used to say the opposite. A document slot
+	 * suspends the graph inside `interrupt()`, and a suspended node is continued
+	 * only by `Command(resume=...)`; an ordinary message re-enters at START and
+	 * asks for the first slot again. So the worry recorded here -- that a second
+	 * resume channel is a second way to advance a form -- had it backwards. There
+	 * is exactly one way to answer a paused upload, prose is not it, and sending
+	 * prose is what made registration unfinishable: every parent who reached the
+	 * ID photo was sent back to "What is your full name?" and looped there.
+	 * Measured against the running server, prose restarted the form and
+	 * `__upload_result` advanced it. See the matching note in `api/stream.py`.
 	 */
 	const directiveContext = useMemo(
 		() => ({
@@ -628,8 +699,10 @@ export function AspireChat() {
 				// reference the real numbers -- "well done" after 2 out of 8 is the
 				// same nothing as no reply at all.
 				ask(`I scored ${result.score} out of ${result.max_score}.`),
-			onUpload: (slot: string, documentId: string) =>
-				ask(`I uploaded ${slot}: ${documentId}`),
+			onUpload: (
+				_slot: string,
+				result: { document_id: string; mime: string; size_bytes: number },
+			) => sendUploadResult(result),
 			onEditSlot: (slot: string) => ask(`I need to change ${slot}.`),
 			onSubmit: () => ask("Submit my application."),
 			onSpeak: (text: string) => voice.play(ELIGIBILITY_SPEECH_ID, text),
@@ -640,6 +713,7 @@ export function AspireChat() {
 			threadId,
 			ask,
 			sendInteraction,
+			sendUploadResult,
 			voice.play,
 			voice.available,
 			voice.language,
@@ -868,6 +942,43 @@ export function AspireChat() {
 			: "ASPIRE AI · Financial literacy assistant";
 	}, [activeTitle]);
 
+	/**
+	 * Deletes one conversation, and leaves it if it is the one on screen.
+	 *
+	 * The rail has already asked; by the time this runs the answer was yes.
+	 *
+	 * Three things happen and only the first is the obvious one. `deleteChat`
+	 * removes it from the rail and from the service. The two lines above it
+	 * clear the parts of this conversation that were deliberately never sent to
+	 * the service — the eligibility verdict, the ticked document checklist, and
+	 * an unsent draft — all of them keyed by thread and none of them reachable
+	 * from anything the delete touches. A delete that leaves a minor's verdict
+	 * sitting in this browser has not deleted the conversation.
+	 */
+	const handleDeleteConversation = useCallback(
+		(conversation: StoredConversation) => {
+			const open = conversation.threadId === threadId;
+
+			clearEligibilityResult(conversation.threadId);
+			drafts.current.delete(conversation.threadId);
+			deleteChat(conversation.threadId);
+
+			if (!open) return;
+			setDrawerOpen(false);
+			// Everything else follows from the address: no chat id means the
+			// reconciler stops the audio, drops the cards, aborts a turn still in
+			// flight and resets the surface. `replace`, so Back does not walk into
+			// an id that no longer resolves — which would bounce straight back here
+			// through the reconciler's own not-found path.
+			void navigate({
+				to: "/",
+				search: (previous: ShellSearch) => previous,
+				replace: true,
+			});
+		},
+		[threadId, deleteChat, navigate],
+	);
+
 	const handleSaveConversation = useCallback(
 		(conversation: StoredConversation) => {
 			const live = conversation.threadId === threadId && messages.length > 0;
@@ -910,6 +1021,7 @@ export function AspireChat() {
 					onRegenerateTitle={(conversation) =>
 						regenerateTitle(conversation.threadId)
 					}
+					onDeleteConversation={handleDeleteConversation}
 				/>
 
 				{drawerModal ? (
@@ -1094,6 +1206,27 @@ export function AspireChat() {
 									onAction={voice.runNoteAction}
 									onDismiss={voice.dismissNote}
 								/>
+							</div>
+						) : null}
+
+						{/* Sits directly above the picker that caused it, in the slot
+						    the voice notes use — the control and the explanation for
+						    what it just did should not be at opposite ends of the
+						    screen. `output` for the same reason VoiceNote uses one:
+						    it announces the result of something the user just did. */}
+						{personaNotice ? (
+							<div className="voice-slot">
+								<output className="voice-note" data-tone="warn">
+									<span className="voice-note__text">{personaNotice}</span>
+									<button
+										type="button"
+										className="icon-btn icon-btn--sm"
+										onClick={() => setPersonaNotice(null)}
+									>
+										<CloseIcon />
+										<span className="sr-only">Dismiss</span>
+									</button>
+								</output>
 							</div>
 						) : null}
 

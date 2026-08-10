@@ -219,3 +219,133 @@ def test_an_unknown_persona_is_refused():
 
     assert claims.persona == "aurora"
     assert claims.persona_request_refused
+
+
+# ── the role ─────────────────────────────────────────────────────────────────
+#
+# These exist because of a second live lockout, of the same shape as the one at
+# the top of this file: two halves each correct, nothing connecting them until a
+# real session was run.
+#
+# Sign-up asked for one date of birth in the second person and derived the
+# persona from it. A parent filling it in for a child produced a child-band
+# account, and `register_agent` lives on `aurora` alone -- so the parent could
+# not switch to it, could not apply, and could not repair it from anywhere in
+# the product. Observed:
+#
+#     WARNING app.api.stream: Refused a request for persona 'aurora'
+#     on a 16-18 band session.
+
+
+def test_a_guardian_account_gets_the_guardian_persona():
+    claims = account.derive(
+        born=date(1990, 1, 1),
+        is_minor=False,
+        account_status="guardian",
+        role="guardian",
+    )
+
+    assert claims.persona == "aurora"
+    assert "register_agent" in allowed_agents(
+        claims.persona, claims.age_band, claims.account_status, user_id="derivation"
+    )
+
+
+def test_an_educator_gets_nova_without_asking_for_it_every_session():
+    """The role picks the persona; the picker is no longer the only route to it."""
+    claims = account.derive(
+        born=date(1990, 1, 1),
+        is_minor=False,
+        account_status="prospect",
+        role="educator",
+    )
+
+    assert claims.persona == "nova"
+
+
+@pytest.mark.parametrize(
+    ("born", "role", "expected"),
+    [
+        # A self-declared guardian in a teen band. `aurora` carries
+        # `register_agent`, which Orion 16-18 does not, so the role is refused
+        # and the band's own persona stands.
+        (date(2009, 1, 1), "guardian", "orion"),
+        # A self-declared educator in a teen band. `nova` has the UNFILTERED
+        # `qa_agent` where Orion 13-15 has `qa_agent_limited` -- wider, so
+        # refused. This is the one worth being sure of: it is the case where
+        # ticking a box would otherwise remove a knowledge-base filter from a
+        # fourteen-year-old.
+        (date(2012, 1, 1), "educator", "orion"),
+        (date(2018, 1, 1), "guardian", "stella"),
+        (date(2018, 1, 1), "educator", "stella"),
+    ],
+)
+def test_a_role_can_never_widen_what_the_band_grants(born, role, expected):
+    claims = account.derive(
+        born=born,
+        is_minor=True,
+        account_status="prospect",
+        role=role,
+        today=date(2026, 8, 5),
+    )
+
+    assert claims.persona == expected
+
+
+def test_a_role_narrows_before_a_request_narrows_again():
+    """The two narrowings compose, and neither may undo the other's limit."""
+    claims = account.derive(
+        born=date(1990, 1, 1),
+        is_minor=False,
+        account_status="guardian",
+        role="educator",          # aurora -> nova
+        requested_persona="aurora",  # and back? no.
+    )
+
+    assert claims.persona == "nova"
+    assert claims.persona_request_refused
+
+
+def test_an_absent_role_behaves_exactly_as_before_the_column_existed():
+    """Every row backfilled by migration 0017 is a `participant`.
+
+    Asserted rather than assumed, because the backfill is what stands between
+    this change and every account created before it.
+    """
+    for band_born, expected in (
+        (date(2018, 1, 1), "stella"),  # 8  -> 5-8
+        (date(2015, 1, 1), "stella"),  # 11 -> 9-12
+        (date(2012, 1, 1), "orion"),  # 14 -> 13-15
+        (date(2009, 1, 1), "orion"),  # 17 -> 16-18
+        (date(1990, 1, 1), "aurora"),  # adult
+    ):
+        without = account.derive(
+            born=band_born,
+            is_minor=True,
+            account_status="prospect",
+            today=date(2026, 8, 5),
+        )
+        participant = account.derive(
+            born=band_born,
+            is_minor=True,
+            account_status="prospect",
+            role="participant",
+            today=date(2026, 8, 5),
+        )
+        assert without.persona == participant.persona == expected
+
+
+def test_persona_for_agrees_with_derive():
+    """`sessions.to_session` shows the reader what `derive` will actually mint.
+
+    Two functions answering one question is how the 9-12 lockout happened. This
+    pins them together for every band and role rather than trusting that the
+    display copy was kept in step.
+    """
+    for band in sorted(account.DEFAULT_PERSONA):
+        for role in ("participant", "guardian", "educator", None):
+            shown = account.persona_for(band, role)
+            assert allowed_agents(shown, band, "prospect", user_id="derivation"), (
+                f"persona_for({band!r}, {role!r}) returned {shown!r}, which the "
+                f"matrix grants no agents for"
+            )

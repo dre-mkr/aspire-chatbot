@@ -143,6 +143,12 @@ def test_one_identity_cannot_rename_anothers_conversation(client: TestClient):
     assert response.status_code == 404
 
 
+# The fourth verb, DELETE, is covered in `test_conversation_delete.py` rather
+# than repeated here: the same 404-not-403 rule applies to it, and that file
+# also asserts the part unique to deleting -- that a refused attempt purges
+# nothing outside the conversations table either.
+
+
 # ── the token itself ─────────────────────────────────────────────────────────
 
 

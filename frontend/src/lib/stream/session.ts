@@ -38,6 +38,8 @@ export interface GraphSession {
 	ageBand: string;
 	accountStatus: string;
 	locale: string;
+	/** True when `persona` is not the one that was asked for. See `onPersonaRefused`. */
+	personaRefused: boolean;
 }
 
 /** In-memory, per tab, per thread. Cleared by a reload, which is correct. */
@@ -53,6 +55,36 @@ export function forget(threadId: string): void {
 export function forgetAll(): void {
 	held.clear();
 	minting.clear();
+}
+
+export interface PersonaRefusal {
+	/** What the client asked for. */
+	requested: string;
+	/** What it got instead, and what every turn will actually run as. */
+	granted: string;
+}
+
+/**
+ * Told when the server declines a persona request.
+ *
+ * This exists because the refusal used to be invisible on this side. The picker
+ * writes `?persona=aurora`, `mint` sends it, the server derives Orion for a
+ * 16-18 account and returns Orion — and nothing reconciled the two, so the
+ * control went on claiming a persona the session did not have. The reader then
+ * followed advice to "choose Aurora", which is what they had already done.
+ *
+ * A single listener rather than a set: there is one persona control on screen,
+ * and a broadcast would invite two of them to both try to correct the URL.
+ */
+let refusedListener: ((refusal: PersonaRefusal) => void) | null = null;
+
+export function onPersonaRefused(
+	listener: (refusal: PersonaRefusal) => void,
+): () => void {
+	refusedListener = listener;
+	return () => {
+		if (refusedListener === listener) refusedListener = null;
+	};
 }
 
 /**
@@ -112,7 +144,16 @@ async function mint(
 		age_band?: string;
 		account_status?: string;
 		locale?: string;
+		persona_refused?: boolean;
 	};
+
+	const granted = body.persona ?? "stella";
+
+	// Announced before the session is returned, so the control is corrected in
+	// the same tick the token arrives rather than a render later.
+	if (body.persona_refused && options.persona && refusedListener) {
+		refusedListener({ requested: options.persona, granted });
+	}
 
 	return {
 		token: body.token,
@@ -121,9 +162,10 @@ async function mint(
 		// what the client draws — the server re-reads its own claims from the
 		// token on every request — but a client that guessed "adult" would draw
 		// an adult's interface for a child while the server served a child's.
-		persona: body.persona ?? "stella",
+		persona: granted,
 		ageBand: body.age_band ?? "5-8",
 		accountStatus: body.account_status ?? "prospect",
 		locale: body.locale ?? options.locale ?? "en",
+		personaRefused: body.persona_refused ?? false,
 	};
 }

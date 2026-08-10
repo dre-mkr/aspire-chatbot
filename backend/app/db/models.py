@@ -156,10 +156,28 @@ class User(Base):
     )
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Who this account is for, asked at sign-up rather than inferred.
+    #
+    # `date_of_birth` alone could not answer it. The form asks for one date in
+    # the second person, so a parent filling it in for a child had two readings
+    # of the same field -- and entering the child's date created an account in a
+    # child band that could never reach registration, because `register_agent`
+    # lives on `aurora` alone and `aurora` is not narrower than a child band's
+    # persona. Asking is the fix; see migration 0017.
+    #
+    # Grants nothing by itself. `access.allowed_agents` does not read this
+    # column. It picks a candidate persona which must still survive
+    # `account._narrowing` -- and a `guardian` account requires an adult date of
+    # birth at sign-up, which is what makes the claim cost something.
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="participant")
+
     # What sign-up collects. All nullable: nothing in the product requires them
     # to be filled in order to hold an account.
     first_name: Mapped[str | None] = mapped_column(Text)
     last_name: Mapped[str | None] = mapped_column(Text)
+    # The date of birth of the person the account is FOR, which `role` now
+    # disambiguates: a guardian's own, not the child they are applying for. The
+    # child's dates belong to the application, in `application_pii`.
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     # Stored rather than recomputed on every read, so a birthday cannot change
     # what somebody is allowed to see half-way through a session.

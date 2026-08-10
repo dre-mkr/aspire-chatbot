@@ -275,17 +275,76 @@ def _parse_national_id(raw: str) -> tuple[Any, str | None]:
     return text, None
 
 
+def _fold(text: str) -> str:
+    """One spelling, out of the many people actually use.
+
+    Case, punctuation and spacing all vary. So does `St.` against `Saint`,
+    which on a St Kitts and Nevis form is not an edge case: it is how most
+    people write most of the fourteen, and a plain substring test misses every
+    one of them for the sake of a full stop.
+    """
+    text = text.lower().replace("'", "").replace("’", "")
+    text = re.sub(r"[^a-z0-9]+", " ", text).strip()
+    return re.sub(r"\b(st|ste|snt)\b", "saint", text)
+
+
+def _tokens_fit(answer: str, option: str) -> bool:
+    """Whether every word typed corresponds to a word in the option.
+
+    Prefixes count in either direction, so `Saint Peter`, `st peter basseterre`
+    and `saint peters basseterre` all reach `Saint Peter Basseterre`. Order is
+    not required either, because `Cayon Saint Mary` is the same answer as
+    `Saint Mary Cayon` and a parent should not have to know which way round we
+    wrote it.
+    """
+    words = option.split()
+    return all(
+        any(
+            token == word
+            or (len(token) >= 3 and word.startswith(token))
+            or (len(word) >= 3 and token.startswith(word))
+            for word in words
+        )
+        for token in answer.split()
+    )
+
+
 def _one_of(options: tuple[str, ...]):
     def parse(raw: str) -> tuple[Any, str | None]:
         text = raw.strip().lower()
         for option in options:
             if text == option.lower():
                 return option, None
-        # Loose match, because a parent types "Cayon" for "Saint Mary Cayon"
-        # and refusing that is refusing the right answer on a technicality.
-        matches = [option for option in options if text and text in option.lower()]
+
+        # Everything below is the loose path, because a parent types "Cayon"
+        # for "Saint Mary Cayon" -- or "St. Peter Basseterre", which differs
+        # from the stored name by one full stop -- and refusing the right
+        # answer on a technicality strands them on this question with a chip
+        # list that only shows four of the fourteen.
+        answer = _fold(raw)
+        if not answer:
+            return None, "not one of the options"
+
+        folded = {option: _fold(option) for option in options}
+        for option, name in folded.items():
+            if answer == name:
+                return option, None
+
+        matches = [
+            option
+            for option, name in folded.items()
+            # `name in answer` catches the other direction: the official list
+            # writes two of the Nevis parishes with a "(Nevis)" suffix, and
+            # "I live in Saint Mary Cayon" is a sentence, not a mistake.
+            if answer in name or name in answer or _tokens_fit(answer, name)
+        ]
         if len(matches) == 1:
             return matches[0], None
+        if len(matches) > 1:
+            # "Basseterre" is two parishes and "Saint George" is two more.
+            # Guessing between them would put the wrong parish on a form that
+            # nobody reads back to the parent.
+            return None, f"matches more than one of: {', '.join(matches)}"
         return None, "not one of the options"
 
     return parse
@@ -434,9 +493,14 @@ GUARDIAN_SLOTS: tuple[Slot, ...] = (
             "fr": "Et quelle paroisse ?",
         },
         reask={
-            "en": "I did not recognise that parish. Tap one of the options.",
-            "es": "No reconocí esa parroquia. Toca una de las opciones.",
-            "fr": "Je n'ai pas reconnu cette paroisse. Touche une des options.",
+            # Not "tap one of the options": there are fourteen parishes and the
+            # chips only ever show four, so for ten of them tapping is not
+            # something the parent can do. It also has to cover the answer that
+            # was understood but is ambiguous -- "Saint George" is two parishes,
+            # and "I did not recognise that" is the wrong thing to say about it.
+            "en": "I need the full parish name — like Saint Mary Cayon. You can type it, or tap one of the options.",
+            "es": "Necesito el nombre completo de la parroquia — por ejemplo Saint Mary Cayon. Puedes escribirlo o tocar una de las opciones.",
+            "fr": "Il me faut le nom complet de la paroisse — par exemple Saint Mary Cayon. Tu peux l'écrire ou toucher une des options.",
         },
         parse=_one_of(PARISHES),
         options=PARISHES,

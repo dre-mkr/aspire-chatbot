@@ -190,6 +190,21 @@ export function PencilIcon(props: IconProps) {
 	);
 }
 
+/* Delete, in the rail's row menu. A lidded bin rather than an X or a minus:
+   both of those read as "close" or "remove from this list", and this one is
+   permanent — the glyph should say so before the confirmation does. */
+export function TrashIcon(props: IconProps) {
+	return (
+		<Icon size={16} {...props}>
+			<path d="M4 7h16" />
+			<path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
+			<path d="M6.5 7l.8 11a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9l.8-11" />
+			<path d="M10.5 11v5.5" />
+			<path d="M13.5 11v5.5" />
+		</Icon>
+	);
+}
+
 /* The per-conversation overflow trigger in the rail. Filled dots rather than
    stroked circles: at 17px a 1.8px stroke on a 1.6px radius closes up into a
    smudge. */

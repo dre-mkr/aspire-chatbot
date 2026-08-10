@@ -109,6 +109,175 @@ class TestTheUploadRequestReachesTheClient:
         assert await _pending_interrupts(graph, {}) == []
 
 
+class TestTheObjectIsWhereTheRowSaysItIs:
+    """The signed upload and the recorded key must name the same object.
+
+    They did not. The card asked `/v2/documents/presign` for a URL without an
+    `application_id`, so the endpoint fell back to the caller's SESSION id and
+    signed a PUT to `applications/<session>/<slot>/<doc>`. `_record_document`
+    then wrote the row with `storage_key_for(draft.application_id, ...)` --
+    `applications/<application>/<slot>/<doc>`. `store.new_draft` mints the
+    application id as a fresh UUID, so the two are never equal.
+
+    Both halves reported success. The PUT returned 200, the row was inserted,
+    the parent was told "Got it, thank you." The 404 waited until `doc_check`
+    read the document or an admin opened it -- for every document ever uploaded.
+
+    The `payload["storage_key"]` fallback in `_record_document` could not save
+    it either: the resume path is a plain text message ("I uploaded <slot>:
+    <id>"), so no key, mime or size ever reaches the graph.
+
+    These tests are written as a ROUND TRIP -- derive the key from what the
+    client is actually told, and compare it to what the database is actually
+    given -- because that is the only form that would have failed before. Each
+    half on its own was self-consistent and passed review.
+    """
+
+    @staticmethod
+    def _draft():
+        from datetime import date
+
+        from app.agents.register import schema as rs
+        from app.agents.register import store
+
+        values = {}
+        for slot in rs.GUARDIAN_SLOTS:
+            if slot.document:
+                continue
+            values[slot.path] = (
+                date(1985, 3, 14) if slot.path == "guardian.date_of_birth" else "x"
+            )
+        return store.Draft(
+            # Deliberately not the session id the state below carries. That is
+            # the whole point: `new_draft` mints a UUID, and no session id is one.
+            application_id="11111111-2222-3333-4444-555555555555",
+            resume_token="t",
+            values=values,
+        )
+
+    @staticmethod
+    async def _pause_on_the_document(draft):
+        """Drive the real graph to the first document slot and return its card."""
+        from langchain_core.messages import HumanMessage
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        from app.agents.register import graph as rg
+        from app.graph.state import initial_state
+
+        async def loader(token: str):
+            return draft
+
+        graph = rg.build_register_graph(
+            loader=loader, recorder=rg._record_document, checkpointer=InMemorySaver()
+        )
+        state = initial_state(
+            session_id="s-reg",
+            user_id="u-reg",
+            device_id="d",
+            persona="aurora",
+            age_band="adult",
+            account_status="guardian",
+        )
+        state["messages"] = [HumanMessage(content="hi")]
+        state["active_agent"] = "register_agent"
+        state["safety_flags"] = {"resume_token": "t"}
+
+        config = {"configurable": {"thread_id": "documents-1"}}
+        await graph.ainvoke(state, config)
+        directive = (await _pending_interrupts(graph, config))[0]
+        return graph, config, directive
+
+    @pytest.mark.anyio
+    async def test_the_card_is_told_which_application_to_upload_into(self):
+        """The regression, at the point it becomes visible to the client.
+
+        `_pending_interrupts` is the real path the payload takes to the browser,
+        so this asserts on the directive as rendered rather than on the node's
+        return value.
+        """
+        draft = self._draft()
+
+        _graph, _config, directive = await self._pause_on_the_document(draft)
+
+        assert directive["t"] == "upload"
+        assert directive["slot"] == "guardian.id_document"
+        assert directive["application_id"] == draft.application_id
+        assert directive["application_id"] != "s-reg", (
+            "the card was told the session id, which is what the presign "
+            "endpoint already defaults to -- the bug, restored"
+        )
+
+    @pytest.mark.anyio
+    async def test_the_recorded_key_is_the_key_the_upload_was_signed_for(
+        self, monkeypatch
+    ):
+        """The round trip, end to end: sign where the row will point.
+
+        `storage_key_for` is called here with exactly what the endpoint would
+        call it with -- the `application_id` off the directive -- so this is the
+        real key the browser PUT to, not a restatement of the recorder's own
+        arithmetic.
+        """
+        from langgraph.types import Command
+
+        from app.agents.register import store
+        from app.storage.presign import storage_key_for
+
+        draft = self._draft()
+        graph, config, directive = await self._pause_on_the_document(draft)
+
+        written: list[dict] = []
+
+        async def _capture(_draft, rows):
+            written.extend(rows)
+
+        monkeypatch.setattr(store, "record_documents", _capture)
+
+        document_id = "d3adb33f000000000000000000000000"
+        signed_key = storage_key_for(
+            directive["application_id"], directive["slot"], document_id
+        )
+
+        await graph.ainvoke(
+            Command(
+                resume={
+                    "document_id": document_id,
+                    "mime": "image/jpeg",
+                    "size_bytes": 2048,
+                }
+            ),
+            config,
+        )
+
+        assert len(written) == 1, "the document was not recorded"
+        assert written[0]["storage_key"] == signed_key, (
+            "the row points at an object that was never written there"
+        )
+
+    def test_the_endpoints_default_cannot_reach_the_recorded_key(self):
+        """Why the field is load-bearing rather than a convenience.
+
+        Says the thing that makes the two tests above necessary: the prefix the
+        presign endpoint picks on its own can never be the prefix the recorder
+        writes. So there is no arrangement of defaults under which omitting the
+        id happens to work -- the card has to send it.
+
+        This one holds with or without the fix, deliberately. It is the standing
+        statement of the constraint, not a regression guard.
+        """
+        from app.storage.presign import storage_key_for
+
+        document_id = "d3adb33f000000000000000000000000"
+        session_scoped = storage_key_for("s-reg", "guardian.id_document", document_id)
+        application_scoped = storage_key_for(
+            "11111111-2222-3333-4444-555555555555",
+            "guardian.id_document",
+            document_id,
+        )
+
+        assert session_scoped != application_scoped
+
+
 class TestANonSensitiveSlotCanActuallyBeSaved:
     """`save_slot` must survive contact with Postgres.
 

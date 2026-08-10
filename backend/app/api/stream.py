@@ -813,6 +813,20 @@ async def mint_session(request: Request) -> dict[str, Any]:
         "age_band": claims.age_band,
         "account_status": claims.account_status,
         "locale": locale,
+        # Whether the persona above is the one that was asked for.
+        #
+        # The refusal was previously server-side only -- a log line and nothing
+        # else -- so a client whose request was rejected went on displaying the
+        # persona it had asked for while every turn ran as the derived one. The
+        # picker read "Aurora", the session was Orion, and the advice the reader
+        # then got was to select Aurora.
+        #
+        # Telling the client is not a permission and does not weaken anything:
+        # the grant is `persona` above, which is already authoritative and
+        # already signed into the token. This says only whether it matched the
+        # request, which the client could work out by comparing the two -- and
+        # frequently forgot to.
+        "persona_refused": claims.persona_request_refused,
     }
 
 

@@ -98,9 +98,41 @@ class SessionResponse(BaseModel):
     display_name: str | None = None
     avatar_url: str | None = None
     expires_in: int
+    #: Who the account is for, as chosen at sign-up.
+    role: str = "participant"
+    #: The persona this account resolves to, so the client can show the right
+    #: one immediately instead of leaving the picker on "Everyone" and waiting
+    #: for somebody to guess.
+    #:
+    #: NOT a grant and not a claim. The authorising copy is minted separately by
+    #: `POST /v2/session` and signed; this is the same derivation run for
+    #: display, and a client that tampered with it would change nothing but its
+    #: own menu. It is sent here because the alternative -- deriving it in the
+    #: browser from a date of birth -- is a second implementation of
+    #: `DEFAULT_PERSONA`, and the last time this product had one of those it
+    #: locked the whole 9-12 band out.
+    persona: str = "stella"
 
 
 def to_session(user: User, token: str) -> SessionResponse:
+    from app.graph.account import YOUNGEST_BAND, band_for, persona_for
+
+    # An anonymous row has no date of birth and `is_minor` False, which
+    # `band_for` reads as `adult` -- it cannot distinguish "no date recorded
+    # because nobody signed up" from "an adult". So the account type answers it
+    # here, before the band table is asked.
+    #
+    # Without this the picker would auto-select Aurora for every first-time
+    # visitor, which is both wrong and the most permissive thing it could
+    # display. See the note in `graph/account.claims_for` on the same row: the
+    # ACCESS consequence of that band is a separate and larger problem than this
+    # display one, and is not fixed here.
+    if user.account_type == ACCOUNT_ANONYMOUS:
+        band, role = YOUNGEST_BAND, "participant"
+    else:
+        band = band_for(user.date_of_birth, is_minor=bool(user.is_minor))
+        role = user.role
+
     return SessionResponse(
         token=token,
         user_id=user.id,
@@ -109,6 +141,8 @@ def to_session(user: User, token: str) -> SessionResponse:
         display_name=user.display_name,
         avatar_url=user.avatar_url,
         expires_in=int(TOKEN_TTL.total_seconds()),
+        role=role,
+        persona=persona_for(band, role),
     )
 
 

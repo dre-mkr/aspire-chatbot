@@ -320,9 +320,28 @@ def _sign(
         for name in sorted(query)
     )
 
+    # Path-style (`endpoint/bucket/key`) or virtual-hosted (`bucket.endpoint/key`),
+    # decided by whether the endpoint already names the bucket.
+    #
+    # This is not a nicety. `S3_ENDPOINT_URL` copied from the AWS console is the
+    # virtual-hosted form -- `https://<bucket>.s3.<region>.amazonaws.com` -- and
+    # signing that path-style puts the bucket in the URL TWICE. S3 then reads the
+    # first path segment as part of the key and the PUT succeeds, writing a real
+    # object at `<bucket>/applications/...` while the database row says
+    # `applications/...`. Every read of it 404s.
+    #
+    # That is the same failure `UploadDirective.application_id` exists to prevent,
+    # arriving by configuration instead of by code, and it is worse here because
+    # nothing in the request fails: only addressing the bucket correctly avoids it.
+    #
+    # The host may carry a port (MinIO is `localhost:9000`), which is why this
+    # tests the leading label rather than the whole host.
+    bucket_in_host = host.split(":", 1)[0].startswith(f"{bucket}.")
+    path = key if bucket_in_host else f"{bucket}/{key}"
+
     # The path is encoded WITHOUT escaping `/`, unlike the query. Getting this
     # backwards produces a signature mismatch that reads as an auth failure.
-    canonical_uri = "/" + quote(f"{bucket}/{key}", safe="/")
+    canonical_uri = "/" + quote(path, safe="/")
 
     canonical_request = "\n".join(
         [

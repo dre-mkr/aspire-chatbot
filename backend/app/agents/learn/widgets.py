@@ -55,7 +55,7 @@ import hashlib
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from app.learning.concepts import TeachingConcept

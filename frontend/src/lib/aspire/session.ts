@@ -27,6 +27,23 @@ export interface Session {
 	email: string | null;
 	displayName: string | null;
 	avatarUrl: string | null;
+	/** Who the account is for, as chosen at sign-up. */
+	role?: "participant" | "guardian" | "educator";
+	/**
+	 * The persona this account resolves to, derived server-side.
+	 *
+	 * Display only, and stored here so the picker can show the right assistant
+	 * on first paint rather than sitting on "Everyone" until somebody guesses.
+	 * It authorises nothing: the claims that do are signed into a separate token
+	 * by `POST /v2/session`, and editing this value in storage changes which
+	 * name is drawn in a menu and nothing else.
+	 *
+	 * Derived on the server rather than computed here from a date of birth,
+	 * because a second implementation of `DEFAULT_PERSONA` in the browser is
+	 * exactly what locked the 9-12 band out of the product once already — see
+	 * the note in `personas.ts`.
+	 */
+	persona?: string;
 	/**
 	 * When this token stops being accepted, in epoch milliseconds.
 	 *

@@ -1,7 +1,15 @@
 """The admin API: the queue, one application, the status machine, the widget queue.
 
-Mounted at `/admin`, on the same FastAPI app as the chat but behind its own auth
-realm (`admin/auth.py`). Same process, same database, different door.
+Mounted at `/api/admin`, on the same FastAPI app as the chat but behind its own
+auth realm (`admin/auth.py`). Same process, same database, different door.
+
+The `/api` prefix is load-bearing, not decoration. The portal's own pages are
+TanStack routes at `/admin`, `/admin/applications` and `/admin/widgets`, and in
+production nginx serves the app and this API from ONE hostname. While this
+router sat at `/admin`, `GET /admin/applications` was two different things --
+the HTML page and this JSON list -- and nginx had no way to tell them apart.
+Whichever upstream won, the other broke. Keep the API under `/api/`, where the
+single proxy rule in deploy/nginx-aspire.conf already sends it to uvicorn.
 
 ## F2's status machine is the highest-value thing here
 
@@ -47,7 +55,7 @@ from app.api.admin.auth import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 Status = Literal[
     "submitted", "under_review", "info_requested", "approved", "rejected"

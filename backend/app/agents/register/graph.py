@@ -397,7 +397,19 @@ def make_collect(recorder=None):
         # Everything above runs AGAIN on resume -- `interrupt` replays the node
         # from the top -- so nothing above it may have a side effect that must
         # not happen twice. Nothing does: three reads and a dict write.
-        raw = interrupt(interrupt_payload(slot, locale, label=label))
+        #
+        # `draft.application_id` goes to the card so the browser signs its upload
+        # into THIS application's prefix. `_record_document` below derives the
+        # stored key from the same id, and the two agreeing is the whole point:
+        # they did not, so every document ever uploaded was written under the
+        # caller's session id and recorded under an application id that had no
+        # object at it. `resume_or_start` has already awaited `open_application`,
+        # so the row the presign endpoint checks ownership against exists by now.
+        raw = interrupt(
+            interrupt_payload(
+                slot, locale, label=label, application_id=draft.application_id
+            )
+        )
         payload = _assert_no_bytes(raw if isinstance(raw, dict) else {})
 
         if payload.get("skipped") and slot.optional:

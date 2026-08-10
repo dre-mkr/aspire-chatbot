@@ -120,6 +120,34 @@ class EligibilityDirective(_Directive):
     language: Literal["en", "es", "fr"] = "en"
 
 
+# ── sign-up ──────────────────────────────────────────────────────────────────
+
+
+class SignupDirective(_Directive):
+    """Open the account sign-up wizard, optionally on a particular role.
+
+    Distinct from `register_agent`, and the difference is worth stating because
+    the two are easy to confuse: an APPLICATION enrols a child in ASPIRE and is
+    the thing `register_agent` collects. An ACCOUNT is how somebody signs in.
+    Applying needs an account first, and the product had no way to say so from
+    inside a conversation -- a reader who was told "a guardian completes this"
+    had to find the sign-up page themselves.
+
+    `role` is a SUGGESTION for which branch the wizard opens on, not an
+    authorisation and not a decision. Sign-up validates it against the date of
+    birth it collects (`accounts._role_problem`), so a directive asking for
+    `guardian` still produces nothing but a guardian-shaped form -- the account
+    is only created if an adult date of birth is entered.
+
+    It is chosen deterministically by the node that emits this, from the reader's
+    own audience, and is never a value a model picked. A model that could set it
+    could open the guardian branch for a nine-year-old.
+    """
+
+    t: Literal["signup"] = "signup"
+    role: Literal["participant", "guardian", "educator"] | None = None
+
+
 # ── upload ───────────────────────────────────────────────────────────────────
 
 
@@ -137,6 +165,25 @@ class UploadDirective(_Directive):
     accepts: list[str] = Field(min_length=1, max_length=8)
     max_mb: int = Field(default=10, ge=1, le=50)
     help: str = Field(default="", max_length=300)
+    #: Which application the document belongs to, so the object lands in the
+    #: prefix the database row will point at.
+    #:
+    #: The card has to send this to `/v2/documents/presign`, because the endpoint
+    #: defaults a missing one to the caller's SESSION id -- and a session id is
+    #: never an application id (`store.new_draft` mints a fresh UUID). The upload
+    #: therefore went to `applications/<session>/<slot>/<doc>` while
+    #: `_record_document` wrote `applications/<application>/<slot>/<doc>`, so
+    #: every recorded key pointed at an object that was never there. Nothing
+    #: noticed at upload time: the PUT succeeded, the row was written, and the
+    #: 404 waited until an admin opened the document or `doc_check` read it.
+    #:
+    #: Sent as a directive field rather than fixed up server-side afterwards
+    #: because the prefix is chosen when the URL is SIGNED. By the time the graph
+    #: hears about the document the bytes are already at the wrong key.
+    #:
+    #: Empty means "no application in hand", and the client then omits it and
+    #: gets the session-scoped default -- the behaviour every upload had before.
+    application_id: str = Field(default="", max_length=64)
     #: Whether the card may offer a skip control.
     #:
     #: `collect` already honours `{"skipped": true}` on resume for an optional
@@ -268,6 +315,7 @@ UIDirective = Annotated[
         QuickRepliesDirective,
         GameDirective,
         EligibilityDirective,
+        SignupDirective,
         UploadDirective,
         ReviewCardDirective,
         ChartDirective,
@@ -287,6 +335,7 @@ DIRECTIVE_TYPES: frozenset[str] = frozenset(
         "quick_replies",
         "game",
         "eligibility",
+        "signup",
         "upload",
         "review_card",
         "chart",

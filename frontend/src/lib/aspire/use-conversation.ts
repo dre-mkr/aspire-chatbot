@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Directive, WidgetInteraction } from "../stream/types";
+import type {
+	Directive,
+	UploadResult,
+	WidgetInteraction,
+} from "../stream/types";
 import { type AskResult, AspireError, type Source } from "./api";
-import { claimConversations, renameConversation } from "./conversations";
 import {
+	claimConversations,
+	deleteConversation,
+	HttpError,
+	renameConversation,
+} from "./conversations";
+import {
+	forgetLocalConversation,
 	loadConversations,
 	type StoredConversation,
 	type StoredMessage,
@@ -21,6 +31,7 @@ import {
 	conversationsQuery,
 	keys,
 	readConversation,
+	removeConversationFromCache,
 	retitleInCache,
 	titleSnapshot,
 	upsertConversation,
@@ -669,6 +680,61 @@ export function useConversation({
 		[renameMutation.mutate],
 	);
 
+	/**
+	 * Deletes a conversation, for good.
+	 *
+	 * Optimistic like the rename beside it, and for a stronger reason: a row the
+	 * reader has just confirmed they want gone must not sit there for a round
+	 * trip looking like the click missed. `removeConversationFromCache` takes it
+	 * out of the rail and drops its transcript in the same commit.
+	 *
+	 * The rollback is the half that makes that safe. A delete that fails puts
+	 * the conversation back rather than leaving the rail claiming something was
+	 * removed that is still on the server -- which, for a delete, is the worse
+	 * of the two lies.
+	 *
+	 * A 404 is the one failure that is not a failure: it means the conversation
+	 * is already gone, which is the state being asked for, so it settles rather
+	 * than restoring a row the server does not have.
+	 */
+	const deleteMutation = useMutation({
+		mutationFn: (id: string) => deleteConversation(id),
+		onMutate: (id: string) => ({
+			removed: removeConversationFromCache(queryClient, id),
+		}),
+		onSuccess: (_result, id) => {
+			// The device-local copy, which nothing writes any more but which
+			// still holds whole transcripts from before history moved to the
+			// service. Deleting a conversation and leaving it in the browser's
+			// own storage is not deleting it. Only on success: while the server
+			// still has the conversation, so should this.
+			forgetLocalConversation(id);
+		},
+		onError: (error, _id, context) => {
+			if (error instanceof HttpError && error.status === 404) return;
+			if (context?.removed) upsertConversation(queryClient, context.removed);
+		},
+		// Ordering after a rollback comes from here rather than from the restore:
+		// `upsertConversation` puts a row at the front, and where this one
+		// actually belongs is the server's answer.
+		onSettled: () =>
+			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
+	});
+
+	/**
+	 * Deletes one conversation. Nothing here asks first — the rail does.
+	 *
+	 * Fire-and-forget at the call site, like `nameConversation`: the row is
+	 * already gone from the screen, and the mutation above owns what happens if
+	 * the service disagrees.
+	 */
+	const deleteChat = useCallback(
+		(id: string) => {
+			deleteMutation.mutate(id);
+		},
+		[deleteMutation.mutate],
+	);
+
 	const clearTimers = useCallback(() => {
 		clearInterval(streamTimer.current);
 		streamTimer.current = undefined;
@@ -853,6 +919,7 @@ export function useConversation({
 			simpleMode: boolean,
 			token: number,
 			interaction?: WidgetInteraction,
+			uploadResult?: UploadResult,
 		) => {
 			const controller = new AbortController();
 			inFlight.current?.abort(); // a previous turn should never outlive this one
@@ -1098,6 +1165,10 @@ export function useConversation({
 					// server-side rather than in `messages`, so the model never
 					// reads `widget_interaction {...}` back as dialogue.
 					interaction,
+					// Present only on the turn that answers a paused upload. It
+					// rides beside `message` rather than replacing it, because the
+					// chat endpoint reads both.
+					uploadResult,
 					onDelta,
 					onTextEnd,
 					onTurn: settleTurn,
@@ -1520,6 +1591,28 @@ export function useConversation({
 		[ask],
 	);
 
+	/**
+	 * Continue a registration that is paused on a document.
+	 *
+	 * No user bubble, for the same reason a widget interaction has none: the
+	 * parent took a photo, they did not say anything, and "I uploaded
+	 * guardian.id_document: 7f3a..." is not a sentence anybody typed.
+	 *
+	 * Sent even while a turn is in flight, which is where this differs from
+	 * `sendInteraction`. The graph is SUSPENDED waiting for exactly this reply;
+	 * dropping it because something else looked busy would leave the form stuck
+	 * with no way to unstick it, and the upload it reports has already happened.
+	 */
+	const sendUploadResult = useCallback(
+		(uploadResult: UploadResult) => {
+			if (!threadRef.current) return;
+			const token = ++turnToken.current;
+			setIsThinking(true);
+			void ask("", false, token, undefined, uploadResult);
+		},
+		[ask],
+	);
+
 	const reset = useCallback(() => {
 		abortInFlight();
 		dropStream();
@@ -1550,11 +1643,13 @@ export function useConversation({
 		animateAfterId,
 		send,
 		sendInteraction,
+		sendUploadResult,
 		regenerate,
 		stop,
 		openPast,
 		reset,
 		renameChat,
 		regenerateTitle,
+		deleteChat,
 	};
 }

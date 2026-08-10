@@ -101,7 +101,7 @@ export interface SignIn {
  * be a sign-in that never actually verified anything.
  */
 export async function signIn(email: string, password: string): Promise<SignIn> {
-	const response = await fetch(`${API_URL}/admin/auth/session`, {
+	const response = await fetch(`${API_URL}/api/admin/auth/session`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ email, password }),
@@ -154,7 +154,11 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const bearer = token();
 	if (!bearer) throw new AdminError("Sign in to continue.", 401);
 
-	const response = await fetch(`${API_URL}/admin${path}`, {
+	// `/api/admin`, not `/admin`: the portal's own pages live at `/admin/*` and
+	// production serves both from one hostname, so an API under `/admin` would
+	// be indistinguishable from the page of the same name. See the module
+	// docstring in backend/app/api/admin/router.py.
+	const response = await fetch(`${API_URL}/api/admin${path}`, {
 		...init,
 		headers: {
 			"Content-Type": "application/json",

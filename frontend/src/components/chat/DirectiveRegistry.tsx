@@ -20,6 +20,7 @@
  * directive can be produced by matching text, a model explaining the syntax
  * renders a control by accident.
  */
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
@@ -37,6 +38,7 @@ import type {
 	ProgressDirective,
 	QuickRepliesDirective,
 	ReviewCardDirective,
+	SignupDirective,
 	UploadDirective,
 	WidgetDirective,
 	WidgetInteraction,
@@ -86,7 +88,10 @@ export interface DirectiveContext {
 		completed: boolean;
 	}) => void;
 	/** A document was uploaded. Resumes the interrupted graph. */
-	onUpload?: (slot: string, documentId: string) => void;
+	onUpload?: (
+		slot: string,
+		result: { document_id: string; mime: string; size_bytes: number },
+	) => void;
 	/** A review-card field was edited. Jumps the graph to that slot. */
 	onEditSlot?: (slot: string) => void;
 	onSubmit?: () => void;
@@ -102,6 +107,7 @@ const KNOWN = new Set([
 	"quick_replies",
 	"game",
 	"eligibility",
+	"signup",
 	"upload",
 	"review_card",
 	"chart",
@@ -185,12 +191,18 @@ export function DirectiveView({
 				/>
 			);
 
+		case "signup":
+			return <SignupCard directive={directive as SignupDirective} />;
+
 		case "upload":
 			return (
 				<UploadCard
 					directive={directive as UploadDirective}
-					onUploaded={(documentId) =>
-						context.onUpload?.((directive as UploadDirective).slot, documentId)
+					// The presign call is authenticated with this thread's graph
+					// session token, so the card needs the thread, not just the slot.
+					threadId={context.threadId}
+					onUploaded={(result) =>
+						context.onUpload?.((directive as UploadDirective).slot, result)
 					}
 				/>
 			);
@@ -210,6 +222,84 @@ export function DirectiveView({
 }
 
 /* ── the small ones, inline ─────────────────────────────────────────────── */
+
+/**
+ * The account sign-up card.
+ *
+ * A LINK, not an automatic navigation, and that is the whole design of it. Every
+ * other card in this file renders where it stands; this one sends the reader to
+ * another route, and a directive that navigated on arrival would throw away a
+ * conversation somebody was in the middle of because a sentence they typed
+ * matched a pattern. They tap it, or they carry on talking.
+ *
+ * `next` brings them back to the conversation they left. Sign-up already
+ * validates that param as a same-site path (`safeNext`), so this cannot become a
+ * way to bounce somebody off ASPIRE.
+ */
+function SignupCard({ directive }: { directive: SignupDirective }) {
+	const label =
+		directive.role === "guardian"
+			? "Create a guardian account"
+			: directive.role === "educator"
+				? "Create a teacher account"
+				: "Create an account";
+
+	return (
+		<div
+			style={{
+				marginBlockStart: "0.75rem",
+				padding: "0.875rem",
+				borderRadius: "0.875rem",
+				background: "var(--wash-m-10)",
+				border: "1px solid var(--wash-m-16)",
+			}}
+		>
+			<p
+				style={{
+					margin: 0,
+					fontSize: "var(--band-type, 16px)",
+					fontWeight: 700,
+					color: "var(--plum-deep)",
+				}}
+			>
+				{label}
+			</p>
+			<p
+				style={{
+					margin: "0.25rem 0 0.75rem",
+					fontSize: "calc(var(--band-type, 16px) - 1px)",
+					color: "var(--slate)",
+				}}
+			>
+				{directive.role === "guardian"
+					? "It takes about a minute. You can start an application straight after."
+					: "It takes about a minute, and your chats come with you."}
+			</p>
+			<Link
+				to="/signup"
+				search={
+					typeof window === "undefined"
+						? undefined
+						: { next: window.location.pathname }
+				}
+				style={{
+					display: "inline-flex",
+					alignItems: "center",
+					minHeight: "44px",
+					padding: "0 1rem",
+					borderRadius: "999px",
+					background: "var(--plum)",
+					color: "#fff",
+					fontSize: "calc(var(--band-type, 16px) - 1px)",
+					fontWeight: 600,
+					textDecoration: "none",
+				}}
+			>
+				{label}
+			</Link>
+		</div>
+	);
+}
 
 function Citations({ directive }: { directive: CitationsDirective }) {
 	return (

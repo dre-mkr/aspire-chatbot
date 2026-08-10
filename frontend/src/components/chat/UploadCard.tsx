@@ -27,6 +27,7 @@
  * three days later.
  */
 import { useEffect, useRef, useState } from "react";
+import { graphSession } from "../../lib/stream/session";
 import type { UploadDirective } from "../../lib/stream/types";
 import { useAgeBand } from "./AgeBandProvider";
 
@@ -38,10 +39,29 @@ type Phase = "idle" | "chosen" | "uploading" | "done" | "failed";
 
 export function UploadCard({
 	directive,
+	threadId,
 	onUploaded,
 }: {
 	directive: UploadDirective;
-	onUploaded: (documentId: string) => void;
+	/**
+	 * The conversation this document belongs to.
+	 *
+	 * Needed for the presign call's credential, not merely for bookkeeping —
+	 * `/v2/documents/presign` authenticates with the GRAPH session token, which
+	 * is minted per thread and held in memory by `lib/stream/session`.
+	 */
+	threadId?: string;
+	/**
+	 * The receipt for a document that is already in the bucket.
+	 *
+	 * Carries the mime and size as well as the id because the graph is paused
+	 * waiting for exactly this shape, and records all three against the slot.
+	 */
+	onUploaded: (result: {
+		document_id: string;
+		mime: string;
+		size_bytes: number;
+	}) => void;
 }) {
 	const band = useAgeBand();
 	const [phase, setPhase] = useState<Phase>("idle");
@@ -90,25 +110,69 @@ export function UploadCard({
 
 	const upload = async () => {
 		if (!file) return;
+		if (!threadId) {
+			// The directive arrived before the thread settled. Rare, and better
+			// said than swallowed: there is no session to sign a presign with.
+			setPhase("failed");
+			setProblem(
+				"This conversation is still starting. Try that again in a moment.",
+			);
+			return;
+		}
 		setPhase("uploading");
 		setProgress(0);
 		try {
+			// The GRAPH session token, not the account one.
+			// `/v2/documents/presign` decodes it with `decode_session_token` and
+			// authenticates the caller by it, so the thread's own token is the
+			// credential this call needs.
+			//
+			// This card used to send `credentials: "include"` and no Authorization
+			// header at all — the only cookie-auth call in the client, against an
+			// API that has never used cookies. Every upload 401'd before storage
+			// was ever consulted, and the catch below reported it as "that did not
+			// go through", so the failure looked like a flaky network.
+			const session = await graphSession(threadId);
+
 			const presign = await fetch(`${API_URL}/v2/documents/presign`, {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				credentials: "include",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${session.token}`,
+				},
 				body: JSON.stringify({
 					slot: directive.slot,
 					mime: file.type,
 					size: file.size,
+					// WHERE the object goes, and it has to be said out loud.
+					//
+					// The token authenticates the caller; it does not name the
+					// application. Left out, the endpoint scopes the upload to the
+					// caller's SESSION id — but the graph records the document
+					// under the APPLICATION id, and the two are never equal
+					// (`store.new_draft` mints a fresh UUID). Every document ever
+					// uploaded went to a key nothing reads and was recorded at a
+					// key holding nothing, and both halves succeeded, so the 404
+					// waited for an admin to open the file.
+					//
+					// Omitted rather than sent empty when the server did not
+					// supply one: absent restores the session-scoped default,
+					// where `""` would be refused as a malformed id.
+					...(directive.application_id
+						? { application_id: directive.application_id }
+						: {}),
 				}),
 			});
-			if (!presign.ok) throw new Error(`presign failed: ${presign.status}`);
+			if (!presign.ok) {
+				setPhase("failed");
+				setProblem(await presignProblem(presign));
+				return;
+			}
 			const { url, document_id: documentId, headers } = await presign.json();
 
 			// Straight to storage. Note there is no `credentials` here and no
 			// Authorization header: the signature IS the authorisation, and
-			// sending our session cookie to a bucket would be sending it
+			// sending our session token to a bucket would be sending it
 			// somewhere it has no business being.
 			const put = await fetch(url, {
 				method: "PUT",
@@ -119,7 +183,11 @@ export function UploadCard({
 
 			setProgress(100);
 			setPhase("done");
-			onUploaded(documentId);
+			onUploaded({
+				document_id: documentId,
+				mime: file.type,
+				size_bytes: file.size,
+			});
 		} catch (error) {
 			console.error("[aspire] upload failed", error);
 			setPhase("failed");
@@ -270,6 +338,41 @@ export function UploadCard({
 			)}
 		</div>
 	);
+}
+
+/**
+ * What to tell somebody whose presign was refused.
+ *
+ * One sentence per reason, because they call for different actions and the card
+ * used to give the same one to all of them: "That did not go through. Please try
+ * again." A parent whose service has no storage configured, or whose session
+ * expired, can retry that card until the battery dies.
+ *
+ * The 400 reason is the service's own wording (`storage.check_upload`), which
+ * names the actual limit — worth showing rather than paraphrasing, since the
+ * client's matching check has already passed by the time we are here and the
+ * two disagreeing is exactly what the reader needs to see.
+ */
+async function presignProblem(response: Response): Promise<string> {
+	let detail = "";
+	try {
+		const body = (await response.json()) as { detail?: unknown };
+		if (typeof body.detail === "string") detail = body.detail;
+	} catch {
+		// A non-JSON error body is a proxy or gateway talking, not the service.
+	}
+
+	if (response.status === 401)
+		return "Your session timed out. Refresh the page and try once more.";
+	if (response.status === 404)
+		return "We could not find that application. Refresh the page and try once more.";
+	if (response.status === 503)
+		return (
+			detail ||
+			"Uploads are switched off on this service right now. Nothing you did — try later, or bring the document to a branch."
+		);
+	if (response.status === 400 && detail) return detail;
+	return "That did not go through. Please try again.";
 }
 
 function buttonStyle(target: number, primary: boolean) {

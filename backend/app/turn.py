@@ -81,6 +81,19 @@ class TurnRecord:
     citations: list[dict[str, Any]] = field(default_factory=list)
     quick_replies: list[str] = field(default_factory=list)
     agent: str | None = None
+    #: Whether the conversation row is already somebody else's guarantee.
+    #:
+    #: Set by `open_conversation` and read by `persist_turn`, which is the only
+    #: reason it is on the record rather than a return value -- the two are
+    #: called minutes apart by the transport, with the same object in hand.
+    #:
+    #: It exists because a conversation can now be DELETED while its turn is
+    #: still running. `persist_turn` upserts the row before appending, so
+    #: without this a delete that lands in the seconds between the answer and
+    #: the write would be undone by it: the row comes back, carrying the
+    #: assistant's reply, and reappears in the rail on the next refetch. See
+    #: the note on the upsert itself.
+    opened: bool = False
 
 
 def provisional_title(question: str) -> str:
@@ -227,7 +240,15 @@ async def open_conversation(record: TurnRecord) -> None:
     Swallows its own failures for the same reason `persist_turn` does: the user
     is owed an answer, and losing the record of the question is our problem.
     """
-    if not database_enabled() or not record.question.strip():
+    if not database_enabled():
+        return
+    if not record.question.strip():
+        # An interaction turn -- a widget moved, an upload resumed -- which by
+        # construction continues a conversation that already exists. There is no
+        # question to record and nothing to open, and `persist_turn` must not
+        # treat that as "the opening write failed, re-create the row": the only
+        # way the row is missing here is that it was deleted.
+        record.opened = True
         return
 
     try:
@@ -248,6 +269,9 @@ async def open_conversation(record: TurnRecord) -> None:
             await append_turn(
                 db, record.thread_id, role="user", content=record.question
             )
+        # Only past both writes. Anything short of that leaves it False, which
+        # is what puts the recovery upsert in `persist_turn` back in play.
+        record.opened = True
     except Exception:
         logger.warning(
             "Could not open conversation %s; the turn was still served.",
@@ -279,19 +303,28 @@ async def persist_turn(record: TurnRecord) -> None:
             if db is None:
                 return
             # `open_conversation` already created the row and recorded the
-            # question before the graph ran. This is an upsert and a no-op when
-            # that succeeded; it stays because that call swallows its own
-            # failures, and a turn whose opening write failed should still be
-            # persisted rather than silently losing its question.
-            await ensure_conversation(
-                db,
-                record.thread_id,
-                language=record.language,
-                persona=record.persona,
-                account_status=record.account_status,
-                owner_id=record.owner_id,
-                title=provisional_title(record.question),
-            )
+            # question before the graph ran. This is the recovery path for the
+            # case where that call failed -- it swallows its own failures, and a
+            # turn whose opening write was lost should still be persisted rather
+            # than silently losing its question.
+            #
+            # Gated on `record.opened` rather than run unconditionally, which it
+            # used to be. As an unconditional upsert it was a no-op on every
+            # successful turn and a RESURRECTION on one specific unsuccessful
+            # one: a conversation deleted between the answer going out and this
+            # write would be recreated here, complete with the reply appended
+            # below, and be back in the rail on the next refetch. The row is
+            # only ever created here now when nothing else has created it.
+            if not record.opened:
+                await ensure_conversation(
+                    db,
+                    record.thread_id,
+                    language=record.language,
+                    persona=record.persona,
+                    account_status=record.account_status,
+                    owner_id=record.owner_id,
+                    title=provisional_title(record.question),
+                )
             await append_turn(
                 db,
                 record.thread_id,

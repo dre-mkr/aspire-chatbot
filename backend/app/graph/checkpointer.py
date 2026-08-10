@@ -415,6 +415,34 @@ async def close_checkpointer() -> None:
     _unavailable = False
 
 
+async def delete_thread(session_id: str) -> bool:
+    """Forget everything the graph holds about one conversation.
+
+    Returns whether there was a checkpointer to ask. False means no database is
+    configured, which is the supported no-persistence deployment -- there was
+    nothing stored, so there is nothing to delete and that is not a failure.
+
+    This exists because the checkpoint is a *second copy of the transcript*. The
+    saver keeps the thread's whole message list, plus whatever the nodes put
+    beside it -- retrieved documents, a half-finished registration, the running
+    summary. Deleting `conversations` and its `messages` and stopping there
+    would leave all of that in Postgres under the same thread id, so a delete
+    the reader was told had happened would have removed the copy they can see
+    and kept the copy the model reads.
+
+    Nothing here checks ownership, deliberately: a thread id is guessable in
+    principle and this call cannot be the thing that decides. The caller must
+    have established the conversation is theirs -- `app.conversations` does it
+    by putting the owner in the DELETE's WHERE clause and only reaching this
+    line if a row actually went.
+    """
+    saver = await get_checkpointer()
+    if saver is None:
+        return False
+    await saver.adelete_thread(session_id)
+    return True
+
+
 def thread_config(session_id: str, **extra: Any) -> dict[str, Any]:
     """The `config` a graph invocation needs to find its thread.
 

@@ -233,6 +233,23 @@ export async function renameConversation(
 }
 
 /**
+ * Delete one conversation, permanently.
+ *
+ * There is nothing to undo afterwards and no archive to fish it back out of,
+ * which is why the rail asks before calling this. The service removes the
+ * transcript, the messages, and the copies that live outside the conversations
+ * table — the model's own checkpoint most of all.
+ *
+ * A 404 is not treated as an error by the caller: the conversation is not
+ * there, which is the state that was being asked for.
+ */
+export async function deleteConversation(threadId: string): Promise<void> {
+	await call<void>(`/api/conversations/${encodeURIComponent(threadId)}`, {
+		method: "DELETE",
+	});
+}
+
+/**
  * Adopt conversations this browser started before ownership was recorded.
  *
  * Every transcript written before the owner column existed is readable by

@@ -51,6 +51,9 @@ from app.auth import (
 from app.claim import ClaimRefused, claim_anonymous, claimable
 from app.db import database_enabled, session
 from app.db.models import AuthToken, User
+# The band table itself, not a local copy of its thresholds. `_role_problem`
+# refuses exactly the dates the derivation would go on to judge non-adult.
+from app.graph.account import band_for
 from app.sessions import SessionResponse, to_session
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,26 @@ TOKEN_LIFETIMES = {
 #: it — the child's details ride along on the same row.
 MINOR_AGE = 13
 
+#: Who the account is for. Asked, not inferred.
+#:
+#: Sign-up used to collect one date of birth in the second person and derive
+#: everything from it. That has exactly one correct reading — a participant
+#: entering their own date — and the form never said so, so a parent filling it
+#: in for a child produced a child-band account that could never reach
+#: registration. `register_agent` lives on `aurora` alone, and `aurora` is not
+#: narrower than a child band's persona, so the switch was refused too:
+#:
+#:     WARNING app.api.stream: Refused a request for persona 'aurora'
+#:     on a 16-18 band session.
+#:
+#: The role is what the date of birth then belongs to. See `graph/account.py`
+#: for what it does and, more importantly, what it does not grant.
+ROLES: frozenset[str] = frozenset({"participant", "guardian", "educator"})
+
+#: The roles that describe an adult acting in a capacity, rather than the person
+#: the programme serves. Both require an adult date of birth — see `_role_problem`.
+ADULT_ROLES: frozenset[str] = frozenset({"guardian", "educator"})
+
 
 def _normalise_email(email: str) -> str:
     return email.strip().lower()
@@ -105,17 +128,25 @@ def age_on(born: date, today: date | None = None) -> int:
 
 
 class SignUpRequest(BaseModel):
-    """Everything the four steps collect, submitted once at the end.
+    """Everything the steps collect, submitted once at the end.
 
-    The steps are a client-side wizard rather than four round trips: a
+    The steps are a client-side wizard rather than several round trips: a
     half-finished account is not a useful thing to have in the table, and a
-    person who abandons at step 3 should leave nothing behind.
+    person who abandons part-way should leave nothing behind.
     """
 
+    #: Defaulted rather than required, so an older client that predates the role
+    #: step keeps working and gets exactly the behaviour it had — every account
+    #: it created was a participant, whether or not the person filling it in
+    #: knew that. New clients always send it.
+    role: str = Field(default="participant")
     email: Email
     password: str = Field(min_length=1, max_length=200)
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
+    #: The date of birth of the person named above — which is now unambiguous,
+    #: because `role` says who that is. A guardian sends their own; the child's
+    #: belongs to the application, not to this row.
     date_of_birth: date
     island: str | None = Field(default=None, max_length=80)
     school: str | None = Field(default=None, max_length=160)
@@ -212,6 +243,57 @@ def _unavailable() -> HTTPException:
     return HTTPException(status_code=503, detail="Accounts are unavailable right now.")
 
 
+def _role_problem(role: str, born: date) -> str | None:
+    """Why this role cannot go with this date of birth, or None.
+
+    ## The check that closes the trap
+
+    A `guardian` account whose date of birth lands in a child band is precisely
+    the state that locked a tester out of registration and could not be undone
+    from inside the product: the account derives a child persona, and the switch
+    to Aurora is refused because Aurora is wider. Nothing in the app can repair
+    it — only a second account can.
+
+    So it is refused at the one moment it is cheap to fix, with a message that
+    says which date is wanted. The alternative was to let the role override the
+    band, which hands `register_agent` (a national ID, a date of birth) to
+    anybody who ticks a box.
+
+    ## Why it borrows `band_for` instead of comparing to a constant
+
+    Because the band table is what will actually judge this account a minute
+    from now. An `ADULT_AGE = 18` here would be a second opinion about the same
+    question, and `band_for` puts an eighteen-year-old in `16-18` rather than
+    `adult` — so a local constant would have accepted a sign-up the derivation
+    then refused, which is the bug this function exists to prevent, rebuilt one
+    layer up.
+    """
+    if role not in ROLES:
+        # Not reachable from the shipped client, which sends one of three values
+        # from a fixed set. Refused rather than defaulted anyway: silently
+        # treating an unrecognised role as `participant` would make a typo in a
+        # client look like it worked.
+        return "Choose who this account is for."
+
+    if role in ADULT_ROLES and band_for(born, is_minor=False) != "adult":
+        # Worded around the programme's range rather than around "you are not an
+        # adult", because `band_for` puts an eighteen-year-old in `16-18` and
+        # telling one of them they are not an adult would be both rude and
+        # arguable. What is true and checkable is that ASPIRE's participant
+        # bands run to 18 and these two roles sit outside them.
+        return (
+            "ASPIRE's participant ages run to 18, and this kind of account sits "
+            "outside them. "
+            + (
+                "Use your own date of birth rather than your child's — their "
+                "details belong to the application, not to the account."
+                if role == "guardian"
+                else "A teacher or educator account is held by someone over 18."
+            )
+        )
+    return None
+
+
 @router.post("/register", response_model=AuthResponse)
 async def register(
     body: SignUpRequest,
@@ -230,7 +312,14 @@ async def register(
     if age < 0 or age > 120:
         raise HTTPException(status_code=422, detail="Check that date of birth.")
 
-    is_minor = age < MINOR_AGE
+    role = body.role.strip().lower()
+    problem = _role_problem(role, body.date_of_birth)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+
+    # Only a participant can be a minor. The two adult roles were refused a
+    # non-adult date of birth above, so this cannot be true for them.
+    is_minor = role == "participant" and age < MINOR_AGE
     if is_minor and not (body.guardian_name and body.guardian_email):
         # The under-13 account belongs to the adult named here. Refusing rather
         # than quietly creating a child-held account is the whole point of
@@ -239,6 +328,14 @@ async def register(
             status_code=422,
             detail="An adult needs to be named for an account for someone under 13.",
         )
+
+    # An adult role has no separate guardian to name — they are the adult. Any
+    # value that arrived in these fields is dropped rather than stored, so a
+    # client that keeps stale wizard state cannot file a second person's name
+    # and address against an account that has no use for them.
+    guardian_name = body.guardian_name if role == "participant" else None
+    guardian_email = body.guardian_email if role == "participant" else None
+    guardian_phone = body.guardian_phone if role == "participant" else None
 
     async with session() as db:
         if db is None:
@@ -255,6 +352,7 @@ async def register(
         account = User(
             id=uuid.uuid4(),
             account_type=ACCOUNT_REGISTERED,
+            role=role,
             email=email,
             display_name=f"{body.first_name} {body.last_name}".strip(),
             password_hash=hash_password(body.password),
@@ -264,11 +362,11 @@ async def register(
             is_minor=is_minor,
             island=body.island,
             school=body.school,
-            guardian_name=body.guardian_name,
-            guardian_email=_normalise_email(str(body.guardian_email))
-            if body.guardian_email
+            guardian_name=guardian_name,
+            guardian_email=_normalise_email(str(guardian_email))
+            if guardian_email
             else None,
-            guardian_phone=body.guardian_phone,
+            guardian_phone=guardian_phone,
             session_epoch=1,
             created_ip_hash=hash_ip(client_ip(request)),
         )
@@ -282,7 +380,9 @@ async def register(
     # account that was created successfully.
     await mail.send(mail.verify_email(email, verify_token))
 
-    logger.info("account registered user=%s minor=%s", account.id, is_minor)
+    logger.info(
+        "account registered user=%s role=%s minor=%s", account.id, role, is_minor
+    )
     response = to_session(account, mint_token(account.id, account.account_type, account.session_epoch))
     return AuthResponse(**response.model_dump(), claim=outcome)
 

@@ -16,6 +16,7 @@ import {
 	PencilIcon,
 	PlusIcon,
 	RetryIcon,
+	TrashIcon,
 } from "#/components/icons";
 import {
 	displayTitle,
@@ -46,6 +47,8 @@ interface RailProps {
 		title: string,
 	) => void;
 	onRegenerateTitle: (conversation: StoredConversation) => void;
+	/** Permanent, and confirmed in the row's own menu before it is called. */
+	onDeleteConversation: (conversation: StoredConversation) => void;
 }
 
 export function Rail({
@@ -58,6 +61,7 @@ export function Rail({
 	onSaveConversation,
 	onRenameConversation,
 	onRegenerateTitle,
+	onDeleteConversation,
 }: RailProps) {
 	/**
 	 * The list, subscribed here rather than passed in.
@@ -217,6 +221,7 @@ export function Rail({
 										onSave={onSaveConversation}
 										onRename={onRenameConversation}
 										onRegenerate={onRegenerateTitle}
+										onDelete={onDeleteConversation}
 									/>
 								))}
 							</section>
@@ -253,6 +258,7 @@ function HistoryRow({
 	onSave,
 	onRename,
 	onRegenerate,
+	onDelete,
 }: {
 	conversation: StoredConversation;
 	active: boolean;
@@ -260,6 +266,7 @@ function HistoryRow({
 	onSave: (conversation: StoredConversation) => void;
 	onRename: (conversation: StoredConversation, title: string) => void;
 	onRegenerate: (conversation: StoredConversation) => void;
+	onDelete: (conversation: StoredConversation) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	/**
@@ -273,10 +280,24 @@ function HistoryRow({
 	 */
 	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
 	const [renaming, setRenaming] = useState(false);
+	/**
+	 * The menu's second face: are you sure?
+	 *
+	 * A step inside the menu rather than a modal over the page, because the
+	 * question is about this row and belongs against it — and because the app
+	 * has no dialog anywhere else, so this would be the one thing that dimmed
+	 * the whole screen. What it must NOT be is nothing at all: deleting is
+	 * permanent, the trigger is a 30px target sitting on top of the row you
+	 * click to open a chat, and there is no undo behind it.
+	 */
+	const [confirming, setConfirming] = useState(false);
 	const menuId = useId();
+	/** The confirmation's sentence, which is also the menu's accessible name. */
+	const askId = `${menuId}-ask`;
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const cancelRef = useRef<HTMLButtonElement>(null);
 
 	// The same stored title the bar reads, with the same fallback applied.
 	const label = displayTitle(conversation);
@@ -287,40 +308,77 @@ function HistoryRow({
 		inputRef.current?.select();
 	}, [renaming]);
 
+	// The question replaces the items, so the item that was clicked unmounts and
+	// focus would fall to the body — inside a popover the reader can no longer
+	// reach or dismiss. It lands on Cancel rather than on Delete: the confirm
+	// exists to catch a mis-tap, and a focused destructive button that a held
+	// Enter key can repeat into is not catching anything.
+	useEffect(() => {
+		if (confirming) cancelRef.current?.focus();
+	}, [confirming]);
+
+	// Asking again next time. Closing the menu — by Escape, by clicking away, by
+	// scrolling the rail — is a "no", and reopening it must not resume mid-answer.
+	useEffect(() => {
+		if (!open) setConfirming(false);
+	}, [open]);
+
 	const menuRef = useRef<HTMLDivElement>(null);
 
+	/**
+	 * A first guess, so the menu has somewhere to be while it is being measured.
+	 *
+	 * Deliberately not a width calculation any more. It used to subtract a
+	 * hardcoded 168 — the menu's old min-width — which is a copy of a number
+	 * that lives in the stylesheet, kept in step by hand, and it stopped being
+	 * true the moment the confirmation made the menu wider. The layout effect
+	 * below measures the real box and re-anchors it before the browser paints,
+	 * so nothing here is ever seen and nothing here has to be right.
+	 */
 	const place = () => {
 		const trigger = triggerRef.current;
 		if (!trigger) return;
 		const r = trigger.getBoundingClientRect();
-		setAt({
-			top: r.bottom + 4,
-			left: Math.min(r.right - 168, window.innerWidth - 176),
-		});
+		setAt({ top: r.bottom + 4, left: r.left });
 	};
 
 	/**
 	 * Corrects the position against the menu's real height, once it exists.
 	 *
-	 * `place` used to flip against a hardcoded 56px. The menu carries three
-	 * items now and measures ~134px, so the estimate was 78px short: on the last
-	 * row at 320x568 it overshot the viewport by 53.8px and "Save chat" sat
-	 * below the fold, unreachable, because a fixed element cannot be scrolled
-	 * to. Measuring removes the constant that has to be remembered.
+	 * `place` used to flip against a hardcoded 56px. The menu carries four items
+	 * now, so the estimate was well short: on the last row at 320x568 it
+	 * overshot the viewport by 53.8px and the bottom item sat below the fold,
+	 * unreachable, because a fixed element cannot be scrolled to. Measuring
+	 * removes the constant that has to be remembered.
+	 *
+	 * The width is corrected here too, and for the same reason: `place` assumes
+	 * 168px, which was the menu's min-width and stopped being its real width the
+	 * moment the confirmation put a sentence in it. A wider menu placed by that
+	 * estimate hangs off the right edge by exactly the difference.
+	 *
+	 * `confirming` is a dependency because that swap is what changes both
+	 * measurements under a menu that is already placed.
 	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: confirming is the trigger, not an input — the effect re-measures the DOM it changed
 	useLayoutEffect(() => {
 		const menu = menuRef.current;
 		const trigger = triggerRef.current;
 		if (!open || !menu || !trigger || !at) return;
 
-		const h = menu.getBoundingClientRect().height;
+		const box = menu.getBoundingClientRect();
 		const r = trigger.getBoundingClientRect();
-		const wanted =
-			r.bottom + 4 + h > window.innerHeight - 8
-				? Math.max(8, r.top - h - 4)
+		const top =
+			r.bottom + 4 + box.height > window.innerHeight - 8
+				? Math.max(8, r.top - box.height - 4)
 				: r.bottom + 4;
-		if (Math.abs(wanted - at.top) > 1) setAt({ ...at, top: wanted });
-	}, [open, at]);
+		const left = Math.max(
+			8,
+			Math.min(r.right - box.width, window.innerWidth - box.width - 8),
+		);
+		if (Math.abs(top - at.top) > 1 || Math.abs(left - at.left) > 1) {
+			setAt({ top, left });
+		}
+	}, [open, at, confirming]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -411,9 +469,9 @@ function HistoryRow({
 
 			{/* The rule below suggests <fieldset>, which groups form CONTROLS inside
 			    a form. This is a positioned popover of actions -- rename, save,
-			    regenerate -- with no form anywhere near it, and a fieldset's own box
-			    model would land inside a fixed-position menu whose geometry is
-			    measured. role="group" with a label is what a screen reader needs. */}
+			    regenerate, delete -- with no form anywhere near it, and a fieldset's
+			    own box model would land inside a fixed-position menu whose geometry
+			    is measured. role="group" with a label is what a screen reader needs. */}
 			{open && at ? (
 				// biome-ignore lint/a11y/useSemanticElements: a popover of actions, not a form control group
 				<div
@@ -421,42 +479,102 @@ function HistoryRow({
 					ref={menuRef}
 					id={menuId}
 					role="group"
-					aria-label={`Actions for ${label}`}
+					// While the question is up the group is named BY the question, so
+					// moving focus into it announces what is being confirmed rather
+					// than the bare words "Keep this chat" — and so the sentence exists
+					// once rather than as visible copy plus a paraphrase of it.
+					aria-labelledby={confirming ? askId : undefined}
+					aria-label={confirming ? undefined : `Actions for ${label}`}
 					style={{ top: at.top, left: at.left }}
 				>
-					<button
-						type="button"
-						className="row-menu__item"
-						onClick={() => {
-							setOpen(false);
-							setRenaming(true);
-						}}
-					>
-						<PencilIcon />
-						Rename
-					</button>
-					<button
-						type="button"
-						className="row-menu__item"
-						onClick={() => {
-							setOpen(false);
-							onRegenerate(conversation);
-						}}
-					>
-						<RetryIcon />
-						Regenerate title
-					</button>
-					<button
-						type="button"
-						className="row-menu__item"
-						onClick={() => {
-							setOpen(false);
-							onSave(conversation);
-						}}
-					>
-						<DownloadIcon />
-						Save chat
-					</button>
+					{confirming ? (
+						/* The same two-step the account menu uses to confirm a sign-out:
+						   one sentence saying what actually happens, then the two
+						   answers as plain menu items — no icons, so the pair aligns and
+						   neither answer is dressed up as the obvious one. Matching that
+						   rather than inventing a second confirmation shape: a product
+						   with two ways of asking "are you sure" has taught nobody
+						   anything. */
+						<>
+							{/* Named, not "this chat". The trigger is a 30px target on a
+							    row that is itself a button, and the menu is positioned
+							    away from the row it belongs to, so the question has to
+							    say which conversation it means. */}
+							<p className="row-menu__confirm" id={askId}>
+								Delete “{label}”? The whole conversation goes, and it cannot be
+								brought back.
+							</p>
+							<button
+								type="button"
+								className="row-menu__item row-menu__item--danger"
+								onClick={() => {
+									setOpen(false);
+									onDelete(conversation);
+								}}
+							>
+								Yes, delete
+							</button>
+							<button
+								type="button"
+								ref={cancelRef}
+								className="row-menu__item"
+								onClick={() => {
+									setOpen(false);
+									triggerRef.current?.focus();
+								}}
+							>
+								Keep this chat
+							</button>
+						</>
+					) : (
+						<>
+							<button
+								type="button"
+								className="row-menu__item"
+								onClick={() => {
+									setOpen(false);
+									setRenaming(true);
+								}}
+							>
+								<PencilIcon />
+								Rename
+							</button>
+							<button
+								type="button"
+								className="row-menu__item"
+								onClick={() => {
+									setOpen(false);
+									onRegenerate(conversation);
+								}}
+							>
+								<RetryIcon />
+								Regenerate title
+							</button>
+							<button
+								type="button"
+								className="row-menu__item"
+								onClick={() => {
+									setOpen(false);
+									onSave(conversation);
+								}}
+							>
+								<DownloadIcon />
+								Save chat
+							</button>
+							{/* Last, and separated. Everything above it is reversible
+							    or additive; this one is not, and it must not sit a
+							    stray pixel away from "Save chat" in a menu people
+							    open to save things. */}
+							<button
+								type="button"
+								className="row-menu__item row-menu__item--danger"
+								onClick={() => setConfirming(true)}
+							>
+								<TrashIcon />
+								Delete
+							</button>
+						</>
+					)}
 				</div>
 			) : null}
 		</div>

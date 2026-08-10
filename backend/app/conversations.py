@@ -5,11 +5,12 @@ listed chats out of the browser's localStorage instead, which made history a
 property of a device rather than of a person, and made "the same conversation"
 something the server could store but never show.
 
-This is the read half. Three routes, all scoped by principal:
+This is the read half. Four routes, all scoped by principal:
 
-    GET   /api/conversations            the rail's list
-    GET   /api/conversations/{id}       one transcript, whole
-    PATCH /api/conversations/{id}       rename
+    GET    /api/conversations           the rail's list
+    GET    /api/conversations/{id}      one transcript, whole
+    PATCH  /api/conversations/{id}      rename
+    DELETE /api/conversations/{id}      delete, and mean it
 
 and one write that exists only for the changeover:
 
@@ -33,7 +34,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import update
+from sqlalchemy import delete, update
 
 from app.db import database_enabled, session
 from app.db.models import Conversation
@@ -229,6 +230,91 @@ async def rename_conversation(
         )
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="No such conversation.")
+
+
+async def _purge_thread_state(conversation_id: str) -> None:
+    """Everything else filed under this thread id, once the row itself is gone.
+
+    The transcript is not the only copy of a conversation. Three other things
+    are keyed on the same id and none of them are reachable from the
+    `conversations` table, so none of them go with it:
+
+    * the **checkpoint**, which holds the thread's whole message list and is
+      what the model actually reads back — see `graph.checkpointer.delete_thread`;
+    * a **game session**, if one was left half-played;
+    * an **eligibility session**, which holds a minor's answers and is the one
+      here that would be worst to keep.
+
+    Called only after the owner-scoped DELETE has actually removed a row, which
+    is what makes it safe: none of these three stores knows who owns anything,
+    so the ownership question has to be settled before we get here.
+
+    Best effort, and that is a decision rather than laziness. By this point the
+    conversation is gone and cannot be deleted again — a 500 would tell the
+    reader the delete failed when the part they can see succeeded, and leave
+    them no way to retry. So a failure is logged loudly and the delete still
+    reports success. The log line is the thing to alert on: it means a
+    transcript was removed while a second copy of it survived.
+    """
+    from app.eligibility.store import get_store as eligibility_sessions
+    from app.games.store import get_store as game_sessions
+    from app.graph.checkpointer import delete_thread
+
+    try:
+        game_sessions().delete(conversation_id)
+        eligibility_sessions().delete(conversation_id)
+    except Exception:
+        logger.warning(
+            "A conversation was deleted but its in-memory session state survived.",
+            exc_info=True,
+        )
+
+    try:
+        await delete_thread(conversation_id)
+    except Exception:
+        logger.warning(
+            "A conversation was deleted but its checkpoint survived, so the "
+            "model's copy of the transcript is still in Postgres.",
+            exc_info=True,
+        )
+
+
+@router.delete("/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: str, principal: Principal = Depends(require_principal)
+) -> None:
+    """Delete one conversation, permanently.
+
+    There is no archive, no soft-delete flag and no undo. A product that offers
+    to delete a child's questions and then keeps them somewhere has not deleted
+    them, and the honest version of that is the one that is easy to reason
+    about: the row goes, `messages` goes with it by ON DELETE CASCADE, and
+    `_purge_thread_state` takes the copies that live outside the table.
+
+    Ownership is in the WHERE clause rather than checked first, for the same
+    reason the rename has it there: a delete must not be aimable at somebody
+    else's conversation by guessing its id. A miss is 404 whether the row
+    belongs to another account or never existed at all.
+    """
+    owner = await _owner(principal)
+    if not database_enabled():
+        raise _unavailable()
+
+    async with session() as db:
+        if db is None:
+            raise _unavailable()
+        result = await db.execute(
+            delete(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.owner_id == owner,
+            )
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="No such conversation.")
+
+    # Outside the transaction: the row is committed gone, and none of these
+    # three stores can participate in it anyway.
+    await _purge_thread_state(conversation_id)
 
 
 @router.post("/claim", response_model=ClaimResult)

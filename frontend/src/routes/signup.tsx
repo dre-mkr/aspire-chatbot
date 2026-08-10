@@ -4,21 +4,48 @@ import { useMemo, useState } from "react";
 import { AuthSurface } from "#/components/auth/AuthSurface";
 import { Field } from "#/components/auth/Field";
 import { AuthError, register } from "#/lib/aspire/auth";
+import { asPersonaId } from "#/lib/aspire/personas";
 import { keys } from "#/lib/aspire/queries";
 
 /**
  * Creating an account, at `/signup`.
  *
- * Four steps, submitted once at the end. The steps are a wizard in the browser
- * rather than four round trips: a half-finished account is not a useful thing
- * to have in the table, and somebody who gives up at step 3 should leave
- * nothing behind.
+ * A wizard in the browser rather than a request per step: a half-finished
+ * account is not a useful thing to have in the table, and somebody who gives up
+ * part-way should leave nothing behind.
  *
- * Date of birth is asked first, before any credentials, because it decides
- * everything after it. Under 13, the account belongs to the adult named in
- * step 3 — their email and password in step 4 — and the child's details ride
- * along on it. That is the one place this form's shape changes, and it changes
- * as soon as the birth date is complete rather than at the end.
+ * ## Who the account is for is asked FIRST, and that is the whole redesign
+ *
+ * This form used to open on "Let us start with you" and ask for one date of
+ * birth in the second person. Everything downstream was derived from it —
+ * including, through `DEFAULT_PERSONA` on the server, which assistant the
+ * account gets.
+ *
+ * That has exactly one correct reading, and the form never said which. A parent
+ * filling it in for a child entered the child's date, which is the obvious
+ * reading of a page headed "Let us start with you" when the reason you are on
+ * it is your daughter. The account then landed in a child band, and the parent
+ * could not get out: `register_agent` lives on Aurora alone, Aurora is wider
+ * than a child band's persona, and the server refuses a request to widen —
+ *
+ *     WARNING app.api.stream: Refused a request for persona 'aurora'
+ *     on a 16-18 band session.
+ *
+ * — so the picker went on showing Aurora while the session ran as Orion, and
+ * "I want to register my daughter" came back with advice to ask their parent.
+ * Nothing inside the product could repair it. Only a second account could.
+ *
+ * So the question is asked instead of inferred, and the date of birth goes back
+ * to meaning one thing: the age of whoever holds the account.
+ *
+ * ## The persona is not computed here
+ *
+ * Deliberately, even though this file now knows the role and the date of birth
+ * and could. The server returns the derived persona on the sign-up response and
+ * this navigates with it. A second copy of `DEFAULT_PERSONA` in the browser is
+ * what locked the whole 9-12 band out of the product once already — the note in
+ * `personas.ts` has that history — and a copy that lived in a form nobody reads
+ * after submitting would be the worst place yet to keep one.
  */
 
 const ISLANDS = ["St. Kitts", "Nevis"];
@@ -49,8 +76,60 @@ const MONTHS = [
 	"December",
 ];
 
+type Role = "participant" | "guardian" | "educator";
+
+/**
+ * The three answers, in the order somebody scans them.
+ *
+ * Participant first because it is the common case and the programme's subject.
+ * The other two are adults acting in a capacity, which is the distinction the
+ * server draws in `accounts.ADULT_ROLES`.
+ */
+const ROLES: ReadonlyArray<{ id: Role; label: string; blurb: string }> = [
+	{
+		id: "participant",
+		label: "I'm joining ASPIRE",
+		blurb: "You are the young person taking part, aged 5 to 18.",
+	},
+	{
+		id: "guardian",
+		label: "I'm a parent or guardian",
+		blurb: "You are applying for a child, or looking after their account.",
+	},
+	{
+		id: "educator",
+		label: "I'm a teacher or educator",
+		blurb: "You teach the material or support students who take part.",
+	},
+];
+
 /** Old enough to hold an account alone. Mirrors `MINOR_AGE` in the service. */
 const MINOR_AGE = 13;
+
+/**
+ * Above this, `band_for` returns `adult`. Mirrors the band table in
+ * `backend/app/graph/account.py`, which puts 18 in the `16-18` band.
+ *
+ * A mirror, not the authority — `accounts._role_problem` refuses the same
+ * combination server-side and this cannot let anything past it. It exists so a
+ * guardian who typed their child's date finds out on the step where the field
+ * is, rather than after filling in a password.
+ */
+const ADULT_ABOVE = 18;
+
+const ADULT_ROLES: ReadonlySet<Role> = new Set<Role>(["guardian", "educator"]);
+
+/** Which steps this role walks. The contact step is a participant's alone. */
+type StepId = "role" | "about" | "place" | "contact" | "credentials";
+
+function stepsFor(role: Role | null): StepId[] {
+	const base: StepId[] = ["role", "about", "place"];
+	// An adult role has no separate adult to name — they are the adult, and the
+	// server drops anything that arrives in those fields anyway.
+	if (role === "participant") base.push("contact");
+	base.push("credentials");
+	return base;
+}
 
 function safeNext(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
@@ -94,7 +173,8 @@ function SignUp() {
 	const queryClient = useQueryClient();
 	const { next } = Route.useSearch();
 
-	const [step, setStep] = useState(1);
+	const [role, setRole] = useState<Role | null>(null);
+	const [index, setIndex] = useState(0);
 	const [busy, setBusy] = useState(false);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -111,15 +191,23 @@ function SignUp() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 
-	const age = useMemo(() => ageFrom(day, month, year), [day, month, year]);
-	const isMinor = age !== null && age < MINOR_AGE;
+	const steps = useMemo(() => stepsFor(role), [role]);
+	const step = steps[index] ?? "role";
 
-	const stepLabels = [
-		"About you",
-		"Where you live",
-		isMinor ? "Your grown-up" : "Someone we can tell",
-		"Sign-in details",
-	];
+	const age = useMemo(() => ageFrom(day, month, year), [day, month, year]);
+	const isMinor = role === "participant" && age !== null && age < MINOR_AGE;
+	const adultRole = role !== null && ADULT_ROLES.has(role);
+	// Only meaningful once the date is complete; `age === null` is "not finished
+	// typing", not "too young", and must not turn the hint red while they type.
+	const tooYoungForRole = adultRole && age !== null && age <= ADULT_ABOVE;
+
+	const LABELS: Record<StepId, string> = {
+		role: "About this account",
+		about: adultRole ? "About you" : "About you",
+		place: "Where you live",
+		contact: isMinor ? "Your grown-up" : "Someone we can tell",
+		credentials: "Sign-in details",
+	};
 
 	function fail(field: string, message: string) {
 		setErrors({ [field]: message });
@@ -128,15 +216,29 @@ function SignUp() {
 
 	function validate(): boolean {
 		setErrors({});
-		if (step === 1) {
+		if (step === "role") {
+			if (role === null) return fail("role", "Choose who this account is for.");
+			return true;
+		}
+		if (step === "about") {
 			if (!first.trim()) return fail("first", "We need a first name.");
 			if (!last.trim()) return fail("last", "We need a last name.");
 			if (age === null) return fail("dob", "Fill in the whole date of birth.");
 			if (age < 0 || age > 120)
 				return fail("dob", "Check that date — it looks wrong.");
+			if (tooYoungForRole) {
+				// The check that closes the trap this redesign exists for. Refused
+				// here and again by the service, which is the authority.
+				return fail(
+					"dob",
+					role === "guardian"
+						? "This should be your own date of birth, not your child's — their details come later, with the application."
+						: "A teacher or educator account is held by someone over 18.",
+				);
+			}
 			return true;
 		}
-		if (step === 3 && isMinor) {
+		if (step === "contact" && isMinor) {
 			// Refused here as well as by the service. An under-13 account without
 			// a named adult is the one shape this form must not be able to send.
 			if (!gName.trim())
@@ -148,7 +250,7 @@ function SignUp() {
 				);
 			return true;
 		}
-		if (step === 4) {
+		if (step === "credentials") {
 			if (!email.trim())
 				return fail("email", "We need an email to sign in with.");
 			if (password.length < 10) {
@@ -160,12 +262,13 @@ function SignUp() {
 	}
 
 	async function submit() {
-		if (!validate() || busy) return;
+		if (!validate() || busy || role === null) return;
 		setBusy(true);
 		try {
-			await register({
-				// Under 13 the adult's address is the account's, so step 4 collects
-				// theirs and this sends it as the credential either way.
+			const result = await register({
+				role,
+				// Under 13 the adult's address is the account's, so the last step
+				// collects theirs and this sends it as the credential either way.
 				email: email.trim(),
 				password,
 				firstName: first.trim(),
@@ -186,20 +289,31 @@ function SignUp() {
 				queryKey: keys.allConversations(),
 			});
 
+			// The persona the account actually resolved to, as the SERVER derived
+			// it, carried into the app so the picker opens on the right assistant
+			// instead of "Everyone". Narrowed through `asPersonaId` like any other
+			// value that reaches the search string: this one is trusted, but the
+			// param it lands in is not, and one gate for it is easier to keep true
+			// than two rules about which writers may skip it.
+			const persona = asPersonaId(result.persona);
+
 			// Re-validated at the point of use; see the note in signin.tsx.
 			void navigate({
 				to: safeNext(next) ?? "/",
 				replace: true,
-				search: (previous: Record<string, unknown>) => previous,
+				search: (previous: Record<string, unknown>) => ({
+					...previous,
+					...(persona ? { persona } : {}),
+				}),
 			});
 		} catch (error) {
 			const failure =
 				error instanceof AuthError
 					? error
 					: new AuthError("Something went wrong. Please try again.");
-			// A duplicate email belongs on step 4, where the email is.
+			// A duplicate email belongs on the step the email is on.
 			if (failure.field === "email" || failure.field === "password") {
-				setStep(4);
+				setIndex(steps.indexOf("credentials"));
 			}
 			setErrors({ [failure.field]: failure.message });
 		} finally {
@@ -209,48 +323,84 @@ function SignUp() {
 
 	function advance() {
 		if (!validate()) return;
-		if (step === 4) {
+		if (step === "credentials") {
 			void submit();
 			return;
 		}
-		setStep(step + 1);
+		setIndex(index + 1);
 	}
+
+	const TITLES: Record<StepId, string> = {
+		role: "Who is this account for?",
+		about: adultRole ? "About you" : "Let us start with you",
+		place: "Where do you live?",
+		contact: isMinor ? "Who looks after you?" : "Someone we can tell",
+		credentials: "Your sign-in details",
+	};
+
+	const SUBTITLES: Record<StepId, string> = {
+		role: "It decides which assistant you get and what the rest of this form asks for.",
+		about:
+			role === "guardian"
+				? "Your own details — your child's come later, with the application itself."
+				: role === "educator"
+					? "Your own details. Nothing here is shared with your students."
+					: "Your date of birth decides which version of ASPIRE you get, so it has to be right.",
+		place: "This helps us point you at the right modules and schools.",
+		contact: isMinor
+			? "An adult holds this account. They sign in, and you use it with them."
+			: "Someone we can reach about your progress. Optional.",
+		credentials: "Last step. This is what you will sign in with.",
+	};
 
 	return (
 		<AuthSurface
-			title={
-				step === 1
-					? "Let us start with you"
-					: step === 2
-						? "Where do you live?"
-						: step === 3
-							? isMinor
-								? "Who looks after you?"
-								: "Someone we can tell"
-							: "Your sign-in details"
-			}
-			subtitle={
-				step === 1
-					? "Your date of birth decides which version of ASPIRE you get, so it has to be right."
-					: step === 2
-						? "This helps us point you at the right modules and schools."
-						: step === 3
-							? isMinor
-								? "An adult holds this account. They sign in, and you use it with them."
-								: "Someone we can reach about your progress. Optional."
-							: "Last step. This is what you will sign in with."
-			}
-			step={{ current: step, total: 4, label: stepLabels[step - 1] }}
+			title={TITLES[step]}
+			subtitle={SUBTITLES[step]}
+			step={{
+				current: index + 1,
+				total: steps.length,
+				label: LABELS[step],
+			}}
 			onBack={() =>
-				step === 1 ? navigate({ to: "/signin" }) : setStep(step - 1)
+				index === 0 ? navigate({ to: "/signin" }) : setIndex(index - 1)
 			}
-			backLabel={step === 1 ? "Back to sign in" : "Back"}
-			footText={step === 1 ? "Already have an account?" : undefined}
-			footLinkLabel={step === 1 ? "Sign in" : undefined}
-			footLinkTo={step === 1 ? "/signin" : undefined}
+			backLabel={index === 0 ? "Back to sign in" : "Back"}
+			footText={index === 0 ? "Already have an account?" : undefined}
+			footLinkLabel={index === 0 ? "Sign in" : undefined}
+			footLinkTo={index === 0 ? "/signin" : undefined}
 		>
 			<div className="auth__fields">
-				{step === 1 ? (
+				{step === "role" ? (
+					<fieldset className="field auth__fieldset">
+						<legend className="sr-only">Who this account is for</legend>
+						<div className="auth__roles">
+							{ROLES.map((option) => (
+								<button
+									type="button"
+									key={option.id}
+									className="auth__role"
+									data-selected={role === option.id || undefined}
+									aria-pressed={role === option.id}
+									onClick={() => {
+										setRole(option.id);
+										setErrors({});
+									}}
+								>
+									<span className="auth__role-label">{option.label}</span>
+									<span className="auth__role-blurb">{option.blurb}</span>
+								</button>
+							))}
+						</div>
+						{errors.role ? (
+							<span className="field__error" role="alert">
+								{errors.role}
+							</span>
+						) : null}
+					</fieldset>
+				) : null}
+
+				{step === "about" ? (
 					<>
 						<Field
 							label="First name"
@@ -272,7 +422,9 @@ function SignUp() {
 						/>
 
 						<fieldset className="field auth__fieldset">
-							<legend className="field__label">Date of birth</legend>
+							<legend className="field__label">
+								{adultRole ? "Your date of birth" : "Date of birth"}
+							</legend>
 							<div className="field__dob">
 								<input
 									className="field__input field__input--day"
@@ -292,8 +444,8 @@ function SignUp() {
 									onChange={(e) => setMonth(e.currentTarget.value)}
 								>
 									<option value="">Month</option>
-									{MONTHS.map((name, index) => (
-										<option key={name} value={String(index + 1)}>
+									{MONTHS.map((name, monthIndex) => (
+										<option key={name} value={String(monthIndex + 1)}>
 											{name}
 										</option>
 									))}
@@ -314,6 +466,15 @@ function SignUp() {
 								<span className="field__error" role="alert">
 									{errors.dob}
 								</span>
+							) : adultRole ? (
+								// Said before the field is filled in, not after it is
+								// rejected. This is the exact confusion the role step
+								// exists to remove, so it is worth saying twice.
+								<span className="field__hint">
+									{role === "guardian"
+										? "Yours, not your child's. Their date of birth is part of the application."
+										: "Yours. A teacher account is held by someone over 18."}
+								</span>
 							) : isMinor ? (
 								// Said as soon as it is known, not sprung at the end.
 								<span className="field__hint">
@@ -329,7 +490,7 @@ function SignUp() {
 					</>
 				) : null}
 
-				{step === 2 ? (
+				{step === "place" ? (
 					<>
 						<fieldset className="field auth__fieldset">
 							<legend className="field__label">Island</legend>
@@ -350,7 +511,7 @@ function SignUp() {
 						</fieldset>
 						<div className="field">
 							<label className="field__label" htmlFor="school">
-								School
+								{role === "educator" ? "Where you teach" : "School"}
 							</label>
 							<select
 								id="school"
@@ -370,10 +531,10 @@ function SignUp() {
 					</>
 				) : null}
 
-				{step === 3 ? (
+				{step === "contact" ? (
 					<>
 						<Field
-							label={isMinor ? "Their name" : "Their name"}
+							label="Their name"
 							icon="user"
 							value={gName}
 							onChange={setGName}
@@ -407,7 +568,7 @@ function SignUp() {
 					</>
 				) : null}
 
-				{step === 4 ? (
+				{step === "credentials" ? (
 					<>
 						<Field
 							label={isMinor ? "Their email" : "Email"}
@@ -461,14 +622,14 @@ function SignUp() {
 					onClick={advance}
 					disabled={busy}
 				>
-					{step === 4
+					{step === "credentials"
 						? busy
 							? "Creating your account"
 							: "Create account"
 						: "Continue"}
 				</button>
 
-				{step === 1 ? (
+				{step === "role" ? (
 					<span className="auth__secondary-note">
 						Signing up keeps your chats when you switch device, and gets them
 						back if this browser is cleared.
