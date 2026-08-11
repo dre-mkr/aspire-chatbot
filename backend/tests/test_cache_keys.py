@@ -130,13 +130,12 @@ class TestFlushCoverage:
         """`flush_probe_answers` measures a warm-MISS: answers gone, vectors warm."""
         from app.cache import embedding_key
 
-        # `scripts/` is not in every checkout; a missing module is a skip.
-        flush_probe = pytest.importorskip(
-            "scripts.flush_probe_answers", reason="scripts/ is not in this checkout"
-        )
+        # `tests.scripts`, not `scripts`: 47006d4 moved backend/scripts/ under
+        # backend/tests/ and left this import pointing at the old location.
+        from tests.scripts.flush_probe_answers import _PREFIXES
 
-        assert self._prefix(embedding_key("q", "m")) not in flush_probe._PREFIXES
-        assert self._prefix(key("q")) in flush_probe._PREFIXES
+        assert self._prefix(embedding_key("q", "m")) not in _PREFIXES
+        assert self._prefix(key("q")) in _PREFIXES
 
 
 class TestValkeyUrl:

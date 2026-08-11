@@ -108,10 +108,7 @@ export async function streamAspire(
 			? {
 					body: {
 						message,
-						__upload_result: uploadResult as unknown as Record<
-							string,
-							unknown
-						>,
+						__upload_result: uploadResult as unknown as Record<string, unknown>,
 					},
 				}
 			: {}),

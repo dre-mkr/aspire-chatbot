@@ -3,7 +3,7 @@
 # Bring the running app up to match origin/main. Invoked by GitHub Actions over
 # SSH (see .github/workflows/deploy.yml), and safe to run by hand on the box:
 #
-#   sudo /aspire/deploy/update.sh
+#   /root/aspire/deploy/update.sh
 #
 # Configuration lives in /etc/aspire-deploy.env, deliberately outside the git
 # checkout so a deploy can never rewrite the settings that drive the deploy.
@@ -33,8 +33,14 @@ export PATH=/usr/local/bin:/usr/bin:/bin
 # $HOME/.pm2. If HOME is empty or different here from the shell you used to run
 # `pm2 start`, pm2 silently talks to a SECOND daemon: the deploy reports success
 # having reloaded an empty process list, while the apps serving traffic are
-# owned by the first one and keep running the old code. Name it explicitly.
-export PM2_HOME=${PM2_HOME:-/aspire/.pm2}
+# owned by the first one and keep running the old code.
+#
+# /root/.pm2 is deliberately root's *default* location rather than a path of our
+# own choosing: everything here runs as root, so an interactive `pm2 status` in
+# a root shell reaches this same daemon with no environment variable set. It is
+# still named explicitly because sshd runs a forced command in a non-login
+# shell, where HOME is not guaranteed.
+export PM2_HOME=${PM2_HOME:-/root/.pm2}
 
 CONFIG_FILE=${ASPIRE_DEPLOY_CONFIG:-/etc/aspire-deploy.env}
 if [ -r "$CONFIG_FILE" ]; then
@@ -42,11 +48,11 @@ if [ -r "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
 fi
 
-REPO_DIR=${REPO_DIR:-/aspire}
+REPO_DIR=${REPO_DIR:-/root/aspire}
 WEB_ROOT=${WEB_ROOT:-/aspire-web}
 BRANCH=${BRANCH:-main}
 # What to check out. Overridable so a rollback can name a commit directly:
-#   sudo env TARGET=<sha> /aspire/deploy/update.sh
+#   TARGET=<sha> /root/aspire/deploy/update.sh
 TARGET=${TARGET:-origin/$BRANCH}
 
 # Baked into the JavaScript at build time, not read at runtime. Getting this
@@ -133,9 +139,9 @@ mv -Tf "$WEB_ROOT/.client.swap" "$WEB_ROOT/client"
 # the retention job lives there and nothing else runs it -- see PRIVACY.md and
 # the note in ecosystem.config.cjs.
 #
-# This needs no sudo. pm2 runs as the `aspire` user that owns these processes,
-# which is why there is no /etc/sudoers.d rule any more: the deploy user cannot
-# restart anything except its own apps.
+# These processes run as root, the same user the deploy logs in as, so no sudo
+# and no sudoers rule is involved. The authorisation boundary is the forced
+# command in root's authorized_keys -- see deploy/README.md section 9.
 log "Restarting services"
 pm2 startOrReload "$REPO_DIR/deploy/ecosystem.config.cjs" --update-env
 

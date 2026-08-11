@@ -9,7 +9,7 @@
  * this file with require().
  */
 
-const ROOT = "/aspire";
+const ROOT = "/root/aspire";
 
 module.exports = {
   apps: [
@@ -33,12 +33,21 @@ module.exports = {
 
       // NEVER raise these two for the API.
       //
-      // Conversation memory is a langgraph InMemorySaver and the voice rate
-      // limiter is a process-local dict. Both live in the process. Run a second
-      // instance and a follow-up question can land on the one that never saw
-      // the first — the assistant loses the thread intermittently, which reads
-      // as a model fault and is nearly impossible to reproduce on purpose.
-      // Scaling past one process means moving both to Redis or Postgres first.
+      // Conversation history itself is safe across processes now — it is
+      // langgraph's `AsyncPostgresSaver` in Neon (app/graph/checkpointer.py).
+      // What is not safe is everything still held in process memory:
+      //
+      //   - the rate limiter, a module-level dict of sliding windows
+      //     (app/limits.py: `SlidingWindowLimiter._hits`). Its docstring records
+      //     the decision that a per-process window IS the whole service's
+      //     window — true only while there is one process. A second worker
+      //     silently doubles every limit on the endpoints that spend model
+      //     credits.
+      //   - the voice limiter in app/voice/router.py, same shape.
+      //   - game state (app/games/store.py), which is per-process by design.
+      //
+      // Scaling past one process means moving those to Valkey and making them
+      // fail closed FIRST. Until then, add CPU rather than workers.
       instances: 1,
       exec_mode: "fork",
 

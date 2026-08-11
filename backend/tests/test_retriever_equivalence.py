@@ -19,11 +19,13 @@ from app.rag import (
     chroma_floor_as_cosine_distance,
     get_embeddings,
 )
-# The probe lives in a `scripts/` directory that not every checkout carries; a missing module must be a skip, n…
-_latency_probe = pytest.importorskip(
-    "scripts.latency_probe", reason="scripts/ is not in this checkout"
-)
-load_cases = _latency_probe.load_cases
+# `tests.scripts`, not `scripts`: 47006d4 moved backend/scripts/ under
+# backend/tests/ and did not update this import. A missing import at module
+# scope is a COLLECTION error rather than a test failure, so pytest aborted the
+# entire run -- the whole backend suite went red, the `verify` job in
+# .github/workflows/deploy.yml failed, and the `deploy` job that depends on it
+# never started. One stale import was blocking every deployment.
+from tests.scripts.latency_probe import load_cases
 
 pytestmark = pytest.mark.slow
 

@@ -5,8 +5,13 @@ Assumes Ubuntu 24.04 (Debian 12 works; note the Python step). The site is
 `nginx-aspire.conf`, so there is nothing to substitute.
 
 Point an `A` record (and `AAAA`, if the VPS has IPv6) at the server before
-starting section 7 — certbot proves control over the name by being reachable at
-it, so it fails until DNS resolves.
+starting section 7 — a certificate authority proves control over the name by
+reaching it, so that step fails until DNS resolves.
+
+This deployment sits **behind Cloudflare**, which changes how TLS is obtained
+and how the app sees client addresses. Section 7 covers both; skipping the
+`nginx-cloudflare-realip.conf` step there leaves every visitor sharing one
+rate-limit bucket.
 
 ## What you are running
 
@@ -19,7 +24,7 @@ Four processes and one datastore behind one hostname, plus Postgres off-box:
 | `aspire-worker` | — | arq — nightly retention, summarisation |
 | `valkey` | 127.0.0.1:6380 | arq's queue and the response cache |
 | `nginx` | 443 | TLS, serves `/aspire-web/client/`, routes the rest |
-| Neon Postgres | (remote) | Conversations, accounts, applications, graph state |
+| Neon Postgres | (remote) | Conversations, accounts, applications, graph state, and the pgvector corpus |
 
 Only nginx is exposed. Everything else binds to loopback.
 
@@ -67,10 +72,15 @@ is a supported test configuration and not a production one.)
 
 ## 1. Server preparation
 
-```bash
-sudo adduser --system --group --home /aspire aspire
-sudo mkdir -p /aspire && sudo chown aspire:aspire /aspire
+Everything here runs as **root**. There is no separate service account: the
+checkout lives in root's home, pm2's daemon is root's own `~/.pm2`, and the
+deploy logs in as root. What bounds a leaked deploy key is therefore not a Unix
+user but the forced command in `authorized_keys` — see section 9. If you later
+want the unprivileged-user model back, the pieces that would need to change are
+`ROOT` in `ecosystem.config.cjs`, `REPO_DIR`/`PM2_HOME` in `update.sh`, and the
+ownership of `/aspire-web`.
 
+```bash
 sudo apt update
 sudo apt install -y nginx git curl
 
@@ -129,7 +139,7 @@ would take the worker down; evicting the coldest key does not.
 ```bash
 # The repository is public, so this needs no credentials. If you ever make it
 # private, switch to the SSH remote and add a deploy key — see section 9.
-sudo git clone https://github.com/fraimerdev/aspire-chatbot.git /aspire
+sudo git clone https://github.com/fraimerdev/aspire-chatbot.git /root/aspire
 ```
 
 ## 3. Database
@@ -146,7 +156,7 @@ does not look pooled.
 ## 4. Backend
 
 ```bash
-cd /aspire/backend
+cd /root/aspire/backend
 sudo uv sync --frozen           # creates .venv from uv.lock
 sudo cp .env.example .env
 sudo nano .env
@@ -203,7 +213,14 @@ sudo .venv/bin/alembic upgrade head
 sudo .venv/bin/python -m app.ingest
 ```
 
-`data/` must stay writable — it holds `chroma/` and `voice_cache/`.
+Retrieval is **pgvector in Neon**, not a local store: `app/ingest.py` writes the
+embedded corpus to the `documents` table, and `app/rag.py` queries it there. The
+local Chroma directory that older notes mention is gone — the only thing left of
+it is `chroma_floor_as_cosine_distance()`, which translates the old relevance
+threshold. So a rebuild of the vector store costs one embedding run against
+OpenAI and touches nothing on disk.
+
+`data/` must still stay writable — it holds `voice_cache/` and `events/`.
 
 ### The first admin account
 
@@ -218,7 +235,7 @@ sudo .venv/bin/python -m app.api.admin.staff create you@example.com --role admin
 ## 5. Frontend
 
 ```bash
-cd /aspire/frontend
+cd /root/aspire/frontend
 sudo bun install --frozen-lockfile
 sudo env VITE_ASPIRE_API_URL="https://aspire.eccugenai.app" bun run build
 ```
@@ -237,43 +254,42 @@ a symlink that only moves once a build has succeeded. Publish this first build
 by hand; from then on `deploy/update.sh` does it:
 
 ```bash
-sudo mkdir -p /aspire-web && sudo chown aspire:aspire /aspire-web
+sudo mkdir -p /aspire-web
 sudo cp -a dist/client /aspire-web/client.a
 sudo ln -sfn /aspire-web/client.a /aspire-web/client
 ```
 
 ## 6. Start the processes
 
-pm2 runs **as the `aspire` user**, not as root. That is what lets the deploy
-restart these processes over SSH without a sudo rule.
-
-`PM2_HOME` is set explicitly for the same reason `update.sh` sets it: pm2
-resolves its daemon through that variable, and a deploy that sees a different
-value talks to a second, empty daemon — reporting success while the processes
-actually serving traffic keep running the old code.
+pm2 runs as root, and its daemon lives at `/root/.pm2` — root's *default*
+`$HOME/.pm2`. That is deliberate. pm2 resolves its daemon through `PM2_HOME`,
+and a shell that sees a different value talks to a second, empty daemon:
+the deploy reports success having reloaded nothing, while the processes actually
+serving traffic keep running the old code. Leaving it at the default means a
+bare `pm2 status` in any root shell reaches the right daemon with no
+environment variable at all. `update.sh` still names it explicitly, because
+sshd runs a forced command in a non-login shell where `HOME` is not guaranteed.
 
 ```bash
-echo 'export PM2_HOME=/aspire/.pm2' | sudo tee -a /aspire/.bashrc
-
-cd /aspire
-sudo env PM2_HOME=/aspire/.pm2 pm2 start deploy/ecosystem.config.cjs
-sudo env PM2_HOME=/aspire/.pm2 pm2 save
-sudo env PM2_HOME=/aspire/.pm2 pm2 status
+cd /root/aspire
+pm2 start deploy/ecosystem.config.cjs
+pm2 save
+pm2 status
 ```
 
 Bring them back after a reboot. `pm2 startup` prints one command; run it exactly
 as printed — it embeds the user and `PM2_HOME`:
 
 ```bash
-sudo env PM2_HOME=/aspire/.pm2 pm2 startup systemd --hp /aspire
+pm2 startup systemd -u root --hp /root
 ```
 
 Log rotation is not on by default and a small VPS will fill its disk:
 
 ```bash
-sudo env PM2_HOME=/aspire/.pm2 pm2 install pm2-logrotate
-sudo env PM2_HOME=/aspire/.pm2 pm2 set pm2-logrotate:max_size 10M
-sudo env PM2_HOME=/aspire/.pm2 pm2 set pm2-logrotate:retain 7
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 7
 ```
 
 `pm2 restart` does **not** rebuild. After a `git pull` the frontend must be
@@ -285,29 +301,120 @@ Check all three answer:
 ```bash
 curl -s localhost:8000/health          # {"status":"ok"}
 curl -sI localhost:3000/ | head -1     # HTTP/1.1 200 OK
-sudo env PM2_HOME=/aspire/.pm2 pm2 status   # three apps, "online"
+pm2 status                             # three apps, "online"
 ```
 
 ## 7. nginx and TLS
 
 ```bash
-sudo cp /aspire/deploy/nginx-aspire.conf /etc/nginx/sites-available/aspire
+sudo cp /root/aspire/deploy/nginx-aspire.conf /etc/nginx/sites-available/aspire
 sudo ln -s /etc/nginx/sites-available/aspire /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
 
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d aspire.eccugenai.app
+# Cloudflare sits in front of this name, so restore the visitor's real address
+# before anything reads it. Section "Cloudflare" below says why this matters.
+sudo cp /root/aspire/deploy/nginx-cloudflare-realip.conf \
+        /etc/nginx/conf.d/cloudflare-realip.conf
+
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Certbot rewrites the listen lines and adds the HTTP redirect. Renewal is
-automatic via its systemd timer.
+### Cloudflare
+
+`aspire.eccugenai.app` is a **proxied** (orange-cloud) record. Two consequences
+that are easy to miss and expensive to diagnose:
+
+**Certificates are two hops, not one.** The certificate a browser sees is
+Cloudflare's, issued for the edge. The certificate nginx presents is only ever
+seen by Cloudflare, and which one it will accept depends on the zone's SSL/TLS
+mode:
+
+| Cloudflare mode | What the origin needs on :443 |
+| --- | --- |
+| Flexible | nothing — Cloudflare talks to :80 (don't: the last hop is plaintext) |
+| Full | any certificate, self-signed included |
+| Full (strict) | a publicly-trusted cert, or a Cloudflare Origin certificate |
+
+If nothing listens on origin :443 you get **521** from the edge; if something
+listens but the cert is not acceptable for the mode, **526**.
+
+**Getting a certificate needs :443 working first.** There is a chicken-and-egg
+here that is worth understanding before you debug it at 2am. HTTP-01 needs
+Let's Encrypt to reach `/.well-known/acme-challenge/` over plain HTTP; with
+*Always Use HTTPS* on, Cloudflare answers that with a 301 to HTTPS at the edge
+and then tries the origin on :443. If nothing is listening there yet, validation
+fails — so you cannot get the certificate that would make :443 work.
+
+Break it with a throwaway self-signed pair, which "Full" mode accepts:
+
+```bash
+sudo install -d -m 700 /etc/ssl/aspire
+sudo openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+     -keyout /etc/ssl/aspire/privkey.pem \
+     -out    /etc/ssl/aspire/fullchain.pem \
+     -subj "/CN=aspire.eccugenai.app" \
+     -addext "subjectAltName=DNS:aspire.eccugenai.app"
+```
+
+Point `ssl_certificate` at that, reload, and :443 answers. Now HTTP-01 works
+straight through the proxy — this is the method in use, and its renewal is
+verified by `certbot renew --dry-run`:
+
+```bash
+sudo apt install -y certbot
+sudo install -d -m 755 /var/www/acme
+sudo certbot certonly --webroot -w /var/www/acme -d aspire.eccugenai.app \
+     --email you@example.com --agree-tos --no-eff-email
+```
+
+`certonly`, not `--nginx`, on purpose: `--nginx` rewrites this repo's config
+file in place, so the copy in git and the copy nginx reads drift apart and the
+next `cp` from the repo silently reverts the certificate paths. With `certonly`
+you set `ssl_certificate` to `/etc/letsencrypt/live/<domain>/fullchain.pem`
+once, in the file, and certbot never touches it.
+
+One thing certbot does not do for you: **nginx keeps the old certificate in
+memory across a renewal.** Without a deploy hook the renewal "succeeds" and the
+site starts serving an expired certificate 60 days later.
+
+```bash
+sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null <<'EOF'
+#!/bin/sh
+systemctl reload nginx
+EOF
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+```
+
+If HTTP-01 ever stops working (Cloudflare settings change, or you want to drop
+port 80 entirely), the two alternatives are a **Cloudflare Origin certificate**
+(dashboard → SSL/TLS → Origin Server; free, 15 years, valid for Full (strict),
+never publicly trusted — which does not matter because only Cloudflare sees it)
+or **DNS-01** via `certbot --dns-cloudflare` with a Zone:DNS:Edit token.
+
+Once a publicly-trusted certificate is installed, set the zone to
+**Full (strict)**. Leaving it on "Full" means Cloudflare accepts *any* origin
+certificate, which is barely better than no verification at all.
 
 Firewall, if you use one:
 
 ```bash
 sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
 ```
+
+Because every legitimate request arrives from Cloudflare, you can go further
+and refuse everything else — worth doing, since the origin IP is discoverable
+and an attacker who has it can bypass Cloudflare's WAF and rate limiting
+entirely:
+
+```bash
+for cidr in $(curl -s https://www.cloudflare.com/ips-v4) \
+            $(curl -s https://www.cloudflare.com/ips-v6); do
+    sudo ufw allow from "$cidr" to any port 443 proto tcp
+done
+sudo ufw delete allow 'Nginx Full'
+```
+
+Keep port 80 open to everyone only if you are renewing by HTTP-01.
 
 ## 8. Verify
 
@@ -343,7 +450,7 @@ One script does the whole sequence — fetch, dependencies, migrations, build,
 publish, restart, health check:
 
 ```bash
-sudo /aspire/deploy/update.sh
+sudo /root/aspire/deploy/update.sh
 ```
 
 It is written to be safe to interrupt and safe to re-run. Two properties worth
@@ -362,9 +469,9 @@ checkout so a deploy cannot rewrite what drives the deploy:
 ```ini
 SITE_URL=https://aspire.eccugenai.app
 # BRANCH=main
-# REPO_DIR=/aspire
+# REPO_DIR=/root/aspire
 # WEB_ROOT=/aspire-web
-# PM2_HOME=/aspire/.pm2
+# PM2_HOME=/root/.pm2
 ```
 
 `SITE_URL` has no default. Without it the script refuses to build rather than
@@ -373,16 +480,19 @@ bake in a guess.
 To roll back, point the checkout at the last good commit and re-run:
 
 ```bash
-sudo env TARGET=<good-sha> /aspire/deploy/update.sh
+sudo env TARGET=<good-sha> /root/aspire/deploy/update.sh
 ```
 
 The next push to `main` will move it forward again, so revert the commit on
 GitHub too rather than leaving the box pinned.
 
-Re-run `python -m app.ingest` only when `data/knowledge_base.csv` changed.
-Changing `EMBEDDINGS_MODEL` or `EMBEDDINGS_PROVIDER` changes the vector
-dimensions and makes the existing store unreadable — delete `data/chroma` and
-re-ingest.
+Re-run `python -m app.ingest` only when `data/knowledge_base.csv` changed. It
+replaces the rows in the `documents` table and flushes the response cache, so
+there is nothing to delete first.
+
+Changing `EMBEDDINGS_MODEL` or `EMBEDDINGS_PROVIDER` changes the vector width,
+which the `documents.embedding` column is typed to. That needs a migration to
+alter the column, not just a re-ingest — treat it as a schema change.
 
 ## 9. Deploying on every push
 
@@ -394,35 +504,42 @@ deploy and an automatic one are the same thing.
 One key is involved, in one direction — GitHub reaching the box:
 
 ```
-GitHub Actions  --ssh(DEPLOY_SSH_KEY)-->  VPS as `aspire`
+GitHub Actions  --ssh(DEPLOY_SSH_KEY)-->  VPS as `root`
 VPS             --https---------------->  github.com  (public repo, no credentials)
 ```
 
 ### GitHub needs to be able to reach the VPS
 
-The `aspire` user was created with `--system`, which gives it no login shell.
-Give it one, and authorise a key that exists only for this purpose:
+Authorise a key that exists only for this purpose:
 
 ```bash
-sudo usermod -s /bin/bash aspire
-sudo install -d -m 700 /aspire/.ssh
+sudo install -d -m 700 /root/.ssh
 
 # Generate this on your own machine, not the server: the private half has to
 # leave the box exactly once, into GitHub's secret store.
 ssh-keygen -t ed25519 -N '' -f ~/.ssh/aspire_deploy -C 'github-actions -> aspire vps'
 ```
 
-Append the **public** half to `/aspire/.ssh/authorized_keys`, restricted so
+Append the **public** half to `/root/.ssh/authorized_keys`, restricted so
 a leaked key cannot open an interactive session or forward ports:
 
 ```
-restrict,command="/aspire/deploy/update.sh" ssh-ed25519 AAAA... github-actions
+restrict,command="/root/aspire/deploy/update.sh" ssh-ed25519 AAAA... github-actions
 ```
 
-That forced command is the whole authorisation story. Under pm2 there is **no
-sudoers rule at all**: the deploy restarts processes owned by the same user it
-logs in as, so a leaked deploy key cannot restart anything else on the box, and
-adding an app to `ecosystem.config.cjs` needs no privilege change. (If you are
+**That forced command is the entire authorisation story, and here it is doing
+all of the work.** The key logs in as root, so `restrict` and `command=` are
+the only things standing between a leaked deploy key and the whole machine.
+Two habits follow from that:
+
+- Never drop the `command=` prefix "just to debug something". Open a second,
+  ordinary key for yourself instead and delete it when you are done.
+- Treat write access to `main` as equivalent to root on this box, because it
+  is: `update.sh` runs whatever `main` says it should. Protect the branch.
+
+There is no sudoers rule and no separate service account to keep in step —
+which is the upside of this arrangement, and the reason adding an app to
+`ecosystem.config.cjs` needs no privilege change on the box. (If you are
 migrating a box that ran the old systemd units, delete
 `/etc/sudoers.d/aspire-deploy` and the units in `/etc/systemd/system/aspire-*`
 once pm2 is serving, or the two will fight for the ports.)
@@ -430,22 +547,22 @@ once pm2 is serving, or the two will fight for the ports.)
 ### If the repository ever becomes private
 
 Skip this while it is public. The VPS would then need its own read-only key:
-generate one owned by `aspire` and add the **public** half at *Settings → Deploy
+generate one and add the **public** half at *Settings → Deploy
 keys → Add deploy key* (leave "Allow write access" unchecked):
 
 ```bash
-sudo ssh-keygen -t ed25519 -N '' -f /aspire/.ssh/id_github
-sudo cat /aspire/.ssh/id_github.pub
+sudo ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_github
+sudo cat /root/.ssh/id_github.pub
 
-sudo tee -a /aspire/.ssh/config >/dev/null <<'EOF'
+sudo tee -a /root/.ssh/config >/dev/null <<'EOF'
 Host github.com
-    IdentityFile /aspire/.ssh/id_github
+    IdentityFile /root/.ssh/id_github
     IdentitiesOnly yes
 EOF
 
 # the remote must be the SSH form for that key to be used
-sudo git -C /aspire remote set-url origin git@github.com:OWNER/REPO.git
-sudo git -C /aspire fetch origin      # accepts the host key, proves it works
+sudo git -C /root/aspire remote set-url origin git@github.com:OWNER/REPO.git
+sudo git -C /root/aspire fetch origin      # accepts the host key, proves it works
 ```
 
 ### Repository secrets
@@ -455,7 +572,7 @@ sudo git -C /aspire fetch origin      # accepts the host key, proves it works
 | Secret | Value |
 | --- | --- |
 | `DEPLOY_HOST` | the server's hostname or IP |
-| `DEPLOY_USER` | `aspire` |
+| `DEPLOY_USER` | `root` |
 | `DEPLOY_SSH_KEY` | contents of `~/.ssh/aspire_deploy` — the whole file, `BEGIN`/`END` lines included |
 | `DEPLOY_KNOWN_HOSTS` | output of `ssh-keyscan -t ed25519 YOUR-HOST` |
 | `DEPLOY_PORT` | only if sshd is not on 22 |
@@ -499,7 +616,7 @@ If the deploy is green but the site is wrong, the box is the place to look —
   immediately once, after checking what it would delete:
 
   ```sh
-  cd /aspire/backend
+  cd /root/aspire/backend
   .venv/bin/python -c "import asyncio; from app.retention import sweep_anonymous; \
       print(asyncio.run(sweep_anonymous(dry_run=True)))"
   ```
@@ -507,19 +624,22 @@ If the deploy is green but the site is wrong, the box is the place to look —
 ## Operating notes
 
 - **Logs:** `pm2 logs aspire-api`, `pm2 logs aspire-worker`, `pm2 logs aspire-web`.
-  Remember `PM2_HOME` if you are not in the `aspire` user's shell.
+  These reach the right daemon from any root shell; `PM2_HOME` defaults to
+  `/root/.pm2`, which is where they live.
 - **Cost:** every message is several model calls, and transcription is billed
   per request with keyterms adding 20%. The per-caller limits in `app/limits.py`
   are abuse dampening, not authentication — anonymous chat is a supported path,
-  so anyone with the URL can spend your API credits. Consider Cloudflare in
-  front, or a private DNS name, until that changes.
+  so anyone with the URL can spend your API credits. Cloudflare is already in
+  front; turn on Bot Fight Mode and a rate-limiting rule there if this starts
+  costing real money, since the edge can refuse a request for free and this box
+  cannot.
 - **Backups:** `backend/.env` (secrets, not in git) and
   `backend/data/knowledge_base.csv` (the source of truth). Neon holds the
-  conversations, accounts and applications and has its own backups — check its
-  retention setting. `data/chroma` is derived and can be rebuilt;
+  conversations, accounts, applications *and* the embedded corpus, and has its
+  own backups — check its retention setting. The `documents` table is derived
+  from the CSV and can be rebuilt with `python -m app.ingest`;
   `data/voice_cache` is disposable.
-- **Memory:** Chroma plus the embedding client wants roughly 1 GB, and Valkey is
-  capped at 256 MB above. A 2 GB VPS is comfortable; 1 GB will be tight during
-  ingest.
+- **Memory:** the vector store is off-box now, so the API process is mostly the
+  model clients; Valkey is capped at 256 MB above. A 2 GB VPS is comfortable.
 - **Scaling past one box** means moving the rate limiter to Valkey and making it
   fail closed first. Until then, add CPU rather than workers.
