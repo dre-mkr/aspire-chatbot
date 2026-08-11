@@ -1,5 +1,5 @@
 /** Asking for a document, and getting it to storage without touching our server. */
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { graphSession } from "../../lib/stream/session";
 import type { UploadDirective } from "../../lib/stream/types";
 import { useAgeBand } from "./AgeBandProvider";
@@ -225,13 +225,15 @@ export function UploadCard({
 						overflow: "hidden",
 					}}
 				>
+					{/* `scaleX`, not `width`: the fill animates on the compositor. */}
 					<div
-						style={{
-							width: `${progress}%`,
-							height: "100%",
-							background: "var(--plum)",
-							transition: "width 200ms ease",
-						}}
+						className="w-bar__fill"
+						style={
+							{
+								"--fill": Math.max(0, Math.min(1, progress / 100)),
+								background: "var(--plum)",
+							} as CSSProperties
+						}
 					/>
 				</div>
 			) : null}

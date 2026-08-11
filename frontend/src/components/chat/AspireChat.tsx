@@ -929,10 +929,10 @@ export function AspireChat() {
 
 					<output className="sr-only">{announcement}</output>
 
-					<p className="disclaimer">
-						ASPIRE AI can
-						<strong>make mistakes</strong>
-					</p>
+					{/* One text node: split across an element the space between "can" and
+					    "make" came from a flex gap, so the copied and spoken line ran the
+					    two words together. */}
+					<p className="disclaimer">ASPIRE AI can make mistakes.</p>
 				</main>
 			</div>
 		</div>

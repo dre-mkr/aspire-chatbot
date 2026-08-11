@@ -113,6 +113,14 @@ export function PersonIcon(props: IconProps) {
 	);
 }
 
+export function ChevronRightIcon(props: IconProps) {
+	return (
+		<Icon {...props}>
+			<path d="m9 6 6 6-6 6" />
+		</Icon>
+	);
+}
+
 export function ChevronDownIcon(props: IconProps) {
 	return (
 		<Icon size={14} {...props}>

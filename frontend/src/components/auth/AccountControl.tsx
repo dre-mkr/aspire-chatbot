@@ -145,7 +145,9 @@ export function AccountControl({ variant }: AccountControlProps) {
 				{variant === "rail" ? (
 					<span className="rail__identity rail__fold">
 						<span className="rail__name">{name}</span>
-						<span className="rail__note">{email}</span>
+						{/* The address is the only note that may be shortened; the signed-out
+						    line is copy, and copy that ends in an ellipsis reads as a bug. */}
+						<span className="rail__note rail__note--address">{email}</span>
 					</span>
 				) : null}
 			</button>

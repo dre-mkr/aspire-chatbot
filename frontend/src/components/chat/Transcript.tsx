@@ -666,11 +666,11 @@ function AnswerActions({
 				</>
 			) : null}
 
-			<button type="button" className="icon-btn icon-btn--sm" onClick={copy}>
+			{/* Labelled like the two either side of it: one bare icon in a row of
+			    named actions is the only one a reader has to guess at. */}
+			<button type="button" className="text-btn" onClick={copy}>
 				{copied ? <CheckIcon /> : <CopyIcon />}
-				<span className="sr-only">
-					{copied ? "Answer copied" : "Copy answer"}
-				</span>
+				{copied ? "Copied" : "Copy"}
 			</button>
 
 			{/* "Ask again", not "Try again": under a successful answer the latter reads as "you got it wrong", which is the… */}
