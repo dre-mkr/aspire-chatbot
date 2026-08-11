@@ -44,7 +44,9 @@ from app.agents.learn.resolve import (
     ConceptResolution,
     asks_to_practise,
     enqueue_candidate,
+    place_concept,
     resolve_concept,
+    wants_a_lesson,
 )
 from app.agents.learn.state import (
     band_of,
@@ -200,13 +202,34 @@ def make_tutor(
                 enqueue_candidate(utterance, band=band, locale=locale, resolution=resolution)
             )
 
+        scores = await _mastery_map(mastery, state)
+
         if not resolution.teaches:
-            return _decline(state, learning, resolution, band, started)
+            # "Teach me something" names no topic, so nothing resolves -- but it
+            # is a request to be taught, not a question we cannot answer, and
+            # declining it sent the learner to a path with no tutor in it.
+            placed = (
+                place_concept(
+                    store=store,
+                    band=band,
+                    locale=locale,
+                    mastery=scores,
+                    exclude=set(learning.get("concepts_touched") or ()),
+                )
+                if wants_a_lesson(utterance)
+                else None
+            )
+            if placed is None:
+                return _decline(state, learning, resolution, band, started)
+
+            logger.info("placed concept=%s for a request that named none", placed.id)
+            resolution = ConceptResolution(
+                concept=placed, source="placed", similarity=1.0
+            )
 
         concept = resolution.concept
 
         # ── 2. what did they just demonstrate? ──────────────────────────────
-        scores = await _mastery_map(mastery, state)
         score = scores.get(concept.id, 0) if concept else 0
 
         outstanding = _outstanding_check(concept, learning, band)

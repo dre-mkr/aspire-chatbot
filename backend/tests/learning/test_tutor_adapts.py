@@ -19,6 +19,7 @@ from app.agents.learn.evaluate import (
     triage,
 )
 from app.agents.learn.planner import Move
+from app.agents.learn.resolve import place_concept, wants_a_lesson
 from app.agents.learn.strategy import LADDER, Strategy, find_prerequisite, next_strategy
 from app.learning.concepts import (
     CheckItem,
@@ -699,6 +700,127 @@ class TestPrerequisites:
         assert state["active_concept_id"] == "CON-0042", "it must resume the real lesson"
         assert state["move"] == Move.ADVANCE.value
         assert state["deferred_concept_id"] is None, "and stop deferring it"
+
+
+# ── the request that names no topic ──────────────────────────────────────────
+
+
+class TestATopiclessRequest:
+    """"Teach me" must reach the tutor, or the tutor may as well not exist.
+
+    It named nothing, so nothing resolved, so the turn fell through to the
+    curriculum lesson machine -- which emits no widget, and never sets
+    `active_concept_id`, so every later turn fell through too. A learner who
+    opened this way got none of the tutoring on this page for the whole session.
+    """
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "teach me",
+            "teach me something",
+            "learn",
+            "I want to learn",
+            "let's learn",
+            "start learning",
+            "next lesson",
+            "help me learn",
+            "show me something",
+        ],
+    )
+    def test_a_request_to_be_taught_is_recognised(self, text):
+        assert wants_a_lesson(text)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "teach me about compound interest",
+            "what is a budget",
+            "hello there",
+            "play a game",
+            "how do I open an account",
+        ],
+    )
+    def test_a_named_topic_or_a_non_request_is_not_placement(self, text):
+        """Placement is the fallback. Anything that resolves must resolve."""
+        assert not wants_a_lesson(text)
+
+    def test_routing_sends_it_to_the_tutor(self, store):
+        from langchain_core.messages import HumanMessage
+
+        from app.agents.learn.graph import _entry
+
+        state = {
+            "messages": [HumanMessage(content="teach me")],
+            "learning": {},
+            "safety_flags": {},
+        }
+        assert _entry(state) == "tutor"
+
+    def test_placement_prefers_what_was_started_and_not_finished(self, store):
+        """Leaving a half-learned idea behind is how gaps are made."""
+        chosen = place_concept(
+            store=store, band="9-12", locale="en", mastery={"CON-0042": 1}
+        )
+        assert chosen is not None and chosen.id == "CON-0042"
+
+    def test_placement_skips_what_is_already_mastered(self, store):
+        chosen = place_concept(
+            store=store, band="9-12", locale="en", mastery={"CON-0042": 3, "CON-0001": 3}
+        )
+        assert chosen is None
+
+    def test_placement_is_stable_for_the_same_learner(self, store):
+        first = place_concept(store=store, band="9-12", locale="en", mastery={})
+        second = place_concept(store=store, band="9-12", locale="en", mastery={})
+        assert first is not None and first.id == second.id
+
+    @pytest.mark.asyncio
+    async def test_the_tutor_teaches_rather_than_declining(self, store, mastery):
+        result = await tutor(mastery=mastery)(turn("teach me", learning={}))
+
+        state = learned(result)
+        assert state["move"] != "DECLINE", "a request to be taught is not unanswerable"
+        assert state["resolution_source"] == "placed"
+        assert state["active_concept_id"], "and the next turn must know what we are on"
+
+    @pytest.mark.asyncio
+    async def test_the_placed_concept_sticks_for_the_next_turn(self, store, mastery):
+        """The old path never set this, which is why sessions never recovered."""
+        node = tutor(mastery=mastery)
+        first = await node(turn("teach me", learning={}))
+        second = await node(turn("more", learning=learned(first)))
+
+        assert learned(second)["active_concept_id"] == learned(first)["active_concept_id"]
+
+    @pytest.mark.asyncio
+    async def test_a_placed_turn_can_carry_a_widget(self, store, mastery):
+        """The symptom that started this: no widget ever reached the reader."""
+        valid = (
+            '{"kind": "growth_stack", "v": 1, "concept_id": "compound_interest",'
+            ' "title": "Watch it grow", "principal_cents": 10000,'
+            ' "contribution_cents": 0, "rate": 0.03, "periods": 5,'
+            ' "period_label": "year", "a11y_text": "Two stacks of coins. The first'
+            ' is what you put in. The second is the same money after five years,'
+            ' taller because the bank added a little each year."}'
+        )
+
+        async def plan(*, system: str, user: str) -> dict:
+            return {"kind": "growth_stack"}
+
+        async def compose(*, system: str, user: str) -> str:
+            return valid
+
+        node = tutor_module.make_tutor(
+            embed=None, invoke=Teacher(), plan=plan, compose=compose, cache=None,
+            mastery=mastery,
+        )
+        result = await node(turn("teach me", learning={}))
+
+        directives = result.get("ui_directives") or []
+        assert any(d.get("t") == "widget" for d in directives), (
+            f"a placed lesson must be able to carry a widget, got {directives}"
+        )
 
 
 # ── the grader itself ────────────────────────────────────────────────────────

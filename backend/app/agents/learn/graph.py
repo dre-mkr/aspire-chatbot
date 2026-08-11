@@ -516,6 +516,14 @@ def _entry(state: AspireState) -> str:
             return "tutor"
         if asks_about_a_topic(text) and not learning.get("question_id"):
             return "tutor"
+        # "Teach me something" names no topic and used to fall through to the
+        # lesson machine below -- which cannot emit a widget and never sets
+        # `active_concept_id`, so the session never found its way back here.
+        # The tutor places a concept itself when the learner names none.
+        from app.agents.learn.resolve import wants_a_lesson
+
+        if wants_a_lesson(text) and not learning.get("question_id"):
+            return "tutor"
 
     phase = str(learning.get("phase") or "placing")
     return {

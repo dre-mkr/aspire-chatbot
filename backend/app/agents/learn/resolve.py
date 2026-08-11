@@ -255,6 +255,73 @@ async def resolve_concept(
     )
 
 
+# ── placement: a learning request that names nothing ─────────────────────────
+
+#: "Teach me", "let's learn", "start a lesson" -- a request to be taught with no
+#: topic in it. Semantic resolution scores these against nothing, so they used to
+#: fall through to the curriculum lesson machine, which cannot emit a widget and
+#: never sets `active_concept_id` -- so the session never came back to the tutor.
+_WANTS_A_LESSON = re.compile(
+    r"""^\s*(?:(?:can\s+you|could\s+you|please|hey|ok(?:ay)?)[\s,]+)?
+    (?:
+        (?:teach|show|tell)\s+me(?:\s+(?:something|anything|a\s+lesson|more|stuff))?
+      | (?:i\s+(?:want|would\s+like|'?d\s+like)\s+to\s+)?learn
+            (?:\s+(?:something|anything|more|about\s+money|stuff))?
+      | (?:let'?s|lets)\s+(?:learn|start|begin|go)
+      | (?:start|begin)(?:\s+(?:a\s+)?(?:lesson|learning))?
+      | (?:next|another|a\s+new)\s+(?:lesson|topic|one)
+      | help\s+me\s+learn(?:\s+about\s+\w+)?
+      | (?:what|anything)\s+(?:can|should)\s+(?:you\s+teach|i\s+learn)
+    )
+    \s*[.!?]*\s*$""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def wants_a_lesson(text: str) -> bool:
+    """Whether this asks to be taught without saying what."""
+    return bool(_WANTS_A_LESSON.match((text or "").strip()))
+
+
+def place_concept(
+    *,
+    store: ConceptStore,
+    band: str,
+    locale: str = "en",
+    mastery: dict[str, int] | None = None,
+    exclude: set[str] | None = None,
+) -> TeachingConcept | None:
+    """What to teach a learner who asked to learn but did not say what.
+
+    The weakest thing they have not finished, which is the same instinct
+    `scheduler.place` applies to authored lessons: something started and not
+    secure comes before something never seen, because leaving a half-learned
+    idea behind is how gaps are made.
+    """
+    scores = mastery or {}
+    skip = exclude or set()
+
+    candidates = [
+        concept
+        for concept in store.teachable(band, locale)
+        if concept.id not in skip and scores.get(concept.id, 0) < MASTERED_SCORE
+    ]
+    if not candidates:
+        return None
+
+    def rank(concept: TeachingConcept) -> tuple[int, int, str]:
+        score = scores.get(concept.id, 0)
+        # Started but unfinished first (1..2), then untouched (0), then by slug
+        # so the same learner is not given a different lesson on a re-run.
+        return (0 if score else 1, -score, concept.slug)
+
+    return sorted(candidates, key=rank)[0]
+
+
+#: Mastery at which a concept no longer needs placing. Mirrors `planner.MASTERED`.
+MASTERED_SCORE = 3
+
+
 def _score_of(row: Any) -> float:
     for attribute in ("score", "similarity", "relevance"):
         value = getattr(row, attribute, None)
