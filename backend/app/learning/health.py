@@ -48,9 +48,37 @@ class TurnMetrics:
     mastery_after: int = 0
     escalated: bool = False
 
+    # ── the tutoring decisions (§25) ─────────────────────────────────────────
+
+    #: `evaluate.Verdict`. NOT_AN_ANSWER on a turn with nothing to grade.
+    verdict: str = "NOT_AN_ANSWER"
+    #: `evaluate.Diagnosis`.
+    diagnosis: str = "NONE"
+    #: How the verdict was reached: accept_list | model | heuristic.
+    evaluated_by: str = "heuristic"
+    #: Whether the answer matched one of the concept's authored misconceptions.
+    misconception_detected: bool = False
+    #: `strategy.Strategy` -- which rung the explanation stood on.
+    strategy: str = "DEFINITION"
+
+    @property
+    def mastery_delta(self) -> int:
+        return self.mastery_after - self.mastery_before
+
     def counters(self) -> dict[str, int]:
         """The increments this turn contributes."""
         counts: dict[str, int] = {"turns": 1}
+        if self.verdict != "NOT_AN_ANSWER":
+            counts["evaluated"] = 1
+            counts[f"verdict:{self.verdict}"] = 1
+            counts[f"grader:{self.evaluated_by}"] = 1
+        if self.diagnosis != "NONE":
+            counts[f"diagnosis:{self.diagnosis}"] = 1
+        if self.misconception_detected:
+            counts["misconception_detected"] = 1
+        if self.mastery_delta > 0:
+            counts["mastery_gained"] = self.mastery_delta
+        counts[f"strategy:{self.strategy}"] = 1
         if self.teach_fallback == "template":
             counts["teach_fallback"] = 1
         if self.teach_retry:
@@ -130,6 +158,15 @@ def _rate(numerator: int, denominator: int) -> float:
     return round(numerator / denominator, 4) if denominator else 0.0
 
 
+def _slice(totals: dict[str, int], prefix: str) -> dict[str, int]:
+    """The counters under one prefix, with the prefix stripped."""
+    return {
+        name[len(prefix) :]: count
+        for name, count in totals.items()
+        if name.startswith(prefix)
+    }
+
+
 @dataclass(slots=True)
 class Health:
     window_hours: int
@@ -148,6 +185,17 @@ class Health:
     concept_coverage: list[dict[str, Any]] = field(default_factory=list)
     band_mix: dict[str, int] = field(default_factory=dict)
     move_mix: dict[str, int] = field(default_factory=dict)
+    #: How the answers that were graded went, and how they were graded.
+    verdict_mix: dict[str, int] = field(default_factory=dict)
+    diagnosis_mix: dict[str, int] = field(default_factory=dict)
+    grader_mix: dict[str, int] = field(default_factory=dict)
+    strategy_mix: dict[str, int] = field(default_factory=dict)
+    #: Turns that graded an answer, as a share of all turns.
+    evaluated_rate: float = 0.0
+    #: Graded answers that matched an authored misconception.
+    misconception_rate: float = 0.0
+    #: Mastery points gained across the window.
+    mastery_gained: int = 0
     breaches: list[str] = field(default_factory=list)
 
     @property
@@ -202,6 +250,15 @@ async def snapshot(hours: int = 24) -> Health:
             for name, count in totals.items()
             if name.startswith("move:")
         },
+        verdict_mix=_slice(totals, "verdict:"),
+        diagnosis_mix=_slice(totals, "diagnosis:"),
+        grader_mix=_slice(totals, "grader:"),
+        strategy_mix=_slice(totals, "strategy:"),
+        evaluated_rate=_rate(totals.get("evaluated", 0), turns),
+        misconception_rate=_rate(
+            totals.get("misconception_detected", 0), totals.get("evaluated", 0)
+        ),
+        mastery_gained=totals.get("mastery_gained", 0),
     )
 
     # Breaches are only meaningful with turns behind them.

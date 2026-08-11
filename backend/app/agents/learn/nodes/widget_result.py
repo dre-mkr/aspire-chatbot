@@ -221,9 +221,49 @@ def make_widget_result(store: MasteryStore | None = None):
             "messages": [AIMessage(content=reply_for(interaction, figures, band))],
             "quick_replies": _chips(band),
             "active_agent": "learn_agent",
+            "learning": _learning_after(state, interaction),
         }
 
     return widget_result
+
+
+def _learning_after(state: AspireState, interaction: Interaction) -> dict[str, Any]:
+    """What the tutor's next turn should know about this interaction.
+
+    §11. The interaction already fed the mastery scale; what it did not feed was
+    the teaching loop, so the turn after a practice widget planned as though the
+    practice had not happened -- and could re-teach from scratch a concept the
+    learner had just worked through by hand.
+    """
+    from app.agents.learn.state import merge, touched
+
+    learning = state.get("learning") or {}
+    concept_id = interaction.concept_id
+
+    return merge(
+        learning,
+        # They are working on this, whatever the conversation was about before.
+        active_concept_id=concept_id,
+        resolution_source="widget",
+        concepts_touched=touched(learning, concept_id),
+        # Practice IS a check, so the tutor should not immediately ask for one.
+        turns_since_check=0,
+        # A widget is not a check question, so nothing is outstanding to grade.
+        awaiting_check_answer=False,
+        pending_check_id=None,
+        # What they did counts as an explanation that landed, so the strategy
+        # ladder starts again rather than continuing down from wherever it was.
+        teaching_strategy="",
+        last_widget_kinds=_remember(learning, interaction.widget_kind),
+    )
+
+
+def _remember(learning: dict[str, Any], kind: str | None, *, keep: int = 3) -> list[str]:
+    """Widget kinds recently shown, so the planner does not repeat itself."""
+    kinds = [item for item in (learning.get("last_widget_kinds") or []) if item]
+    if kind:
+        kinds.append(kind)
+    return kinds[-keep:]
 
 
 def _chips(band: str) -> list[str]:

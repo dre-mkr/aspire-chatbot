@@ -516,6 +516,14 @@ def _entry(state: AspireState) -> str:
             return "tutor"
         if asks_about_a_topic(text) and not learning.get("question_id"):
             return "tutor"
+        # "Teach me something" names no topic and used to fall through to the
+        # lesson machine below -- which cannot emit a widget and never sets
+        # `active_concept_id`, so the session never found its way back here.
+        # The tutor places a concept itself when the learner names none.
+        from app.agents.learn.resolve import wants_a_lesson
+
+        if wants_a_lesson(text) and not learning.get("question_id"):
+            return "tutor"
 
     phase = str(learning.get("phase") or "placing")
     return {
@@ -544,6 +552,7 @@ def build_learn_graph(
     disambiguate=None,
     widget_plan=None,
     widget_compose=None,
+    grade=None,
 ):
     """Compile the lesson machine."""
     graph = StateGraph(AspireState)
@@ -579,6 +588,11 @@ def build_learn_graph(
             plan=widget_plan,
             compose=widget_compose,
             mastery=store,
+            grade=grade,
+            # The authored prerequisite graph, which the teachable-concept rows
+            # inherit through their slugs. A tutor that cannot see what comes
+            # first can only ever reteach what came second.
+            curriculum=curriculum,
         ),
     )
     # Straight to END.
@@ -748,6 +762,10 @@ def build_production_learn():
         disambiguate=_structured("learn_resolve_model"),
         widget_plan=_structured("learn_widget_plan_model"),
         widget_compose=_compose_caller(),
+        # `learn_evaluate_model` has been in the settings since Track L and had
+        # no call site: the grader it was tiered for was specified and never
+        # built, so no learning turn ever looked at what the learner answered.
+        grade=_structured("learn_evaluate_model"),
     )
 
 
