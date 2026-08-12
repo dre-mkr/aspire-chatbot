@@ -4,7 +4,7 @@ import asyncio
 
 from app.cache import _FLUSH_PREFIXES, get_client, namespace
 
-#: Answers and shelves, every version -- but never the embedding cache, which is the whole point of this script…
+#: Answers and shelves, every version -- but never the embedding cache.
 _PREFIXES = tuple(p for p in _FLUSH_PREFIXES if not p.startswith("embed:"))
 
 

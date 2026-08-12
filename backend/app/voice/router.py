@@ -91,7 +91,7 @@ async def transcribe(
 ) -> TranscriptionResponse:
     settings = get_voice_settings()
 
-    # Consent first: Stella's audience starts at five years old, so a recording without explicit consent is not som…
+    # Consent first: this audience starts at five, so no recording moves without it.
     if not voice_consent:
         raise HTTPException(
             status_code=403,
@@ -202,7 +202,7 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
 
     key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
     cache = get_cache()
-    # `aget`/`aput`, not `get`/`put`: this is an async handler, and reading or writing a whole MP3 on the event loo…
+    # `aget`/`aput`, not `get`/`put`: a whole MP3 on the event loop would block it.
     if (cached := await cache.aget(key)) is not None:
         annotate_timings(cache_hit=True)
         return Response(
@@ -245,7 +245,7 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
 
 @router.post("/speak-stream")
 async def speak_stream(request: Request, body: SpeakRequest) -> Response:
-    """Text to audio, first byte before the last is synthesised (P14-C)."""
+    """Text to audio, with the first byte sent before the last is synthesised."""
     with timed_turn(
         endpoint="/voice/speak-stream",
         persona=body.persona.value,
@@ -273,7 +273,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
 
         headers = {
             "Cache-Control": "private, max-age=86400",
-            # nginx buffers proxied responses by default, which would turn this back into exactly the wait it exists to rem…
+            # nginx buffers proxied responses by default, restoring the wait this removes.
             "X-Accel-Buffering": "no",
         }
 
@@ -295,7 +295,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
                 headers={"Retry-After": str(decision.retry_after_seconds)},
             )
 
-        # The first chunk is awaited HERE, before the response object exists, because a StreamingResponse has already c…
+        # The first chunk is awaited before the response exists, so a failure can still 503.
         stream = get_client().synthesise_stream(
             spoken, profile.voice_id, model_id, profile.settings
         )
@@ -307,7 +307,7 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
             raise HTTPException(status_code=503, detail=_FALLBACK) from None
 
         async def body_and_cache():
-            # Teed as it flows: the reader hears chunks now, the cache gets the whole file after -- but only when the strea…
+            # Teed: the reader hears chunks now, the cache gets the file only if it completes.
             collected = [first]
             clean = False
             try:

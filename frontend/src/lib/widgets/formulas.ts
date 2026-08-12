@@ -61,7 +61,7 @@ export function compoundInterest(
 	const periods = Math.trunc(years * n);
 	const perPeriod = rate / n;
 
-	// The zero-rate branch is not an edge case to tolerate -- a savings account paying nothing is the comparison th…
+	// The zero-rate branch is the point: an account paying nothing is the comparison.
 	const total =
 		perPeriod === 0
 			? principal + contribution * periods

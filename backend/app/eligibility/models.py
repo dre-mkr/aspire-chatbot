@@ -6,13 +6,8 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 
-
-class Language(str, Enum):
-    """Re-declared rather than imported from `app.games`."""
-
-    EN = "en"
-    ES = "es"
-    FR = "fr"
+# Re-exported: this package's callers import it from here.
+from app.domain import Language
 
 
 class Verdict(str, Enum):
@@ -96,7 +91,7 @@ class Result:
     steps: tuple[Step, ...] = ()
     notices: tuple[str, ...] = ()
     contacts: tuple[str, ...] = ()
-    # Set only on the under-5 branch: the year they can register, so the result can name it rather than saying "lat…
+    # Set only on the under-5 branch: the year they can register, so the result can name it.
     reminder_year: int | None = None
 
 

@@ -18,6 +18,7 @@ from app.graph.nodes.safety_in import safety_in
 from app.graph.nodes.safety_out import make_safety_out
 from app.graph.state import AspireState
 from app.safety import pii
+from app.messages import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ def register_all() -> None:
     """Import every agent package so it can register itself."""
     modules = (
         "app.agents.qa.graph",
-        "app.agents.escalate.graph",
+        "app.agents.escalation.graph",
         "app.agents.learn.graph",
         "app.agents.register.graph",
     )
@@ -114,7 +115,7 @@ def register_all() -> None:
 #: Which agent names each module registers.
 _PROVIDES: dict[str, tuple[str, ...]] = {
     "app.agents.qa.graph": ("qa_agent", "qa_agent_limited", "qa_agent_public"),
-    "app.agents.escalate.graph": ("escalate_agent",),
+    "app.agents.escalation.graph": ("escalate_agent",),
     "app.agents.learn.graph": ("learn_agent", "learning_preview", "learning_sample"),
     "app.agents.register.graph": ("register_agent", "register_agent_step1"),
 }
@@ -146,9 +147,9 @@ def make_persist(summarise: Summariser | None = None):
         if summarise is not None and len(messages) > SUMMARY_AFTER_MESSAGES:
             older = messages[:-SUMMARY_AFTER_MESSAGES]
             redacted = [
-                pii.redact_for_summary(_text_of(message))
+                pii.redact_for_summary(text_of(message))
                 for message in older
-                if _text_of(message).strip()
+                if text_of(message).strip()
             ]
             if redacted:
                 try:
@@ -161,7 +162,7 @@ def make_persist(summarise: Summariser | None = None):
                         exc_info=True,
                     )
 
-        # Mastery deltas are written by the learning subgraph's `mastery_update` node, against the database, at the poi…
+        # Mastery deltas are written by the learning subgraph's `mastery_update` node, not here.
         _publish_turn(state)
 
         flags = state.get("safety_flags") or {}
@@ -195,9 +196,7 @@ def _publish_turn(state: AspireState) -> None:
             directive if isinstance(directive, dict) else directive_payload(directive)
         )
 
-    # Every field the panel renders, not just the id and the title. This is the
-    # only crossing citations make from state to the wire, so a field missing
-    # here is a field the reader can never be shown however well it was filled.
+    # Every field the panel renders: the only crossing citations make to the wire.
     citations = []
     for citation in state.get("citations") or []:
         citations.append(
@@ -221,19 +220,6 @@ def _publish_turn(state: AspireState) -> None:
             }
         }
     )
-
-
-def _text_of(message: Any) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""
 
 
 # ── routing ──────────────────────────────────────────────────────────────────
@@ -310,7 +296,7 @@ def build_main_graph(
     graph.add_node("hydrate", make_hydrate(token, body))
     graph.add_node("guard", guard)
     graph.add_node("safety_in", safety_in)
-    # Before routing, so `classify` and every agent read one resolved object instead of each re-deriving persona, b…
+    # Before routing, so `classify` and every agent share one resolved context.
     graph.add_node("resolve_context", make_resolve_context())
     graph.add_node("cards", make_intent_gate())
     graph.add_node("classify", make_classify(classifier_invoke))

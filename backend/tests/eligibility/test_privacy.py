@@ -54,7 +54,7 @@ def test_the_outcome_row_has_no_field_an_answer_could_occupy():
 
 
 def test_the_outcome_row_has_no_link_back_to_a_conversation():
-    """A join key would tie a verdict to a transcript, and a transcript identifies a person far better than an age b…"""
+    """A join key would tie a verdict to a transcript, which identifies a person."""
     assert EligibilityOutcome.__table__.foreign_keys == set()
     columns = {column.name for column in EligibilityOutcome.__table__.columns}
     for identifying in ("conversation_id", "thread_id", "session_id", "user_id"):
@@ -123,7 +123,7 @@ def test_the_history_line_carries_no_answer_and_no_verdict():
 def test_a_question_response_carries_only_the_answer_to_its_own_question(
     engine: EligibilityEngine,
 ):
-    """`answered_with` is the one place an answer appears, and it is scoped to the question being shown -- never the…"""
+    """`answered_with` is scoped to the question shown, never to earlier ones."""
     engine.start("privacy-4", Language.EN)
     engine.answer("privacy-4", "under5")
     engine.answer("privacy-4", "4")
@@ -131,7 +131,7 @@ def test_a_question_response_carries_only_the_answer_to_its_own_question(
 
     body = json.loads(_envelope(snapshot, Language.EN).model_dump_json())
     rendered = json.dumps(body)
-    # The current question is `residence`; nothing from the three answered before it may be in the payload.
+    # The current question is `residence`; nothing answered earlier may appear.
     assert "under5" not in rendered
     assert "by_descent" not in rendered
     assert body["question"]["id"] == "residence"

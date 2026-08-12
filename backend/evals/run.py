@@ -82,7 +82,7 @@ def score_retrieval_hybrid(cases: list[dict], k: int | None = None) -> dict:
     # The reranked path emits QA_RERANK_K chunks, not `retriever_k`.
     k = k or settings.qa_rerank_k
     retrieve = make_hybrid_retrieve(_search, _corpus)
-    # Reranking is part of retrieval here, not a separate concern: the cross encoder is what turns the fused candid…
+    # Reranking is part of retrieval here: the cross encoder orders the fused candidates.
     rerank = make_rerank(rerank_scores)
 
     async def run_one(case: dict) -> dict:
@@ -438,7 +438,7 @@ def main() -> int:
         return 0
 
     if args.retrieval:
-        # DENSE-ONLY REMAINS THE DEFAULT, and that is a deliberate, temporary compromise rather than the end state.
+        # DENSE-ONLY REMAINS THE DEFAULT, a deliberate and temporary compromise.
         block = (
             score_retrieval_hybrid(cases)
             if args.hybrid

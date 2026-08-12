@@ -27,7 +27,7 @@ export function Proportion({
 		? `${highlighted} of ${total} — ${Math.round((highlighted / total) * 100)} in every hundred`
 		: `${highlighted} out of ${total}`;
 
-	// Icon size shrinks as the count grows so a proportion of 100 still fits at 380px, with a floor that keeps it a…
+	// Shrinks as the count grows so 100 icons still fit at 380px, with a floor.
 	const size = total > 40 ? 10 : total > 20 ? 14 : 18;
 
 	return (

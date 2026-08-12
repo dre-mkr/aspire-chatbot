@@ -16,7 +16,8 @@ CABLE_OFFICE = "The Cable Office, Cayon Street, Basseterre"
 CABLE_HOURS = "Mon-Fri, 9:00 AM - 3:00 PM"
 
 
-# --- Questions ------------------------------------------------------------ Keyed by question id, then languag…
+# --- Questions ------------------------------------------------------------
+# Keyed by question id, then language.
 
 QUESTIONS: dict[str, dict[Language, dict[str, str]]] = {
     "age": {
@@ -48,7 +49,7 @@ QUESTIONS: dict[str, dict[Language, dict[str, str]]] = {
             "unsure": "Je ne sais pas",
         },
     },
-    # Asked only on the under-5 branch, and only so the result can name a year instead of saying "later".
+    # Asked only on the under-5 branch, so the result can name a year instead of "later".
     "age_exact": {
         Language.EN: {
             "text": "How old are they right now?",
@@ -240,7 +241,8 @@ UI: dict[Language, dict[str, str]] = {
 }
 
 
-# --- Results -------------------------------------------------------------- `headline` never states a decision.
+# --- Results --------------------------------------------------------------
+# `headline` never states a decision.
 
 RESULTS: dict[str, dict[Language, dict[str, object]]] = {
     "likely_eligible": {
@@ -563,7 +565,8 @@ UNRESOLVED_LABELS: dict[str, dict[Language, str]] = {
 }
 
 
-# --- Documents ------------------------------------------------------------ `where` never claims a civil-regis…
+# --- Documents ------------------------------------------------------------
+# `where` never names a registry office; it points to the ASPIRE team or the site.
 
 DOCUMENTS: dict[str, dict[Language, dict[str, str]]] = {
     # ASP-035, ASP-036. Firm.

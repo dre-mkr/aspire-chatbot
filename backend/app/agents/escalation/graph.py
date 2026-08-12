@@ -13,6 +13,7 @@ from langgraph.graph import END, START, StateGraph
 from app.graph.state import MINOR_BANDS, AspireState
 from app.safety import pii
 from app.schemas.directives import EscalatedDirective
+from app.messages import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,6 @@ _TRIAGE: dict[str, tuple[Priority, str]] = {
     "uncited_policy_claim": ("normal", "accuracy"),
     "repeated_clarification": ("normal", "comprehension"),
 }
-
-#: Three failed clarifications in a row is an escalation trigger in its own right.
-CLARIFICATION_LIMIT = 3
 
 
 def _is_child(state: AspireState) -> bool:
@@ -154,7 +152,7 @@ def summarise(state: AspireState) -> dict[str, Any]:
         role = {"human": "user", "ai": "assistant"}.get(
             getattr(message, "type", ""), "system"
         )
-        text = _text_of(message).strip()
+        text = text_of(message).strip()
         if text:
             lines.append(f"{role}: {pii.redact_for_summary(text)}")
 
@@ -247,19 +245,6 @@ def _chips(state: AspireState) -> list[str]:
         "es": ["Gracias", "Otra cosa"],
         "fr": ["Merci", "Autre chose"],
     }.get(locale, ["Thanks", "Something else"])
-
-
-def _text_of(message: Any) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""
 
 
 def build_escalate_graph(*, persist=None):

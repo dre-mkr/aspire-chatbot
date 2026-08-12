@@ -73,5 +73,5 @@ class TestSchemaLatch:
 
 
 def test_the_tables_we_require_are_the_ones_the_request_path_writes():
-    # `documents` is deliberately absent: it is only read, and a service with an empty corpus still answers questio…
+    # `documents` is absent on purpose: it is only read, and an empty corpus still answers.
     assert set(db_engine.REQUIRED_TABLES) == {"conversations", "messages"}

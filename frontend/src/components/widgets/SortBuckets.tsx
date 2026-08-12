@@ -120,7 +120,7 @@ export function SortBuckets({
 							type="button"
 							disabled={!held}
 							onClick={() => drop(bucket.id)}
-							// Named for what tapping it does right now, so a screen reader user is not told "Need" nine times with no indic…
+							// Named for what the tap does now, not just the bucket, for screen readers.
 							aria-label={held ? `Put it in ${bucket.label}` : bucket.label}
 							style={{
 								minHeight: "5.5rem",

@@ -127,7 +127,7 @@ class TestPrecedence:
             seen.append(user)
             return {"concept_id": target.id}
 
-        # An utterance equidistant from every concept scores 1/sqrt(3) = 0.577 against each -- above the disambiguation…
+        # Equidistant from every concept scores 0.577 each, inside the disambiguation band.
         resolution = await resolve_concept(
             "money things",
             band="9-12",

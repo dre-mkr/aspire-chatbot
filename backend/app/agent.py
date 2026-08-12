@@ -48,7 +48,7 @@ def build_chat_model(settings: Settings | None = None, *, model: str | None = No
         model_kwargs["use_responses_api"] = True
 
     if chosen.startswith("openai:"):
-        # Ask for usage in the stream, so the turn can report the provider's own input-token count and prefix-cache rea…
+        # Ask for usage in the stream, so the turn can report the provider's own token counts.
         model_kwargs["stream_usage"] = True
 
     return init_chat_model(chosen, **model_kwargs)
@@ -102,7 +102,7 @@ async def suggest_title(question: str, answer: str, language: str = "en") -> str
     title = (result.title or "").strip().strip("\"'").rstrip(".!?,;:")
     if not title or title.upper().replace(" ", "_") == NO_TITLE:
         return None
-    # The prompt asks for 48; enforce it here too, because a prompt is a request and this is the thing the layout a…
+    # The prompt asks for 48 characters; enforce it here too, because a prompt is only a request.
     return title[:48].strip()
 
 

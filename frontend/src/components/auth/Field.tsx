@@ -2,13 +2,7 @@ import { useId, useState } from "react";
 
 /** One labelled input, with its icon, its hint and its error. */
 
-export type FieldIcon =
-	| "mail"
-	| "lock"
-	| "user"
-	| "calendar"
-	| "school"
-	| "phone";
+export type FieldIcon = "mail" | "lock" | "user" | "phone";
 
 const PATHS: Record<FieldIcon, ReactPath> = {
 	mail: [
@@ -22,17 +16,6 @@ const PATHS: Record<FieldIcon, ReactPath> = {
 	user: [
 		<path key="p" d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />,
 		<circle key="c" cx="12" cy="7" r="4" />,
-	],
-	calendar: [
-		<rect key="r" x="3" y="4" width="18" height="18" rx="2" />,
-		<path key="a" d="M16 2v4" />,
-		<path key="b" d="M8 2v4" />,
-		<path key="c" d="M3 10h18" />,
-	],
-	school: [
-		<path key="a" d="M22 10v6" />,
-		<path key="b" d="M2 10l10-5 10 5-10 5z" />,
-		<path key="c" d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />,
 	],
 	phone: [
 		<path
@@ -117,7 +100,7 @@ export function Field({
 					inputMode={inputMode}
 					data-reveal={revealable || undefined}
 					data-error={error ? "" : undefined}
-					// The error is announced with the field rather than separately, so a screen reader hears the problem while on t…
+					// Announced with the field, so the problem is heard while focus is on it.
 					aria-invalid={error ? true : undefined}
 					aria-describedby={hint || error ? describedBy : undefined}
 					onChange={(event) => onChange(event.currentTarget.value)}

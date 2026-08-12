@@ -70,7 +70,7 @@ def test_personal_eligibility_questions_open_the_card(question: str) -> None:
         "Does Nevis count?",
         "how old do you have to be",
         "Is there an income limit?",
-        # The one that broke the injection detector for the same reason: a phrase that contains an eligibility word and…
+        # Broke the injection detector too: "act as" inside an ordinary question.
         "How do I act as a good saver?",
         "What is interest?",
         "How does compound interest work?",
@@ -191,7 +191,7 @@ async def test_a_disabled_module_never_opens_its_card() -> None:
     assert await gate(_state("let's play a game")) == {}
 
 
-# ── registration intent, for the personas that cannot register ─────────────── Reported from a live session on…
+# ── registration intent, for the personas that cannot register ───────────────
 
 
 from app.graph.access import allowed_agents  # noqa: E402

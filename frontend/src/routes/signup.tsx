@@ -71,7 +71,7 @@ type StepId = "role" | "about" | "place" | "contact" | "credentials";
 
 function stepsFor(role: Role | null): StepId[] {
 	const base: StepId[] = ["role", "about", "place"];
-	// An adult role has no separate adult to name — they are the adult, and the server drops anything that arrives…
+	// An adult role has no adult to name; the server drops one if sent.
 	if (role === "participant") base.push("contact");
 	base.push("credentials");
 	return base;
@@ -138,7 +138,7 @@ function SignUp() {
 	const age = useMemo(() => ageFrom(day, month, year), [day, month, year]);
 	const isMinor = role === "participant" && age !== null && age < MINOR_AGE;
 	const adultRole = role !== null && ADULT_ROLES.has(role);
-	// Only meaningful once the date is complete; `age === null` is "not finished typing", not "too young", and must…
+	// `age === null` means "still typing", not "too young".
 	const tooYoungForRole = adultRole && age !== null && age <= ADULT_ABOVE;
 
 	const LABELS: Record<StepId, string> = {
@@ -205,7 +205,7 @@ function SignUp() {
 		try {
 			const result = await register({
 				role,
-				// Under 13 the adult's address is the account's, so the last step collects theirs and this sends it as the cred…
+				// Under 13 the adult's address is the account's, collected on the last step.
 				email: email.trim(),
 				password,
 				firstName: first.trim(),
@@ -226,7 +226,7 @@ function SignUp() {
 				queryKey: keys.allConversations(),
 			});
 
-			// The persona the account actually resolved to, as the SERVER derived it, carried into the app so the picker op…
+			// The persona the server derived, carried in so the picker opens correct.
 			const persona = asPersonaId(result.persona);
 
 			// Re-validated at the point of use; see the note in signin.tsx.

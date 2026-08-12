@@ -1,9 +1,6 @@
 /** The graph session token, and where it comes from. */
 import { authHeaders } from "../aspire/session";
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+import { API_URL } from "../config";
 
 export interface GraphSession {
 	token: string;
@@ -24,11 +21,6 @@ const minting = new Map<string, Promise<GraphSession>>();
 export function forget(threadId: string): void {
 	held.delete(threadId);
 	minting.delete(threadId);
-}
-
-export function forgetAll(): void {
-	held.clear();
-	minting.clear();
 }
 
 export interface PersonaRefusal {
@@ -105,7 +97,7 @@ async function mint(
 
 	const granted = body.persona ?? "stella";
 
-	// Announced before the session is returned, so the control is corrected in the same tick the token arrives rath…
+	// Announced before returning, so the control corrects in the token's tick.
 	if (body.persona_refused && options.persona && refusedListener) {
 		refusedListener({ requested: options.persona, granted });
 	}

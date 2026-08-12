@@ -42,14 +42,6 @@ def decrypt(blob: bytes) -> str:
     return _fernet().decrypt(blob).decode("utf-8")
 
 
-def encryption_available() -> bool:
-    try:
-        _fernet()
-        return True
-    except Exception:
-        return False
-
-
 def _serialise(value: Any) -> str:
     """A slot value as the string that gets encrypted or stored."""
     if isinstance(value, (date, datetime)):

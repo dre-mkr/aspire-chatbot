@@ -28,7 +28,7 @@ def _no_database(monkeypatch):
 
     monkeypatch.setattr(store, "session", _none, raising=False)
 
-    # `store` imports `session` inside each function, so the module-level patch above is not enough on its own -- p…
+    # `store` imports `session` per call, so `app.db` needs patching too.
     import app.db as db_module
 
     monkeypatch.setattr(db_module, "session", _none)

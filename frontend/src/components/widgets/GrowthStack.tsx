@@ -153,8 +153,7 @@ function Stack({
 	const shown = Math.max(0, Math.min(coins, MAX_COINS));
 	return (
 		<div>
-			{/* The pile wraps: as a single column 24 coins ran nearly 400px tall and
-			    left the other half of the row empty. */}
+			{/* The pile wraps: one column of 24 coins ran ~400px tall. */}
 			<div aria-hidden="true" className="w-coins">
 				{/* Keyed by a minted id rather than by the loop index. */}
 				{coinIds(shown).map((id, index) => (

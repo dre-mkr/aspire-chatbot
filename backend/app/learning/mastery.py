@@ -232,7 +232,7 @@ class PostgresMasteryStore(MasteryStore):
 
         from app.db import session
 
-        # A learner id that is not a UUID cannot be a `mastery.learner_id`, so it is served from memory rather than han…
+        # A non-UUID learner id cannot be a `mastery.learner_id`, so it is served from memory.
         if not is_persistable(learner_id):
             return await super().get(learner_id, concept_id)
 
@@ -281,7 +281,7 @@ class PostgresMasteryStore(MasteryStore):
                 await super().put(learner_id, row)
                 return
 
-            # The learner row first, because `mastery.learner_id` references it and NOTHING ELSE CREATES ONE.
+            # The learner row first: `mastery.learner_id` references it, and nothing else makes it.
             await db.execute(
                 sql(
                     """

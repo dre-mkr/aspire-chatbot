@@ -4,8 +4,6 @@ import type { Source } from "./api";
 import type { AnswerBlock } from "./knowledge";
 
 const STORAGE_KEY = "aspire.conversations.v1";
-/** Enough for the rail to feel lived-in without unbounded growth. */
-const MAX_CONVERSATIONS = 50;
 const TITLE_MAX = 60;
 
 export type StoredMessage =
@@ -54,7 +52,7 @@ export function loadConversations(): Array<StoredConversation> {
 		const parsed: unknown = JSON.parse(raw);
 		if (!Array.isArray(parsed)) return [];
 
-		// Storage is shared with older builds and with hand-editing, so nothing out of it is trusted structurally.
+		// Storage is shared with older builds and hand-edits, so trust no shape from it.
 		return (parsed as Array<StoredConversation>)
 			.filter(
 				(item) =>
@@ -69,26 +67,6 @@ export function loadConversations(): Array<StoredConversation> {
 	}
 }
 
-/** Inserts or replaces one conversation, newest first. */
-export function saveConversation(
-	conversation: StoredConversation,
-): Array<StoredConversation> {
-	const next = [
-		conversation,
-		...loadConversations().filter((c) => c.threadId !== conversation.threadId),
-	].slice(0, MAX_CONVERSATIONS);
-
-	if (canStore()) {
-		try {
-			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-		} catch {
-			// Private browsing and full quotas both throw here.
-		}
-	}
-
-	return next;
-}
-
 /** Drops one conversation from this browser's copy of history. */
 export function forgetLocalConversation(threadId: string) {
 	if (!canStore()) return;
@@ -98,7 +76,7 @@ export function forgetLocalConversation(threadId: string) {
 	try {
 		window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 	} catch {
-		// Same reasoning as saveConversation: storage is a convenience, and a quota or a private window must not turn a…
+		// Storage is a convenience: a quota or a private window must not break this.
 	}
 }
 
@@ -146,46 +124,3 @@ export function groupByRecency(
 	return groups.filter((group) => group.items.length > 0);
 }
 
-/** Renames one conversation in place. */
-export function retitleConversation(
-	threadId: string,
-	title: string,
-	source: "generated" | "manual",
-): Array<StoredConversation> {
-	const clean = title.trim().slice(0, TITLE_MAX);
-	if (!clean) return loadConversations();
-
-	const next = loadConversations().map((conversation) => {
-		if (conversation.threadId !== threadId) return conversation;
-		if (source === "generated" && conversation.titleSource === "manual") {
-			return conversation;
-		}
-		return { ...conversation, title: clean, titleSource: source };
-	});
-
-	if (canStore()) {
-		try {
-			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-		} catch {
-			// Same reasoning as saveConversation: history is a convenience.
-		}
-	}
-	return next;
-}
-
-/** Drops the manual flag so a regenerate is allowed to replace the title. */
-export function clearTitleLock(threadId: string): Array<StoredConversation> {
-	const next = loadConversations().map((conversation) =>
-		conversation.threadId === threadId
-			? { ...conversation, titleSource: undefined }
-			: conversation,
-	);
-	if (canStore()) {
-		try {
-			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-		} catch {
-			// As above.
-		}
-	}
-	return next;
-}

@@ -222,7 +222,7 @@ async def claims_for(
     born, is_minor, _account_type, role, application_status = row
     status = _STATUS_FROM_APPLICATION.get(str(application_status or ""), "prospect")
 
-    # Somebody with an application in flight who is not themselves the child is a guardian applying, not an applica…
+    # An adult or guardian with an application in flight is a guardian applying, not the applicant.
     band = band_for(born, is_minor=bool(is_minor))
     if status in ("applicant", "beneficiary") and (role == "guardian" or band == "adult"):
         status = "guardian"

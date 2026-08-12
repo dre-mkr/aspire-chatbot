@@ -79,7 +79,7 @@ class UploadDirective(_Directive):
     accepts: list[str] = Field(min_length=1, max_length=8)
     max_mb: int = Field(default=10, ge=1, le=50)
     help: str = Field(default="", max_length=300)
-    #: Which application the document belongs to, so the object lands in the prefix the database row will point at.
+    #: Which application the document belongs to, so the object lands under the right prefix.
     application_id: str = Field(default="", max_length=64)
     #: Whether the card may offer a skip control.
     optional: bool = False
@@ -146,9 +146,7 @@ class CitationRef(BaseModel):
 
     kb_id: str
     title: str = ""
-    #: The question the row answers, and the text that backs the claim. Both are
-    #: corpus copy: the reader never sees the inline marker, so the panel has to
-    #: stand on its own.
+    #: The question the row answers and the text backing the claim, both corpus copy.
     question: str = ""
     snippet: str = ""
 
@@ -198,23 +196,6 @@ UIDirective = Annotated[
     ],
     Field(discriminator="t"),
 ]
-
-#: Every `t` the server can emit.
-DIRECTIVE_TYPES: frozenset[str] = frozenset(
-    {
-        "quick_replies",
-        "game",
-        "eligibility",
-        "signup",
-        "upload",
-        "review_card",
-        "chart",
-        "progress",
-        "citations",
-        "escalated",
-        "widget",
-    }
-)
 
 
 def directive_payload(directive: Any) -> dict[str, Any]:

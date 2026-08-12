@@ -222,5 +222,5 @@ class TestExhaustively:
             count += 1
 
         assert count == 5 * 5 * 2 * 5 * 6 * 4 * 2 * 2
-        # Every move except GAME is reachable from any band; GAME needs a child band, which the product includes.
+        # Every move but GAME works from any band, and the product covers GAME's child band.
         assert seen == set(Move)

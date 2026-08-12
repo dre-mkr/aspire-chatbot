@@ -41,7 +41,7 @@ def test_the_expected_tools_are_exposed():
 
 def test_list_games_describes_what_actually_exists(engine):
     payload = tools_module.list_games.invoke({}, config=cfg())
-    # The fixture engine carries word scramble only; the true/false set that ships is a draft and reports nothing u…
+    # The fixture engine carries word scramble only, so no true/false set is listed here.
     assert payload["games"] == [
         {
             "id": "word_scramble",

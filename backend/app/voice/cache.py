@@ -48,7 +48,8 @@ class VoiceCache:
         self._known_bytes = -1
         self._last_sweep = 0.0
 
-    # ── async wrappers ──────────────────────────────────────────────────── `speak` is an async handler, so every…
+    # ── async wrappers ────────────────────────────────────────────────────
+    # `speak` is an async handler, so disk I/O goes to a thread off the event loop.
 
     async def aget(self, key: str) -> bytes | None:
         return await asyncio.to_thread(self.get, key)
@@ -82,7 +83,7 @@ class VoiceCache:
     def put(self, key: str, audio: bytes) -> None:
         path = self.path_for(key)
         try:
-            # Write to a temp file in the same directory and replace, so a reader never sees a half-written MP3.
+            # Temp file in the same directory then replace, so no reader sees a half-written MP3.
             with tempfile.NamedTemporaryFile(
                 dir=self.directory, suffix=".part", delete=False
             ) as handle:
@@ -118,7 +119,7 @@ class VoiceCache:
             return
 
         total = sum(stat.st_size for _, stat in entries)
-        # Recorded whether or not anything is dropped: a sweep that finds the cache comfortably under the cap is exactl…
+        # Recorded even when nothing is dropped, so the next sweep can be skipped.
         self._known_bytes = total
         self._last_sweep = time.monotonic()
         if total <= limit:

@@ -12,6 +12,7 @@ from langgraph.types import Command
 
 from app.config import get_settings
 from app.graph.state import AspireState, Citation, KBChunk
+from app.messages import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,11 @@ def make_rewrite_query(invoke=None):
             return {}
 
         if invoke is None or len(messages) <= 1:
-            # An opening question has no context to resolve against, so the rewrite would be an identity transform with a m…
+            # An opening question has no context to resolve against, so skip the rewrite call.
             return {"qa_query": original}
 
         context = "\n".join(
-            f"{_role(message)}: {_text_of(message)}"
+            f"{_role(message)}: {text_of(message)}"
             for message in messages[-(REWRITE_WINDOW + 1) : -1]
         )
         try:
@@ -53,7 +54,7 @@ def make_rewrite_query(invoke=None):
             logger.warning("Query rewrite failed; searching the original.", exc_info=True)
             rewritten = original
 
-        # A rewrite that came back empty, or vastly longer than the question, is a rewrite that went wrong.
+        # Empty, or vastly longer than the question, means the rewrite went wrong.
         if not rewritten or len(rewritten) > len(original) * 6 + 80:
             rewritten = original
 
@@ -138,7 +139,7 @@ def make_hybrid_retrieve(search=None, corpus=None):
         dense = [chunk for chunk in dense if _permitted(chunk, audience)]
         by_id: dict[str, KBChunk] = {chunk.kb_id: chunk for chunk in dense}
 
-        # BM25 searches the WHOLE audience-permitted corpus, never a subset of what the dense side already found.
+        # BM25 searches the whole audience-permitted corpus, not a subset of the dense hits.
         lexical = bm25_rank(query, rows, settings.qa_retrieve_k)
         text_by_id = dict(rows)
         for identifier in lexical:
@@ -151,7 +152,7 @@ def make_hybrid_retrieve(search=None, corpus=None):
         fused = rrf_fuse(rankings, k=settings.qa_rrf_k)
         ranked = sorted(fused, key=lambda identifier: -fused[identifier])
 
-        # Normalised against the best score this fusion could possibly produce -- a document ranked first by every retr…
+        # The best RRF score this fusion could produce: rank one in every ranking.
         ceiling = len(rankings) / (settings.qa_rrf_k + 1)
 
         chunks: list[KBChunk] = []
@@ -242,11 +243,7 @@ def make_rerank(score=None):
                 chunk.model_copy(update={"score": float(value)})
                 for chunk, value in paired[:top]
             ],
-            # What the cut dropped, still in rank order. These are the corpus
-            # questions nearest to the one asked that the answer did NOT use,
-            # which is exactly what a follow-up chip should offer -- and without
-            # keeping them a good answer has no chips at all, because it cites
-            # every chunk it was given and `qa_rerank_k` is 4.
+            # What the cut dropped, still ranked -- the near-miss questions the chips offer.
             "qa_related": [chunk for chunk, _ in paired[top:]],
         }
 
@@ -280,7 +277,7 @@ DEPTH AND COMPLETENESS
 - Close with the one thing the reader should do next, when the extracts name
   one. Never pad; every sentence must carry information from an extract."""
 
-#: Legacy single-string prompt, kept for callers that build the messages themselves (the eval harness and older…
+#: Legacy single-string prompt, kept for callers that build their own messages.
 GENERATE_SYSTEM = """You answer questions about the ASPIRE savings programme.
 
 Rules, in order of importance:
@@ -336,7 +333,7 @@ def _generation_messages(
         if isinstance(context, SessionContext):
             from app.prompting.builder import build_messages
 
-            # The resolver's history includes this turn's question; drop it so the model reads the question once, in the hu…
+            # History already carries this turn's question; drop it so the model reads it once.
             turns = list(context.recent_turns)
             if turns and turns[-1].role == "user" and turns[-1].text.strip() == question.strip():
                 turns = turns[:-1]
@@ -367,7 +364,7 @@ def _generation_messages(
 #: Numbers and money amounts in an answer.
 _FIGURE = re.compile(r"(?:EC\$|US\$|\$)?\d[\d,]*(?:\.\d+)?%?")
 
-#: Figures that are never claims: small integers used as ordinals or counts ("three documents", "step 2"), and y…
+#: Small integers used as counts or ordinals; never a factual claim needing attribution.
 _INNOCUOUS = frozenset({"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"})
 
 #: Phrases that assert a rule. A sentence containing one must cite something.
@@ -452,14 +449,14 @@ def make_ground_check(threshold: float | None = None):
 
         chunks = list(state.get("retrieved") or [])
         messages = state.get("messages") or []
-        answer = _text_of(messages[-1]) if messages else ""
+        answer = text_of(messages[-1]) if messages else ""
 
         if not chunks or not answer.strip():
             return _ungrounded(state, "no_context", "Nothing in the knowledge base matched.")
 
         query = state.get("qa_query") or _latest_user_text(state)
 
-        # ── the primary floor: real cosine relevance ──────────────────────── `relevance` is the dense retriever's cos…
+        # ── the primary floor: the dense retriever's real cosine relevance ──
         best = max((chunk.relevance for chunk in chunks), default=0.0)
         dense_seen = any(chunk.relevance > 0.0 for chunk in chunks)
         if dense_seen and best < floor:
@@ -469,7 +466,7 @@ def make_ground_check(threshold: float | None = None):
                 f"The closest chunk scored {best:.3f}, below the {floor:.3f} floor.",
             )
 
-        # ── the lexical floor: English only ───────────────────────────────── A second, independent signal, and the on…
+        # ── the lexical floor: English only, and only when the dense side never ran ──
         if str(state.get("locale") or "en") == "en":
             coverage = lexical_coverage(query, chunks)
             matched = matched_terms(query, chunks)
@@ -496,7 +493,7 @@ def make_ground_check(threshold: float | None = None):
                 f"The answer stated {', '.join(missing[:3])}, which no extract contains.",
             )
 
-        # ── the gate that actually works: attribution ─────────────────────── An answer with no citation is ungrounded…
+        # ── attribution: an answer citing no retrieved extract is ungrounded ──
         known = {chunk.kb_id for chunk in chunks}
         cited = {
             match.group(1)
@@ -511,7 +508,7 @@ def make_ground_check(threshold: float | None = None):
                 "The answer cites no retrieved extract, so nothing supports it.",
             )
 
-        # A citation to something that was NOT retrieved is worse than none: it is a fabricated reference, and it reads…
+        # A citation to something not retrieved is worse than none: it is fabricated.
         invented = cited - known
         if invented:
             return _ungrounded(
@@ -520,10 +517,7 @@ def make_ground_check(threshold: float | None = None):
                 f"The answer cited {sorted(invented)}, which was not retrieved.",
             )
 
-        # The marker the model wrote inline is stripped before the prose reaches
-        # the reader (`stream_interceptor.strip_citation_markers`), so this panel
-        # is the ONLY provenance anybody sees. A bare title is not provenance --
-        # it carries the row's own question and the text that backs the claim.
+        # Inline markers are stripped from the prose, so this panel is the only provenance.
         citations = [
             Citation(
                 kb_id=chunk.kb_id,
@@ -534,7 +528,7 @@ def make_ground_check(threshold: float | None = None):
             for chunk in chunks
             if chunk.kb_id in grounded_citations
         ]
-        # The calibrated relevance of the best chunk, falling back to the fused agreement when the dense side never ran.
+        # The best chunk's calibrated relevance, or the fused score when dense never ran.
         groundedness = min(
             1.0,
             best if dense_seen else max((chunk.score for chunk in chunks), default=0.0),
@@ -563,16 +557,7 @@ _FIELD_LINE = re.compile(r"^\s*[A-Za-z][A-Za-z0-9_ ]{0,30}\s*:\s")
 
 
 def answer_text(content: str) -> str:
-    """A row's answer, without the column scaffolding around it.
-
-    `ingest.row_to_document` stores a row as `Category: …`, `Question: …`,
-    `Answer: …` and then every leftover column. Rendering that verbatim shows a
-    reader `id:` and `subcategory:`, which is worse than showing nothing -- so
-    the panel gets the answer and only the answer.
-
-    Falls back to the whole text for a row that is not QA-shaped, which is the
-    other schema `ingest` supports.
-    """
+    """A row's answer without the column scaffolding, or the whole text if not QA-shaped."""
     lines = (content or "").splitlines()
     for index, line in enumerate(lines):
         if not _ANSWER_LINE.match(line):
@@ -589,11 +574,7 @@ def answer_text(content: str) -> str:
 
 
 def snippet_of(content: str) -> str:
-    """The cited row's answer, cut at a word boundary.
-
-    Corpus text, so there is nothing to redact -- but a reader sees it, so it
-    ends on a whole word rather than mid-syllable.
-    """
+    """The cited row's answer, cut at a word boundary rather than mid-syllable."""
     text = " ".join(answer_text(content).split())
     if len(text) <= SNIPPET_MAX_CHARS:
         return text
@@ -602,43 +583,19 @@ def snippet_of(content: str) -> str:
     return (cut[:space] if space > SNIPPET_MAX_CHARS // 2 else cut).rstrip(" ,;:-") + "…"
 
 
-#: How many chips go under an answer. Three: enough to offer a direction,
-#: few enough to read at a glance rather than as a menu.
+#: How many chips go under an answer: enough to offer a direction, few enough to scan.
 FOLLOW_UP_CHIPS = 3
 
-#: A chip's character cap, set from the corpus rather than guessed.
-#:
-#: Measured over the 706 authored questions: median 42, p90 63, longest 102.
-#: At 60 this dropped 98 of them (14%) -- including entirely readable ones like
-#: "Are children living in Nevis eligible for the ASPIRE programme?" (63). At 72
-#: it keeps 96% and still fits the chip grid's column.
+#: A chip's character cap, set from the corpus: 72 keeps 96% of the authored questions.
 CHIP_MAX_CHARS = 72
 
 
 def follow_up_chips(
     state: AspireState, chunks: list[KBChunk], cited: set[str]
 ) -> list[str]:
-    """More questions the knowledge base can actually answer.
-
-    ## Candidates come from two pools, and the second one is why this works
-
-    The reranked chunks first, then `qa_related` -- the fused hits the reranker
-    dropped. Measured against the running service: a good answer produced ZERO
-    chips, because `qa_rerank_k` is 4, the model was handed 4 extracts, and it
-    cited all four. Drawing only from uncited top-4 rows means the chips vanish
-    exactly when the answer is at its best.
-
-    Rows 5-12 of the fusion are the corpus questions nearest to the one asked
-    that the answer did not use -- real questions, with real answers behind
-    them, chosen by the retriever rather than invented by a second model call.
-    """
+    """More questions the corpus can answer, drawn from the reranked chunks then `qa_related`."""
     asked = _asked_questions(state)
-    # What the ANSWER already covered, by question rather than by id. Two rows
-    # can ask one question -- ASP-029 "What is the minimum age to join ASPIRE?"
-    # and ASP-241 "What is the minimum age requirement for ASPIRE enrolment?" --
-    # so excluding cited ids alone still offered the reader a fact they had just
-    # been given. Measured: an eligibility answer that stated both the minimum
-    # and the maximum age offered both of them back as chips.
+    # What the answer covered, by question not by id: two rows can ask the same thing.
     covered = [
         _words(str(chunk.metadata.get("question") or chunk.title or ""))
         for chunk in chunks
@@ -657,9 +614,7 @@ def follow_up_chips(
         words = _words(question)
         if not words:
             continue
-        # Near-duplicates, not just exact ones -- against everything asked in
-        # this thread, everything the answer covered, and everything already
-        # offered on this turn.
+        # Near-duplicates too: against the thread, the answer's coverage, and this turn's chips.
         if any(_restates(words, other) for other in (*asked, *covered, *seen)):
             continue
 
@@ -707,12 +662,7 @@ def _restates(candidate: set[str], other: set[str]) -> bool:
 
 
 def _asked_questions(state: AspireState) -> list[set[str]]:
-    """Every question the reader has asked in this thread, as word sets.
-
-    The WHOLE thread, not just the last turn. A chip offering something that was
-    asked and answered six turns ago reads as the assistant not having listened,
-    and the reader has no way to know it would only repeat itself.
-    """
+    """Every question asked in the whole thread, as word sets, not just the last turn."""
     asked: list[set[str]] = []
     for message in state.get("messages") or []:
         if getattr(message, "type", None) != "human":
@@ -726,7 +676,7 @@ def _asked_questions(state: AspireState) -> list[set[str]]:
     return asked
 
 
-# ── small talk ─────────────────────────────────────────────────────────────── "Ungrounded means escalate, not…
+# ── small talk: a greeting is not an ungrounded question, so it never opens a ticket ──
 _SMALL_TALK: Final[tuple[tuple[str, str], ...]] = (
     ("greeting", r"(hi|hey|hello|good\s+(morning|afternoon|evening)|hola|buenos\s+d[ií]as|bonjour|salut)"),
     ("thanks", r"(thanks|thank\s+you|ty|cheers|gracias|merci)"),
@@ -783,7 +733,7 @@ _SMALL_TALK_RE: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
 def _small_talk_reply(state: AspireState) -> Command | None:
     """A conversational reply for a conversational turn, or None."""
     text = (_latest_user_text(state) or "").strip()
-    # Length is a second guard on top of the anchoring: no phrase in the closed list is anywhere near this long, so…
+    # A length guard on top of the anchoring: no phrase in the closed list comes near 64.
     if not text or len(text) > 64:
         return None
 
@@ -901,15 +851,3 @@ def _role(message: Any) -> str:
         getattr(message, "type", ""), "system"
     )
 
-
-def _text_of(message: Any) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""

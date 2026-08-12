@@ -18,7 +18,7 @@ export const Route = createFileRoute("/admin")({
 type Session = { role: Role; email: string; mustChange: boolean } | null;
 
 function AdminShell() {
-	// Restored from the tab, but WITHOUT a role read back from storage — a role the client remembered is a role the…
+	// Restored from the tab, but never the role: a remembered role is forgeable.
 	const [session, setSession] = useState<Session>(() =>
 		token() ? { role: "reviewer", email: "", mustChange: false } : null,
 	);

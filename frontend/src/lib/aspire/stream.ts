@@ -103,7 +103,7 @@ export async function streamAspire(
 					body: gameResult as unknown as Record<string, unknown>,
 				}
 			: {}),
-		// The ordinary chat path, unlike an interaction: this IS the turn that answers the upload the graph is waiting…
+		// The ordinary chat path: this IS the turn answering the upload the graph awaits.
 		...(uploadResult
 			? {
 					body: {
@@ -117,7 +117,7 @@ export async function streamAspire(
 			: {}),
 		onToken: (text) => onDelta?.(text),
 		onDirective: (directive) => {
-			// Directives close the prose in this protocol: the server emits them from the settled state, after the last tok…
+			// Directives close the prose: the server emits them after the last token.
 			closeProse();
 
 			// Cast per branch rather than relying on narrowing.
@@ -125,8 +125,7 @@ export async function streamAspire(
 				case "citations":
 					for (const ref of (directive as CitationsDirective).refs) {
 						sources.push({
-							// The row's own text, so the panel shows evidence rather
-							// than restating the title it is already labelled with.
+							// The row's own text, so the panel shows evidence, not the title again.
 							content: ref.snippet || ref.title || ref.kb_id,
 							metadata: {
 								kb_id: ref.kb_id,
@@ -182,7 +181,7 @@ export async function streamAspire(
 	}
 
 	const answer: AskResult = {
-		// A card turn produces no prose at all — the server never asks a model to write any — so an empty reply here is…
+		// A card turn produces no prose at all, so an empty reply here is correct.
 		reply: startedGame || startedEligibility ? "" : result.text,
 		threadId: thread,
 		sources,
@@ -192,7 +191,7 @@ export async function streamAspire(
 		directives: directives.filter((d) => !CARD_TYPES.has(d.t)),
 	};
 
-	// Handed over before this function resolves, matching the old contract: the caller settles the turn on this rat…
+	// Handed over before this resolves: the caller settles on this, not on the return.
 	onTurn?.(answer);
 	return answer;
 }

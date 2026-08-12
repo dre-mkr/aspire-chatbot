@@ -106,7 +106,7 @@ class TestTheRowsThemselves:
     @pytest.mark.parametrize("band", ["5-8", "9-12"])
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_stella_in_her_own_bands(self, band, status):
-        # Q&A leads: it is the default agent for every reader, and the row order is what makes `classify`'s fallback pi…
+        # Q&A leads: row order is what makes `classify`'s fallback pick it.
         assert allowed_agents("stella", band, status, user_id=USER) == [
             "qa_agent_limited",
             "learn_agent",
@@ -129,7 +129,7 @@ class TestTheRowsThemselves:
 
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_orion_sixteen_to_eighteen(self, status):
-        """Servicing but not registration: old enough to hold an account, not the person who opens one."""
+        """Old enough to hold an account, not to be the person who opens one."""
         assert allowed_agents("orion", "16-18", status, user_id=USER) == [
             "qa_agent",
             "learn_agent",
@@ -157,7 +157,7 @@ class TestTheRowsThemselves:
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_nova(self, band, status):
-        """Neither servicing nor registration: both act on another person's account, which is a portal function with its…"""
+        """Neither servicing nor registration: both act on another person's account."""
         assert allowed_agents("nova", band, status, user_id=USER) == [
             "qa_agent",
             "escalate_agent",

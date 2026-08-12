@@ -103,7 +103,7 @@ def kinds_for(age_band: str, concept_id: str, recent: list[str]) -> list[str]:
     stale = set(recent[-2:])
     offered = [kind for kind in KIND_SUMMARIES if kind in permitted and kind not in stale]
 
-    # If avoiding repetition emptied the list, allow repeats rather than returning nothing: a repeated primitive be…
+    # If avoiding repetition emptied the list, allow repeats: a repeat beats no widget.
     return offered or [kind for kind in KIND_SUMMARIES if kind in permitted]
 
 

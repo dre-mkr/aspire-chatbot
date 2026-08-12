@@ -90,7 +90,7 @@ export function Simulator({
 						max={control.max}
 						step={control.step}
 						value={values[control.id]}
-						// Both are stated: a screen reader reads `aria-valuetext` where it exists and the raw number where it does not,…
+						// Both are stated: readers without `aria-valuetext` fall back to the raw number.
 						aria-valuetext={formatControl(control.unit, values[control.id])}
 						onChange={(event) => {
 							const next = Number(event.target.value);
@@ -108,7 +108,7 @@ export function Simulator({
 			))}
 
 			<output
-				// `aria-live="polite"` rather than `assertive`: the number changes on every drag frame, and assertive would int…
+				// `polite`, not `assertive`: the number changes on every drag frame.
 				aria-live="polite"
 				style={{
 					display: "block",

@@ -179,7 +179,7 @@ async def _compose(
         avoid=_avoid(learning),
     )
 
-    # Track C.4: one builder for every agent.
+    # One prompt builder for every agent.
     if context is not None:
         from app.prompting import build_messages
 
@@ -190,7 +190,7 @@ async def _compose(
             extra_instruction=widget_prompt,
         )
     else:
-        # No resolved context: a unit test driving the node directly, or a turn where `resolve_context` did not run.
+        # No resolved context: a unit test, or a turn where `resolve_context` did not run.
         prompt = f"{role}\n\n{widget_prompt}" if widget_prompt else role
         messages = [SystemMessage(content=prompt), HumanMessage(content=user)]
 
@@ -252,7 +252,7 @@ async def _ground_and_plan(
         from app.graph.nodes.safety_in import latest_user_text
 
         return await plan(
-            # What the child last said, falling back to the lesson's own objective when they said nothing -- a lesson can b…
+            # What the child last said, or the lesson's objective when they said nothing.
             user_message=latest_user_text(state) or lesson.objective,
             concept_id=lesson.concept_id,
             age_band=band,

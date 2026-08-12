@@ -252,7 +252,7 @@ def _one_of(options: tuple[str, ...]):
             if text == option.lower():
                 return option, None
 
-        # Everything below is the loose path, because a parent types "Cayon" for "Saint Mary Cayon" -- or "St.
+        # The loose path below, because a parent types "Cayon" for "Saint Mary Cayon".
         answer = _fold(raw)
         if not answer:
             return None, "not one of the options"
@@ -265,7 +265,7 @@ def _one_of(options: tuple[str, ...]):
         matches = [
             option
             for option, name in folded.items()
-            # `name in answer` catches the other direction: the official list writes two of the Nevis parishes with a "(Nev…
+            # `name in answer` catches the other direction: the option is the shorter string.
             if answer in name or name in answer or _tokens_fit(answer, name)
         ]
         if len(matches) == 1:
@@ -417,7 +417,7 @@ GUARDIAN_SLOTS: tuple[Slot, ...] = (
             "fr": "Et quelle paroisse ?",
         },
         reask={
-            # Not "tap one of the options": there are fourteen parishes and the chips only ever show four, so for ten of th…
+            # Not "tap one of the options": there are more parishes than the chips can show.
             "en": "I need the full parish name — like Saint Mary Cayon. You can type it, or tap one of the options.",
             "es": "Necesito el nombre completo de la parroquia — por ejemplo Saint Mary Cayon. Puedes escribirlo o tocar una de las opciones.",
             "fr": "Il me faut le nom complet de la paroisse — par exemple Saint Mary Cayon. Tu peux l'écrire ou toucher une des options.",

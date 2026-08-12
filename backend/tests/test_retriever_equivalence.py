@@ -19,7 +19,7 @@ from app.rag import (
     chroma_floor_as_cosine_distance,
     get_embeddings,
 )
-# The probe lives in a `scripts/` directory that not every checkout carries; a missing module must be a skip, n…
+# `scripts/` is not in every checkout, so a missing probe module must skip rather than error.
 _latency_probe = pytest.importorskip(
     "scripts.latency_probe", reason="scripts/ is not in this checkout"
 )

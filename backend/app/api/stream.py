@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
 from app import turn as turn_service
+from app.auth import bearer_token
 from app.config import get_settings
 from app.graph.checkpointer import get_checkpointer, thread_config
 from app.graph.identity import decode_session_token
@@ -47,15 +48,6 @@ TURN_TIMEOUT_SECONDS = 120.0
 MAX_MESSAGE_CHARS = 8_000
 
 
-def _bearer(authorization: str | None) -> str | None:
-    if not authorization:
-        return None
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
-
-
 async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]:
     """The turn, as encoded SSE frames."""
     interceptor = StreamInterceptor(widgets_enabled=get_settings().widgets_enabled)
@@ -75,7 +67,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     game_score = body.get("__game_result")
     resume = body.get("__upload_result")
     message = str(body.get("message") or "").strip()
-    # A widget interaction, a game result and an upload resume are all real turns with no prose in them; only a tur…
+    # A widget interaction, a game result and an upload resume are real turns with no prose.
     if not message and not interaction and not game_score and not resume:
         yield interceptor.error("empty_message", "There was nothing to answer.").encode()
         return
@@ -115,7 +107,8 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         owner_id=owner_id,
     )
 
-    # ── layer 1: this exact question, from this exact audience ────────────── Consulted before anything is embedde…
+    # ── layer 1: this exact question, from this exact audience ──
+    # Consulted before anything is embedded or generated.
     if message and not interaction and not _wants_card(message):
         cached = await turn_service.cached_answer(
             message,
@@ -130,7 +123,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
                 yield frame
             return
 
-    # In flight, not awaited. See the docstring.
+    # Started in flight and awaited later by `_settle`, so the first token is not delayed.
     opening = asyncio.create_task(turn_service.open_conversation(record))
 
     checkpointer = await get_checkpointer()
@@ -162,16 +155,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         )
 
     try:
-        # Deliberately NOT `subgraphs=True`. The custom channel carries only
-        # what the main graph's nodes write, which is why a subgraph's directive
-        # never reached the transport -- but turning the flag on made every
-        # answer arrive twice (measured in the browser: the whole reply, printed
-        # again with no separator), because a node's streamed deltas and the
-        # finished message it returns both surface once the boundary is opened.
-        #
-        # A subgraph reaches the client through STATE instead: `ui_directives`
-        # is merged into the main graph's state and published by `persist`, and
-        # that is the path the cards already use. See `learn/tutor._state_after`.
+        # Not `subgraphs=True`: it doubles every answer, so subgraph directives ride in state.
         async for chunk in graph.astream(
             graph_input,
             config=config,
@@ -201,7 +185,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         ).encode()
         return
     except Exception:
-        # The traceback goes to the log; the reader gets a sentence with no component names, no provider names and no r…
+        # The traceback goes to the log; the reader gets a sentence with no internal names.
         logger.exception("v2 turn failed for session %s", thread_id)
         await _settle(opening)
         yield interceptor.error(
@@ -209,11 +193,12 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         ).encode()
         return
 
-    # ── the turn's directives ─────────────────────────────────────────────── Emitted AFTER the prose, from the se…
+    # ── the turn's directives ──
+    # Emitted after the prose, from the closing summary `persist` published.
     turn = interceptor.turn or {}
     directives = _closing_directives(turn)
 
-    # A graph paused on `interrupt()` is asking the reader for something, and the payload it paused with IS the dir…
+    # A paused `interrupt()` is asking the reader for something, and its payload is the directive.
     directives.extend(await _pending_interrupts(graph, config))
 
     for directive in directives:
@@ -229,7 +214,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         }
     ).encode()
 
-    # ── after the answer ──────────────────────────────────────────────────── The reader has everything.
+    # ── after the answer, once the reader already has everything ──
     record.reply = interceptor.prose
     record.directives = directives
     record.citations = list(turn.get("citations") or [])
@@ -240,7 +225,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
     await _settle(opening)
     await turn_service.persist_turn(record)
     await turn_service.cache_answer(record)
-    # Compression is a model call and it is deliberately out here, past `done`, so the reader never waits through i…
+    # Compression is a model call, deliberately past `done`, so the reader never waits for it.
     await turn_service.summarise_thread(graph, config)
 
 
@@ -257,7 +242,7 @@ async def _pending_interrupts(graph: Any, config: dict[str, Any]) -> list[dict[s
         for interrupt in getattr(task, "interrupts", ()) or ():
             value = getattr(interrupt, "value", None)
             if isinstance(value, dict) and value.get("t"):
-                # `type` is the node's own name for it and means nothing on the wire; `t` is the directive discriminator.
+                # `type` means nothing on the wire; `t` is the directive discriminator.
                 found.append({key: item for key, item in value.items() if key != "type"})
             elif value is not None:
                 logger.warning(
@@ -412,7 +397,7 @@ async def chat_stream_v2(
     request: Request, authorization: str | None = Header(default=None)
 ) -> StreamingResponse:
     """One turn through the graph."""
-    token = _bearer(authorization)
+    token = bearer_token(authorization)
     _meter(request, token)
 
     try:
@@ -444,7 +429,7 @@ async def widget_interaction(
     request: Request, authorization: str | None = Header(default=None)
 ) -> StreamingResponse:
     """A widget interaction, answered as a turn."""
-    token = _bearer(authorization)
+    token = bearer_token(authorization)
     _meter(request, token)
 
     try:
@@ -466,7 +451,7 @@ async def game_result(
     request: Request, authorization: str | None = Header(default=None)
 ) -> StreamingResponse:
     """A finished game's score, answered as a turn."""
-    token = _bearer(authorization)
+    token = bearer_token(authorization)
     _meter(request, token)
 
     try:
@@ -494,7 +479,7 @@ async def presign(
         presign_upload,
     )
 
-    claims = decode_session_token(_bearer(authorization))
+    claims = decode_session_token(bearer_token(authorization))
     if claims is None:
         raise HTTPException(status_code=401, detail="A valid session is required.")
 
@@ -505,7 +490,7 @@ async def presign(
     if not isinstance(body, dict):
         body = {}
 
-    # The application id is a RESOURCE IDENTIFIER supplied by the client, and it was previously trusted.
+    # The application id is a resource identifier supplied by the client, so ownership is checked.
     requested = str(body.get("application_id") or claims.session_id)
     if not await owns_application(requested, claims):
         # 404, not 403.
@@ -570,7 +555,7 @@ async def mint_session(request: Request) -> dict[str, Any]:
         requested_persona=str(requested) if requested else None,
     )
     if claims.persona_request_refused:
-        # Worth a line in the log: a client repeatedly asking to widen is either a bug or a probe, and neither is visib…
+        # Worth a log line: a client repeatedly asking to widen is either a bug or a probe.
         logger.warning(
             "Refused a request for persona %r on a %s band session.",
             requested,
@@ -589,7 +574,7 @@ async def mint_session(request: Request) -> dict[str, Any]:
     return {
         "token": token,
         "session_id": session_id,
-        # Echoed so the client can render the right mascot and reading level without decoding a JWT it must not depend…
+        # Echoed so the client can pick the mascot and reading level without decoding the JWT.
         "persona": claims.persona,
         "age_band": claims.age_band,
         "account_status": claims.account_status,

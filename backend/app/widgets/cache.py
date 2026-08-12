@@ -58,7 +58,7 @@ class Stats:
     misses: int = 0
     rejected_served: int = 0
     generated: int = 0
-    #: Per-gate validation failures, so a rising `copy` count is a prompt to fix the copy instructions rather than a…
+    #: Per-gate validation failures, so a rising count says which gate to fix.
     gate_failures: dict[str, int] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -77,7 +77,7 @@ class Stats:
             "hit_rate": round(self.hit_rate, 3),
             "rejected_served": self.rejected_served,
             "generated": self.generated,
-            # Two model calls per generation, so this is the number the sustainability case is made from.
+            # Two model calls per generation, so this is the sustainability number.
             "generations_avoided": self.hits,
             "gate_failures": dict(self.gate_failures),
         }

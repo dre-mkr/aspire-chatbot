@@ -36,7 +36,7 @@ export function Avatar({ name, url, size = 36 }: AvatarProps) {
 		>
 			<circle cx="24" cy="24" r="24" fill="var(--plum)" />
 			<circle cx="24" cy="18.5" r="7.4" fill="#fff" />
-			{/* The shoulders, clipped by the circle rather than drawn to fit it — one arc that stays correct at any size. */}
+			{/* Shoulders clipped by the circle: one arc, correct at any size. */}
 			<path
 				d="M8.6 42.4a15.9 15.9 0 0 1 30.8 0A23.9 23.9 0 0 1 24 48a23.9 23.9 0 0 1-15.4-5.6Z"
 				fill="#fff"

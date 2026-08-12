@@ -203,7 +203,7 @@ def test_contact_details_are_never_invented():
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_the_whole_flow_renders_end_to_end_in_every_language(language: Language):
-    """Walks every question and both plan shapes, so a missing key is a failure here rather than a KeyError in front…"""
+    """Walks every question and both plan shapes so a missing key fails here, not in the UI."""
     answers = {
         "age": "under5",
         "age_exact": "3",

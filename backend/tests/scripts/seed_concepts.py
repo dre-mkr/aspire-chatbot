@@ -509,7 +509,7 @@ def derivable_from(anchors: dict[str, Any]) -> set[float]:
             if right:
                 derived.add(left / right)
 
-    # Registry results, guarded: these take specific parameter names and a body's anchors are named freely, so the…
+    # Registry results, guarded: these take specific parameter names, but anchors are named freely.
     try:
         from app.widgets.formulas import registry
     except Exception:  # pragma: no cover - the registry is always importable
@@ -713,7 +713,7 @@ async def pass_e(
             logger.info("Skipping %s: every body was empty or nulled.", concept.slug)
             continue
 
-        # `needs_review` for two independent reasons and both exclude it from runtime: too few sources to be trustworth…
+        # `needs_review` for two reasons, both excluding it from runtime: too thin, or it failed.
         thin = len(concept.kb_ids) < 2
         status = "needs_review" if (thin or concept.slug in failures) else "draft"
 

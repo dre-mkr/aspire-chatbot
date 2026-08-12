@@ -206,7 +206,7 @@ async def resolve_concept(
                     alternatives=tuple(c for c, _ in ranked if c.id != chosen.id),
                 )
 
-    # ── 3.
+    # ── 3. RAG teach ────────────────────────────────────────────────────────
     rows: tuple[Any, ...] = ()
     if retrieve is not None:
         try:
@@ -223,7 +223,7 @@ async def resolve_concept(
             alternatives=tuple(concept for concept, _ in ranked[:2]),
         )
 
-    # ── 4.
+    # ── 4. nothing resolved ─────────────────────────────────────────────────
     offers = [concept for concept, _ in ranked] or store.teachable(band, locale)[:2]
     return ConceptResolution(
         source="none",

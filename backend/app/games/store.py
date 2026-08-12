@@ -47,7 +47,7 @@ class InMemorySessionStore:
         session.updated_at = now
         with self._lock:
             self._sessions[session.session_id] = session
-            # Opportunistic sweep: abandoned sessions are cleared by the next writer rather than by a background task nobod…
+            # Opportunistic sweep: the next writer clears abandoned sessions, no background task.
             if len(self._sessions) > 1:
                 for key in [
                     k

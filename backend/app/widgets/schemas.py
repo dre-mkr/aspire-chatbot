@@ -161,15 +161,7 @@ class _BaseWidget(_WidgetModel):
     """What every widget carries regardless of kind."""
 
     v: int = Field(default=1, ge=1, le=1)
-    #: Which curriculum concept this teaches.
-    #:
-    #: Lower-cased before the pattern is applied. The concept store seeds ids as
-    #: `CON-0019` and this pattern demands a lowercase leading letter, so a
-    #: composer that copied the id it was given failed the schema while one that
-    #: lowercased it used to fail the band gate -- there was no spelling that
-    #: passed both, and the feature was dropped on every lesson turn as a result.
-    #: Case is not meaningful in an identifier; the case-insensitive lookup in
-    #: `safety.vocab.is_allowed_concept` is the other half of this.
+    #: The curriculum concept, lower-cased first: ids seed as `CON-0019`, case is not meaningful.
     concept_id: str = Field(pattern=r"^[a-z][a-z0-9_.\-]{0,63}$")
 
     @field_validator("concept_id", mode="before")
@@ -271,7 +263,7 @@ class AllocatorWidget(_BaseWidget):
 
     @model_validator(mode="after")
     def _shares_reconcile(self) -> AllocatorWidget:
-        # Gate 4 checks this too, and that is not redundancy: this catches a malformed generation at parse time, gate 4…
+        # Gate 4 checks this too; catching it at parse time rejects the generation earlier.
         total = sum(bucket.default_share for bucket in self.buckets)
         if total != 100:
             raise ValueError(f"bucket default shares must total 100, got {total}")

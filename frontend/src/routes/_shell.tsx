@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_shell")({
 	// Full-document SSR: this is the app shell and the first paint of every conversation.
 	ssr: true,
 	validateSearch: (search: Record<string, unknown>): ShellSearch => {
-		// The search string is user-editable, so `?persona=nonsense` must land on "not chosen" rather than being forwar…
+		// User-editable, so `?persona=nonsense` must land on "not chosen".
 		const persona = asPersonaId(search.persona);
 		const lang = asLanguage(search.lang);
 		return {

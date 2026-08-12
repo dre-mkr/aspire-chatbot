@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-/** Line icons drawn on a 24px grid, stroked in `currentColor` so they inherit whatever the surrounding chrome is… */
+/** Line icons on a 24px grid, stroked in `currentColor` to inherit the chrome. */
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 function Icon({ size = 18, strokeWidth = 1.9, children, ...rest }: IconProps) {
@@ -88,17 +88,6 @@ export function DownloadIcon(props: IconProps) {
 			<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
 			<path d="M7 10l5 5 5-5" />
 			<path d="M12 15V3" />
-		</Icon>
-	);
-}
-
-/** Marks where the transcript actually lives: this device, not an account. */
-export function DeviceIcon(props: IconProps) {
-	return (
-		<Icon size={16} {...props}>
-			<rect x="3" y="4" width="18" height="12" rx="2" />
-			<path d="M12 16v4" />
-			<path d="M8 20h8" />
 		</Icon>
 	);
 }
@@ -218,7 +207,7 @@ export function MoreIcon(props: IconProps) {
 	);
 }
 
-/* Sliders, deliberately not a mic variant: this opens voice *settings* and it sits two controls away from the a… */
+/* Sliders, not a mic variant: this opens voice settings, near the mic itself. */
 export function SlidersIcon(props: IconProps) {
 	return (
 		<Icon size={17} {...props}>
@@ -232,7 +221,7 @@ export function SlidersIcon(props: IconProps) {
 	);
 }
 
-/* Filled rather than stroked, unlike its neighbours: stop is the one control here that halts something already… */
+/* Filled, unlike its neighbours: stop halts something already in flight. */
 export function StopIcon(props: IconProps) {
 	return (
 		<Icon size={16} {...props}>

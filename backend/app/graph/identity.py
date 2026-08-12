@@ -100,7 +100,7 @@ def decode_session_token(token: str | None, *, grace: timedelta = GRACE) -> Sess
     )
 
 
-#: Body fields a client is never allowed to set, because each of them is an identity claim the server mints.
+#: Body fields a client may never set -- each one is an identity claim the server mints.
 CLIENT_FORBIDDEN_FIELDS: tuple[str, ...] = (
     "persona",
     "age_band",

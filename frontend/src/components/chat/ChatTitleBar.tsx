@@ -95,7 +95,7 @@ export function ChatTitleBar({
 						setEditing(true);
 					}}
 				>
-					{/* Both layers occupy one grid cell, so the crossfade cannot shift the bar or the thread beneath it. */}
+					{/* Both layers share one grid cell, so the crossfade cannot shift the bar. */}
 					<span className="titlebar__text">{title}</span>
 					{outgoing ? (
 						<span

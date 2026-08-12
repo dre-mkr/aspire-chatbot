@@ -191,7 +191,7 @@ class TestIdentityIsNotClientControlled:
         agent = events[-1]["data"]["usage"]["agent"]
         assert agent not in ("register_agent", "register_agent_step1", "servicing_agent")
 
-        # What a Stella token earns for this message: told that a parent or guardian applies, rather than being walked…
+        # What a Stella token earns here: told that a parent or guardian applies.
         prose = "".join(
             event["data"]["t"] for event in events if event["event"] == "token"
         )
@@ -218,7 +218,7 @@ class TestTheEncoding:
             "POST", "/v2/chat/stream", json={"message": "hi"}, headers=headers
         ) as response:
             assert response.headers["content-type"].startswith("text/event-stream")
-            # nginx buffers proxied responses by default; without this the whole stream lands at once in production and in…
+            # nginx buffers proxied responses by default, so the stream would land all at once.
             assert response.headers["x-accel-buffering"] == "no"
             raw = "".join(chunk for chunk in response.iter_text())
 

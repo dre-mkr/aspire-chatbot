@@ -116,7 +116,7 @@ class TestTheThirdAttemptEscalates:
         assert update["escalation_summary"]
 
     async def test_the_streak_resets_on_escalation(self):
-        """Left at the limit, every later turn on the same intent opens another ticket -- one per turn, which is worse t…"""
+        """Left at the limit, every later turn on the same intent would open another ticket."""
         node = make_ground_check()
         streak = {counter.intent_key(UNANSWERABLE): counter.LIMIT - 1}
         update, goto = await _turn(node, UNANSWERABLE, streak)

@@ -67,14 +67,14 @@ export function AccountControl({ variant }: AccountControlProps) {
 	}
 
 	function goToSignIn() {
-		// Carried so that signing in returns you to whatever you were reading rather than to a generic landing screen.
+		// Carried so signing in returns you to what you were reading.
 		void navigate({ to: "/signin", search: { next: pathname } });
 	}
 
 	async function handleSignOut() {
 		setOpen(false);
 		setConfirming(false);
-		// Handed to `signOut` rather than run here, so the caches are dropped in the moment between the old session bei…
+		// Handed to `signOut` so the caches drop in the gap between sessions.
 		await signOut(() => {
 			queryClient.removeQueries({ queryKey: keys.allConversations() });
 			queryClient.removeQueries({ queryKey: keys.allGames() });
@@ -97,7 +97,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 				</div>
 			);
 		}
-		// The sidebar's signed-out state keeps the shape it has always had: the icon slot, the name line, the note.
+		// The signed-out rail keeps its shape: icon slot, name line, note.
 		return (
 			<div className="account account--rail">
 				<button type="button" className="account__block" onClick={goToSignIn}>
@@ -136,17 +136,12 @@ export function AccountControl({ variant }: AccountControlProps) {
 				aria-controls={open ? menuId : undefined}
 				onClick={() => setOpen((was) => !was)}
 			>
-				<Avatar
-					name={name}
-					url={session?.avatarUrl}
-					size={variant === "corner" ? 36 : 36}
-				/>
-				{/* The corner is the avatar and nothing else: a name beside it would compete with the centred hero for attention. */}
+				<Avatar name={name} url={session?.avatarUrl} size={36} />
+				{/* Avatar only: a name beside it would compete with the centred hero. */}
 				{variant === "rail" ? (
 					<span className="rail__identity rail__fold">
 						<span className="rail__name">{name}</span>
-						{/* The address is the only note that may be shortened; the signed-out
-						    line is copy, and copy that ends in an ellipsis reads as a bug. */}
+						{/* Only the address may truncate; truncated copy reads as a bug. */}
 						<span className="rail__note rail__note--address">{email}</span>
 					</span>
 				) : null}
@@ -191,7 +186,7 @@ export function AccountControl({ variant }: AccountControlProps) {
 							type="button"
 							className="account__item"
 							role="menuitem"
-							// Confirmed rather than immediate: from here it is not obvious what happens to the conversations in the rail, a…
+							// Confirmed, not immediate: the fate of the rail's chats is unclear here.
 							onClick={() => setConfirming(true)}
 						>
 							Sign out

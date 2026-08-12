@@ -269,7 +269,7 @@ class TestTheSlotLoop:
             return draft
 
         graph = rg.build_register_graph(loader=loader)
-        # `_entry` routes to `extract` on `registration.awaiting`, which is state rather than the draft -- the draft is…
+        # `_entry` routes to `extract` on `registration.awaiting`, which is state, not the draft.
         result = await graph.ainvoke(
             state_for(
                 "skip",
@@ -323,7 +323,7 @@ class TestUploads:
         assert payload["max_mb"] == 10
 
     def test_a_resume_payload_carrying_a_preview_is_stripped(self, caplog):
-        """The failure this prevents: a base64 thumbnail written into a checkpoint and replayed into a model prompt."""
+        """Prevents a base64 thumbnail reaching a checkpoint and then a model prompt."""
         with caplog.at_level("WARNING"):
             cleaned = upload._assert_no_bytes(
                 {

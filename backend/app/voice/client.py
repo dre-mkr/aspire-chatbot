@@ -106,7 +106,7 @@ class VoiceClient:
                 file=(filename, audio, "application/octet-stream"),
                 model_id=self._settings.stt_model,
                 language_code=language_hint,
-                # Defaults to True upstream; a transcript full of "(laughter)" is not a user message.
+                # Defaults to True upstream, but "(laughter)" is not a user message.
                 tag_audio_events=False,
                 diarize=False,
                 keyterms=keyterms,
@@ -161,7 +161,7 @@ class VoiceClient:
                     timeout_in_seconds=int(self._settings.tts_timeout_seconds)
                 ),
             )
-            # `t_tts_first_byte` is measured where the first chunk arrives from the vendor -- which is NOT when the caller…
+            # `t_tts_first_byte` marks the vendor's first chunk, not when the caller hears it.
             chunks: list[bytes] = []
             for chunk in stream:
                 if not chunk:
@@ -208,7 +208,7 @@ class VoiceClient:
         loop = asyncio.get_running_loop()
         started = time.perf_counter()
         sentinel_done, sentinel_failed = object(), object()
-        #: Set when the consumer walks away -- a disconnect, a cancel -- so the producer stops pulling (and billing) ins…
+        #: Set when the consumer walks away, so the producer stops pulling (and billing).
         abandoned = threading.Event()
 
         def produce() -> None:
@@ -229,7 +229,7 @@ class VoiceClient:
                     if abandoned.is_set():
                         return
                     if chunk:
-                        # Blocks when the consumer is slower than the vendor, which is the backpressure keeping memory flat.
+                        # Blocks when the consumer lags the vendor: backpressure keeps memory flat.
                         asyncio.run_coroutine_threadsafe(queue.put(chunk), loop).result()
                 asyncio.run_coroutine_threadsafe(queue.put(sentinel_done), loop).result()
             except Exception:
@@ -264,7 +264,7 @@ class VoiceClient:
                 if item is sentinel_failed:
                     self._breaker.record_failure()
                     if produced_any:
-                        # Bytes are on the wire; a truncated stream is the honest remainder of this turn.
+                        # Bytes are already on the wire, so a truncated stream is the honest end.
                         return
                     raise VoiceUnavailable("Speech synthesis failed.")
 
@@ -275,7 +275,7 @@ class VoiceClient:
                     produced_any = True
                 yield item
         finally:
-            # Orderly on every exit: tell the producer to stop, then drain until it has -- a put blocked on a full queue co…
+            # Orderly exit: signal stop, then drain, or a put on a full queue never returns.
             abandoned.set()
             while not worker.done():
                 while not queue.empty():

@@ -53,7 +53,7 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
-# `escalate_agent` deliberately has NO description, because the router is no longer offered it -- `routable()`…
+# `escalate_agent` has no description because `routable()` drops it before the menu is built.
 
 _SYSTEM = (
     "You route one message to one handler. Choose from the list you are given "
@@ -133,7 +133,7 @@ def _coerce(
         return Classification(agent=proposed, confidence=confidence, reason=reason)
 
     if proposed:
-        # WARNING: a name outside the list is either a hallucination or an attempt, and the rate of it is worth watchin…
+        # WARNING: a name outside the list is a hallucination or an attempt, and worth watching.
         logger.warning(
             "Classifier proposed %r for session %s, which is not in %s; coercing.",
             proposed[:40],
@@ -219,7 +219,7 @@ def build_classifier_model():
 #: State flags that mean "this turn is a reply to something an agent showed".
 CONTINUATION_FLAGS: tuple[str, ...] = ("widget_interaction", "game_result")
 
-#: Where a continuation goes when the checkpoint has no active agent to resume -- a restarted process, an expire…
+#: Where a continuation goes when the checkpoint has no active agent to resume.
 CONTINUATION_FALLBACKS: tuple[str, ...] = (
     "learn_agent",
     "learning_sample",
@@ -263,7 +263,8 @@ def make_classify(invoke=None):
 
         active = state.get("active_agent")
 
-        # ── a reply to something an agent showed, not a new question ──────── A widget interaction and a game result a…
+        # ── a reply to something an agent showed, not a new question ──
+        # A widget interaction or a game result resumes its agent instead of being routed.
         continuation = _continues_an_agent(state, allowed)
         if continuation is not None:
             return {
@@ -316,7 +317,7 @@ def make_classify(invoke=None):
 
         decision = apply_stickiness(decision, state)
 
-        # Belt and braces, and worth the two lines: this is the invariant the whole file exists to hold, and it is chea…
+        # Belt and braces: this is the invariant the whole file exists to hold.
         if decision.agent not in allowed:  # pragma: no cover - unreachable by _coerce
             logger.error(
                 "Classifier escaped the allowed list for session %s; forcing %s.",

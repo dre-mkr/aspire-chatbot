@@ -148,11 +148,7 @@ def make_intent_gate(
     """The node that decides whether this turn is a card."""
 
     async def intent_gate(state: AspireState) -> dict[str, Any]:
-        # A continuation turn (widget interaction, game result) carries no new
-        # message; `_last_human` would re-read the PREVIOUS turn's text from the
-        # checkpoint and re-open the card it already opened. Measured: closing a
-        # finished game re-launched it, because "can we play true or false" was
-        # still the last human message.
+        # A continuation turn has no new message; `_last_human` would re-open the previous card.
         flags = state.get("safety_flags") or {}
         if any(flags.get(name) for name in ("widget_interaction", "game_result")):
             return {}
@@ -171,12 +167,12 @@ def make_intent_gate(
             if card is not None:
                 return card
 
-        # Before the registration help and before the router: somebody who has asked for a person is not asking anythin…
+        # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
             return asked
 
-        # Before the registration help, because it is the more specific of the two: "create a guardian account" is an a…
+        # Before registration help: "create a guardian account" is the more specific intent.
         card = _open_signup(state, message)
         if card is not None:
             return card

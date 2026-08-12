@@ -1,12 +1,9 @@
 /** Asking for a document, and getting it to storage without touching our server. */
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { API_URL } from "#/lib/config";
 import { graphSession } from "../../lib/stream/session";
 import type { UploadDirective } from "../../lib/stream/types";
 import { useAgeBand } from "./AgeBandProvider";
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
 
 type Phase = "idle" | "chosen" | "uploading" | "done" | "failed";
 
@@ -33,7 +30,7 @@ export function UploadCard({
 	const [progress, setProgress] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
 
-	// Object URLs are a leak if they are not revoked, and a parent adding four children uploads a dozen files in on…
+	// Object URLs leak unless revoked, and one sitting can run to a dozen files.
 	useEffect(() => {
 		return () => {
 			if (preview) URL.revokeObjectURL(preview);

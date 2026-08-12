@@ -144,7 +144,7 @@ def make_doc_check(invoke=None):
             logger.warning("doc_check unavailable; proceeding.", exc_info=True)
             verdict = Verdict(unavailable=True, notes="check unavailable")
 
-        # Logged alongside the document so agreement with the eventual human decision can be MEASURED.
+        # Logged with the document so agreement with the human decision can be measured.
         logger.info(
             "doc_check document=%s slot=%s confidence=%.2f flag=%s notes=%r",
             document.get("document_id"),
@@ -203,7 +203,7 @@ def make_doc_check(invoke=None):
         return {
             "registration": {
                 **registration,
-                # Cleared so the next slot's `_after_doc_check` does not read a stale retake flag and end the turn again.
+                # Cleared so the next slot does not read a stale retake flag.
                 "__last_document": None,
                 "__last_verdict": {
                     "document_id": document.get("document_id"),

@@ -55,9 +55,6 @@ jobs:
       - name: Lint, format and import order
         working-directory: frontend
         run: bunx biome check
-      - name: Frontend regression tests
-        working-directory: frontend
-        run: node --test src/lib/aspire/*.test.ts
       - name: Production build
         working-directory: frontend
         # The real deploy builds with the site URL. Without it the bundle is

@@ -14,7 +14,7 @@ export function getContext() {
 	const queryClient = new QueryClient({
 		defaultOptions: {
 			queries: { retry: retryable },
-			// A failed write is shown and offered again rather than retried behind the reader's back: a rename that silentl…
+			// A failed write is shown and offered again, never retried unseen.
 			mutations: { retry: false },
 		},
 	});

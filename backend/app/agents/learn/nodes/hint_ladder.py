@@ -25,7 +25,7 @@ VERDICT_WORDS: tuple[str, ...] = (
     "error",
 )
 
-#: Words that are only a verdict IN VERDICT POSITION -- at the very start, where a child reads them as the answe…
+#: Words that are a verdict only at the very start, where a child reads them as one.
 LEADING_WORDS: tuple[str, ...] = ("no", "nah", "not quite", "bad", "sorry")
 
 NEGATIVE_WORDS: tuple[str, ...] = VERDICT_WORDS + LEADING_WORDS
@@ -56,7 +56,7 @@ def sanitise(text: str) -> str:
     # Only the LEADING occurrence, and only if it leads.
     out = _LEADING.sub("", out)
     out = re.sub(r"\s{2,}", " ", out)
-    # Tidy the punctuation the removal left behind: a leading comma, a doubled full stop, a dangling dash.
+    # Tidy the punctuation the removal left behind: leading commas, doubled stops.
     out = re.sub(r"^[\s,.;:!-]+", "", out)
     out = re.sub(r"\s+([,.;:!?])", r"\1", out)
     out = re.sub(r"([,.;:!?])\1+", r"\1", out)

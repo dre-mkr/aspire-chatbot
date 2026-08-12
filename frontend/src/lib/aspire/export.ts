@@ -36,7 +36,7 @@ export function transcriptToText(
 			lines.push(`You:  ${message.text}`, "");
 			continue;
 		}
-		// A game turn has no prose to write out, so it is named rather than skipped -- a transcript that silently omits…
+		// A game turn has no prose, so name it rather than silently omit the turn.
 		if (message.role === "game") {
 			lines.push("ASPIRE AI: [started a learning game]", "");
 			continue;
@@ -67,21 +67,6 @@ export function transcriptToText(
 		"ASPIRE AI can make mistakes. Check important info with your mentor.",
 	);
 	return lines.join("\n");
-}
-
-/** An amount of money, in the currency this programme actually uses. */
-export function formatXCD(amount: number, language = "en") {
-	return new Intl.NumberFormat(language, {
-		style: "currency",
-		currency: "XCD",
-	}).format(amount);
-}
-
-/** A date, in the language the conversation is being held in. */
-export function formatDate(date: Date, language = "en") {
-	return new Intl.DateTimeFormat(language, {
-		dateStyle: "long",
-	}).format(date);
 }
 
 /** Writes the transcript out as a download. No-op with nothing to save. */

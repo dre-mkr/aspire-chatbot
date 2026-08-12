@@ -313,7 +313,7 @@ def check_grounding(report: Report) -> None:
         )
         state["active_agent"] = "qa_agent"
         state["messages"] = [HumanMessage(content=question)]
-        # Give every chunk a relevance above the floor, so this measures the ATTRIBUTION gate rather than the similarit…
+        # Every chunk is above the relevance floor, so this measures the ATTRIBUTION gate.
         state["retrieved"] = [
             chunk.model_copy(update={"relevance": 0.7, "score": 0.7})
             for chunk in retrieved
@@ -337,7 +337,7 @@ def check_grounding(report: Report) -> None:
         state["messages"].append(AIMessage(content=hallucination))
         command = asyncio.run(check(state))
 
-        # ## Why this is no longer `goto != "escalate_agent"` It was, and that equated "did not fetch a human" with "se…
+        # Not `goto != "escalate_agent"`: not fetching a human is not the same as serving a figure.
         reply = ""
         for message in (command.update or {}).get("messages", []):
             reply += str(getattr(message, "content", ""))
@@ -548,7 +548,7 @@ async def check_routing(report: Report) -> None:
     report.record(
         "routing_accuracy", correct / max(1, len(rows)), misses=misses[:10]
     )
-    # Folded into band violations: a classifier escaping its list IS a band violation, arriving by a different rout…
+    # Folded into band violations: a classifier escaping its list IS a band violation.
     report.metrics["band_violations"] = report.metrics.get("band_violations", 0) + escapes
 
 

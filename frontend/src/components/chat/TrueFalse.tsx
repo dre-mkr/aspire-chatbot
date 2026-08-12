@@ -108,7 +108,7 @@ export function TrueFalse({
 			setCovered((current) => [...current, entry]);
 			setSettled(entry);
 			setSummary(done);
-			// The final numbers go up the moment they exist; `onChanged(null)` only fires on leave, after the wrap-up has b…
+			// Numbers go up as soon as they exist; `onChanged(null)` waits for leave.
 			if (done) onSummary?.(done);
 			// Null means the round is over.
 			if (next) onChanged(next);
@@ -126,7 +126,7 @@ export function TrueFalse({
 					return;
 				}
 				if (!result.reveal) {
-					// Cannot happen for true/false — a wrong answer resolves the item — but the type allows it, so say something ho…
+					// Cannot happen for true/false, but the type allows it, so say something honest.
 					setFailure("That did not settle the statement. Try again.");
 					return;
 				}
@@ -176,7 +176,7 @@ export function TrueFalse({
 		if (!card) return;
 
 		const onIn = () => setKeyboardArmed(true);
-		// `focusout` fires before focus lands, so `document.activeElement` is still <body> here — `relatedTarget` is wh…
+		// `focusout` fires before focus lands, so read `relatedTarget`, not `activeElement`.
 		const onOut = (event: FocusEvent) =>
 			setKeyboardArmed(card.contains(event.relatedTarget as Node | null));
 
@@ -211,7 +211,7 @@ export function TrueFalse({
 	const label = `Statement ${state.prompt.position} of ${state.prompt.total}`;
 
 	return (
-		// tabIndex -1 so a click anywhere on the card puts focus inside it, which is what arms the T/F shortcut scoped…
+		// tabIndex -1 so a click anywhere puts focus inside, which is what arms the T/F shortcut.
 		<section className="game tf" aria-label={label} ref={cardRef} tabIndex={-1}>
 			<header className="game__head">
 				<span className="game__badge" aria-hidden="true">
@@ -280,7 +280,7 @@ export function TrueFalse({
 
 						<p className="tf__statement">{state.prompt.text}</p>
 
-						{/* No wrapper role: the section's own label already announces which statement this is, and each button says what… */}
+						{/* No wrapper role: the section label names the statement and each button says its own. */}
 						<div className="tf__choices">
 							{choices.map((choice) => (
 								<button

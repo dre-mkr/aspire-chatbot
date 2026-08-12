@@ -32,7 +32,7 @@ const CONFIGS: Record<AgeBand, BandConfig> = {
 		chipsDominant: true,
 		inputCollapsed: true,
 		dragAllowed: false,
-		// 88pt for the youngest band: the push-to-talk button is the primary input, so it is sized as a primary control…
+		// 88pt for the youngest band: push-to-talk is the primary input, so it is sized as one.
 		micSize: 88,
 	},
 	"9-12": {
@@ -97,7 +97,7 @@ export function AgeBandProvider({
 	const config = useMemo(() => configFor(band), [band]);
 	return (
 		<BandContext.Provider value={config}>
-			{/* The scale is published as a CSS variable as well as through context, because widgets are rendered inside `dan… */}
+			{/* A CSS variable as well as context: widgets read the scale from inline styles. */}
 			<div
 				data-age-band={config.band}
 				style={
@@ -115,9 +115,4 @@ export function AgeBandProvider({
 
 export function useAgeBand(): BandConfig {
 	return useContext(BandContext);
-}
-
-/** Whether drag-and-drop may be used for this band. */
-export function dragAllowed(config: BandConfig): boolean {
-	return config.dragAllowed;
 }

@@ -39,7 +39,7 @@ _PERSONAS_TS = (
     Path(__file__).resolve().parents[3] / "frontend/src/lib/aspire/personas.ts"
 )
 
-#: `id: "x", name: "…", audience: "…"` from the PERSONAS literal.
+#: The id, name and audience of each entry in the PERSONAS literal.
 _ENTRY = re.compile(
     r'id:\s*"(?P<id>\w+)",\s*name:\s*"[^"]*",\s*audience:\s*"(?P<audience>[^"]*)"'
 )
@@ -69,7 +69,7 @@ def test_the_persona_menu_never_advertises_an_age_the_matrix_denies():
     offences = []
     for persona, low, high in advertised:
         for age in range(low, high + 1):
-            # A birthday on 1 January has always passed by August, so the arithmetic in `band_for` yields exactly `age`.
+            # A 1 January birthday has passed by August, so `band_for` yields `age`.
             band = account.band_for(
                 date(today.year - age, 1, 1), is_minor=True, today=today
             )
@@ -171,7 +171,7 @@ def test_an_unknown_persona_is_refused():
     assert claims.persona_request_refused
 
 
-# ── the role ───────────────────────────────────────────────────────────────── These exist because of a second…
+# ── the role ─────────────────────────────────────────────────────────────────
 
 
 def test_a_guardian_account_gets_the_guardian_persona():

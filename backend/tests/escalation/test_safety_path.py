@@ -90,7 +90,7 @@ class TestTheRouterIsNotInvolved:
         assert safety_signal(both) == "safeguarding"
 
     async def test_the_edge_is_declared_in_the_graph(self):
-        """A predicate returning a node name the graph has no edge to is a runtime error on the turn it first fires -- w…"""
+        """A predicate naming a node with no declared edge fails at runtime, so declare it."""
         from app.graph.main_graph import build_main_graph
 
         graph = build_main_graph(token=None).get_graph()

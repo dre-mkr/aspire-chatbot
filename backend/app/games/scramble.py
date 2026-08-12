@@ -25,9 +25,9 @@ class WordScrambleGame:
     display_name = "Unscramble These Words"
 
     supports_hints = True
-    # The ECCB handout is four words in a printed order, and the chat game shows a child the same puzzle in the sam…
+    # The ECCB handout is four words in a printed order, and the chat game keeps that order.
     round_size = None
-    # The letters are still on the table after a wrong guess, and rearranging them is the activity.
+    # The letters are still on the table after a wrong guess; rearranging them is the game.
     advance_on_wrong = False
 
     def __init__(self, settings: GameSettings | None = None) -> None:

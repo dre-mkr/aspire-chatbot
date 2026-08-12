@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ───────────────────────────────────────────────────────────────────────── Webfonts — self-hosted ────────────… */
+/* ── Webfonts, self-hosted ── */
 
 @font-face {
 	font-family: "Sora";
@@ -37,7 +37,7 @@
 		U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* ───────────────────────────────────────────────────────────────────────── ASPIRE design system Tokens mirror… */
+/* ── ASPIRE design system: tokens ── */
 
 /* One palette, one place. */
 @theme {
@@ -83,7 +83,7 @@
 	--success: var(--color-success);
 	--danger: var(--color-danger);
 
-	/* Every rule that tints against a brand colour derives from these, so a palette change never leaves a stray har… */
+	/* Brand tints all derive from these, so a palette change leaves no stray hardcoded colour. */
 	--wash-3: rgb(72 41 119 / 0.03);
 	--wash-6: rgb(72 41 119 / 0.06);
 	--wash-7: rgb(72 41 119 / 0.07);
@@ -261,7 +261,7 @@ body {
 	border-radius: 50%;
 }
 
-/* In chat the frame covers all but a 16px margin, so the drift is doing continuous GPU work almost nobody can s… */
+/* The frame covers all but a 16px margin in chat, so the drift is GPU work almost nobody sees. */
 .app[data-phase="chat"] .atmosphere span {
 	animation-play-state: paused;
 }
@@ -389,7 +389,7 @@ body {
 	grid-area: 1 / 1;
 	align-self: center;
 	justify-self: start;
-	/* The rail's own chrome fades on --settle; matching it here is what makes the logo swap and the rail collapse r… */
+	/* Matches the rail's own --settle fade, so the logo swap and the collapse read as one motion. */
 	transition: opacity var(--settle);
 }
 
@@ -443,7 +443,7 @@ body {
 	pointer-events: none;
 }
 
-/* Everything that folds away when the rail collapses shares one rule, so the fade always stays in step with the… */
+/* One rule for everything that folds away, so the fade stays in step with the collapse. */
 .rail__fold {
 	opacity: 1;
 	transition: opacity var(--settle);
@@ -467,7 +467,7 @@ body {
 }
 
 /* Out of the flow, not merely faded. */
-/* Scoped to the header, and that is not decoration: this button also carries `.icon-btn`, which sets `position:… */
+/* Scoped to the header: this button also carries `.icon-btn`, which sets `position`. */
 .rail__head .rail__collapse {
 	position: absolute;
 	top: 18px;
@@ -488,7 +488,7 @@ body {
 	white-space: nowrap;
 }
 
-/* Fixed 20px so the glyph holds the same column whether the rail is open or folded to icons — the label beside… */
+/* Fixed 20px so the glyph holds its column whether the rail is open or folded to icons. */
 .rail__section-glyph {
 	display: flex;
 	justify-content: center;
@@ -524,7 +524,7 @@ body {
 	cursor: pointer;
 }
 
-/* Three rows of nothing, so first load reads as "still arriving" rather than as "you have none" -- which is wha… */
+/* Three empty rows, so first load reads as "still arriving" rather than "you have none". */
 .rail__skeleton {
 	display: flex;
 	flex-direction: column;
@@ -545,7 +545,7 @@ body {
 	animation: rail-shimmer 1.4s ease-in-out infinite;
 }
 
-/* Each row starts a beat after the one above, so the group reads as one loading surface rather than three synch… */
+/* Each row starts a beat later, so the group reads as one surface rather than three. */
 .rail__skeleton i:nth-child(2) {
 	animation-delay: 0.12s;
 	width: 82%;
@@ -668,9 +668,8 @@ body {
 	white-space: nowrap;
 }
 
-/* ── Touch targets ────────────────────────────────────────────────────────── Several controls are deliberately… */
+/* ── Touch targets ── */
 
-.chip-btn,
 .text-btn,
 .play-btn,
 .voice-choice,
@@ -683,7 +682,6 @@ body {
 	position: relative;
 }
 
-.chip-btn::after,
 .text-btn::after,
 .play-btn::after,
 .voice-choice::after,
@@ -703,7 +701,6 @@ body {
 }
 
 /* These sit alone or with wide gaps, so they can grow in both axes. */
-.chip-btn--square::after,
 .composer__mic::after,
 .composer__send::after,
 .tool-btn::after {
@@ -744,11 +741,7 @@ body {
 	color: var(--plum);
 }
 
-.icon-btn--faint {
-	color: var(--faint);
-}
-
-/* Real height rather than the 44px overlay the other controls use: history rows are stacked with no gap, so an… */
+/* Real height, not the 44px overlay: history rows stack with no gap, so overlays would collide. */
 /* A conversation and its overflow trigger share a row. */
 .history-row {
 	position: relative;
@@ -805,7 +798,7 @@ body {
 	color: var(--plum);
 }
 
-/* Fixed, not absolute: the rail body scrolls, and a scroll container clips its absolutely positioned children —… */
+/* Fixed, not absolute: the rail body scrolls and would clip an absolutely positioned child. */
 .row-menu {
 	position: fixed;
 	z-index: 40;
@@ -868,7 +861,7 @@ body {
 	color: currentcolor;
 }
 
-/* While the question is up, the destructive answer is one of two ordinary items and needs no separator of its o… */
+/* While the question is up, the destructive answer is one of two ordinary items. */
 .row-menu__confirm + .row-menu__item--danger {
 	margin-top: 0;
 	border-top: 0;
@@ -941,7 +934,7 @@ body {
 
 /* ── Workspace ──────────────────────────────────────────────────────────── */
 
-/* Positioned so the title bar and the landing drawer trigger anchor to the conversation column rather than to `… */
+/* Anchors the title bar and drawer trigger to the conversation column, not the viewport. */
 .workspace {
 	position: relative;
 	display: flex;
@@ -953,41 +946,11 @@ body {
 }
 
 
-/* Chrome controls read against both the purple gradient and the white panel by deriving every colour from the i… */
-.chip-btn {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	min-height: 36px;
-	padding: 0 13px;
-	border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-	border-radius: 12px;
-	background: transparent;
-	color: inherit;
-	font: inherit;
-	font-size: 0.8125rem;
-	font-weight: 500;
-	white-space: nowrap;
-	transition: background var(--swift);
-}
-
-.chip-btn:hover {
-	background: color-mix(in srgb, currentColor 8%, transparent);
-}
-
-
-
-.chip-btn--square {
-	min-width: 36px;
-	padding: 0;
-	justify-content: center;
-}
-
-
+/* Chrome derives every colour from the ink, so it reads on both the gradient and the panel. */
 
 /* ── Title bar ───────────────────────────────────────────────────────────── */
 
-/* Thin, quiet, and translucent so the transcript scrolls under it -- which is what keeps the thread's top fade… */
+/* Thin, quiet and translucent, so the transcript scrolls under it and keeps its top fade. */
 .titlebar {
 	position: absolute;
 	z-index: 12;
@@ -1099,7 +1062,7 @@ body {
 	outline-offset: 1px;
 }
 
-/* The bar overlays the thread, so the thread's own top padding has to clear it rather than the floating trigger… */
+/* The bar overlays the thread, so the thread's own top padding has to clear it. */
 .app[data-phase="chat"] .thread {
 	padding-top: 72px;
 	mask-image: linear-gradient(
@@ -1158,15 +1121,15 @@ body {
 	);
 }
 
-/* The fade is 24px, not 56px: at 56px a line arriving into the viewport sat 24px inside the band and lost half… */
+/* 24px, not 56px: at 56px an arriving line sat inside the band and lost half its height. */
 
-/* The landing hero is vertically composed and centred in the stage; the same top padding there would push it of… */
+/* The landing hero is centred in the stage, where the same top padding would push it off. */
 .app[data-phase="landing"] .thread {
 	padding-top: 0;
 	mask-image: none;
 }
 
-/* Anchors short conversations to the bottom so the first reply rises out of the composer instead of dropping in… */
+/* Anchors short conversations to the bottom, so the first reply rises out of the composer. */
 .thread__inner {
 	margin-top: auto;
 	width: 100%;
@@ -1315,7 +1278,7 @@ body {
 	width: 100%;
 }
 
-/* Rows are taken out of flow and placed by transform, which is what lets the list skip the ones nobody is looki… */
+/* Rows are placed by transform and taken out of flow, which is what lets the list skip them. */
 .transcript__row {
 	position: absolute;
 	top: 0;
@@ -1427,7 +1390,7 @@ body {
 	margin-bottom: 0;
 }
 
-/* ── Voice ────────────────────────────────────────────────────────────────── The microphone, the listening sta… */
+/* ── Voice ── */
 
 .voice-slot {
 	display: flex;
@@ -1593,7 +1556,7 @@ body {
 
 /* ── Notes ───────────────────────────────────────────────────────────────── */
 
-/* Opaque for the same reason as .voice-consent: the mic-denied and no-speech notes are shown in the landing pha… */
+/* Opaque like .voice-consent: these notes are shown over the landing gradient. */
 .voice-note {
 	display: flex;
 	align-items: center;
@@ -1654,7 +1617,7 @@ body {
 }
 
 /* Tone carries the meaning; the icon and copy carry it too, so colour is never the only signal. */
-/* Each tone keeps its tint but paints it over the opaque base rather than replacing it — a 7% wash alone is tra… */
+/* Each tone paints its tint over the opaque base: a 7% wash alone is transparent. */
 .voice-note[data-tone="bad"] {
 	border-color: var(--danger-line-strong);
 	background:
@@ -1924,7 +1887,7 @@ body {
 	}
 }
 
-/* Below the drawer breakpoint it is a bottom sheet, not a floating panel: pinned to the bottom edge, full width… */
+/* Below the drawer breakpoint it is a bottom sheet: pinned to the bottom edge, full width. */
 .voice-menu--up[data-sheet] {
 	position: fixed;
 	z-index: 60;
@@ -1959,7 +1922,7 @@ body {
 	animation: fade-in 200ms var(--ease) both;
 }
 
-/* The settings trigger: icon-only at every width, so it never competes with the plain-words chip for room on a… */
+/* Icon-only at every width, so it never competes with the plain-words chip for room. */
 .tool-btn--icon {
 	min-width: 36px;
 	padding: 0;
@@ -2037,7 +2000,7 @@ body {
 	color: var(--plum);
 }
 
-/* `--magenta` on this wash measured 4.41:1 at 12.5px/500 — just under AA, and this is the only indication of wh… */
+/* `--magenta` here measured 4.41:1 at 12.5px/500, just under AA, so it is not the only cue. */
 .voice-choice[aria-pressed="true"] {
 	border-color: var(--wash-m-32);
 	background: var(--wash-m-10);
@@ -2122,7 +2085,7 @@ body {
 	transform: translateX(18px);
 }
 
-/* ── Links inside an answer ───────────────────────────────────────────────── Underlined rather than colour-onl… */
+/* ── Links inside an answer ── */
 
 .answer-link {
 	color: var(--plum);
@@ -2149,7 +2112,7 @@ body {
 	text-decoration-color: currentColor;
 }
 
-/* ── Sources ──────────────────────────────────────────────────────────────── The evidence behind an answer, no… */
+/* ── Sources ── */
 
 .sources {
 	margin: -4px 0 2px;
@@ -2305,7 +2268,7 @@ body {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	/* 8px, not 6: the buttons carry 44px-tall invisible hit areas and this is the margin that keeps neighbouring ta… */
+	/* 8px, not 6: the buttons carry 44px hit areas, and this keeps neighbouring targets apart. */
 	gap: 8px;
 	margin-top: 12px;
 }
@@ -2394,7 +2357,7 @@ body {
 
 /* ── Follow-ups ─────────────────────────────────────────────────────────── */
 
-/* Reserved on the same terms as the answer's tail, and for the same reason: these chips are the last thing in t… */
+/* Reserved like the answer's tail: these chips are the last thing to arrive in a turn. */
 .follow-ups {
 	display: flex;
 	flex-wrap: wrap;
@@ -2566,7 +2529,7 @@ body {
 	text-align: right;
 }
 
-/* The limit reached is worth more than "getting close" -- this is the moment the box stops accepting what is be… */
+/* The limit reached beats "getting close": this is the moment the box stops accepting input. */
 .composer__counter[data-full] {
 	color: var(--danger);
 	font-weight: 500;
@@ -2577,7 +2540,7 @@ body {
 	z-index: 60;
 	top: 8px;
 	left: 50%;
-	/* Parked above the viewport rather than hidden, so it slides in from where it will land instead of appearing ou… */
+	/* Parked above the viewport, so it slides in from where it lands instead of appearing. */
 	transform: translate(-50%, -200%);
 	padding: 10px 18px;
 	border-radius: 12px;
@@ -2726,7 +2689,7 @@ body {
 	}
 }
 
-/* Fixed, like `.row-menu`, and for the same reason: the composer sits inside a clipping context and an absolute… */
+/* Fixed, like `.row-menu`: the composer sits inside a clipping context. */
 .persona__menu {
 	position: fixed;
 	z-index: 40;
@@ -2772,14 +2735,14 @@ body {
 	border-radius: 10px;
 }
 
-/* A separator rather than a heading: "Everyone" is the absence of a choice, not a fifth persona, and grouping i… */
+/* A separator, not a heading: "Everyone" is the absence of a choice, not a fifth persona. */
 .persona__option--none {
 	margin-top: 4px;
 	padding-top: 12px;
 	border-top: 1px solid var(--wash-12);
 }
 
-/* Reserved from the start, so checking a different option does not shunt every label sideways by the width of a… */
+/* Reserved from the start, so checking another option does not shunt every label sideways. */
 .persona__tick {
 	display: flex;
 	align-items: center;
@@ -2915,7 +2878,7 @@ body {
 
 /* ── Disclaimer ─────────────────────────────────────────────────────────── */
 
-/* `--slate` rather than `--quiet`: measured at 390px in the chat phase this line sits on the panel's lavender t… */
+/* `--slate`, not `--quiet`: at 390px this line sits on the panel's lavender tint. */
 .disclaimer {
 	display: flex;
 	align-items: center;
@@ -2929,24 +2892,6 @@ body {
 	text-align: center;
 }
 
-
-/* ── Model dot ──────────────────────────────────────────────────────────── */
-
-.model-dot {
-	display: block;
-	width: 18px;
-	height: 18px;
-	flex-shrink: 0;
-	border-radius: 999px;
-	background: radial-gradient(
-		circle at 32% 28%,
-		#ffffff 0%,
-		var(--magenta-light) 30%,
-		var(--plum-light) 66%,
-		var(--plum-deep) 100%
-	);
-	box-shadow: inset 0 -1px 3px rgb(53 29 90 / 0.5);
-}
 
 /* ── Screen-reader only ─────────────────────────────────────────────────── */
 
@@ -3008,7 +2953,7 @@ body {
 	border-color: rgb(255 255 255 / 0.34);
 }
 
-/* Listed with the hamburger rather than given its own rule, because they are one pair: the same frosted surface… */
+/* Listed with the hamburger because they are one pair, sharing the same frosted surface. */
 .app[data-phase="landing"] .account__signin:hover {
 	background: rgb(38 16 70 / 0.52);
 }
@@ -3041,7 +2986,7 @@ body {
 	}
 }
 
-/* ── Word scramble ────────────────────────────────────────────────────────── The game card, rendered inside an… */
+/* ── Word scramble ── */
 
 .game {
 	--tile: 52px;
@@ -3055,7 +3000,7 @@ body {
 	--step: 26px;
 	--btn-h: 40px;
 	--btn-fs: 0.875rem;
-	/* Shared by every card: the numbered step, the marker chip and the rule beside an eyebrow are one primitive eac… */
+	/* Shared by every card: the numbered step, the marker chip and the eyebrow rule. */
 	--disabled: 0.45;
 	--lead-fs: 1.0625rem;
 	--meaning-word: 2.25rem;
@@ -3182,7 +3127,7 @@ body {
 	border-color: var(--wash-30);
 }
 
-/* Carries `disabled` while a request is in flight and had no disabled state at all, so it stayed fully lit and… */
+/* Carries `disabled` in flight; without a disabled state it stayed lit and invited a re-tap. */
 .game__leave:disabled {
 	opacity: var(--disabled);
 	cursor: not-allowed;
@@ -3224,7 +3169,7 @@ body {
 	color: var(--danger);
 }
 
-/* ── Tiles ─────────────────────────────────────────────────────────────── The tray sits at slight angles so it… */
+/* ── Tiles ── */
 
 .game__tray,
 .game__slots,
@@ -3263,7 +3208,7 @@ body {
 		0 4px 10px rgb(53 29 90 / 0.08);
 	cursor: pointer;
 	transform: rotate(var(--rot, 0deg));
-	/* The one overshoot in the product, and it is load-bearing: a letter tile landing for a child is the single pla… */
+	/* The one overshoot in the product, and load-bearing: a tile landing is the moment of play. */
 	animation: tile-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; /* impeccable-disable-line bounce-easing -- deliberate, see note above */
 }
 
@@ -3339,7 +3284,7 @@ body {
 	}
 }
 
-/* The row shakes once on a wrong guess — the letters are all still there, and the shake says "these, in another… */
+/* One shake on a wrong guess: the letters are all still there, in another order. */
 .game__slots[data-shake] {
 	animation: nudge 400ms var(--ease);
 }
@@ -3379,7 +3324,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* The tone is carried by the fill and the icon, not by a 4px coloured tab down the left edge — that stripe is g… */
+/* Tone carried by the fill and the icon, not a 4px stripe down the left edge. */
 .game__wrong {
 	border: 1px solid var(--warn-line);
 	background: var(--warn-wash);
@@ -3572,7 +3517,7 @@ body {
 	color: var(--magenta);
 }
 
-/* The word gets the display face — it is the thing being taught, and the serif is the only place this product u… */
+/* The word gets the display face: it is the thing being taught. */
 .game__meaning-word {
 	font-family: var(--font-display);
 	font-size: var(--meaning-word);
@@ -3609,7 +3554,7 @@ body {
 	box-shadow: 0 4px 12px rgb(72 41 119 / 0.26);
 }
 
-/* ── True or false ────────────────────────────────────────────────────────── Shares the card shell above — hea… */
+/* ── True or false ── */
 
 .tf {
 	--stmt: 1.3125rem;
@@ -3644,7 +3589,7 @@ body {
 	background: var(--hairline);
 }
 
-/* The statement is the thing being judged, so it gets the weight — and a measure short enough that judging it d… */
+/* The statement is what is being judged, so it gets the weight and a short measure. */
 .tf__statement {
 	margin: 0;
 	max-width: 60ch;
@@ -3793,7 +3738,7 @@ body {
 	line-height: 1.66;
 }
 
-/* A numbered breakdown, for teaching that a paragraph cannot carry — the 10-20-30-40 shares only mean anything… */
+/* A numbered breakdown, for teaching that a paragraph cannot carry. */
 .tf__bullets {
 	display: flex;
 	flex-direction: column;
@@ -3888,7 +3833,7 @@ body {
 	height: 15px;
 }
 
-/* Progress sits on its own row in this card rather than inline: with five questions the track is wider than a g… */
+/* Progress gets its own row: with five questions the track is wider than a card allows inline. */
 .elig .game__steps {
 	order: 4;
 	width: 100%;
@@ -4052,7 +3997,7 @@ body {
 	text-wrap: pretty;
 }
 
-/* The question to put to a person, set as a quotation because it is one — it is meant to be read out or pasted… */
+/* The question to put to a person, set as a quotation because it is one. */
 .elig__mentor {
 	padding: 14px 16px;
 	border: 1px solid var(--wash-12);
@@ -4130,7 +4075,7 @@ body {
 	background: rgb(22 163 74 / 0.05);
 }
 
-/* An alternative, tucked under the item it substitutes for so the pair reads as one decision rather than two er… */
+/* Tucked under the item it substitutes for, so the pair reads as one decision. */
 .elig__doc[data-alt] {
 	margin-top: -4px;
 	margin-left: 18px;
@@ -4334,7 +4279,7 @@ body {
 		margin-left: 0;
 	}
 
-	/* The indent that keeps the checklist detail lined up under its title costs 30px of a 320px screen, and French… */
+	/* The checklist indent costs 30px of a 320px screen, and French copy is longer again. */
 	.elig__doc-detail,
 	.elig__doc-meta,
 	.elig__doc-caveat {
@@ -4344,7 +4289,7 @@ body {
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 
-/* Below this width the rail stops being a column and becomes an overlay, so the conversation keeps the full rea… */
+/* Below this width the rail becomes an overlay, so the conversation keeps the full reading column. */
 @media (max-width: 860px) {
 	.app[data-phase="chat"] .rail {
 		position: absolute;
@@ -4365,7 +4310,7 @@ body {
 		pointer-events: none;
 	}
 
-	/* The landing rail is already a drawer at every width (see below); inside this breakpoint it only needs the hea… */
+	/* The landing rail is already a drawer at every width; here it only needs the header. */
 	.app[data-phase="landing"] .rail {
 		box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
 	}
@@ -4423,7 +4368,7 @@ body {
 		overscroll-behavior-x: contain;
 		scroll-snap-type: x proximity;
 		padding: 14px 16px 14px;
-		/* Without this, snapping to `start` eats the row's own left padding and the first chip rests 1px from the viewp… */
+		/* Without this, snapping to `start` eats the row's left padding and the first chip touches the edge. */
 		scroll-padding-left: 16px;
 		scrollbar-width: none;
 		/* The peek at the right edge is the only signal that the row scrolls, so it
@@ -4516,7 +4461,7 @@ body {
 		animation-duration: 1ms !important;
 	}
 
-	/* The wrong-guess shake is the one motion here that carries meaning, so it is replaced rather than removed: the… */
+	/* The wrong-guess shake carries meaning, so it is replaced rather than removed. */
 	.game__slots[data-shake] {
 		animation: none !important;
 	}
@@ -4532,7 +4477,7 @@ body {
 		scroll-behavior: auto !important;
 	}
 
-	/* The three keep working: the thinking dots, the transcribing spinner, and the recording dot are the only evide… */
+	/* The thinking dots, the transcribing spinner and the recording dot are the only progress cues. */
 	.thinking__dots i {
 		animation: dot-fade 1.4s ease-in-out infinite !important;
 		transform: none !important;
@@ -5042,7 +4987,7 @@ body {
 	border-radius: 16px;
 	background: #fff;
 	font-family: inherit;
-	/* 16px exactly: anything smaller makes iOS zoom the page on focus, which throws the layout out from under whoev… */
+	/* 16px exactly: anything smaller makes iOS zoom the page on focus. */
 	font-size: 1rem;
 	color: var(--ink);
 	outline: none;
@@ -5200,7 +5145,7 @@ body {
 	}
 }
 
-/* `fieldset` is the right element for a group of inputs under one label, and it arrives with a border and paddi… */
+/* `fieldset` is right for a group under one label, but it arrives with a border and padding. */
 .auth__fieldset {
 	min-width: 0;
 	margin: 0;
@@ -5213,7 +5158,7 @@ body {
 	margin-bottom: 8px;
 }
 
-/* ─── The account control ─────────────────────────────────────────────────── One control, two placements: floa… */
+/* ── The account control ── */
 
 .account-slot {
 	position: absolute;
@@ -5253,7 +5198,7 @@ body {
 
 /* The signed-out corner control. */
 .account__signin {
-	/* So the 44px target below is positioned against this pill rather than whatever ancestor happens to be position… */
+	/* So the 44px target below positions against this pill, not a distant ancestor. */
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -5275,7 +5220,7 @@ body {
 		color var(--morph);
 }
 
-/* The same trick `.rail-open` uses, and for the same reason: the pill is 40px because that is what pairs with t… */
+/* The same trick `.rail-open` uses: the pill is 40px because that is what pairs with the mark. */
 .account__signin::after {
 	content: "";
 	position: absolute;
@@ -5422,7 +5367,7 @@ body {
 	background: var(--danger-wash);
 }
 
-/* One sentence, because from the menu it is not obvious what happens to the conversations in the rail — and the… */
+/* One sentence, because it is not obvious what happens to the conversations in the rail. */
 .account__confirm {
 	margin: 0;
 	padding: 2px 10px 8px;
@@ -5432,9 +5377,9 @@ body {
 	text-wrap: pretty;
 }
 
-/* The corner control sits over the gradient on the landing screen and over the white workspace in a conversatio… */
+/* The corner control sits over the gradient on landing and the white workspace in a conversation. */
 
-/* The title bar and the account control share the top-right corner in a conversation, and at narrow widths they… */
+/* The title bar and the account control share the top-right corner and would collide when narrow. */
 .app:has(.account-slot[data-shown]) .titlebar {
 	padding-right: 100px;
 }

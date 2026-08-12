@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     if args.reload:
-        # The reloader supervises a child process and never runs the app on this loop, so choosing one here would apply…
+        # The reloader only supervises a child process, so the loop chosen here would never serve.
         uvicorn.Server(config).run()
         return
 

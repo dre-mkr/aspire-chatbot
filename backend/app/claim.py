@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import ACCOUNT_ANONYMOUS
@@ -82,12 +82,3 @@ async def claimable(db: AsyncSession, anonymous_id: uuid.UUID) -> bool:
     return account_type == ACCOUNT_ANONYMOUS and claimed_by is None
 
 
-async def anonymous_conversation_count(db: AsyncSession, anonymous_id: uuid.UUID) -> int:
-    """How much would be carried over. Shown before asking someone to sign out."""
-    return (
-        await db.scalar(
-            select(func.count())
-            .select_from(Conversation)
-            .where(Conversation.owner_id == anonymous_id)
-        )
-    ) or 0

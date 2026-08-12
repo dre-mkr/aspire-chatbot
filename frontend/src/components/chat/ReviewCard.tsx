@@ -19,7 +19,7 @@ export function ReviewCard({
 	const band = useAgeBand();
 	const [attested, setAttested] = useState(false);
 
-	// A running number across sections, so "change item 4" means the fourth thing on screen rather than the fourth…
+	// A running number across sections, so "item 4" means the fourth thing on screen.
 	let item = 0;
 
 	return (

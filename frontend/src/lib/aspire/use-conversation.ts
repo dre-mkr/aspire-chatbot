@@ -63,7 +63,7 @@ export type ChatMessage =
 			role: "error";
 			text: string;
 			canRetry: boolean;
-			/** "stopped" is the reader's own decision, not a fault, and is drawn accordingly — the same reason a wrong game… */
+			/** "stopped" is the reader's own choice, not a fault, and is drawn accordingly. */
 			tone?: "stopped";
 	  };
 
@@ -240,13 +240,13 @@ function toStored(messages: Array<ChatMessage>): Array<StoredMessage> {
 export interface UseConversationOptions {
 	/** Which language to name the conversation in. */
 	getLanguage?: () => string;
-	/** Fired the moment a reply lands, with the whole text — before the typewriter starts revealing it. */
+	/** Fired the moment a reply lands, with the whole text, before the reveal starts. */
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
 	persona?: string | null;
 	/** Fired synchronously inside `send`, the instant a conversation is minted. */
 	onThreadStart?: (threadId: string) => void;
-	/** Fired when a turn started a game instead of answering. Carries the directive's game name and concept. */
+	/** Fired when a turn started a game instead of answering; carries game name and concept. */
 	onGameStart?: (threadId: string, gameType: string, concept: string) => void;
 	/** Fired when a turn opened the eligibility check instead of answering. */
 	onEligibilityStart?: (threadId: string, language: string) => void;
@@ -266,7 +266,7 @@ export function useConversation({
 	const [isThinking, setIsThinking] = useState(false);
 	const queryClient = useQueryClient();
 
-	// Subscribed to the session, so a sign-in or sign-out re-renders this and the query picks up the new owner's ke…
+	// Subscribed to the session: a sign-in or sign-out re-renders and requeries the new owner.
 	const { session } = useSession();
 	const [threadId, setThreadId] = useState<string | null>(null);
 
@@ -290,7 +290,7 @@ export function useConversation({
 	const cursor = useRef<StreamCursor | undefined>(undefined);
 	/** Last question asked, so "Try again" can re-ask it. */
 	const lastQuestion = useRef("");
-	/** Guards against a reply from an abandoned turn landing in the transcript — "New chat" or a second question whi… */
+	/** Drops replies from a turn the reader abandoned. */
 	const turnToken = useRef(0);
 	/** Cancels the request behind the turn in flight. */
 	const inFlight = useRef<AbortController | null>(null);
@@ -310,7 +310,7 @@ export function useConversation({
 		onAnswerRef.current = onAnswer;
 	}, [onAnswer]);
 
-	// Same reason as onAnswer: the voice layer is created after this hook (it needs the thread id this hook owns),…
+	// Same reason as onAnswer: the voice layer is created after this hook.
 	const getLanguageRef = useRef(getLanguage);
 	useEffect(() => {
 		getLanguageRef.current = getLanguage;
@@ -335,7 +335,7 @@ export function useConversation({
 	/** The thread the next request belongs to, readable synchronously. */
 	const threadRef = useRef<string | null>(null);
 
-	// Commits before any later click can be dispatched, so the guard in `send` never reads a stale value.
+	// Commits before any later click, so the guard in `send` never reads a stale value.
 	useEffect(() => {
 		isThinkingRef.current = isThinking;
 	}, [isThinking]);
@@ -394,7 +394,7 @@ export function useConversation({
 			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
 	});
 
-	// Still fire-and-forget at the call sites, and deliberately so: a name that fails to save is worth strictly les…
+	// Deliberately fire-and-forget: a name that fails to save is not worth interrupting for.
 	const nameConversation = useCallback(
 		(id: string, title: string, source: "generated" | "manual") => {
 			renameMutation.mutate({ id, title, source });
@@ -409,14 +409,14 @@ export function useConversation({
 			removed: removeConversationFromCache(queryClient, id),
 		}),
 		onSuccess: (_result, id) => {
-			// The device-local copy, which nothing writes any more but which still holds whole transcripts from before hist…
+			// The device-local copy still holds transcripts from before history moved server-side.
 			forgetLocalConversation(id);
 		},
 		onError: (error, _id, context) => {
 			if (error instanceof HttpError && error.status === 404) return;
 			if (context?.removed) upsertConversation(queryClient, context.removed);
 		},
-		// Ordering after a rollback comes from here rather than from the restore: `upsertConversation` puts a row at th…
+		// Ordering after a rollback comes from this refetch: the restore puts the row on top.
 		onSettled: () =>
 			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
 	});
@@ -537,7 +537,7 @@ export function useConversation({
 			setIsThinking(false);
 			const id = nextId.current++;
 
-			// Reduced motion still skips the reveal, but only once the answer is whole -- settling a half-delivered stream…
+			// Reduced motion skips the reveal, but only once the answer is whole.
 			if (ended && prefersReducedMotion()) {
 				setMessages((current) => [...current, completed(answer, sources, id)]);
 				return id;
@@ -597,7 +597,7 @@ export function useConversation({
 
 				const state = cursor.current;
 				if (!state) return;
-				// Only ever grows, and only over settled text, so `built` indices stay valid and the reveal is never rewound.
+				// Only grows, over settled text: `built` indices stay valid and the reveal never rewinds.
 				state.answer = { ...state.answer, blocks };
 			};
 
@@ -653,7 +653,7 @@ export function useConversation({
 					return;
 				}
 
-				// An eligibility turn is the card and nothing else, for the same reason and by the same mechanism as a game tur…
+				// An eligibility turn is the card and nothing else, exactly like a game turn.
 				if (result.startedEligibility) {
 					setIsThinking(false);
 					setMessages((current) => [
@@ -675,7 +675,7 @@ export function useConversation({
 					return;
 				}
 
-				// The payload is authoritative, not the accumulated deltas: on a card turn the service deliberately sends an em…
+				// The payload wins over the deltas: a card turn deliberately sends empty prose.
 				const finalAnswer: Answer = {
 					blocks: parseAnswer(result.reply),
 					followUps: result.followUps,
@@ -691,7 +691,7 @@ export function useConversation({
 					// Usually already true, from `TEXT_MESSAGE_END`.
 					live.textEnded = true;
 				} else {
-					// Nothing was ever revealed -- a reply with no newline in it, or the non-streaming fallback inside `streamAspir…
+					// Nothing was revealed: a reply with no newline, or the non-streaming fallback.
 					streamingId = beginStream(finalAnswer, result.sources, true);
 				}
 				onAnswerRef.current?.(streamingId, result.reply);
@@ -733,11 +733,11 @@ export function useConversation({
 					threadId: threadRef.current,
 					simpleMode,
 					persona,
-					// Read at call time for the same reason the title call does: the voice layer that owns this setting is built af…
+					// Read at call time: the voice layer is built after this hook.
 					language: getLanguageRef.current(),
 				});
 
-				// Usually a no-op by now: `onTurn` settled this when the service announced the turn, which on a streamed reply…
+				// Usually a no-op: `onTurn` already settled this when the turn was announced.
 				settleTurn(result);
 				applyFollowUps(result.followUps);
 			} catch (error) {
@@ -760,7 +760,7 @@ export function useConversation({
 				]);
 			}
 		},
-		// `nameConversation`, `queryClient` and `settleRevealed` are all stable references, so naming them here does no…
+		// `nameConversation` and `settleRevealed` are stable, so listing them costs no rebuilds.
 		[beginStream, persona, nameConversation, settleRevealed],
 	);
 
@@ -768,14 +768,14 @@ export function useConversation({
 		(raw: string, simpleMode = false) => {
 			const text = raw.trim();
 			if (!text) return;
-			// A second question while the first is still in flight used to bump the turn token, so the first reply was disc…
+			// Ignore a second question while one is in flight, rather than discarding the first reply.
 			if (isThinkingRef.current || cursor.current) return;
 
 			dropStream();
 			lastQuestion.current = text;
 			const token = ++turnToken.current;
 
-			// The first message of a conversation is the moment it becomes real: it gets an id, an address, and a row in th…
+			// The first message makes the conversation real: an id, an address, and a rail row.
 			const opening = !threadRef.current;
 			if (opening) {
 				const minted = newThreadId();
@@ -811,7 +811,7 @@ export function useConversation({
 			const index = messages.findIndex((m) => m.id === messageId);
 			if (index === -1) return;
 
-			// The question this answer came from is the nearest user turn above it, not the newest one in the transcript.
+			// The question is the nearest user turn above this answer, not the newest one.
 			let question = "";
 			for (let i = index - 1; i >= 0; i -= 1) {
 				const previous = messages[i];
@@ -826,7 +826,7 @@ export function useConversation({
 			const token = ++turnToken.current;
 			lastQuestion.current = question;
 
-			// Re-found inside the updater so a turn that settled between the click and this point cannot make the index cut…
+			// Re-found inside the updater: a turn settling since the click would shift the index.
 			setMessages((current) => {
 				const at = current.findIndex((m) => m.id === messageId);
 				return at === -1 ? current : current.slice(0, at);
@@ -844,7 +844,7 @@ export function useConversation({
 		// The half that was missing. Without this, Stop only hid the answer.
 		abortInFlight();
 
-		// Keep whatever is already on screen — the words are there to be read, and deleting them as you read is its own…
+		// Keep whatever is already on screen: those words are there to be read.
 		if (cursor.current) settleRevealed();
 		setIsThinking(false);
 
@@ -880,7 +880,7 @@ export function useConversation({
 		const firstQuestion = messages.find((m) => m.role === "user");
 		if (firstQuestion?.role !== "user") return;
 
-		// Whatever this conversation is already called wins over a fresh truncation: a generated or hand-typed title mu…
+		// An existing title beats a fresh truncation: generated and manual names must survive.
 		const existing = readConversation(queryClient, threadId);
 
 		upsertConversation(queryClient, {
@@ -902,7 +902,7 @@ export function useConversation({
 		const firstQuestion = messages.find((m) => m.role === "user");
 		if (firstQuestion?.role !== "user") return;
 
-		// Only the opening exchange names the chat, so a conversation that already has more than one answer was restore…
+		// Only the opening exchange names the chat; more than one answer means it was restored.
 		const answers = messages.filter((m) => m.role === "assistant");
 		if (answers.length !== 1) return;
 
@@ -934,7 +934,7 @@ export function useConversation({
 	/** Asks for a fresh title for one conversation. */
 	const regenerateTitle = useCallback(
 		(id: string) => {
-			// The rail's rows carry no transcripts, so the opening exchange is fetched rather than read off the row.
+			// The rail's rows carry no transcripts, so the opening exchange is fetched.
 			void queryClient
 				.ensureQueryData(conversationQuery(id))
 				.then((stored) => {
@@ -987,7 +987,7 @@ export function useConversation({
 									},
 			);
 
-			// A conversation whose last stored turn is the question is one whose first send failed: the chat was committed…
+			// A transcript ending on the question means the first send failed after the commit.
 			if (conversation.messages.at(-1)?.role === "user") {
 				restored.push({
 					id: nextId.current++,
@@ -1059,7 +1059,7 @@ export function useConversation({
 		setIsThinking(false);
 	}, [dropStream, abortInFlight]);
 
-	// Follow-ups belong to the answer that has settled — never to one still being revealed, where they would appear…
+	// Follow-ups belong to the settled answer, never to one still being revealed.
 	const tail = messages.at(-1);
 	const followUps =
 		!streaming && tail?.role === "assistant" ? tail.followUps : [];

@@ -97,7 +97,7 @@ def grade(answer: str, accept: list[str]) -> Grade:
     found = [word for word in accept if _present(word.lower(), haystack, tokens)]
 
     if found:
-        # "Partial" means thin, not wrong: one word out of a long accept list, or a very short answer.
+        # "Partial" means thin, not wrong: one accept word, inside a very short answer.
         partial = len(found) == 1 and len(tokens) <= 4
         return Grade(accepted=True, partial=partial, found=found)
 

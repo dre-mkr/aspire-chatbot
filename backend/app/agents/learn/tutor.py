@@ -84,7 +84,7 @@ def make_tutor(
         )
 
         if resolution.source in ("rag", "none"):
-            # Fire and forget: the authoring backlog must never be the thing that delays a child's lesson.
+            # Fire and forget: the authoring backlog must never delay a child's lesson.
             asyncio.create_task(
                 enqueue_candidate(utterance, band=band, locale=locale, resolution=resolution)
             )
@@ -309,15 +309,7 @@ def _state_after(
         # The message is returned as well as emitted.
         "messages": [AIMessage(content=lesson.text)],
         "quick_replies": _chips(band, _chip_options(move, band)),
-        # The widget travels in STATE, not on the custom channel.
-        #
-        # `_emit_directive` writes it to the stream writer, and a subgraph's
-        # custom writes never reach the transport -- `astream` only surfaces
-        # them with `subgraphs=True`, which doubled every answer. `ui_directives`
-        # merges into the main graph's state and `persist` publishes it with the
-        # closing directives, which is the same path the cards use and the only
-        # one measured to work. Emitting to the writer as well is harmless and
-        # keeps a streaming deployment that does open the boundary correct.
+        # The widget travels in STATE, not the custom channel: `subgraphs=True` doubles answers.
         **({"ui_directives": [widget.payload]} if widget.emitted else {}),
         "learning": merge(
             learning,

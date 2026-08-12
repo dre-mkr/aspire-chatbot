@@ -12,7 +12,7 @@ os.environ.setdefault("SESSION_SECRET", "test-only-secret-not-for-production-32b
 # Give this run its own Valkey namespace.
 os.environ.setdefault("ASPIRE_CACHE_NAMESPACE", f"test-{uuid.uuid4().hex[:8]}:")
 
-# ── connections are never pooled across tests ──────────────────────────────── The engine is a process-wide si…
+# ── connections are never pooled across tests ────────────────────────────────
 try:
     from sqlalchemy.pool import NullPool
 

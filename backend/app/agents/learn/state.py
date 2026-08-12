@@ -42,7 +42,7 @@ class LearningState(TypedDict, total=False):
     session_started_at: str
     #: Concepts this session has touched, for the wrap-up summary.
     concepts_touched: list[str]
-    #: Which widget kinds have been shown recently, so the planner does not emit the same primitive three turns runn…
+    #: Which widget kinds have been shown recently, so the planner varies the primitive.
     last_widget_kinds: list[str]
     #: The primitive `plan_widget` chose for the teaching turn about to run, or None.
     pending_widget: str | None
@@ -56,10 +56,10 @@ class LearningState(TypedDict, total=False):
     review_concepts: list[str]
     #: The learner row this session writes mastery against.
     learner_id: str | None
-    #: Set once `wrap_session` has emitted its progress directive, so a resumed graph does not emit a second one.
+    #: Set once `wrap_session` emitted its progress directive, so a resume emits no second one.
     wrapped: bool
 
-    # ── topic resolution (Track L) ────────────────────────────────────────── The lesson machine above places by S…
+    # ── topic resolution ──────────────────────────────────────────────────
 
     #: The concept this turn is about, from `resolve_concept`.
     active_concept_id: str | None
@@ -77,7 +77,7 @@ class LearningState(TypedDict, total=False):
     seen_check_ids: list[str]
     #: Consecutive wrong answers on the current concept.
     consecutive_wrong: int
-    #: What they actually answered, so a later turn can avoid re-explaining what they already got right and can name…
+    #: The wrong answers themselves, so a later turn can address the mistake, not just repeat.
     prior_wrong_answers: list[str]
     #: Turns spent on each concept this session. Drives the switch to a game.
     turns_on_concept: dict[str, int]

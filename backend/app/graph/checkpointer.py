@@ -18,7 +18,8 @@ _setup_done = False
 _unavailable = False
 
 
-# ── what may come back out of a checkpoint ─────────────────────────────────── langgraph's msgpack layer recon…
+# ── what may come back out of a checkpoint ──
+# langgraph's msgpack layer only reconstructs the types named on this allowlist.
 
 
 def _models_reachable_from(*roots: Any) -> set[type]:
@@ -53,7 +54,7 @@ def allowed_checkpoint_types() -> list[tuple[str, str]]:
     from app.graph.state import Citation, KBChunk
     from app.schemas.directives import UIDirective
 
-    # `SessionContext` is a root because `AspireState.context` holds one and the checkpoint round-trips it.
+    # `SessionContext` is a root: `AspireState.context` holds one and it round-trips.
     models = _models_reachable_from(
         KBChunk, Citation, UIDirective, Application, SessionContext
     )
@@ -122,7 +123,7 @@ async def get_checkpointer() -> Any | None:
         )
         return None
 
-    # Checked before psycopg is even imported: on a loop it cannot use, there is nothing to import it for.
+    # Checked before psycopg is imported: on a loop it cannot use, there is no point.
     if _proactor_loop_in_use():
         _unavailable = True
         logger.error(
@@ -136,7 +137,7 @@ async def get_checkpointer() -> Any | None:
         )
         return None
 
-    # Imported here rather than at module scope so that a deployment without a database -- and the test suite -- do…
+    # Imported here, not at module scope, so a database-less deployment never needs psycopg.
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
     from psycopg_pool import AsyncConnectionPool
@@ -148,7 +149,7 @@ async def get_checkpointer() -> Any | None:
         conninfo=dsn,
         min_size=1,
         max_size=settings.checkpointer_pool_size,
-        # `open=False` plus an explicit `open()` rather than letting the constructor connect: the constructor's implici…
+        # `open=False` plus an explicit `open()`, so failures are handled below.
         open=False,
         # Verify the connection before handing it out.
         check=AsyncConnectionPool.check_connection,
@@ -177,7 +178,7 @@ async def get_checkpointer() -> Any | None:
         return None
 
     _pool = pool
-    # Passing an explicit allowlist is what turns the warning off, and it also flips the hook from "import whatever…
+    # An explicit allowlist silences the warning and limits what msgpack may import on load.
     _saver = AsyncPostgresSaver(
         _pool,
         serde=JsonPlusSerializer(

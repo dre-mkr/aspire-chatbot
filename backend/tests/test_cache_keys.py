@@ -65,7 +65,7 @@ class TestKeyDimensions:
         assert key("q", language="ES") == key("q", language="es")
 
     def test_persona_separates(self):
-        # Persona changes what the assistant may say, so an answer cached for one must never be served to another.
+        # Persona changes what may be said, so one persona's cached answer must not reach another.
         assert key("q", persona="student") != key("q", persona="parent")
         assert key("q", persona=None) != key("q", persona="student")
 
@@ -82,7 +82,7 @@ class TestKeyDimensions:
             "answer keys with production"
         )
         assert produced.startswith(f"{namespace()}answer:v2:")
-        # Hashed, so a very long question cannot produce an unbounded key and no user text leaks into logs or `KEYS` ou…
+        # Hashed, so the key stays bounded and no user text leaks into logs or `KEYS` output.
         assert len(produced) < 64 + len(namespace())
         assert "x" * 20 not in produced
 

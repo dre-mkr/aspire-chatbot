@@ -1,8 +1,5 @@
 /** The games half of the ASPIRE backend client. */
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+import { API_URL } from "../config";
 
 /** Every action is a tap away from the next; a slow one reads as broken. */
 const TIMEOUT_MS = 10_000;

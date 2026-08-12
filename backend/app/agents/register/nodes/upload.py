@@ -57,7 +57,7 @@ def upload_directive(
         accepts=ACCEPTS,
         max_mb=MAX_MB,
         help=(HELP.get(slot.path, {}).get(locale) or HELP.get(slot.path, {}).get("en", "")),
-        # Carried from the slot table, so the card offers skip on exactly the documents `collect` will accept a skip fo…
+        # From the slot table, so the card offers skip on exactly the documents `collect` allows.
         optional=slot.optional,
         application_id=application_id,
     )
@@ -87,57 +87,6 @@ def _assert_no_bytes(payload: dict[str, Any]) -> dict[str, Any]:
             ", ".join(sorted(unexpected)),
         )
     return {key: value for key, value in payload.items() if key in _ALLOWED_RESUME_KEYS}
-
-
-def make_collect_document(slot: Slot, locale: str, *, label: str | None = None):
-    """A node that pauses for one document and resumes with its id."""
-
-    def collect_document(state: Any) -> dict[str, Any]:
-        from langgraph.types import interrupt
-
-        # The same id `graph._draft` rehydrates from, read straight out of state because this node holds no draft of it…
-        registration = state.get("registration") if isinstance(state, dict) else None
-        application_id = ""
-        if isinstance(registration, dict):
-            application_id = str(registration.get("application_id") or "")
-
-        raw = interrupt(
-            interrupt_payload(
-                slot, locale, label=label, application_id=application_id
-            )
-        )
-        payload = _assert_no_bytes(raw if isinstance(raw, dict) else {})
-
-        if payload.get("skipped") and slot.optional:
-            logger.info("document slot %s skipped", slot.path)
-            return {"registration": {"__last_document": None}}
-
-        document_id = payload.get("document_id")
-        if not document_id:
-            # Resumed with nothing usable.
-            logger.info("document slot %s resumed with no id", slot.path)
-            return {}
-
-        logger.info(
-            "document %s collected for %s (%s, %d bytes)",
-            document_id,
-            slot.path,
-            payload.get("mime", "?"),
-            int(payload.get("size_bytes") or 0),
-        )
-        return {
-            "registration": {
-                "__last_document": {
-                    "document_id": str(document_id),
-                    "mime": str(payload.get("mime") or ""),
-                    "size_bytes": int(payload.get("size_bytes") or 0),
-                    # Never `clean`.
-                    "scan_status": "pending",
-                }
-            }
-        }
-
-    return collect_document
 
 
 def document_ref(payload: dict[str, Any] | None) -> dict[str, Any] | None:

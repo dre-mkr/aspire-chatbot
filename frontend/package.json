@@ -33,9 +33,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.4.5",
 		"@rolldown/plugin-babel": "^0.2.3",
-		"@tanstack/devtools-event-client": "^0.5.0",
 		"@tanstack/devtools-vite": "^0.8.3",
-		"@tanstack/intent": "^0.3.6",
 		"@tanstack/router-cli": "^1.132.0",
 		"@types/node": "^22.10.2",
 		"@types/react": "^19.2.0",
@@ -45,11 +43,5 @@
 		"puppeteer": "^25.4.0",
 		"typescript": "^6.0.2",
 		"vite": "^8.2.0"
-	},
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"esbuild",
-			"lightningcss"
-		]
 	}
 }

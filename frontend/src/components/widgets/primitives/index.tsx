@@ -1,12 +1,8 @@
-/** Shared parts every widget is built from: tokens, a panel, a coin, and the two affordances that are not optional. */
+/** Shared parts every widget is built from: tokens, panel, coin, actions. */
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import type { ColourToken } from "../../../lib/stream/types";
 
-export type ColourToken =
-	| "neutral"
-	| "accent"
-	| "positive"
-	| "caution"
-	| "muted";
+export type { ColourToken };
 
 /** The five tokens, as the CSS variables the stylesheet defines. */
 export function tone(token: ColourToken | undefined): {
@@ -67,14 +63,6 @@ export function useReducedMotion(): boolean {
 	return reduced;
 }
 
-/** Money in minor units, as a reader sees it. Mirrors `registry.money_display`. */
-export function money(cents: number, currency = "EC$"): string {
-	const sign = cents < 0 ? "-" : "";
-	const whole = Math.floor(Math.abs(cents) / 100);
-	const part = Math.abs(cents) % 100;
-	return `${sign}${currency}${whole.toLocaleString("en-US")}.${String(part).padStart(2, "0")}`;
-}
-
 /** The text equivalent, for a screen reader. */
 export function A11yText({ children }: { children: ReactNode }) {
 	const hidden: CSSProperties = {
@@ -123,8 +111,7 @@ export function WidgetActions({
 	onSkip,
 	doneLabel = "Got it",
 	skipLabel = "Skip",
-	/* Quiet while the widget still has a step left in it, so the card has one
-	   loud control at a time rather than two competing for the same tap. */
+	/* Quiet while a step remains, so the card has one loud control at a time. */
 	doneTone = "primary",
 }: {
 	onDone: () => void;
@@ -165,8 +152,7 @@ export function Coin({
 		<span
 			aria-hidden="true"
 			className={filled ? "w-coin" : "w-coin w-coin--empty"}
-			// `accent` is the only token the coin draws differently; the rest read
-			// as the plain disc, which is what every caller already means by them.
+			// `accent` is the only token drawn differently; the rest are plain discs.
 			data-token={filled && token === "accent" ? "accent" : undefined}
 			style={
 				{

@@ -44,7 +44,7 @@ class TestVectorPlumbing:
         assert sum(v * v for v in shelf) == pytest.approx(1.0, abs=1e-6)
 
     def test_cosine_refuses_mismatched_shapes(self):
-        # A dims change must read as "no match", never as a comparison of prefixes that happen to align.
+        # A dims change must read as "no match", not as a comparison of aligned prefixes.
         assert cache._cosine([1.0, 0.0], [1.0]) == -1.0
 
 
@@ -113,7 +113,7 @@ needs_valkey = pytest.mark.skipif(
 
 @pytest.fixture(autouse=True)
 def _fresh_client_per_loop():
-    """Each async test runs on its own event loop, and a redis connection made on one loop cannot be reused on the n…"""
+    """A redis client made on one event loop cannot be reused on the next test's loop."""
     cache.get_client.cache_clear()
     yield
     cache.get_client.cache_clear()
@@ -152,7 +152,7 @@ async def test_a_close_paraphrase_hits_and_a_distant_question_does_not(monkeypat
 @needs_valkey
 @pytest.mark.anyio
 async def test_the_shelf_never_crosses_a_language(monkeypatch):
-    """The layer-1 property, carried over: an English answer must be unreachable from a Spanish session however clos…"""
+    """An English answer stays unreachable from a Spanish session however close the vectors are."""
     _force_on(monkeypatch)
 
     query = f"cross-lang {uuid.uuid4().hex[:6]}"

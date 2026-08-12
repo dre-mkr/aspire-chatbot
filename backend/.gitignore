@@ -7,6 +7,9 @@ data/chroma/
 # Synthesised speech: rebuild with `python scripts/prewarm_voice.py`
 data/voice_cache/
 
+# Append-only runtime game telemetry, rewritten by every local run
+data/events/
+
 # Python
 __pycache__/
 *.py[cod]

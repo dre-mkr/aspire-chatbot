@@ -301,10 +301,10 @@ class GameEngine:
 
         if not verdict and not game.advance_on_wrong:
             self._store.put(session)
-            # No echo of the answer, and no "close!" — a near-miss signal is a side channel that narrows the item for anyon…
+            # No echo of the answer and no "close!" — a near-miss signal narrows the item.
             return SubmitResult(correct=False, attempts=attempts_taken)
 
-        # From here the item resolves, right or wrong, and the cursor moves in the same call that produces the answer.
+        # From here the item resolves either way, and the cursor moves in the same call.
         reveal = game.reveal(entry)
 
         if verdict:
@@ -365,7 +365,7 @@ class GameEngine:
         session.hint_level += 1
         level = session.hint_level
 
-        # Past the last rung, asking again is not a request for a hint — it is a child who has had enough.
+        # Past the last rung, asking again means the child has had enough, so reveal instead.
         if level > self._settings.max_hint_level:
             return self._give_up(session, entry, reason="revealed")
 

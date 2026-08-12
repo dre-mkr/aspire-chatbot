@@ -99,7 +99,8 @@ def _decode(token: str, *, grace: timedelta = timedelta(0)) -> Principal | None:
         return None
 
 
-def _bearer(authorization: str | None) -> str | None:
+def bearer_token(authorization: str | None) -> str | None:
+    """The token out of an `Authorization: Bearer <token>` header, or None."""
     if not authorization:
         return None
     scheme, _, token = authorization.partition(" ")
@@ -112,7 +113,7 @@ async def optional_principal(
     authorization: str | None = Header(default=None),
 ) -> Principal | None:
     """The caller, or None if they presented nothing valid."""
-    token = _bearer(authorization)
+    token = bearer_token(authorization)
     return _decode(token) if token else None
 
 
@@ -120,7 +121,7 @@ async def chat_principal(
     authorization: str | None = Header(default=None),
 ) -> Principal | None:
     """As above, but tolerant of a token that expired moments ago."""
-    token = _bearer(authorization)
+    token = bearer_token(authorization)
     return _decode(token, grace=GRACE) if token else None
 
 

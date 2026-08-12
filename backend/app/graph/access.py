@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-# ── the closed sets ────────────────────────────────────────────────────────── Deliberately duplicated as runt…
+# ── the closed sets ──
+# Runtime frozensets, deliberately duplicated from the Literal types in `state`.
 
 PERSONAS: Final[frozenset[str]] = frozenset({"stella", "orion", "aurora", "nova"})
 AGE_BANDS: Final[frozenset[str]] = frozenset({"5-8", "9-12", "13-15", "16-18", "adult"})
@@ -28,9 +29,10 @@ KNOWN_AGENTS: Final[frozenset[str]] = frozenset(
     }
 )
 
-# ── the rows ───────────────────────────────────────────────────────────────── Written out as literal tuples r…
+# ── the rows ──
+# Written out as literal tuples rather than computed, so every row can be read on its own.
 
-#: Q&A first: it is the default agent for every reader, and the row order is what makes it the fallback (`classi…
+#: Q&A first: it is the default agent for every reader, and row order is what makes it the fallback.
 _STELLA: Final[tuple[str, ...]] = ("qa_agent_limited", "learn_agent", "escalate_agent")
 
 #: The bands `stella` covers.
@@ -84,7 +86,7 @@ def allowed_agents(
     if user_id is None:
         return list(_ANONYMOUS)
 
-    # From here the values came out of a signed token, so anything outside the closed vocabularies is a token that…
+    # From a signed token, so anything outside the closed vocabularies is refused.
     if persona not in PERSONAS:
         return []
     if age_band not in AGE_BANDS:

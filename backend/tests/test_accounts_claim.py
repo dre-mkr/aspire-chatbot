@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import database_enabled  # noqa: E402
 from app.main import app  # noqa: E402
 
-#: P0-010 -- see the `slow` marker note in pyproject.toml.
+#: See the `slow` marker note in pyproject.toml.
 pytestmark = [pytest.mark.slow, pytest.mark.skipif(
     not database_enabled(), reason="These are database-backed account tests."
 )]
@@ -64,7 +64,7 @@ def signup_body(email: str, **over) -> dict:
         "password": STRONG,
         "first_name": "Jayla",
         "last_name": "Thomas",
-        # 15 years old on the date this was written: old enough to hold an account alone, so no guardian is required.
+        # 15 on the date this was written: old enough to hold an account alone, no guardian needed.
         "date_of_birth": "2011-03-14",
         "island": "St. Kitts",
         "school": "Washington Archibald High School",
@@ -96,7 +96,7 @@ def test_registering_carries_the_anonymous_conversations_across(client: TestClie
     ids = {c["thread_id"] for c in listing.json()["conversations"]}
     assert {first, second} <= ids
 
-    # And the conversation the person was in the middle of still resolves, which is what stops sign-up from orphani…
+    # And the conversation they were in the middle of still resolves, so sign-up orphans nothing.
     detail = client.get(f"/api/conversations/{first}", headers=auth(body["token"]))
     assert detail.status_code == 200
 
@@ -109,7 +109,7 @@ def test_the_anonymous_token_stops_working_once_claimed(client: TestClient):
     )
     assert registered.status_code == 200
 
-    # The browser that just signed up must not be able to keep writing to an identity that now owns nothing.
+    # The browser that just signed up must not keep writing to an identity that now owns nothing.
     stale = client.get("/api/conversations", headers=auth(guest["token"]))
     assert stale.status_code == 401
 
@@ -174,7 +174,7 @@ def test_claiming_is_all_or_nothing(client: TestClient):
     )
     assert account.status_code == 200
 
-    # A second sign-in attempt with the (now dead) anonymous token changes nothing about who owns the conversation.
+    # A second attempt with the now-dead anonymous token changes nothing about who owns the thread.
     owner = client.get(f"/api/conversations/{thread}", headers=auth(account.json()["token"]))
     assert owner.status_code == 200
 
@@ -206,7 +206,7 @@ def test_an_under_13_account_is_held_by_the_guardian(client: TestClient):
         ),
     )
     assert created.status_code == 200, created.text
-    # The credentials on the account are the adult's; the child rides along on the same row until profiles exist.
+    # The credentials are the adult's; the child rides the same row until profiles exist.
     assert created.json()["email"] == guardian_email
 
 

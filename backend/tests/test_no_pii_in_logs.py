@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.slow
 
-#: Distinctive enough that a match cannot be a coincidence, and shaped like what a child actually types into a c…
+#: Distinctive enough that a log match cannot be coincidence, yet shaped like real child input.
 NAME = "Zephaniah Quillfeather"
 ADDRESS = "17 Marigold Crescent, Basseterre"
 SCHOOL = "Saint Ambrose Preparatory"
