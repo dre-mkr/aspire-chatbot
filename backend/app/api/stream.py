@@ -550,8 +550,14 @@ async def mint_session(request: Request) -> dict[str, Any]:
         locale = "en"
 
     requested = body.get("persona")
+    # An anonymous account is a place to keep a visitor's chats until they sign up,
+    # not a proof of who they are. Reading it as an identity derived `aurora/adult`
+    # from its empty date of birth, which handed a signed-out visitor the guardian
+    # row -- `register_agent` included. The id still travels, so those chats can
+    # still be claimed at sign-up; only the access decision changes.
+    proven = principal is not None and not principal.is_anonymous
     claims = await claims_for(
-        str(principal.user_id) if principal else None,
+        str(principal.user_id) if proven else None,
         requested_persona=str(requested) if requested else None,
     )
     if claims.persona_request_refused:
@@ -570,6 +576,7 @@ async def mint_session(request: Request) -> dict[str, Any]:
         age_band=claims.age_band,
         account_status=claims.account_status,
         locale=locale,
+        identity_proven=proven,
     )
     return {
         "token": token,

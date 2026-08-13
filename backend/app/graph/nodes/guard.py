@@ -43,11 +43,15 @@ def refusal_text(locale: str) -> str:
 
 def guard(state: AspireState) -> dict[str, Any]:
     """Compute the permitted agents; halt the turn if there are none."""
+    # `user_id`, not identity: a signed-out visitor holds an anonymous account row so
+    # their chats survive sign-up, and reading that as proof handed them the guardian
+    # row. The matrix wants "did anybody prove who this is", which is what it asks for.
+    proven = bool(state.get("identity_proven", True)) and state.get("user_id")
     agents = compute_allowed_agents(
         state.get("persona", ""),
         state.get("age_band", ""),
         state.get("account_status", ""),
-        user_id=state.get("user_id"),
+        user_id=str(proven) if proven else None,
     )
 
     if is_denied(agents):
@@ -59,7 +63,7 @@ def guard(state: AspireState) -> dict[str, Any]:
             state.get("persona"),
             state.get("age_band"),
             state.get("account_status"),
-            state.get("user_id") is None,
+            not proven,
         )
         locale = state.get("locale", "en")
         return {

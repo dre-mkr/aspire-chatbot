@@ -211,3 +211,58 @@ class TestPurity:
             granted.update(allowed_agents(persona, band, status, user_id=USER))
         granted.update(allowed_agents("stella", "5-8", "prospect", user_id=None))
         assert granted == KNOWN_AGENTS
+
+
+class TestAnUnprovenIdentityIsAVisitor:
+    """A signed-out visitor is given an anonymous account row so their chats survive
+    sign-up. `guard` used to read that row's id as proof of who they were, and the
+    row's empty date of birth derives `aurora/adult` -- so a visitor was handed the
+    guardian row, `register_agent` (the variant that collects a national id) included.
+    """
+
+    @staticmethod
+    def _state(**overrides):
+        return {
+            "persona": "aurora",
+            "age_band": "adult",
+            "account_status": "prospect",
+            # Present, because the chats have to belong to something.
+            "user_id": "0f8e0f57-0000-4000-8000-000000000000",
+            "identity_proven": False,
+            "locale": "en",
+            **overrides,
+        }
+
+    def _agents(self, **overrides):
+        from app.graph.nodes.guard import guard
+
+        return guard(self._state(**overrides)).get("allowed_agents")
+
+    def test_a_visitor_gets_the_visitor_row(self):
+        assert self._agents() == [
+            "qa_agent_public",
+            "learning_sample",
+            "register_agent_step1",
+            "escalate_agent",
+        ]
+
+    def test_a_visitor_never_reaches_the_sensitive_registration_agent(self):
+        """`register_agent_step1` exists to stop before the sensitive slots."""
+        assert "register_agent" not in self._agents()
+
+    def test_a_visitor_never_reaches_a_guardians_view_of_a_child(self):
+        assert "learning_preview" not in self._agents()
+
+    def test_proving_who_you_are_restores_the_guardian_row(self):
+        assert "register_agent" in self._agents(identity_proven=True)
+
+    def test_a_token_minted_before_the_claim_existed_is_still_a_member(self):
+        """Absent means proven: only a signed-in member's token outlives a reload."""
+        state = self._state()
+        del state["identity_proven"]
+        from app.graph.nodes.guard import guard
+
+        assert "register_agent" in guard(state)["allowed_agents"]
+
+    def test_the_visitor_row_does_not_depend_on_the_persona_the_row_derived(self):
+        assert self._agents(persona="stella", age_band="5-8") == self._agents()

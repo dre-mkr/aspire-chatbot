@@ -109,7 +109,11 @@ class AspireState(TypedDict, total=False):
     # ── identity: written by `hydrate`, from token claims only ──────────────
     session_id: str
     #: None for an anonymous caller, which is a first-class state rather than an error.
+    #: Present but unproven for a visitor: a signed-out caller is still given an
+    #: anonymous account row so their chats survive until they sign up.
     user_id: str | None
+    #: Whether anybody proved who this is. `guard` reads this, not `user_id`.
+    identity_proven: bool
     device_id: str
     persona: Persona
     age_band: AgeBand

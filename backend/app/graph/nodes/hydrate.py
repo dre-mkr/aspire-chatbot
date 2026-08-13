@@ -27,6 +27,7 @@ def identity_from(claims: SessionClaims) -> dict[str, Any]:
     return {
         "session_id": claims.session_id,
         "user_id": claims.user_id,
+        "identity_proven": claims.identity_proven,
         "device_id": claims.device_id,
         "persona": claims.persona,
         "age_band": claims.age_band,
