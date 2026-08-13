@@ -326,6 +326,20 @@ def make_classify(invoke=None):
             )
             decision = Classification(agent=allowed[0], confidence=0.0, coerced=True)
 
+        # The only record of a routing decision. Its ABSENCE is a signal too: the
+        # continuation bypass and the single-option shortcut both return above this,
+        # so no line means the router was never consulted.
+        logger.info(
+            "route session=%s agent=%s confidence=%.2f sticky=%s coerced=%s active=%s reason=%r",
+            state.get("session_id"),
+            decision.agent,
+            decision.confidence,
+            decision.sticky,
+            decision.coerced,
+            active,
+            decision.reason,
+        )
+
         _announce(state, decision.agent)
         return {
             "active_agent": decision.agent,
