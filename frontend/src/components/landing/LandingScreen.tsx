@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccountControl } from "#/components/auth/AccountControl";
 import { Composer } from "#/components/chat/Composer";
@@ -33,6 +33,7 @@ import { useVoice } from "#/lib/aspire/use-voice";
  */
 export function LandingScreen() {
 	const navigate = useNavigate();
+	const router = useRouter();
 	const queryClient = useQueryClient();
 
 	/** The three answer settings, read from the address. */
@@ -81,6 +82,33 @@ export function LandingScreen() {
 		if (typeof document === "undefined") return;
 		document.title = DEFAULT_DOCUMENT_TITLE;
 	}, []);
+
+	/**
+	 * Warms the conversation screen once this one is idle.
+	 *
+	 * Splitting the two pages took the transcript, the directives and the whole
+	 * widget set out of this page's download — but it also moved them onto the
+	 * far side of the send button, which is the worst moment to be fetching
+	 * anything. Asking for the chunk on idle keeps both: nothing extra in the
+	 * first paint's way, and nothing left to fetch by the time a question is
+	 * ready. Only the component, never the loader: there is no conversation to
+	 * load yet.
+	 */
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const warm = () => {
+			const route = router.routesById["/chat/$chatId"];
+			if (route) void router.loadRouteChunk(route);
+		};
+		// `requestIdleCallback` is still missing on older Safari.
+		const idle = window.requestIdleCallback;
+		if (idle) {
+			const handle = idle(warm, { timeout: 2500 });
+			return () => window.cancelIdleCallback?.(handle);
+		}
+		const timer = setTimeout(warm, 1200);
+		return () => clearTimeout(timer);
+	}, [router]);
 
 	/**
 	 * One press is one conversation, however fast it is repeated. Never

@@ -136,7 +136,14 @@ export function Rail({
 				</p>
 
 				{/* Four states, not two. */}
-				<div className="rail__groups rail__fold" inert={folded}>
+				{/* A navigation landmark, because that is what the rows are: the one
+				    way to move between conversations. The label repeats the section
+				    above it, which is not read out here. */}
+				<nav
+					className="rail__groups rail__fold"
+					aria-label="Conversation history"
+					inert={folded}
+				>
 					{conversations.isPending ? (
 						<div className="rail__skeleton" aria-hidden="true">
 							<i />
@@ -179,7 +186,7 @@ export function Rail({
 							</section>
 						))
 					)}
-				</div>
+				</nav>
 			</div>
 
 			{/* One block, two states: an invitation signed out, the avatar and name signed in. */}

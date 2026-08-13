@@ -673,6 +673,11 @@ export function ChatScreen() {
 						<AccountControl variant="corner" />
 					</div>
 
+					{/* Above the transcript, not after it: each answer carries its own
+					    `h2`, and a page whose first heading is an `h2` reads to a
+					    screen reader as a document that starts mid-outline. */}
+					<h1 className="sr-only">Conversation with ASPIRE AI</h1>
+
 					<ChatTitleBar
 						title={activeTitle}
 						showDrawerTrigger={compact}
@@ -819,9 +824,6 @@ export function ChatScreen() {
 							voice={voice}
 						/>
 					</div>
-
-					{/* There is no hero here to carry it, so this supplies the page heading. */}
-					<h1 className="sr-only">Conversation with ASPIRE AI</h1>
 
 					<output className="sr-only">{announcement}</output>
 
