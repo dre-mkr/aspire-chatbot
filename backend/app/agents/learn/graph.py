@@ -512,7 +512,19 @@ def _entry(state: AspireState) -> str:
 
     if len(get_store()):
         text = latest_user_text(state)
-        if learning.get("active_concept_id") and learning.get("resolution_source") != "none":
+        # Asking to move on is a request the phase table already knows how to honour
+        # (`branch` places another lesson). The claim below would swallow it, and then
+        # nothing could ever leave a concept: `branch` is only reached from the phase
+        # table, which this claim returns before.
+        if wants_a_different_lesson(text):
+            # `branch` is where the request is honoured, and it can only be reached
+            # from the phase table below; without a lesson to move on from, place one.
+            return "branch" if learning.get("lesson_id") else "resume_or_place"
+
+        if (
+            learning.get("active_concept_id")
+            and learning.get("resolution_source") != "none"
+        ):
             return "tutor"
         if asks_about_a_topic(text) and not learning.get("question_id"):
             return "tutor"
