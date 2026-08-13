@@ -13,7 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import yaml  # noqa: E402
 
@@ -34,7 +34,7 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):  # pragma: no cover - not a real tty
         pass
 
-GOLDEN = Path(__file__).resolve().parent.parent / "evals" / "golden.yaml"
+GOLDEN = Path(__file__).resolve().parent.parent.parent / "evals" / "golden.yaml"
 
 #: Ten per language, and within a language the personas are filled round-robin in this order.
 PERSONA_ORDER = ("stella", "orion", "aurora", "nova")
