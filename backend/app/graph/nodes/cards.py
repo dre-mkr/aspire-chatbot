@@ -123,6 +123,25 @@ _REGISTRATION_CHIPS: dict[str, dict[str, list[str]]] = {
 }
 
 
+def _holding_agent(state: AspireState) -> str | None:
+    """Who the turn is recorded against when a card answers instead of an agent.
+
+    A card is claimed before the router runs, so nothing has chosen an agent this
+    turn. Defaulting to the literal "qa_agent" stamped readers with an agent their
+    row never granted -- a 9-12 reader was recorded as `qa_agent` when only
+    `qa_agent_limited` is theirs -- and, because stickiness ignores an active agent
+    outside the allowed list, silently dropped stickiness on the following turn.
+
+    The access matrix orders every row with that reader's default agent first, which
+    is exactly the fallback wanted here.
+    """
+    active = state.get("active_agent")
+    if active:
+        return str(active)
+    allowed = state.get("allowed_agents") or []
+    return str(allowed[0]) if allowed else None
+
+
 def _last_human(state: AspireState) -> str:
     for message in reversed(state.get("messages") or []):
         if getattr(message, "type", None) == "human":
@@ -236,7 +255,7 @@ def _open_signup(state: AspireState, message: str) -> dict[str, Any] | None:
         "ui_directives": [
             directive_payload(SignupDirective(role=role))  # type: ignore[arg-type]
         ],
-        "active_agent": state.get("active_agent") or "qa_agent",
+        "active_agent": _holding_agent(state),
         "safety_flags": {"card": "signup"},
     }
 
@@ -344,7 +363,7 @@ def _open_eligibility(
         "ui_directives": [
             directive_payload(EligibilityDirective(language=locale))  # type: ignore[arg-type]
         ],
-        "active_agent": state.get("active_agent") or "qa_agent",
+        "active_agent": _holding_agent(state),
         "safety_flags": {"card": "eligibility"},
     }
 
@@ -364,7 +383,7 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
         return {
             "quick_replies": [_GAME_LABELS.get(name, name) for name in playable],
             "messages": [_ask_which(band)],
-            "active_agent": state.get("active_agent") or "qa_agent",
+            "active_agent": _holding_agent(state),
         }
 
     learning = state.get("learning") or {}
@@ -375,13 +394,13 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
         return {
             "quick_replies": [_GAME_LABELS.get(name, name) for name in playable],
             "messages": [_ask_which(band)],
-            "active_agent": state.get("active_agent") or "qa_agent",
+            "active_agent": _holding_agent(state),
         }
 
     logger.info("game card opened game=%s concept=%s band=%s", chosen, concept, band)
     return {
         "ui_directives": [directive],
-        "active_agent": state.get("active_agent") or "qa_agent",
+        "active_agent": _holding_agent(state),
         "safety_flags": {"card": "game"},
     }
 
