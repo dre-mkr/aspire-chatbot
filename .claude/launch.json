@@ -16,6 +16,25 @@
 			}
 		},
 		{
+			"name": "frontend-e2e",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": [
+				"run",
+				"dev",
+				"--prefix",
+				"frontend",
+				"--",
+				"--port",
+				"3001",
+				"--strictPort"
+			],
+			"autoPort": false,
+			"port": 3001,
+			"env": {
+				"VITE_ASPIRE_API_URL": "http://localhost:8010"
+			}
+		},
+		{
 			"name": "backend",
 			"runtimeExecutable": ".venv/Scripts/python.exe",
 			"runtimeArgs": [
