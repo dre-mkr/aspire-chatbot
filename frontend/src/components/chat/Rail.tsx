@@ -30,7 +30,7 @@ import { Crossfade } from "./Crossfade";
 interface RailProps {
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
 	collapsed: boolean;
-	/** The rail is off-screen entirely — collapsed to zero width on the landing screen, or closed as a drawer. */
+	/** Off-screen entirely: zero width on the landing screen, or a closed drawer. */
 	unreachable: boolean;
 	activeThreadId: string | null;
 	onToggle: () => void;
@@ -80,7 +80,7 @@ export function Rail({
 			<div className="rail__head">
 				{/* One logo at a time, but both always mounted. */}
 				<div className="rail__logo">
-					{/* The A mark IS the toggle, and only in the collapsed rail: at 76px there is no room for a control beside it. */}
+					{/* The A mark IS the toggle, but only collapsed: at 76px nothing else fits beside it. */}
 					<button
 						type="button"
 						className="rail__mark"
@@ -89,12 +89,12 @@ export function Rail({
 						aria-expanded={!collapsed}
 						inert={!collapsed || undefined}
 					>
-						{/* alt="" on purpose: the button's own label says what it does, and the wordmark beside it is what carries the b… */}
+						{/* alt="" on purpose: the button labels itself; the wordmark carries the brand. */}
 						<img src="/brand/aspire-mark.png" alt="" width={40} height={40} />
 						<span className="sr-only">Expand sidebar</span>
 					</button>
 
-					{/* Opacity alone does not remove a thing from the accessibility tree, so the hidden state is stated rather than… */}
+					{/* Opacity does not remove a node from the a11y tree, so the hidden state is stated. */}
 					<img
 						className="rail__wordmark"
 						src="/brand/aspire-wordmark.png"
@@ -127,7 +127,7 @@ export function Rail({
 
 			{/* `tabIndex={-1}` while folded, and only while folded. */}
 			<div className="rail__body" tabIndex={folded ? -1 : undefined}>
-				{/* Not a heading: the rail is a labelled landmark, and a heading here would sit above the page's own h1 in docum… */}
+				{/* Not a heading: the rail is a labelled landmark, and this would outrank the page h1. */}
 				<p className="rail__section-label">
 					<span className="rail__section-glyph">
 						<ClockIcon />
@@ -136,7 +136,14 @@ export function Rail({
 				</p>
 
 				{/* Four states, not two. */}
-				<div className="rail__groups rail__fold" inert={folded}>
+				{/* A navigation landmark, because that is what the rows are: the one
+				    way to move between conversations. The label repeats the section
+				    above it, which is not read out here. */}
+				<nav
+					className="rail__groups rail__fold"
+					aria-label="Conversation history"
+					inert={folded}
+				>
 					{conversations.isPending ? (
 						<div className="rail__skeleton" aria-hidden="true">
 							<i />
@@ -179,10 +186,10 @@ export function Rail({
 							</section>
 						))
 					)}
-				</div>
+				</nav>
 			</div>
 
-			{/* One block, two states: signed out it invites you in, signed in it is the avatar, the name and the address. */}
+			{/* One block, two states: an invitation signed out, the avatar and name signed in. */}
 			<div className="rail__foot">
 				<AccountControl variant="rail" />
 			</div>
@@ -231,7 +238,7 @@ function HistoryRow({
 		inputRef.current?.select();
 	}, [renaming]);
 
-	// The question replaces the items, so the item that was clicked unmounts and focus would fall to the body — ins…
+	// The question replaces the items, so the clicked item unmounts and focus would fall to <body>.
 	useEffect(() => {
 		if (confirming) cancelRef.current?.focus();
 	}, [confirming]);
@@ -284,7 +291,7 @@ function HistoryRow({
 		const onPointer = (event: PointerEvent) => {
 			if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
 		};
-		// Fixed coordinates stop being true the moment anything moves, so the menu closes rather than drifting away fro…
+		// Fixed coordinates go stale the moment anything moves, so close rather than drift.
 		const onMove = () => setOpen(false);
 
 		window.addEventListener("keydown", onKey, true);
@@ -335,7 +342,7 @@ function HistoryRow({
 					title={label}
 					onClick={() => onOpen(conversation)}
 				>
-					{/* The row is written the moment a chat is sent, carrying the truncated question, and the generated title lands… */}
+					{/* The row shows the truncated question first; the generated title lands later. */}
 					<Crossfade text={label} />
 				</button>
 			)}
@@ -363,13 +370,13 @@ function HistoryRow({
 					ref={menuRef}
 					id={menuId}
 					role="group"
-					// While the question is up the group is named BY the question, so moving focus into it announces what is being…
+					// While the question is up the group is named BY it, so entering announces what is asked.
 					aria-labelledby={confirming ? askId : undefined}
 					aria-label={confirming ? undefined : `Actions for ${label}`}
 					style={{ top: at.top, left: at.left }}
 				>
 					{confirming ? (
-						/* The same two-step the account menu uses to confirm a sign-out: one sentence saying what actually happens, the… */
+						/* The account menu's two-step: one sentence saying what actually happens, then the choice. */
 						<>
 							{/* Named, not "this chat". */}
 							<p className="row-menu__confirm" id={askId}>

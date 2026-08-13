@@ -61,7 +61,7 @@ _EXTRACT = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-#: Delimiter and role-marker spoofing -- text pretending to be a message boundary so that what follows reads as…
+#: Delimiter and role-marker spoofing -- text pretending to be a message boundary.
 _DELIMITER = re.compile(
     r"""
     (?:
@@ -146,7 +146,7 @@ _ON_TOPIC = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-#: Messages that are not off-topic even with no money word in them: the child is answering the lesson, not chang…
+#: Messages with no money word that are still on topic: the child is answering the lesson.
 _LESSON_REPLY = re.compile(
     r"""
     ^\s*(?:

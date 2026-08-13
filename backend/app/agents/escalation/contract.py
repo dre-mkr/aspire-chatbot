@@ -49,6 +49,9 @@ SAFETY_TRIAGE: Final[dict[SafetyKind, tuple[str, str]]] = {
     SafetyKind.DISTRESS: ("high", "wellbeing"),
 }
 
+#: Three failed clarifications in a row is an escalation trigger in its own right.
+CLARIFICATION_LIMIT = 3
+
 #: Longest summary a ticket carries.
 SUMMARY_MAX = 600
 

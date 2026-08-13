@@ -3,25 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from functools import lru_cache
 
 from elevenlabs.types import VoiceSettings as ElevenVoiceSettings
 
+# Re-exported: callers have always reached for these through this module.
+from app.domain import Language, Persona
 from app.voice.config import VoiceSettings, get_voice_settings
-
-
-class Persona(str, Enum):
-    STELLA = "stella"
-    ORION = "orion"
-    AURORA = "aurora"
-    NOVA = "nova"
-
-
-class Language(str, Enum):
-    EN = "en"
-    ES = "es"
-    FR = "fr"
 
 
 @dataclass(frozen=True)

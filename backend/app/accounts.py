@@ -65,7 +65,7 @@ MINOR_AGE = 13
 #: Who the account is for.
 ROLES: frozenset[str] = frozenset({"participant", "guardian", "educator"})
 
-#: The roles that describe an adult acting in a capacity, rather than the person the programme serves.
+#: Roles describing an adult acting in a capacity, not the person the programme serves.
 ADULT_ROLES: frozenset[str] = frozenset({"guardian", "educator"})
 
 
@@ -88,13 +88,13 @@ def age_on(born: date, today: date | None = None) -> int:
 class SignUpRequest(BaseModel):
     """Everything the steps collect, submitted once at the end."""
 
-    #: Defaulted rather than required, so an older client that predates the role step keeps working and gets exactly…
+    #: Defaulted rather than required, so a client predating the role step keeps working.
     role: str = Field(default="participant")
     email: Email
     password: str = Field(min_length=1, max_length=200)
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
-    #: The date of birth of the person named above — which is now unambiguous, because `role` says who that is.
+    #: The date of birth of the person named above, whom `role` identifies.
     date_of_birth: date
     island: str | None = Field(default=None, max_length=80)
     school: str | None = Field(default=None, max_length=160)
@@ -193,7 +193,7 @@ def _role_problem(role: str, born: date) -> str | None:
         return "Choose who this account is for."
 
     if role in ADULT_ROLES and band_for(born, is_minor=False) != "adult":
-        # Worded around the programme's range rather than around "you are not an adult", because `band_for` puts an eig…
+        # Worded around the programme's age range rather than around "you are not an adult".
         return (
             "ASPIRE's participant ages run to 18, and this kind of account sits "
             "outside them. "
@@ -283,7 +283,7 @@ async def register(
         outcome = await _run_claim(db, principal, account)
         verify_token = await _issue(db, account, "verify")
 
-    # After the transaction: an email that fails to send must not roll back an account that was created successfull…
+    # After the transaction: a failed email must not roll back an account already created.
     await mail.send(mail.verify_email(email, verify_token))
 
     logger.info(
@@ -309,7 +309,7 @@ async def login(
             await db.execute(select(User).where(func.lower(User.email) == email))
         ).scalar_one_or_none()
 
-        # One message for both failures, and `verify_password` burns a hash even when there is no account, so neither t…
+        # One message for both failures, and a hash is burned either way, so neither leaks.
         if account is None or not verify_password(body.password, account.password_hash):
             if account is None:
                 verify_password(body.password, None)

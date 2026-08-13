@@ -20,7 +20,7 @@ class RateDecision:
 
 
 class SlidingWindowLimiter:
-    """Same algorithm as the voice limiter, without its settings coupling."""
+    """Hits per (bucket, caller) inside a moving window. The voice limiter wraps this."""
 
     def __init__(self) -> None:
         self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
@@ -77,14 +77,6 @@ def _enforce(bucket: str, request: Request, principal: Principal | None, limit: 
         detail="You're asking questions faster than I can answer. Wait a moment, then try again.",
         headers={"Retry-After": str(decision.retry_after_seconds)},
     )
-
-
-async def chat_rate_limit(
-    request: Request, principal: Principal | None = Depends(chat_principal)
-) -> Principal | None:
-    """Meter a message send, and hand the principal on to the route."""
-    _enforce("chat", request, principal, get_settings().chat_messages_per_window)
-    return principal
 
 
 def graph_rate_limit(request: Request, session_id: str, user_id: str | None) -> None:

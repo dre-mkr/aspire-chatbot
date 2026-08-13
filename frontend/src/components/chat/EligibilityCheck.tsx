@@ -88,7 +88,7 @@ export function EligibilityCheck({
 
 	const leave = () =>
 		guard(async () => {
-			// A finished flow has no session left to quit, and asking anyway would be a 200 that means nothing.
+			// A finished flow has no session to quit; asking would be a meaningless 200.
 			if (state.active) await quitEligibility(threadId).catch(() => undefined);
 			onChanged(null);
 		});
@@ -107,7 +107,7 @@ export function EligibilityCheck({
 				<span className="game__title">{labels.title}</span>
 
 				{question ? (
-					/* Decorative: the card's own label announces which question this is, and five unlabelled markers read as noise… */
+					/* Decorative: the card's label names the question, so bare markers would be noise. */
 					<div className="game__steps" aria-hidden="true">
 						{Array.from({ length: question.total }, (_, i) => {
 							const n = i + 1;
@@ -214,7 +214,7 @@ function QuestionPanel({
 			<h3 className="elig__question">{question.text}</h3>
 			{question.help ? <p className="elig__help">{question.help}</p> : null}
 
-			{/* Tappable options, never free text: the answer set is finite on every question, and typing an age is both slow… */}
+			{/* Tappable options, never free text: every answer set is finite, and typing is slower. */}
 			<div className="elig__options">
 				{question.options.map((option) => (
 					<button

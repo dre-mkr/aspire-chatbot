@@ -161,7 +161,7 @@ async def record_result(
             learner_id, result.concept_id, Evidence.GAME, age_band=age_band
         )
     except Exception:
-        # Same rule as `widget_result`: the score is already on screen, and a bookkeeping failure must not take it away.
+        # As in `widget_result`: the score is on screen, so a bookkeeping failure must not undo it.
         logger.warning(
             "Could not record game mastery for concept %s.",
             result.concept_id,
@@ -196,7 +196,7 @@ def make_game_result_node(store: MasteryStore | None = None):
         return {
             "messages": [AIMessage(content=reaction_for(result, band))],
             "quick_replies": _chips(band),
-            # Keep whichever learning agent the router picked for this caller; hardcoding `learn_agent` broke stickiness fo…
+            # Keep the learning agent the router picked; hardcoding `learn_agent` broke stickiness.
             "active_agent": state.get("active_agent") or "learn_agent",
             "learning": _learning_after(state, result),
         }

@@ -1,5 +1,6 @@
 /** Signing up, signing in, and getting back in. */
 
+import { API_URL } from "../config";
 import {
 	authHeaders,
 	clearSession,
@@ -8,10 +9,6 @@ import {
 	type Session,
 	storeSession,
 } from "./session";
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
 
 /** What happened to the anonymous session, so the page can say so. */
 export interface ClaimOutcome {
@@ -114,7 +111,7 @@ function adopt(wire: WireSession): AuthResult {
 		// Left undefined rather than defaulted when the service does not send it.
 		persona: wire.persona,
 	};
-	// Stored before returning, so every surface is already agreed about who is signed in by the time the page react…
+	// Stored before returning, so every surface agrees before the page reacts.
 	storeSession(session);
 	return {
 		...session,
@@ -220,7 +217,7 @@ export async function signOut(afterCleared?: () => void): Promise<void> {
 
 	clearSession();
 
-	// Dropped here, in the gap where this browser has no identity at all, and the ordering is the whole point.
+	// Dropped in the gap where this browser has no identity; the ordering is the point.
 	afterCleared?.();
 
 	await resetToFreshAnonymous();

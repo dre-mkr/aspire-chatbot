@@ -56,7 +56,7 @@ export const conversationQuery = (
 		queryFn: () => fetchConversation(threadId as string),
 		enabled: Boolean(threadId) && Boolean(currentSession()),
 		staleTime: Number.POSITIVE_INFINITY,
-		// Without this, `gcTime` defaults to five minutes and the entry is evicted that long after the last observer go…
+		// Without this the entry is evicted five minutes after its last observer.
 		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		retry: 1,
@@ -70,7 +70,7 @@ export const gameStateQuery = (threadId: string | null, settled = true) =>
 		// Gated on the turn being over, not merely on having a thread.
 		enabled: Boolean(threadId) && settled,
 		staleTime: Number.POSITIVE_INFINITY,
-		// See `conversationQuery`: a five-minute default gcTime would evict a card that is merely off-screen, and the n…
+		// See `conversationQuery`: the default gcTime would evict a merely off-screen card.
 		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		refetchOnReconnect: false,
@@ -90,7 +90,7 @@ export const eligibilityStateQuery = (
 		// Same gate, same reason as the game query above.
 		enabled: Boolean(threadId) && settled,
 		staleTime: Number.POSITIVE_INFINITY,
-		// See `conversationQuery`: a five-minute default gcTime would evict a card that is merely off-screen, and the n…
+		// See `conversationQuery`: the default gcTime would evict a merely off-screen card.
 		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 		refetchOnReconnect: false,
@@ -116,7 +116,7 @@ export function readConversation(
 	queryClient: QueryClient,
 	threadId: string,
 ): StoredConversation | undefined {
-	// The list carries no transcripts, so a full record is preferred when one has been loaded and the summary is th…
+	// The list carries no transcripts, so prefer a loaded full record over the summary.
 	return (
 		queryClient.getQueryData<StoredConversation>(
 			keys.messages(owner(), threadId),
@@ -156,7 +156,7 @@ export function removeConversationFromCache(
 	queryClient: QueryClient,
 	threadId: string,
 ): StoredConversation | undefined {
-	// A list fetch already in flight answers with the conversation still in it, and would land on top of this write.
+	// An in-flight list fetch still holds this conversation and would overwrite this.
 	void queryClient.cancelQueries(
 		{ queryKey: keys.conversations(owner()) },
 		{ revert: false },
@@ -196,7 +196,7 @@ export function retitleInCache(
 	queryClient: QueryClient,
 	threadId: string,
 	title: string,
-	// `undefined` is a real value here and not a missing argument: it is the "nobody typed this" state, which is wh…
+	// `undefined` is a real value, not an omitted argument: the "nobody typed this" state.
 	titleSource: "generated" | "manual" | undefined,
 ) {
 	const apply = (conversation: StoredConversation) =>
@@ -204,7 +204,7 @@ export function retitleInCache(
 			? { ...conversation, title, titleSource }
 			: conversation;
 
-	// Same reason as the optimistic insert: a list fetch already in flight answers with the old name and would land…
+	// Same as the optimistic insert: an in-flight list fetch carries the old name.
 	void queryClient.cancelQueries(
 		{ queryKey: keys.conversations(owner()) },
 		{ revert: false },
@@ -256,7 +256,7 @@ export function invalidateAfterTurn(
 	void queryClient.invalidateQueries({
 		queryKey: keys.eligibilityState(threadId, owner()),
 	});
-	// Reaches this conversation's transcript too: `["conversations", id]` is a prefix of `["conversations", id, "me…
+	// Reaches the transcript too: its key is prefixed by `["conversations", id]`.
 	void queryClient.invalidateQueries({
 		queryKey: keys.conversation(owner(), threadId),
 	});

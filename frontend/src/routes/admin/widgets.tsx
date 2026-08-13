@@ -132,7 +132,7 @@ function Candidate({
 					{row.kind} · {row.concept_id} · {row.age_band} · {row.locale} · served{" "}
 					{row.serve_count}×
 				</p>
-				{/* The source question is what a reviewer reads first: not "is this widget correct" in the abstract, but "does i… */}
+				{/* Reviewers judge the widget against the question, not in the abstract. */}
 				<p
 					style={{
 						margin: "0.25rem 0 0",

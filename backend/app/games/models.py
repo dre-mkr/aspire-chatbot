@@ -7,24 +7,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 
-
-class Persona(str, Enum):
-    """Mirrors `app.voice.registry.Persona`."""
-
-    STELLA = "stella"
-    ORION = "orion"
-    AURORA = "aurora"
-    NOVA = "nova"
-
+# Re-exported so `app.games.models` stays the one import for this package's vocabulary.
+from app.domain import Language, Persona
 
 # Games are a learning activity for account holders.
 PLAYING_PERSONAS = frozenset({Persona.STELLA, Persona.ORION})
-
-
-class Language(str, Enum):
-    EN = "en"
-    ES = "es"
-    FR = "fr"
 
 
 class Volatility(str, Enum):

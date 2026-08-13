@@ -98,7 +98,7 @@ def test_one_identity_cannot_read_anothers_conversation(client: TestClient):
         f"/api/conversations/{thread_id}",
         headers={"Authorization": f"Bearer {attacker['token']}"},
     )
-    # 404, not 403: "not yours" and "does not exist" must be indistinguishable, or the API becomes an oracle for wh…
+    # 404, not 403: "not yours" and "does not exist" must look alike, or the API leaks what exists.
     assert response.status_code == 404
 
 
@@ -115,7 +115,7 @@ def test_one_identity_cannot_rename_anothers_conversation(client: TestClient):
     assert response.status_code == 404
 
 
-# The fourth verb, DELETE, is covered in `test_conversation_delete.py` rather than repeated here: the same 404-…
+# DELETE, the fourth verb, is covered by the same 404 rule in `test_conversation_delete.py`.
 
 
 # ── the token itself ─────────────────────────────────────────────────────────

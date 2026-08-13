@@ -25,7 +25,7 @@ export function PersonaPicker({
 		const trigger = triggerRef.current;
 		if (!trigger) return null;
 		const rect = trigger.getBoundingClientRect();
-		// Above by preference: the composer is docked low and the menu should grow away from the box being typed in, no…
+		// Above by preference: the composer is docked low, so the menu grows away from it.
 		let top = rect.top - 8 - estimatedHeight;
 		// No room above — put it below, then clamp.
 		if (top < 8) {
@@ -40,7 +40,7 @@ export function PersonaPicker({
 	/** Five rows plus padding. Only used for the frame before the real one. */
 	const ESTIMATED_MENU_PX = 400;
 
-	// Correct against the menu's real height once it exists, so a short viewport cannot push the first option off t…
+	// Re-measure against the menu's real height, so a short viewport cannot clip the first option.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `measure` reads live geometry and is recreated every render
 	useLayoutEffect(() => {
 		const menu = menuRef.current;
@@ -53,14 +53,14 @@ export function PersonaPicker({
 		if (!open) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
-			// Stopped from bubbling: Escape in the composer also blurs the field, and closing the menu should not additiona…
+			// Stop bubbling: Escape also blurs the composer, and closing the menu should not do that too.
 			event.stopPropagation();
 			setOpen(false);
 			triggerRef.current?.focus();
 		};
 		const onPointer = (event: PointerEvent) => {
 			const target = event.target as Node;
-			// The menu is portalled out of this subtree, so it is not inside `wrapRef` and has to be asked about separately.
+			// The menu is portalled out of this subtree, so `wrapRef` does not contain it.
 			if (wrapRef.current?.contains(target)) return;
 			if (menuRef.current?.contains(target)) return;
 			setOpen(false);

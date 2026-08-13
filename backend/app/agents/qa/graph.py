@@ -19,7 +19,7 @@ from app.graph.state import AspireState
 
 logger = logging.getLogger(__name__)
 
-#: Where a clear lesson request is handed, in preference order, filtered against `allowed_agents` so the handoff…
+#: Lesson agents in preference order; the first one present in `allowed_agents` wins.
 _LESSON_AGENTS: tuple[str, ...] = ("learn_agent", "learning_sample", "learning_preview")
 
 
@@ -53,7 +53,7 @@ def build_qa_graph(
     """Compile the subgraph."""
     graph = StateGraph(AspireState)
 
-    # No `destinations` on the handoff nodes, deliberately: `delegate` and `ground_check` hand off with `Command(gr…
+    # No `destinations` on the handoff nodes: they leave via `Command(graph=Command.PARENT)`.
     graph.add_node("delegate", _delegate)
     graph.add_node("rewrite_query", make_rewrite_query(rewrite_invoke))
     graph.add_node("hybrid_retrieve", make_hybrid_retrieve(search, corpus))
@@ -94,7 +94,7 @@ async def _search(query: str, k: int):
 
     return [
         KBChunk(
-            # `id` is the key the ingest actually writes -- it carries the CSV column verbatim, and the `kb_id` column on t…
+            # Ingest writes the CSV id under `id`, so fall back to it when `kb_id` is missing.
             kb_id=str(
                 document.metadata.get("kb_id")
                 or document.metadata.get("id")

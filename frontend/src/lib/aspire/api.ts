@@ -1,11 +1,6 @@
-/** The ASPIRE backend client. */
+/** The shapes a turn returns, shared by every ASPIRE backend client module. */
 
 import type { Directive } from "../stream/types";
-
-/** Where the FastAPI service lives. Override with VITE_ASPIRE_API_URL. */
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
 
 /** One knowledge-base snippet the agent actually used for an answer. */
 export interface Source {
@@ -66,16 +61,3 @@ export class AspireError extends Error {
 	}
 }
 
-/* `askAspire` stood here, with its response-body validator and its failure describer: a non-streaming `POST /ch… */
-
-/** Liveness probe, used to explain a dead backend before the first question. */
-export async function checkHealth(): Promise<boolean> {
-	try {
-		const response = await fetch(`${API_URL}/health`, {
-			signal: AbortSignal.timeout(4000),
-		});
-		return response.ok;
-	} catch {
-		return false;
-	}
-}

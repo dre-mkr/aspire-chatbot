@@ -1,0 +1,836 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { AccountControl } from "#/components/auth/AccountControl";
+import { CloseIcon } from "#/components/icons";
+import { fetchConversation } from "#/lib/aspire/conversations";
+import {
+	clearEligibilityResult,
+	type EligibilityState,
+	loadEligibilityResult,
+} from "#/lib/aspire/eligibility";
+import { downloadTranscript } from "#/lib/aspire/export";
+import { type GameState, startGame } from "#/lib/aspire/games";
+import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
+import {
+	displayTitle,
+	type StoredConversation,
+	titleFor,
+} from "#/lib/aspire/history";
+import { answerToText } from "#/lib/aspire/knowledge";
+import {
+	eligibilityStateQuery,
+	gameStateQuery,
+	invalidateAfterTurn,
+	readConversation,
+	upsertConversation,
+} from "#/lib/aspire/queries";
+import type { AnswerSearch } from "#/lib/aspire/search";
+import { ensureSession } from "#/lib/aspire/session";
+import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
+import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
+import { useConversation } from "#/lib/aspire/use-conversation";
+import { useVoice } from "#/lib/aspire/use-voice";
+import { useMediaQuery } from "#/lib/use-media-query";
+import { ChatTitleBar } from "./ChatTitleBar";
+import { Composer } from "./Composer";
+import { Rail } from "./Rail";
+import { Transcript } from "./Transcript";
+import { VoiceConsent, VoiceNote } from "./Voice";
+
+/** Below this the rail stops being a column and becomes a modal drawer. */
+const COMPACT = "(max-width: 860px)";
+/** How far from the bottom still counts as "following along". */
+const STICK_THRESHOLD_PX = 160;
+/** The playback id the eligibility card speaks under. */
+const ELIGIBILITY_SPEECH_ID = -1;
+
+/**
+ * One conversation, and nothing else. The landing screen is a separate page:
+ * it mints the conversation and stages its first question, and this page is
+ * what sends it.
+ */
+export function ChatScreen() {
+	// A ref: onAnswer is needed now, but voice needs the threadId useConversation returns.
+	const speakArrival = useRef<(id: number, text: string) => void>(() => {});
+
+	const navigate = useNavigate();
+	const queryClient = useQueryClient();
+	/** Which conversation the URL is pointing at. The only source of truth for it. */
+	const chatId = useParams({
+		from: "/chat/$chatId",
+		select: (params) => params.chatId,
+	});
+
+	/** The three answer settings, read from the address. */
+	const {
+		simpleMode,
+		toggleSimpleMode,
+		persona,
+		setPersona,
+		lang,
+		setLanguageInUrl,
+		personaNotice,
+		dismissPersonaNotice,
+	} = useAnswerSettings();
+
+	/** The language each eligibility check opened in, by thread. */
+	const checkLanguage = useRef(new Map<string, string>());
+
+	/** The live game's score; the card closing (`onChanged(null)`) is what reports it. */
+	const liveGame = useRef<{
+		gameType: string;
+		concept: string;
+		solved: number;
+		total: number;
+		duration_s: number;
+		completed: boolean;
+		reported: boolean;
+	} | null>(null);
+
+	const {
+		messages,
+		streaming,
+		isThinking,
+		followUps,
+		activeStoredTitle,
+		threadId,
+		animateAfterId,
+		send,
+		resumeFirstTurn,
+		sendInteraction,
+		sendUploadResult,
+		sendGameResult,
+		regenerate,
+		stop,
+		openPast,
+		renameChat,
+		regenerateTitle,
+		deleteChat,
+	} = useConversation({
+		onAnswer: (id, text) => speakArrival.current(id, text),
+		persona,
+		// Titles follow the interface language, read at call time since voice is built below.
+		getLanguage: () => voice.language,
+		onGameStart: (id, gameType, concept) => {
+			setGame(null);
+			liveGame.current = {
+				gameType,
+				concept,
+				solved: 0,
+				total: 0,
+				duration_s: 0,
+				completed: false,
+				reported: false,
+			};
+			// Start it here: the state poll alone never starts one, so the card sat inactive forever.
+			const engineName =
+				{ scramble: "word_scramble", true_false: "true_false" }[gameType] ??
+				gameType;
+			void startGame(id, { game_type: engineName })
+				.then((state) => {
+					if (state) setGame(state);
+				})
+				.catch(() =>
+					queryClient
+						.fetchQuery({ ...gameStateQuery(id), staleTime: 0 })
+						.then((state) => {
+							if (state) setGame(state);
+						})
+						.catch(() => undefined),
+				);
+		},
+		// The card carries the whole turn, so it is fetched rather than read off the chat response.
+		onEligibilityStart: (id, language) => {
+			clearEligibilityResult(id);
+			setEligibility(null);
+			// The language the check opened in, captured here and not read again.
+			checkLanguage.current.set(id, language);
+			// Same treatment, same reason as the game turn above.
+			void queryClient
+				.fetchQuery({ ...eligibilityStateQuery(id, language), staleTime: 0 })
+				.then((state) => {
+					if (state.active) setEligibility(state);
+				})
+				.catch(() => undefined);
+		},
+	});
+
+	const compact = useMediaQuery(COMPACT);
+	const [railCollapsed, setRailCollapsed] = useState(false);
+	const [drawerOpen, setDrawerOpen] = useState(false);
+
+	// Lifted so a transcript can land here for the user to check before sending.
+	const [draft, setDraft] = useState("");
+
+	const voice = useVoice({
+		onTranscript: setDraft,
+		threadId,
+		language: lang,
+		onLanguageChange: setLanguageInUrl,
+	});
+
+	// Only new answers are spoken.
+	useEffect(() => {
+		speakArrival.current = (id, text) => {
+			if (voice.autoSpeak && voice.available) void voice.play(id, text);
+		};
+	}, [voice.autoSpeak, voice.available, voice.play]);
+
+	const threadRef = useRef<HTMLDivElement>(null);
+
+	// The game lives on the server, keyed by this thread.
+	const [game, setGame] = useState<GameState | null>(null);
+	/** The eligibility card's state. */
+	const [eligibility, setEligibility] = useState<EligibilityState | null>(null);
+	const settled = !isThinking && !streaming;
+
+	/** The server's answer for this thread's game, cached by Query. */
+	const gameQuery = useQuery(gameStateQuery(threadId, settled));
+
+	// Adopt, never clear.
+	useEffect(() => {
+		if (gameQuery.data) setGame(gameQuery.data);
+	}, [gameQuery.data]);
+
+	/** Restores the eligibility card, from whichever half still holds it. */
+	const eligibilityQuery = useQuery(
+		// The captured language, not the live one.
+		eligibilityStateQuery(
+			threadId,
+			(threadId ? checkLanguage.current.get(threadId) : undefined) ??
+				voice.language,
+			settled,
+		),
+	);
+
+	/** The completion handoff. */
+	const wasSettled = useRef(settled);
+	useEffect(() => {
+		const justSettled = settled && !wasSettled.current;
+		wasSettled.current = settled;
+		if (justSettled) invalidateAfterTurn(queryClient, threadId);
+	}, [settled, threadId, queryClient]);
+
+	useEffect(() => {
+		const state = eligibilityQuery.data;
+		if (!state || !threadId) return;
+
+		if (state.active) {
+			setEligibility(state);
+			return;
+		}
+
+		// Server says no session.
+		const stored = loadEligibilityResult(threadId);
+		if (!stored) return;
+		setEligibility({
+			active: false,
+			language: stored.language,
+			question: null,
+			result: stored.result,
+			answered: 0,
+			total: 0,
+			labels: stored.labels,
+		});
+	}, [eligibilityQuery.data, threadId]);
+
+	// The rail is a drawer only where it cannot sit as a column.
+	const railClosed = compact ? !drawerOpen : railCollapsed;
+	const drawerModal = compact && drawerOpen;
+
+	// Announce discrete events, not the stream.
+	const latest = messages.at(-1);
+	const announcement =
+		isThinking || streaming
+			? "ASPIRE AI is writing a reply."
+			: latest?.role === "game"
+				? "A game has started. The game card is below."
+				: latest?.role === "eligibility"
+					? "The ASPIRE eligibility check has started. The card is below."
+					: latest?.role === "error"
+						? latest.text
+						: latest?.role === "assistant"
+							? answerToText(latest.blocks)
+							: "";
+
+	/** Where each conversation was left, keyed by thread. */
+	const scrollTops = useRef(new Map<string, number>());
+	/** True while the restore below is assigning an offset. */
+	const restoring = useRef(false);
+	/** `""` is a thread not yet adopted, which cannot collide with an id. */
+	const scrollKey = threadId ?? "";
+
+	/** Which thread the follow-the-stream effect is currently chasing. */
+	const following = useRef<string | null>(null);
+
+	// Follow the stream only from the bottom; scrolling up to re-read must not be yanked back.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: change trigger
+	useEffect(() => {
+		const thread = threadRef.current;
+		if (!thread) return;
+
+		// A different conversation just arrived.
+		if (following.current !== threadId) {
+			following.current = threadId;
+			return;
+		}
+
+		const distance =
+			thread.scrollHeight - thread.scrollTop - thread.clientHeight;
+		if (distance < STICK_THRESHOLD_PX) {
+			thread.scrollTop = thread.scrollHeight;
+		}
+	}, [messages, streaming, isThinking, threadId]);
+
+	// Restore before paint, so a reopened conversation is never briefly shown at the wrong offset.
+	const restoredFor = useRef<string | null>(null);
+	useLayoutEffect(() => {
+		const thread = threadRef.current;
+		if (!thread || !threadId) return;
+		if (restoredFor.current === threadId) return;
+		// Nothing to measure against yet; wait for the transcript to render.
+		if (messages.length === 0) return;
+
+		restoredFor.current = threadId;
+		const saved = scrollTops.current.get(threadId);
+		// Suppress the `scroll` this fires, or the restore overwrites the offset being restored.
+		restoring.current = true;
+		thread.scrollTop = saved ?? thread.scrollHeight;
+		requestAnimationFrame(() => {
+			restoring.current = false;
+		});
+	}, [threadId, messages]);
+
+	/** One unsent draft per conversation. */
+	const drafts = useRef(new Map<string, string>());
+	const draftKey = useRef("");
+	const liveDraft = useRef(draft);
+
+	// Runs before the swap below, so the draft banked on a thread change is the outgoing one.
+	useEffect(() => {
+		liveDraft.current = draft;
+	}, [draft]);
+
+	useEffect(() => {
+		if (scrollKey === draftKey.current) return;
+		drafts.current.set(draftKey.current, liveDraft.current);
+		draftKey.current = scrollKey;
+		setDraft(drafts.current.get(scrollKey) ?? "");
+	}, [scrollKey]);
+
+	// Captured on open, not in the effect: by then the workspace is inert and focus has moved.
+	const railTrigger = useRef<HTMLElement | null>(null);
+
+	const openDrawer = useCallback(() => {
+		railTrigger.current = document.activeElement as HTMLElement | null;
+		setDrawerOpen(true);
+	}, []);
+
+	// Trap focus and Escape, or Tab walks straight out of the drawer into the page behind it.
+	useEffect(() => {
+		if (!drawerModal) return;
+
+		document
+			.getElementById("aspire-rail")
+			?.querySelector<HTMLElement>("button")
+			?.focus();
+
+		const close = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setDrawerOpen(false);
+		};
+		window.addEventListener("keydown", close);
+		return () => {
+			window.removeEventListener("keydown", close);
+			const trigger = railTrigger.current;
+			railTrigger.current = null;
+			if (trigger?.isConnected) trigger.focus();
+		};
+	}, [drawerModal]);
+
+	const toggleRail = useCallback(() => {
+		if (compact) setDrawerOpen((open) => !open);
+		else setRailCollapsed((collapsed) => !collapsed);
+	}, [compact]);
+
+	// Asking, reopening, or starting a chat all make the current read-aloud stale.
+	const { stopPlayback } = voice;
+
+	// simpleMode is read at send time, so toggling it changes the next answer, not past ones.
+	const ask = useCallback(
+		(question: string) => {
+			stopPlayback();
+			send(question, simpleMode);
+		},
+		[send, simpleMode, stopPlayback],
+	);
+
+	/** What a directive needs in order to be interactive. */
+	const directiveContext = useMemo(
+		() => ({
+			threadId: threadId ?? undefined,
+			send: ask,
+			onWidgetInteraction: sendInteraction,
+			// Own channel (`/v2/game/result`), not prose: the score rides on `safety_flags` server-side.
+			onGameResult: sendGameResult,
+			onUpload: (
+				_slot: string,
+				result: { document_id: string; mime: string; size_bytes: number },
+			) => sendUploadResult(result),
+			onEditSlot: (slot: string) => ask(`I need to change ${slot}.`),
+			onSubmit: () => ask("Submit my application."),
+			onSpeak: (text: string) => voice.play(ELIGIBILITY_SPEECH_ID, text),
+			speakAvailable: voice.available,
+			locale: voice.language,
+		}),
+		[
+			threadId,
+			ask,
+			sendInteraction,
+			sendUploadResult,
+			sendGameResult,
+			voice.play,
+			voice.available,
+			voice.language,
+		],
+	);
+
+	// Carries the retried answer's id, so it replaces that one and not whatever is last.
+	const handleRegenerate = useCallback(
+		(messageId: number) => {
+			stopPlayback();
+			regenerate(messageId, simpleMode);
+		},
+		[regenerate, simpleMode, stopPlayback],
+	);
+
+	const handleStop = useCallback(() => {
+		stopPlayback();
+		stop();
+	}, [stop, stopPlayback]);
+
+	/**
+	 * Which conversation this page has already gone to open. A ref, and not
+	 * `threadId`, because it has to be true the instant the work starts: the
+	 * callbacks below are rebuilt when the voice layer loads its preferences,
+	 * which re-runs this effect a tick later, while `threadId` is still the
+	 * state it was before. Guarding on state alone let that second run walk
+	 * past a first turn it had already sent and restore the cached row over
+	 * the top of it.
+	 */
+	const openedFor = useRef<string | null>(null);
+
+	/** The claimed first question, waiting for a mount that will last. */
+	const firstTurn = useRef<PendingTurn | null>(null);
+	/** Bumped once a first question has been claimed and is ready to go out. */
+	const [armed, setArmed] = useState(0);
+
+	/**
+	 * Sends the handed-off question, one commit after it was claimed.
+	 *
+	 * The router re-commits this page as it finishes its navigation, so the
+	 * mount effects run, are torn down, and run again — with refs intact, and
+	 * before any state from the first pass has landed. `useConversation` ends
+	 * whatever is in flight when it is torn down, so a turn started during the
+	 * mount commit is aborted in that gap and arrives as "that took too long".
+	 * Waiting for `armed` to land puts the request past it.
+	 */
+	useEffect(() => {
+		if (armed === 0) return;
+		const turn = firstTurn.current;
+		if (!turn) return;
+		firstTurn.current = null;
+		resumeFirstTurn(turn.threadId, turn.question, turn.simple, turn.language);
+	}, [armed, resumeFirstTurn]);
+
+	/** Makes the conversation match the URL, in one direction only. */
+	useEffect(() => {
+		if (openedFor.current === chatId) return;
+		// The first turn's id, now committed. Nothing to open: it is already here.
+		if (chatId === threadId) {
+			openedFor.current = chatId;
+			return;
+		}
+		openedFor.current = chatId;
+
+		stopPlayback();
+		setGame(null);
+		// Cleared, not carried: the restore effect fetches the new thread's own card.
+		setEligibility(null);
+
+		/**
+		 * Before the cache, and that ordering is the whole trick: the landing
+		 * page wrote this question into the cache to give the rail its row, so
+		 * restoring from there first would put the message on screen and then
+		 * `resumeFirstTurn` would append it a second time.
+		 */
+		const pending = takePendingTurn(chatId);
+		if (pending) {
+			firstTurn.current = pending;
+			setArmed((n) => n + 1);
+			return;
+		}
+
+		// Read from the cache first, and that is not an optimisation.
+		const cached = readConversation(queryClient, chatId);
+		if (cached && cached.messages.length > 0) {
+			openPast(cached);
+			return;
+		}
+
+		/**
+		 * An identity first, because a conversation is only readable as its
+		 * owner. Then the service directly rather than through Query: this is
+		 * the one read whose *failure* has to be acted on, and a rejection is
+		 * the only thing that tells an unknown address apart from an empty one.
+		 * The result is written back to the cache so the rail and every later
+		 * read see it, exactly as the query would have left it.
+		 */
+		void ensureSession()
+			.then((identity) => {
+				if (!identity)
+					throw new Error("no session to read a conversation with");
+				return fetchConversation(chatId);
+			})
+			.then((stored) => {
+				// The reader moved on while this was in flight.
+				if (openedFor.current !== chatId) return;
+				upsertConversation(queryClient, stored);
+				openPast(stored);
+			})
+			.catch(() => {
+				// An address this account has no conversation for: another device, a cleared identity.
+				if (openedFor.current !== chatId) return;
+				void navigate({
+					to: "/",
+					search: (previous: AnswerSearch) => previous,
+					replace: true,
+				});
+			});
+	}, [chatId, threadId, navigate, openPast, stopPlayback, queryClient]);
+
+	const handleOpenPast = useCallback(
+		(conversation: StoredConversation) => {
+			setDrawerOpen(false);
+			void navigate({
+				to: "/chat/$chatId",
+				params: { chatId: conversation.threadId },
+				search: (previous: AnswerSearch): AnswerSearch => ({
+					// "Explain it simply" belongs to the reader, so it survives moving between conversations.
+					...previous,
+					// Language does not.
+					...(conversation.language ? { lang: conversation.language } : {}),
+				}),
+				viewTransition: true,
+			});
+		},
+		[navigate],
+	);
+
+	const startNewChat = useCallback(() => {
+		stopPlayback();
+		setDrawerOpen(false);
+		void navigate({
+			to: "/",
+			search: (previous: AnswerSearch) => previous,
+			viewTransition: true,
+		});
+	}, [navigate, stopPlayback]);
+
+	/** Cmd/Ctrl+Shift+O — the same binding both reference products use. */
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+			if (event.code !== "KeyO") return;
+			event.preventDefault();
+			startNewChat();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [startNewChat]);
+
+	/** What the open conversation is called. */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: activeStoredTitle is the trigger
+	const activeTitle = useMemo(() => {
+		const stored = threadId
+			? readConversation(queryClient, threadId)
+			: undefined;
+		if (stored) return displayTitle(stored);
+
+		// Nothing stored yet: the first answer is still arriving, so there is no record.
+		const firstQuestion = messages.find((m) => m.role === "user");
+		return firstQuestion?.role === "user" ? titleFor(firstQuestion.text) : "";
+	}, [threadId, activeStoredTitle, messages]);
+
+	// Browser tabs and history entries should say which chat this is.
+	useEffect(() => {
+		if (typeof document === "undefined") return;
+		document.title = activeTitle
+			? `${activeTitle} · ASPIRE AI`
+			: DEFAULT_DOCUMENT_TITLE;
+		// Set by hand, so it has to be put back by hand — leaving here for the
+		// landing screen, or for `/signin`, must not keep this chat's name.
+		return () => {
+			document.title = DEFAULT_DOCUMENT_TITLE;
+		};
+	}, [activeTitle]);
+
+	/** Deletes one conversation, and leaves it if it is the one on screen. */
+	const handleDeleteConversation = useCallback(
+		(conversation: StoredConversation) => {
+			const open = conversation.threadId === threadId;
+
+			clearEligibilityResult(conversation.threadId);
+			drafts.current.delete(conversation.threadId);
+			deleteChat(conversation.threadId);
+
+			if (!open) return;
+			setDrawerOpen(false);
+			// Nothing is left to read here, so the landing screen is where this lands.
+			void navigate({
+				to: "/",
+				search: (previous: AnswerSearch) => previous,
+				replace: true,
+				viewTransition: true,
+			});
+		},
+		[threadId, deleteChat, navigate],
+	);
+
+	const handleSaveConversation = useCallback(
+		(conversation: StoredConversation) => {
+			const live = conversation.threadId === threadId && messages.length > 0;
+			downloadTranscript(
+				live ? messages : conversation.messages,
+				// The conversation's own language when it is known, the interface language otherwise.
+				conversation.language ?? voice.language,
+			);
+		},
+		[messages, threadId, voice.language],
+	);
+
+	return (
+		<div
+			className="app"
+			data-phase="chat"
+			data-rail={railClosed ? "collapsed" : "expanded"}
+		>
+			<div className="atmosphere" aria-hidden="true">
+				<span />
+				<span />
+				<span />
+				<span />
+			</div>
+
+			<div className="frame">
+				<Rail
+					collapsed={railClosed}
+					unreachable={compact && !drawerOpen}
+					activeThreadId={threadId}
+					onToggle={toggleRail}
+					onNewChat={startNewChat}
+					onOpenPast={handleOpenPast}
+					onSaveConversation={handleSaveConversation}
+					onRenameConversation={(conversation, title) =>
+						renameChat(conversation.threadId, title)
+					}
+					onRegenerateTitle={(conversation) =>
+						regenerateTitle(conversation.threadId)
+					}
+					onDeleteConversation={handleDeleteConversation}
+				/>
+
+				{drawerModal ? (
+					<button
+						type="button"
+						className="rail-scrim"
+						onClick={() => setDrawerOpen(false)}
+					>
+						<span className="sr-only">Close conversations</span>
+					</button>
+				) : null}
+
+				<main className="workspace" inert={drawerModal || undefined}>
+					{/* The way to the input without walking the whole conversation. */}
+					<a href="#aspire-composer" className="skip-link">
+						Skip to the message box
+					</a>
+
+					{/* The way into an account, whenever the sidebar is not there to carry it. */}
+					{/* `inert` as well as the CSS, because they cover different people. */}
+					<div
+						className="account-slot"
+						data-shown={railClosed || undefined}
+						inert={!railClosed || undefined}
+					>
+						<AccountControl variant="corner" />
+					</div>
+
+					{/* Above the transcript, not after it: each answer carries its own
+					    `h2`, and a page whose first heading is an `h2` reads to a
+					    screen reader as a document that starts mid-outline. */}
+					<h1 className="sr-only">Conversation with ASPIRE AI</h1>
+
+					<ChatTitleBar
+						title={activeTitle}
+						showDrawerTrigger={compact}
+						drawerOpen={drawerOpen}
+						onOpenRail={openDrawer}
+						onRename={(title) => {
+							if (threadId) renameChat(threadId, title);
+						}}
+					/>
+
+					<div className="stage">
+						<div
+							className="thread"
+							ref={threadRef}
+							// Banked on every scroll: a chat can also be left by the back button or a shortcut.
+							onScroll={(event) => {
+								// Not during a restore: that scroll is ours, and banking it overwrites the saved offset.
+								if (restoring.current) return;
+								scrollTops.current.set(
+									scrollKey,
+									event.currentTarget.scrollTop,
+								);
+							}}
+						>
+							<div className="thread__inner">
+								<section aria-label="Conversation">
+									<Transcript
+										messages={messages}
+										streaming={streaming}
+										isThinking={isThinking}
+										followUps={followUps}
+										animateAfterId={animateAfterId}
+										scrollRef={threadRef}
+										onRegenerate={handleRegenerate}
+										onAsk={ask}
+										playback={{
+											available: voice.available,
+											playingId: voice.playingId,
+											pausedId: voice.pausedId,
+											play: voice.play,
+										}}
+										directiveContext={directiveContext}
+										game={
+											game && threadId
+												? {
+														threadId,
+														state: game,
+														onChanged: (state: GameState | null) => {
+															const live = liveGame.current;
+															if (state && live) {
+																live.solved = state.solved;
+																live.total = state.prompt.total;
+															}
+															// Card closed: report the score once, on the game-result channel.
+															if (!state && live && !live.reported) {
+																live.reported = true;
+																sendGameResult({
+																	game: live.gameType,
+																	concept_id: live.concept,
+																	score: live.solved,
+																	max_score: Math.max(1, live.total),
+																	duration_s: live.duration_s,
+																	completed: live.completed,
+																});
+															}
+															setGame(state);
+														},
+														onSummary: (summary) => {
+															const live = liveGame.current;
+															if (!live) return;
+															live.solved = summary.solved;
+															live.total = Math.max(1, summary.total);
+															live.duration_s = Math.max(
+																0,
+																Math.round(summary.duration_seconds),
+															);
+															live.completed = true;
+														},
+													}
+												: null
+										}
+										eligibility={
+											eligibility && threadId
+												? {
+														threadId,
+														state: eligibility,
+														onChanged: setEligibility,
+														// Speaks the question, or the verdict.
+														onSpeak: (text) =>
+															voice.play(ELIGIBILITY_SPEECH_ID, text),
+														speakAvailable: voice.available,
+													}
+												: null
+										}
+									/>
+								</section>
+							</div>
+						</div>
+
+						{voice.phase === "consent" ? (
+							<div className="voice-slot">
+								<VoiceConsent onAllow={voice.allowMic} onDeny={voice.denyMic} />
+							</div>
+						) : null}
+
+						{voice.note ? (
+							<div className="voice-slot">
+								<VoiceNote
+									note={voice.note}
+									onAction={voice.runNoteAction}
+									onDismiss={voice.dismissNote}
+								/>
+							</div>
+						) : null}
+
+						{/* Sits in the voice-note slot, directly above the picker that caused it. */}
+						{personaNotice ? (
+							<div className="voice-slot">
+								<output className="voice-note" data-tone="warn">
+									<span className="voice-note__text">{personaNotice}</span>
+									<button
+										type="button"
+										className="icon-btn icon-btn--sm"
+										onClick={dismissPersonaNotice}
+									>
+										<CloseIcon />
+										<span className="sr-only">Dismiss</span>
+									</button>
+								</output>
+							</div>
+						) : null}
+
+						<Composer
+							onSend={ask}
+							busy={!settled}
+							onStop={handleStop}
+							simpleMode={simpleMode}
+							onToggleSimpleMode={toggleSimpleMode}
+							persona={persona}
+							onPersonaChange={setPersona}
+							draft={draft}
+							onDraftChange={setDraft}
+							focusSignal={0}
+							voice={voice}
+						/>
+					</div>
+
+					<output className="sr-only">{announcement}</output>
+
+					{/* One text node: as two, the flex gap made "can" and "make" run together when copied. */}
+					<p className="disclaimer">ASPIRE AI can make mistakes.</p>
+				</main>
+			</div>
+		</div>
+	);
+}

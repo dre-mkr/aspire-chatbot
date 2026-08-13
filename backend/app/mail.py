@@ -70,7 +70,7 @@ async def send(message: Message) -> bool:
     api_key = settings.resend_api_key
 
     if not api_key:
-        # The default in development, where having the link in the log is the only way to complete a password reset wit…
+        # The development default, where logging the link is the only way to follow it.
         if settings.mail_console_logs_links:
             logger.info(
                 "[mail:console] to=%s subject=%s\n%s",
@@ -101,7 +101,7 @@ async def send(message: Message) -> bool:
                 },
             )
         if response.status_code >= 400:
-            # The address is deliberately not logged at error level: a bounce log becomes a list of real addresses.
+            # The address is left out on purpose: a bounce log becomes a list of real addresses.
             logger.error("Mail provider refused a message: %s", response.status_code)
             return False
         return True

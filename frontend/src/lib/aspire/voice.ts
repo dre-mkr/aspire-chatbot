@@ -1,8 +1,5 @@
 /** The voice half of the ASPIRE backend client. */
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+import { API_URL } from "../config";
 
 /** Personas map to voices on the server. */
 export const DEFAULT_PERSONA = "nova";
@@ -48,18 +45,30 @@ export class VoiceError extends Error {
 	}
 }
 
+/**
+ * Held for the life of the page: the composer is mounted fresh on every move
+ * between the landing and a chat, and without this each one re-asks and blinks
+ * the mic and its settings out of the toolbar while the answer is in flight.
+ */
+let configRequest: Promise<VoiceConfig | null> | null = null;
+
 /** Ask the server what voice can do. */
-export async function fetchVoiceConfig(): Promise<VoiceConfig | null> {
-	try {
-		const response = await fetch(`${API_URL}/api/voice/config`, {
-			signal: AbortSignal.timeout(4000),
-		});
-		if (!response.ok) return null;
-		const body = (await response.json()) as VoiceConfig;
-		return body.enabled ? body : null;
-	} catch {
-		return null;
-	}
+export function fetchVoiceConfig(): Promise<VoiceConfig | null> {
+	configRequest ??= (async () => {
+		try {
+			const response = await fetch(`${API_URL}/api/voice/config`, {
+				signal: AbortSignal.timeout(4000),
+			});
+			if (!response.ok) return null;
+			const body = (await response.json()) as VoiceConfig;
+			return body.enabled ? body : null;
+		} catch {
+			// A timeout is not an answer: forget it, so the next mount asks again.
+			configRequest = null;
+			return null;
+		}
+	})();
+	return configRequest;
 }
 
 /** A filename whose extension matches what was actually recorded. */
@@ -82,7 +91,7 @@ export async function transcribe(
 	threadId: string | null,
 ): Promise<Transcription> {
 	const form = new FormData();
-	// The blob's own type rides along as the part's Content-Type; the filename has to agree with it, because that i…
+	// The filename's extension must agree with the blob's own Content-Type.
 	form.append("file", audio, filenameFor(audio.type));
 	form.append("voice_consent", "true");
 	form.append("language", language);
@@ -108,42 +117,6 @@ export async function transcribe(
 	return body;
 }
 
-/** Synthesise an answer. */
-export async function speak(
-	text: string,
-	language: VoiceLanguage,
-	threadId: string | null,
-	/** Cancels the synthesis, and with it the ElevenLabs call behind it. */
-	signal?: AbortSignal,
-): Promise<string> {
-	let response: Response;
-	// The external signal and the timeout are combined rather than chosen between: whichever fires first should sto…
-	const timeout = AbortSignal.timeout(20_000);
-	const cancel = signal ? AbortSignal.any([signal, timeout]) : timeout;
-	try {
-		response = await fetch(`${API_URL}/api/voice/speak`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				text,
-				persona: DEFAULT_PERSONA,
-				language,
-				thread_id: threadId,
-			}),
-			signal: cancel,
-		});
-	} catch {
-		// A caller-driven abort is not a fault and must not be dressed as one: the caller already knows, because it is…
-		if (signal?.aborted) throw new VoiceError("aborted");
-		throw new VoiceError("dropped");
-	}
-
-	if (response.status === 429) throw new VoiceError("limited");
-	if (!response.ok) throw new VoiceError("offline");
-
-	return URL.createObjectURL(await response.blob());
-}
-
 /** Synthesise an answer and start it playing before it has finished being made. */
 export async function speakStream(
 	text: string,
@@ -151,7 +124,7 @@ export async function speakStream(
 	threadId: string | null,
 	signal?: AbortSignal,
 ): Promise<string> {
-	// The timeout must cover WAITING for audio, never the audio itself: a long answer streams for longer than any s…
+	// The timeout covers WAITING for audio, never the stream: long answers run long.
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 20_000);
 	if (signal) {
@@ -214,7 +187,7 @@ export async function speakStream(
 				});
 
 			const finish = () => {
-				// Ending a source that is already closed (stopPlayback revoked the URL) throws; that is teardown, not a failure.
+				// Ending an already-closed source throws; that is teardown, not a failure.
 				try {
 					if (source.readyState === "open") source.endOfStream();
 				} catch {
@@ -233,7 +206,7 @@ export async function speakStream(
 						await wait;
 					}
 				} catch {
-					// A dropped stream or an abort: whatever audio arrived is playable, and the ended event returns the UI to Play.
+					// Whatever audio arrived is still playable; the ended event resets the UI.
 				} finally {
 					finish();
 				}
@@ -242,7 +215,7 @@ export async function speakStream(
 		{ once: true },
 	);
 
-	// Stop pulling bytes the moment the caller aborts — without this the fetch keeps billing and downloading into a…
+	// Stop pulling bytes on abort, or the fetch keeps downloading and billing.
 	signal?.addEventListener(
 		"abort",
 		() => void reader.cancel().catch(() => {}),

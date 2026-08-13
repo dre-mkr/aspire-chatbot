@@ -11,7 +11,7 @@ from typing import Any
 import jwt
 from fastapi import Header, HTTPException, Request
 
-from app.auth import ALGORITHM, _secret
+from app.auth import ALGORITHM, _secret, bearer_token
 
 logger = logging.getLogger(__name__)
 
@@ -87,18 +87,9 @@ def decode_staff(token: str | None) -> Staff | None:
     )
 
 
-def _bearer(authorization: str | None) -> str | None:
-    if not authorization:
-        return None
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
-
-
 async def current_staff(authorization: str | None = Header(default=None)) -> Staff:
     """The signed-in staff member, or 401."""
-    staff = decode_staff(_bearer(authorization))
+    staff = decode_staff(bearer_token(authorization))
     if staff is None:
         raise HTTPException(status_code=401, detail="Staff sign-in is required.")
     return staff
@@ -124,7 +115,7 @@ def requires(role: str):
 def client_ip(request: Request) -> str | None:
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        # Rightmost only: everything left of the edge's own entry is client-controlled, and an audit row recording a sp…
+        # Rightmost only: everything left of the edge's own entry is client-controlled.
         return forwarded.split(",")[-1].strip()
     return request.client.host if request.client else None
 

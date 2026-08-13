@@ -14,7 +14,7 @@ from app.config import get_settings  # noqa: E402
 from app.graph import checkpointer  # noqa: E402
 
 pytest.importorskip("psycopg_pool", reason="no database configured in this deployment")
-# Imported for real, and BEFORE any monkeypatching, because langgraph subscripts `AsyncConnectionPool` at impor…
+# Imported for real BEFORE monkeypatching: langgraph subscripts the pool at import.
 pytest.importorskip("langgraph.checkpoint.postgres.aio")
 
 
@@ -26,16 +26,16 @@ def pool_kwargs(monkeypatch):
     from psycopg_pool import AsyncConnectionPool
 
     class RecordingPool:
-        # The real callable, because the code under test reaches for `AsyncConnectionPool.check_connection` through thi…
+        # The real callable, because the code under test reaches for it through this stub.
         check_connection = AsyncConnectionPool.check_connection
 
-        # Kept subscriptable so this stub cannot break an import that treats the real class as a generic, whatever the…
+        # Kept subscriptable so an import treating the class as a generic still works.
         def __class_getitem__(cls, _item):
             return cls
 
         def __init__(self, **kwargs):
             captured.update(kwargs)
-            # `check` is compared by identity against the real callable below, so the stub must not replace it.
+            # `check` is compared by identity below, so the stub must not replace it.
             self.check = kwargs.get("check")
 
         async def open(self, **_):

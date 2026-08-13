@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
+import { DEFAULT_DOCUMENT_TITLE } from "../lib/aspire/title";
 import appCss from "../styles.css?url";
 
 interface MyRouterContext {
@@ -19,7 +20,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		meta: [
 			{ charSet: "utf-8" },
 			{ name: "viewport", content: "width=device-width, initial-scale=1" },
-			{ title: "ASPIRE AI · Financial literacy assistant" },
+			{ title: DEFAULT_DOCUMENT_TITLE },
 			{
 				name: "description",
 				content:

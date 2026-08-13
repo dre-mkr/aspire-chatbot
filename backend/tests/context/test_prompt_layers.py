@@ -27,7 +27,7 @@ def _context(**overrides) -> SessionContext:
 class TestTheGlobalLayerIsAliveAgain:
     @pytest.mark.parametrize("clause", LOAD_BEARING)
     def test_every_load_bearing_clause_survives_verbatim(self, clause):
-        """Each is a safety decision somebody made on purpose, and each is the kind of line an editor tightening prose w…"""
+        """Each clause is a deliberate safety decision, easily lost to a prose edit."""
         assert " ".join(clause.split()) in " ".join(GLOBAL.split())
 
     def test_it_reaches_the_prompt(self):
@@ -35,7 +35,7 @@ class TestTheGlobalLayerIsAliveAgain:
         assert "Never invent a figure" in messages[0].content
 
     def test_the_retrieval_rules_did_NOT_move_here(self):
-        """GROUNDING and ANSWER-DO-NOT-NARRATE are about answering from retrieved rows, which is the Q&A agent's job and…"""
+        """Answering from retrieved rows is the Q&A agent's job, not a global rule."""
         assert "according to the knowledge base" not in GLOBAL
         assert "Answer from those entries" not in GLOBAL
 
@@ -95,7 +95,7 @@ class TestTheCacheBreakpoint:
         assert "Today is" not in prefix
 
     def test_retrieved_chunks_go_in_the_human_turn(self):
-        """`qa/nodes.py:485` put them in the system block via `GENERATE_SYSTEM.format(context=...)`, which is why that a…"""
+        """In the system block they would break the cacheable prefix every turn."""
         messages = build_messages(
             context=_context(),
             agent_role=ROLE,
@@ -137,7 +137,7 @@ class TestHistoryFinallyArrives:
         assert "assistant: Keeping some for later." in block
 
     def test_the_running_summary_is_included(self):
-        """Computed, PII-redacted and checkpointed since the graph shipped, and read by no prompt until now."""
+        """Computed and checkpointed since launch, read by no prompt until now."""
         messages = build_messages(
             context=_context(running_summary="They are working on saving."),
             agent_role=ROLE,
@@ -146,7 +146,7 @@ class TestHistoryFinallyArrives:
         assert "They are working on saving." in messages[1].content
 
     def test_the_date_is_included(self):
-        """No prompt in the product had it, so every deadline question was answered without knowing today."""
+        """Without it, every deadline question is answered without knowing today."""
         messages = build_messages(context=_context(), agent_role=ROLE, user_text="hi")
         assert "Today is" in messages[1].content
 

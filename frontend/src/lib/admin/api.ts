@@ -1,8 +1,5 @@
 /** The admin API client, and its own token storage — a separate realm from the chat's. */
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+import { API_URL } from "../config";
 
 const TOKEN_KEY = "aspire.admin.token";
 

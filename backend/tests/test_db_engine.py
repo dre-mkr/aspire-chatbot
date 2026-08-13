@@ -5,7 +5,7 @@ from app.db.engine import POOLED_HOST_MARKER, _normalise, _strip_libpq_only_para
 
 class TestDriverNormalisation:
     def test_postgres_scheme_becomes_asyncpg(self):
-        # psql accepts `postgres://`; SQLAlchemy would reach for psycopg2 and fail on an async engine with a message th…
+        # psql accepts `postgres://`, but SQLAlchemy would pick psycopg2 and break the async engine.
         assert _normalise("postgres://u:p@host/db").startswith("postgresql+asyncpg://")
 
     def test_postgresql_scheme_becomes_asyncpg(self):
@@ -50,7 +50,7 @@ class TestLibpqParameters:
 
 
 def test_the_pooled_marker_is_what_we_check_for():
-    # The direct endpoint is one Postgres backend per connection and will be exhausted by a per-request pool.
+    # The direct endpoint gives one backend per connection, so a per-request pool exhausts it.
     assert POOLED_HOST_MARKER in "ep-cool-name-123456-pooler.us-east-2.aws.neon.tech"
     assert POOLED_HOST_MARKER not in "ep-cool-name-123456.us-east-2.aws.neon.tech"
 

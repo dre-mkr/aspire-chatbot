@@ -69,7 +69,7 @@ class Document(Base):
     # The knowledge-base row this chunk came from ("ASP-042").
     kb_id: Mapped[str | None] = mapped_column(Text)
 
-    # `metadata` is taken by SQLAlchemy's Declarative API, so the attribute is renamed and the column keeps the nam…
+    # `metadata` is taken by SQLAlchemy, so the attribute is renamed and the column keeps the name.
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
 
     updated_at: Mapped[datetime] = mapped_column(
@@ -108,9 +108,9 @@ class User(Base):
     # What sign-up collects.
     first_name: Mapped[str | None] = mapped_column(Text)
     last_name: Mapped[str | None] = mapped_column(Text)
-    # The date of birth of the person the account is FOR, which `role` now disambiguates: a guardian's own, not the…
+    # The date of birth of the person the account is for, which `role` disambiguates.
     date_of_birth: Mapped[date | None] = mapped_column(Date)
-    # Stored rather than recomputed on every read, so a birthday cannot change what somebody is allowed to see half…
+    # Stored rather than recomputed on every read, so a birthday cannot change access mid-session.
     is_minor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     island: Mapped[str | None] = mapped_column(Text)
     school: Mapped[str | None] = mapped_column(Text)
@@ -207,7 +207,7 @@ class Message(Base):
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
     __table_args__ = (
-        # Unique, so `seq` is a real sequence rather than a hint, and covering the only read shape there is: this conve…
+        # Unique, so `seq` is a real sequence, and it covers the only read shape there is.
         Index("ix_messages_conversation_seq", "conversation_id", "seq", unique=True),
     )
 
@@ -220,7 +220,7 @@ class EligibilityOutcome(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # "likely_eligible", "not_yet", "needs_confirmation".
     verdict: Mapped[str] = mapped_column(String(32), nullable=False)
-    # Which criterion decided it: "citizenship", "age_minimum", "age_cohort", "residence", "school", or "none" for…
+    # Which criterion decided it: citizenship, age_minimum, age_cohort, residence, school, or none.
     criterion: Mapped[str] = mapped_column(String(32), nullable=False)
     language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
     created_at: Mapped[datetime] = mapped_column(

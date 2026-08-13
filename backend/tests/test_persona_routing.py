@@ -60,7 +60,7 @@ class TestMaxTokens:
         assert resolve_max_tokens_for("orion") == 4096
 
     def test_zero_means_uncapped_not_zero_output(self, monkeypatch):
-        """A 0 in config must read as "no cap", never as max_tokens=0 -- a cap of zero would reject every request at the…"""
+        """A 0 in config means "no cap", not a max_tokens=0 that would reject every request."""
         monkeypatch.setattr(get_settings(), "max_tokens_by_persona", {"": 0})
         assert resolve_max_tokens_for("stella") is None
 

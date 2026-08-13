@@ -52,7 +52,7 @@ class FastEmbedEmbeddings(Embeddings):
         return [vector.tolist() for vector in self.model.embed(texts)]
 
     def embed_query(self, text: str) -> list[float]:
-        # query_embed applies the model's query prefix where one is expected (BGE models are trained with an asymmetric…
+        # query_embed applies the model's query prefix, which BGE-style models are trained with.
         return next(iter(self.model.query_embed(text))).tolist()
 
 
@@ -192,7 +192,7 @@ class PgVectorRetriever(BaseRetriever):
                 )
             rows = (await db.execute(self._statement(vector))).all()
 
-        # `metadata` is returned as stored, so a source on the wire has exactly the shape it had under Chroma.
+        # `metadata` is returned as stored, so a source keeps the shape it had under Chroma.
         return [
             LangchainDocument(page_content=content, metadata=dict(metadata or {}))
             for content, metadata in rows
@@ -278,7 +278,7 @@ def get_retriever() -> BaseRetriever:
 
 
 async def embed_query_cached(text: str) -> list[float]:
-    """This query's embedding: from Valkey when it has been asked before (P14-D)."""
+    """This query's embedding, served from Valkey when it has been asked before."""
     from app import cache as response_cache
 
     model = get_settings().embeddings_model
@@ -295,14 +295,3 @@ async def embed_query_cached(text: str) -> list[float]:
     return vector
 
 
-async def retrieve_with_vector(vector: list[float], *, started_at: float) -> list[LangchainDocument]:
-    """The vector search, timed to mean what `TimedRetriever` has always meant."""
-    inner = getattr(get_retriever(), "inner", None)
-    if not isinstance(inner, PgVectorRetriever):  # pragma: no cover - config error
-        raise RuntimeError("The configured retriever cannot search by vector.")
-    try:
-        documents = await inner.asearch_by_vector(vector)
-    finally:
-        record_stage(T_RETRIEVE_TOTAL, (time.perf_counter() - started_at) * 1000.0)
-    annotate(retrieved_chunk_count=len(documents))
-    return documents

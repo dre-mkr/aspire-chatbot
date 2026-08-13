@@ -22,10 +22,10 @@ export function useSession(): { session: Session | null; resolved: boolean } {
 		};
 
 		const stop = subscribeToSession(sync);
-		// `storage` only fires in OTHER tabs, so the local writes come through the subscription above and this covers t…
+		// `storage` fires only in OTHER tabs; local writes come via the subscription.
 		window.addEventListener("storage", sync);
 
-		// An identity already in hand resolves immediately; otherwise the answer arrives with the anonymous session.
+		// An identity in hand resolves now; otherwise the anonymous session answers.
 		const existing = currentSession();
 		if (existing) {
 			setSession(existing);

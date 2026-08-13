@@ -28,7 +28,7 @@ async def sweep_anonymous(*, dry_run: bool = False) -> dict[str, int]:
         if db is None:
             return {"users": 0, "conversations": 0, "skipped": 1}
 
-        # An anonymous identity is expired when it has never been claimed and its newest conversation is older than the…
+        # Expired means never claimed, created before the cutoff, and no conversation touched since.
         recent = (
             select(Conversation.id)
             .where(

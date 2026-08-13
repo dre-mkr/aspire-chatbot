@@ -45,14 +45,15 @@ class VoiceSettings(BaseSettings):
     voice_enabled: bool = False
     elevenlabs_api_key: str | None = None
 
-    # --- Models ----------------------------------------------------------- scribe_v1 and eleven_turbo_v2_5 are bo…
+    # --- Models -----------------------------------------------------------
     stt_model: str = "scribe_v2"
     # Live replies: ~75ms, 32 languages, half the per-character cost.
     tts_model_live: str = "eleven_flash_v2_5"
     # Prewarmed and number-heavy text: higher quality, reads figures better.
     tts_model_quality: str = "eleven_multilingual_v2"
 
-    # --- Voice ids -------------------------------------------------------- A persona's base voice covers every la…
+    # --- Voice ids --------------------------------------------------------
+    # A persona's base voice covers every language unless a per-language id overrides it.
     voice_stella: str | None = None
     voice_orion: str | None = None
     voice_aurora: str | None = None
@@ -71,7 +72,8 @@ class VoiceSettings(BaseSettings):
     voice_nova_es: str | None = None
     voice_nova_fr: str | None = None
 
-    # --- Upload limits ---------------------------------------------------- Two gates, both pre-flight and free.
+    # --- Upload limits ----------------------------------------------------
+    # Two gates, both pre-flight and free.
     max_upload_bytes: int = 25 * 1024 * 1024
     duration_guard_bytes: int = 4 * 1024 * 1024
     max_duration_seconds: float = 60.0

@@ -102,7 +102,7 @@ class TestTheModelWritesTheLesson:
             assert point in model.system
 
     async def test_the_prompt_states_the_bands_own_word_cap(self, curriculum):
-        """A prompt asking for a different number than the gate enforces means a re-prompt on every single turn, forever."""
+        """A prompt naming a different cap than the gate enforces means a re-prompt every turn."""
         for band in ("5-8", "9-12", "13-15"):
             model = Recorder()
             await run_teach(invoke=model, curriculum=curriculum, band=band)
@@ -374,7 +374,7 @@ class TestItDoesNotRepeatItself:
         assert "on another day" not in model.system
 
     async def test_it_is_told_not_to_narrate_what_it_is_doing(self, curriculum):
-        """A live session produced: "Now hand the idea back in your own words: saving means keeping money instead of usi…"""
+        """A live session narrated the instruction itself, so the prompt forbids narration."""
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum)
 
@@ -382,7 +382,7 @@ class TestItDoesNotRepeatItself:
         assert "hand" not in model.system.lower().split("HOW TO SAY IT")[-1]
 
     async def test_a_first_teaching_is_not_told_to_avoid_anything(self, curriculum):
-        """There is nothing to differ from yet, and saying so invites the model to be different from the plainest correc…"""
+        """Nothing to differ from yet, so asking for difference only invites a worse opening."""
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum)
         assert "begin differently" not in model.system
@@ -465,7 +465,7 @@ class TestReteach:
         assert said(update) == lesson.teach_for("9-12")[-1]
 
     async def test_it_still_records_the_wrong_outcome(self, curriculum):
-        """The reveal path must reach `mastery_update` carrying a wrong answer, model or no model."""
+        """The reveal path must reach `mastery_update` with a wrong answer, model or not."""
         node = teaching.make_reteach(curriculum, invoke=Recorder())
         update = await node(state_for())
 
@@ -511,7 +511,7 @@ class TestAskingForADifferentLesson:
         ],
     )
     async def test_these_do_not(self, text):
-        """A false positive abandons a lesson somebody was halfway through, which is worse than the digression it replac…"""
+        """A false positive abandons a lesson somebody was halfway through."""
         from app.agents.learn.graph import wants_a_different_lesson
 
         assert wants_a_different_lesson(text) is False
@@ -545,7 +545,7 @@ class TestAskingForADifferentLesson:
         assert "back to" not in second["messages"][-2].content.lower()
 
     async def test_a_real_digression_is_still_steered_back(self, curriculum):
-        """The move-on check runs first and must not swallow the case the digression handler exists for."""
+        """The move-on check runs first and must not swallow a real digression."""
         from langchain_core.messages import HumanMessage
 
         graph = build_learn_graph(curriculum=curriculum)
@@ -574,7 +574,7 @@ class TestAskingForADifferentLesson:
     async def test_every_band_names_what_it_is_steering_back_to(
         self, band, curriculum
     ):
-        """"Back to what we were doing" is the reprimand `_digress` exists to avoid, and it was what `16-18` and `adult`…"""
+        """Every band must name the lesson, not fall back on "back to what we were doing"."""
         from app.agents.learn.graph import _digress
 
         lesson = curriculum.lessons[LESSON]
@@ -646,7 +646,7 @@ class TestTheGraphStillHoldsItsShape:
         assert len(result["quick_replies"]) >= 2
 
     async def test_a_widget_travels_the_whole_way_to_a_directive(self, curriculum):
-        """teach -> safety_out -> transport, in one test, because every seam between them was written before anything cr…"""
+        """teach -> safety_out -> transport, exercised end to end in one test."""
         import json
 
         from app.graph.nodes.safety_out import make_safety_out
@@ -694,7 +694,7 @@ class TestTheGraphStillHoldsItsShape:
         assert prose.strip().startswith("Money you keep")
 
     async def test_the_planner_runs_in_a_node_the_transport_suppresses(self):
-        """The planner's JSON must never reach a child, and the ONLY thing stopping it is the node's name."""
+        """The planner's JSON is kept from the child only by the node's name."""
         import inspect
 
         from app.graph.stream_interceptor import INTERNAL_NODES
@@ -722,7 +722,7 @@ class TestTheGraphStillHoldsItsShape:
         assert update["learning"]["pending_widget"] is None
 
     async def test_grading_is_untouched_by_any_of_this(self):
-        """Named here because this file is about adding a model to the lesson, and this is the thing that must not acqui…"""
+        """Grading must not acquire a model just because the lesson around it gained one."""
         from app.agents.learn.graph import grade_answer
         from app.curriculum.schema import CheckQuestion
 

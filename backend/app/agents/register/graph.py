@@ -80,7 +80,7 @@ async def load_real_values(draft: store.Draft) -> store.Draft:
         return draft
     loaded.child_index = draft.child_index
     loaded.children_complete = draft.children_complete
-    # Skips live in the checkpoint, not in the database -- declining to give an email writes no row anywhere, which…
+    # Skips live in the checkpoint, not the database: declining a slot writes no row anywhere.
     loaded.skipped = list(draft.skipped)
     return loaded
 
@@ -252,7 +252,7 @@ def make_collect(recorder=None):
         draft.values["__awaiting"] = slot.path
         label = _document_label(draft, slot)
 
-        # Everything above runs AGAIN on resume -- `interrupt` replays the node from the top -- so nothing above it may…
+        # `interrupt` replays the node from the top, so nothing above it may have side effects.
         raw = interrupt(
             interrupt_payload(
                 slot, locale, label=label, application_id=draft.application_id
@@ -612,7 +612,7 @@ def build_register_graph(
         START, _entry, ["resume_or_start", "extract", "review", "submit"]
     )
     graph.add_edge("resume_or_start", "route")
-    # `route` exists so the document/typed split is a conditional edge with a name in the graph diagram.
+    # `route` exists so the document/typed split is a named conditional edge in the diagram.
     graph.add_conditional_edges("route", _needs_document, ["ask", "collect", "review"])
     graph.add_conditional_edges("ask", _after_ask, ["review", END])
     graph.add_conditional_edges(
@@ -623,7 +623,7 @@ def build_register_graph(
     graph.add_edge("review", END)
     graph.add_edge("submit", END)
 
-    # A checkpointer is REQUIRED for `interrupt()` to resume -- without one the paused state has nowhere to live, a…
+    # A checkpointer is required for `interrupt()` to resume: paused state needs somewhere to live.
     return graph.compile(checkpointer=checkpointer)
 
 

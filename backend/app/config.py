@@ -22,7 +22,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Sessions --------------------------------------------------------- HMAC key for session tokens.
+    # --- Sessions ---
+    # HMAC key for session tokens.
     session_secret: str = ""
 
     # How many anonymous sessions one address may create per hour.
@@ -40,26 +41,29 @@ class Settings(BaseSettings):
     # Whether the console provider may write message bodies to the log.
     mail_console_logs_links: bool = False
 
-    # --- Chat model ------------------------------------------------------- Passed straight to init_chat_model, so…
+    # --- Chat model ---
+    # Passed straight to init_chat_model, so it must be in "provider:model" form.
     chat_model: str = "openai:gpt-5.6-luna"
 
     # Left unset by default, which means "don't send a temperature at all".
     chat_temperature: float | None = None
 
-    # --- Per-persona model routing (P14-A) -------------------------------- Persona name -> "provider:model" overr…
+    # --- Per-persona model routing ---
+    # Persona name -> "provider:model" override; anything unlisted falls back to chat_model.
     chat_model_by_persona: dict[str, str] = {}
 
     # Persona name -> max output tokens, with "" as the key for the no-persona case.
     max_tokens_by_persona: dict[str, int] = {}
 
-    # OpenAI only, and required for the GPT-5 family: on /v1/chat/completions those models reject function tools wh…
+    # OpenAI only, required for GPT-5: those models reject function tools on /v1/chat/completions.
     openai_use_responses_api: bool = True
 
     # Read by the provider SDK. Only the key matching `chat_model` needs a value.
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
 
-    # --- Embeddings ------------------------------------------------------- Configured separately from the chat mo…
+    # --- Embeddings ---
+    # Configured separately from the chat model.
     embeddings_provider: Literal["openai", "fastembed"] = "openai"
     # 3072 dims.
     embeddings_model: str = "text-embedding-3-large"
@@ -82,30 +86,35 @@ class Settings(BaseSettings):
     #: Generate follow-up chips on every turn, not just the opening one.
     follow_ups_always: bool = True
 
-    # --- Postgres (Neon) -------------------------------------------------- MUST be the POOLED endpoint -- the hos…
+    # --- Postgres (Neon) ---
+    # MUST be the POOLED endpoint, not the direct host.
     database_url: str | None = None
     # Neon scales to zero, so the first request after an idle period pays the wake-up.
     database_warm_on_start: bool = True
     db_pool_size: int = Field(default=5, ge=1, le=50)
     db_max_overflow: int = Field(default=5, ge=0, le=50)
 
-    # --- Valkey ----------------------------------------------------------- Wire-compatible with Redis 7.2, so red…
+    # --- Valkey ---
+    # Wire-compatible with Redis 7.2, so a redis client speaks to it unchanged.
     valkey_url: str | None = None
     # How long a cached answer stays servable.
     response_cache_ttl_seconds: int = Field(default=6 * 3600, ge=60, le=1_209_600)
     response_cache_enabled: bool = True
 
-    # --- Semantic response cache (P14-B, layer 2) -------------------------- On a layer-1 miss, a query whose embe…
+    # --- Semantic response cache (layer 2) ---
+    # On a layer-1 miss, a query whose embedding is near a cached one reuses that answer.
     semantic_cache_enabled: bool = False
     semantic_cache_threshold: float = Field(default=0.95, ge=0.80, le=1.0)
     # How many cached-query embeddings one (persona, language, status) shelf holds.
     semantic_cache_max_entries: int = Field(default=512, ge=8, le=4096)
 
-    # --- Query-embedding cache (P14-D) ------------------------------------- Embedding a query is a ~400 ms networ…
+    # --- Query-embedding cache ---
+    # Embedding a query is a ~400 ms network round trip, so the vector is cached.
     embedding_cache_enabled: bool = True
     embedding_cache_ttl_seconds: int = Field(default=30 * 86_400, ge=3600, le=90 * 86_400)
 
-    # --- LangGraph platform (Tracks A-G) ---------------------------------- The checkpointer keeps its own psycopg…
+    # --- LangGraph platform ---
+    # The checkpointer keeps its own psycopg pool, sized separately from the app's.
     checkpointer_pool_size: int = Field(default=4, ge=1, le=20)
     checkpointer_connect_timeout: float = Field(default=30.0, ge=1.0, le=120.0)
     #: How long a pooled connection may live before the pool replaces it.
@@ -127,43 +136,29 @@ class Settings(BaseSettings):
     #: The QA relevance floor, as a COSINE similarity from the dense retriever.
     qa_relevance_floor: float = Field(default=0.55, ge=0.0, le=1.0)
 
-    #: The lexical fallback floor, as a fraction of the question's own content words appearing in what was retrieved.
+    #: Lexical fallback floor: the share of the question's content words that were retrieved.
     qa_coverage_floor: float = Field(default=0.25, ge=0.0, le=1.0)
 
-    # --- The learning agent (Track L) ------------------------------------- ## Model tiering, in ONE place Five jo…
+    # --- The learning agent ---
+    # Model tiering in one place: each job below names the model its difficulty earns.
 
-    #: Writes the lesson.
-    learn_teach_model: str = ""
     #: Disambiguates between two or three candidate concepts.
     learn_resolve_model: str = "openai:gpt-4o"
     #: Picks one widget primitive from a short list, or none.
     learn_widget_plan_model: str = "openai:gpt-4o"
-    #: Composes the chosen primitive's JSON.
-    #:
-    #: gpt-4o, the planner's tier, rather than the empty default that meant
-    #: `chat_model`. Measured against the running service: composing on
-    #: gpt-5.6-luna took ~5.4s against the 3.5s post-prose budget below, so the
-    #: widget lost that race on essentially every lesson turn and the feature
-    #: never reached a reader -- `widget_gate_failed=timeout`, silently.
-    #:
-    #: Composing a widget is filling in a fixed JSON shape from a concept that
-    #: has already been chosen. It is mechanical, it is what this file's own
-    #: tiering calls "harder than planning and easier than teaching", and the
-    #: nine gates in `widgets/validate.py` judge the result either way.
+    #: Composes the primitive's JSON on gpt-4o; gpt-5.6-luna took ~5.4s and missed the 3.5s budget.
     learn_widget_compose_model: str = "openai:gpt-4o"
-    #: Judges a free-text check answer against an accept list.
-    learn_evaluate_model: str = "openai:gpt-4o"
 
-    # ## Concept resolution thresholds Not hardcoded, because they are decision boundaries and the only honest way…
+    # Concept resolution thresholds, configurable because they are decision boundaries worth tuning.
 
     #: At or above this cosine similarity, the concept is resolved outright.
     learn_resolve_threshold: float = Field(default=0.62, ge=0.0, le=1.0)
-    #: Between the two thresholds, one cheap structured call disambiguates between the top candidates.
+    #: Between the two thresholds, one cheap structured call picks among the top candidates.
     learn_disambiguate_floor: float = Field(default=0.45, ge=0.0, le=1.0)
     #: How many candidates the disambiguation call is shown.
     learn_disambiguate_k: int = Field(default=3, ge=2, le=5)
 
-    # ## The widget pipeline's independence from prose How long the widget task may run after the prose has settled…
+    # How long the widget task may run after the prose has settled, keeping the two independent.
     learn_widget_timeout_s: float = Field(default=3.5, gt=0.0, le=30.0)
     #: A validated widget config is reused for this long.
     learn_widget_cache_ttl_days: int = Field(default=7, ge=1, le=90)
@@ -190,7 +185,8 @@ class Settings(BaseSettings):
     # Encryption key for `application_pii`, base64-encoded 32 bytes (Fernet).
     pii_encryption_key: str | None = None
 
-    # --- Conversation memory --------------------------------------------- ON by default, since the worker that ba…
+    # --- Conversation memory ---
+    # On by default; the summarisation it drives runs after the answer has gone out.
     memory_window_enabled: bool = True
     # How many recent messages the model sees verbatim.
     memory_window_turns: int = Field(default=6, ge=1, le=50)
@@ -199,13 +195,15 @@ class Settings(BaseSettings):
     # Used only for accounting. o200k_base is the GPT-4o/5 family's encoding.
     token_encoding: str = "o200k_base"
 
-    # --- Rate limits on the endpoints that spend model calls --------------- Counted per proven identity where the…
+    # --- Rate limits on the endpoints that spend model calls ---
+    # Counted per proven identity where there is one, and per address otherwise.
     chat_rate_window_seconds: int = Field(default=600, ge=10, le=3600)
     chat_messages_per_window: int = Field(default=30, ge=1, le=1000)
     # Titles are one per conversation, so this only has to allow starting a lot of chats.
     title_requests_per_window: int = Field(default=20, ge=1, le=1000)
 
-    # --- HTTP ------------------------------------------------------------- Origins allowed to call this API from…
+    # --- HTTP ---
+    # Origins allowed to call this API from a browser.
     cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     log_level: str = "INFO"
 

@@ -133,7 +133,7 @@ interface NoteProps {
 }
 
 export function VoiceNote({ note, onAction, onDismiss }: NoteProps) {
-	// <output> rather than a div with role="status": it is a live region announcing the result of the recording the…
+	// <output>, not a role="status" div: a live region for the recording's result.
 	return (
 		<output className="voice-note" data-tone={note.tone}>
 			<span className="voice-note__icon" aria-hidden="true">

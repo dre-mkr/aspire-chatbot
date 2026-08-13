@@ -173,7 +173,7 @@ def budget_split(total: int, allocations: Mapping[str, int]) -> Result:
     floors = {name: int(value) for name, value in exact.items()}
     remainder = total - sum(floors.values())
 
-    # Biggest fractional part first; ties broken by name so the result is deterministic rather than dict-order depe…
+    # Biggest fractional part first, ties broken by name, so the result is deterministic.
     order = sorted(
         exact,
         key=lambda name: (-(exact[name] - floors[name]), name),

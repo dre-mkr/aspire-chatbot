@@ -6,7 +6,7 @@ import logging
 import math
 import re
 from functools import lru_cache
-from typing import Protocol, Sequence
+from typing import Sequence
 
 from app.graph.state import KBChunk
 
@@ -14,12 +14,6 @@ logger = logging.getLogger(__name__)
 
 #: The cross-encoder.
 DEFAULT_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
-
-
-class Reranker(Protocol):
-    async def __call__(
-        self, query: str, chunks: Sequence[KBChunk]
-    ) -> list[float]: ...
 
 
 # ── the real one ─────────────────────────────────────────────────────────────
@@ -123,6 +117,3 @@ async def rerank_scores(query: str, chunks: Sequence[KBChunk]) -> list[float]:
     return lexical_scores(query, chunks)
 
 
-def reranker_available() -> bool:
-    """Whether the cross-encoder loaded. Reported by `/ready`."""
-    return _cross_encoder() is not None

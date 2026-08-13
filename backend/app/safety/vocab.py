@@ -15,13 +15,14 @@ class VocabViolation:
     """One banned term found in outbound text."""
 
     term: str
-    #: The variant actually matched, which is what a log line should name -- "compounding" is more useful to a promp…
+    #: The variant actually matched, which is what a log line or a re-prompt should name.
     matched: str
     start: int
     end: int
 
 
-# ── the general list ───────────────────────────────────────────────────────── Applies at every band including…
+# ── the general list ──
+# Applies at every band, adult included.
 
 _GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
     "guaranteed return": ("guaranteed return", "guaranteed returns"),
@@ -33,7 +34,8 @@ _GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
 }
 
 
-# ── the per-band ladders ───────────────────────────────────────────────────── `allow` is what this band ADDS.
+# ── the per-band ladders ──
+# `_ALLOW` is what a band adds to everything the younger bands already allow.
 
 _ALLOW: Final[dict[str, tuple[str, ...]]] = {
     "5-8": ("save", "spend", "share", "money", "bank", "coin", "goal", "wait"),
@@ -136,16 +138,7 @@ def is_allowed_concept(concept: str, band: str) -> bool:
     except Exception:  # pragma: no cover - import cycles during partial startup
         return False
 
-    # Both compared case-insensitively. An id is an identifier, not copy, and
-    # the two sides of this comparison are written by different authors: the
-    # store carries `CON-0019` from the seed, while the widget composer emits
-    # whatever case the model wrote. Measured: a composed compound-interest
-    # widget was dropped as "not on the 13-15 ladder" because it said
-    # `con-0019` -- the gate's failure silently deletes the feature, so a case
-    # mismatch must not be able to cause it.
-    #
-    # This does NOT widen the gate. The concept must still exist in the store
-    # and still return `teachable_at(band)`.
+    # Matched case-insensitively on both sides; the gate itself still requires `teachable_at(band)`.
     wanted = concept.strip().lower()
     for candidate in store.all():
         if candidate.slug.lower() == wanted or candidate.id.lower() == wanted:

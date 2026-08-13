@@ -7,7 +7,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from app.voice.cache import cache_key, get_cache  # noqa: E402
 from app.voice.client import VoiceUnavailable, get_client  # noqa: E402

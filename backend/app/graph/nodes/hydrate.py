@@ -27,6 +27,7 @@ def identity_from(claims: SessionClaims) -> dict[str, Any]:
     return {
         "session_id": claims.session_id,
         "user_id": claims.user_id,
+        "identity_proven": claims.identity_proven,
         "device_id": claims.device_id,
         "persona": claims.persona,
         "age_band": claims.age_band,
@@ -67,14 +68,15 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         update["retrieved"] = []
         update["qa_related"] = []
         update["groundedness"] = 0.0
-        # RESET rather than `[]`: both of these accumulate, so an empty list would append nothing and last turn's chips…
+        # RESET rather than `[]`: these accumulate, so `[]` would leave last turn's values in place.
         update["ui_directives"] = RESET
         update["citations"] = RESET
         if ignored:
-            # Carried into state as well as logged, so `persist` can record it against the session and the admin queue can…
+            # Carried into state as well as logged, so `persist` can record it against the session.
             update["safety_flags"] = {"identity_spoof_attempt": ignored}
 
-        # ── the turn's INPUTS, put back after the clear ───────────────────── A widget interaction and a game result a…
+        # ── the turn's inputs, put back after the clear ──
+        # A widget interaction or a game result arrives as a body field, not as a message.
         for field in CONTINUATION_FIELDS:
             value = (body or {}).get(f"__{field}")
             if value:

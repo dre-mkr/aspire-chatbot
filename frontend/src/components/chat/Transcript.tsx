@@ -183,14 +183,14 @@ export function Transcript({
 		};
 		measure();
 
-		// The hero's collapse changes the offset without resizing the list, so watching the list alone would miss it.
+		// Watch the scroller: the hero's collapse moves the offset without resizing the list.
 		const observer = new ResizeObserver(measure);
 		observer.observe(scroller);
 		return () => observer.disconnect();
 	}, [windowed, scrollRef]);
 
 	const virtualizer = useVirtualizer({
-		// Zero while the list renders whole, so the virtualizer does no work at all on the common case rather than meas…
+		// Zero while the list renders whole: the virtualizer then does no work on the common case.
 		count: windowed ? turns.length : 0,
 		getScrollElement: () => scrollRef.current,
 		estimateSize: () => ESTIMATED_TURN_PX,
@@ -200,7 +200,7 @@ export function Transcript({
 			[turns],
 		),
 		scrollMargin,
-		// Turns are tall — roughly 1.5 fit a 662px viewport — so 3 either side is already a screen and a half of runway.
+		// Turns are tall — ~1.5 fit a 662px viewport — so 3 either side is 1.5 screens of runway.
 		overscan: 3,
 	});
 
@@ -349,7 +349,7 @@ export function Transcript({
 			) : null}
 
 			{chips.length > 0 ? (
-				// Present and laid out for the whole of the reveal, inert and invisible until the answer settles.
+				// Laid out through the reveal, inert and invisible until the answer settles.
 				<div
 					className="follow-ups"
 					data-pending={streaming ? "" : undefined}
@@ -403,7 +403,7 @@ function Answer({
 					// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
 					<Block key={index} block={block} revealing={revealing} />
 				))}
-				{/* Between the prose and the tail, which is where the turn put them: a widget answers the question the paragraph… */}
+				{/* Between prose and tail: a widget answers the question the paragraph raises. */}
 				{!revealing && message.directives?.length
 					? message.directives.map((directive, index) => (
 							<DirectiveView
@@ -414,7 +414,7 @@ function Answer({
 							/>
 						))
 					: null}
-				{/* Laid out from the first frame of the reveal and revealed when the answer settles, rather than mounting at com… */}
+				{/* Laid out from the reveal's first frame rather than mounting when it completes. */}
 				<div
 					className="answer__tail"
 					data-pending={revealing ? "" : undefined}
@@ -512,7 +512,7 @@ function Sources({ sources }: { sources: Array<Source> }) {
 	if (sources.length === 0) return null;
 
 	return (
-		// Opening this grows the thread by the height of the panel, and the transcript's scroll-follow only runs when a…
+		// Opening grows the thread by the panel's height, which scroll-follow does not cover.
 		<details
 			className="sources"
 			onToggle={(event) => {
@@ -534,8 +534,7 @@ function Sources({ sources }: { sources: Array<Source> }) {
 				{sources.map((source, index) => {
 					const label = source.metadata?.question ?? source.metadata?.category;
 					const reference = source.metadata?.kb_id;
-					// The snippet only earns its space when it says something the
-					// label does not; on a short row the two can be the same text.
+					// The snippet earns its space only when it says something the label does not.
 					const snippet =
 						source.content && source.content !== String(label ?? "")
 							? source.content
@@ -578,7 +577,7 @@ function Failure({
 		<div className="turn turn--assistant" data-enter={arriving || undefined}>
 			<div className="orb orb--muted" aria-hidden="true" />
 			<div className="answer">
-				{/* Every other assistant turn carries this, so heading navigation skipped precisely the turns where "who is spea… */}
+				{/* Every other assistant turn carries this; without it heading navigation skips failures. */}
 				<h2 className="sr-only">ASPIRE AI</h2>
 				{/* No role="alert" here. */}
 				<p className="failure" data-tone={tone}>
@@ -589,7 +588,7 @@ function Failure({
 					<div className="answer-actions">
 						<button type="button" className="text-btn" onClick={onRetry}>
 							<RetryIcon />
-							{/* Nothing went wrong, so it is not "Try again" — the question is simply still there to be asked. */}
+							{/* Nothing went wrong, so not "Try again" — the question is still there to ask. */}
 							{stopped ? "Ask again" : "Try again"}
 						</button>
 					</div>
@@ -666,14 +665,13 @@ function AnswerActions({
 				</>
 			) : null}
 
-			<button type="button" className="icon-btn icon-btn--sm" onClick={copy}>
+			{/* Labelled like its neighbours: a lone bare icon is the one a reader must guess at. */}
+			<button type="button" className="text-btn" onClick={copy}>
 				{copied ? <CheckIcon /> : <CopyIcon />}
-				<span className="sr-only">
-					{copied ? "Answer copied" : "Copy answer"}
-				</span>
+				{copied ? "Copied" : "Copy"}
 			</button>
 
-			{/* "Ask again", not "Try again": under a successful answer the latter reads as "you got it wrong", which is the… */}
+			{/* "Ask again", not "Try again": under a good answer the latter reads as "you got it wrong". */}
 			<button
 				type="button"
 				className="text-btn"

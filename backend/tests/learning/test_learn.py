@@ -214,7 +214,7 @@ class TestPlacement:
         assert placement.lesson.id == "l03_a_goal"
 
     def test_it_does_not_resume_after_the_window(self, curriculum):
-        """Outside 48 hours the setup is forgotten, and being dropped into the middle of an explanation is worse than st…"""
+        """Outside 48 hours, starting over beats being dropped mid-explanation."""
         placement = scheduler.place(
             curriculum,
             "9-12",
@@ -345,7 +345,7 @@ class TestHintLadder:
         ],
     )
     def test_an_ordinary_sentence_with_a_negation_in_it_is_not_a_verdict(self, text):
-        """Banning "no" outright would flag real sentences and `sanitise` would then delete the word, leaving the opposi…"""
+        """Banning "no" outright would flag real sentences and `sanitise` would delete the word."""
         assert not hl.contains_negative(text)
 
     def test_sanitising_leaves_a_readable_sentence(self):

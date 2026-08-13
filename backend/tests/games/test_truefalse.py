@@ -465,7 +465,7 @@ def test_the_volatile_rate_item_is_gated(settings: GameSettings):
     assert rate.servable_on(date.today(), review_days=180) is False
 
 
-# --- the verdict never leaves early ---------------------------------------- This matters more here than on th…
+# --- the verdict never leaves early ----------------------------------------
 
 
 @pytest.fixture

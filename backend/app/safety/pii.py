@@ -10,16 +10,6 @@ from typing import Final
 #: The field names this module can name.
 PIIKind = str
 
-PII_KINDS: Final[tuple[str, ...]] = (
-    "email",
-    "phone",
-    "national_id",
-    "account_number",
-    "date_of_birth",
-    "street_address",
-)
-
-
 @dataclass(frozen=True, slots=True)
 class PIISpan:
     """One match: what it is, where it is, and what was there."""
@@ -30,7 +20,7 @@ class PIISpan:
     text: str
 
 
-# ── the patterns ───────────────────────────────────────────────────────────── Order matters and is load-beari…
+# ── the patterns ──
 
 #: RFC-shaped enough.
 _EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
@@ -66,7 +56,7 @@ _NATIONAL_ID = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-#: A bare identity-document-shaped run, for the case where the label came a sentence earlier ("What is your nati…
+#: A bare ID-shaped run, for when the label came a sentence earlier.
 _ID_LIKE = re.compile(r"\b[A-Z]{0,2}\d{8,12}\b")
 
 #: Bank and account numbers, again context-anchored for the same reason.
@@ -108,7 +98,7 @@ _ADDRESS = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-#: `(kind, pattern, group)`.
+#: `(kind, pattern, group)`; order decides which pattern wins an overlap in `detect`.
 _PATTERNS: Final[tuple[tuple[str, re.Pattern[str], int], ...]] = (
     ("email", _EMAIL, 0),
     ("national_id", _NATIONAL_ID, 1),
@@ -154,11 +144,6 @@ def detect(text: str) -> list[PIISpan]:
         spans.append(PIISpan(kind=kind, start=start, end=end, text=value))
         consumed_to = end
     return spans
-
-
-def has_pii(text: str) -> bool:
-    """Whether anything at all matched. Cheaper to read than `bool(detect(...))`."""
-    return bool(detect(text))
 
 
 def kinds_in(text: str) -> list[str]:

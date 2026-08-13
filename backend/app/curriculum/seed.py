@@ -82,7 +82,7 @@ async def seed_curriculum(curriculum: Any | None = None) -> int:
                         ),
                         {
                             "id": concept.id,
-                            # `slug` and `title` are NOT NULL as of migration 0016, which gave this table teaching bodies and the columns t…
+                            # `slug` and `title` are NOT NULL since 0016; id and name fill them.
                             "slug": concept.id,
                             "title": concept.name,
                             "name": concept.name,

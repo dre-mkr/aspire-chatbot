@@ -102,56 +102,6 @@ def summarise_for_reviewer(registration: dict[str, Any]) -> dict[str, Any]:
     return {"fields": fields}
 
 
-def make_confirm(notifier=None):
-    """Tell the parent it is in, in the chat and by email or SMS."""
-
-    async def confirm(state: Any) -> dict[str, Any]:
-        from langchain_core.messages import AIMessage
-
-        registration = state.get("registration") or {}
-        locale = str(state.get("locale") or "en")
-        application_id = str(registration.get("application_id") or "")
-        reference = application_id[:8].upper()
-
-        if notifier is not None:
-            contact = (registration.get("values") or {}).get("guardian.email") or (
-                registration.get("values") or {}
-            ).get("guardian.phone")
-            try:
-                await notifier(application_id, contact)
-            except Exception:
-                logger.warning(
-                    "Could not notify the guardian for application %s; it is still "
-                    "submitted.",
-                    application_id,
-                    exc_info=True,
-                )
-
-        message = {
-            "en": (
-                f"That is submitted. Your reference is {reference}. ASPIRE will "
-                "come back to you within five working days, and I have sent a "
-                "copy of this to you."
-            ),
-            "es": (
-                f"Enviado. Tu referencia es {reference}. ASPIRE te responderá en "
-                "cinco días hábiles y te he enviado una copia."
-            ),
-            "fr": (
-                f"C'est envoyé. Ta référence est {reference}. ASPIRE te répondra "
-                "sous cinq jours ouvrables et je t'en ai envoyé une copie."
-            ),
-        }.get(locale)
-
-        return {
-            "messages": [AIMessage(content=message or "Submitted.")],
-            "quick_replies": _chips(locale),
-            "registration": {**registration, "phase": "done"},
-        }
-
-    return confirm
-
-
 def _chips(locale: str) -> list[str]:
     return {
         "en": ["Add another child", "Something else"],

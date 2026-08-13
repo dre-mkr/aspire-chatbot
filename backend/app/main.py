@@ -43,7 +43,7 @@ from app.voice import get_voice_settings, validate_registry, voice_router
 
 logger = logging.getLogger(__name__)
 
-# psycopg's async mode cannot run on Windows' default ProactorEventLoop, and the checkpointer is psycopg.
+# psycopg's async mode cannot run on Windows' default ProactorEventLoop.
 if sys.platform == "win32":  # pragma: no cover - platform-specific
     from app.graph.checkpointer import install_windows_event_loop_policy
 
@@ -66,7 +66,7 @@ async def _require_corpus(settings) -> None:
             "    python -m app.ingest"
         )
 
-    # Auto-ingest on a cold start so a fresh deployment is usable out of the box, exactly as it was before the move…
+    # Auto-ingest on a cold start so a fresh deployment is usable out of the box.
     await ingest_if_empty(settings)
 
     chunks = await count_corpus()
@@ -88,7 +88,7 @@ async def lifespan(app: FastAPI):
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    # Third-party HTTP clients are capped at INFO however loud this service is told to be, and that is a privacy co…
+    # Third-party HTTP clients stay at INFO however loud this service is: DEBUG would log bodies.
     for noisy in ("openai", "httpx", "httpcore", "anthropic", "urllib3"):
         logging.getLogger(noisy).setLevel(max(logging.INFO, logging.getLogger().level))
 
@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
 
     _secret()
 
-    # Build the answer model eagerly so a bad model string or a missing key surfaces at boot rather than in the mid…
+    # Build the answer model eagerly so a bad model string or a missing key surfaces at boot.
     from app.agent import build_chat_model
 
     build_chat_model()
@@ -133,9 +133,14 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Closed only when one was ever built: touching the cache here would construct a client just to close it.
+    # Closed only if one was built; touching the cache would construct a client to close it.
     if _probe_client.cache_info().currsize:
         await _probe_client().aclose()
+
+    # The checkpointer keeps its own psycopg pool, which nothing else disposes of.
+    from app.graph.checkpointer import close_checkpointer
+
+    await close_checkpointer()
     await dispose_database()
 
 
@@ -146,7 +151,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for local development: the Vite dev server on :3000 is a different origin from this API on :8000, so the…
+# CORS for local development: the dev server on :3000 is a different origin from this API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allow_origins,
@@ -159,11 +164,11 @@ app.add_middleware(
 if get_voice_settings().voice_enabled:
     app.include_router(voice_router)
 
-# The game card talks to these directly rather than through the agent: a tapped answer must be graded now, not…
+# The game card calls these directly, not through the agent: a tapped answer is graded now.
 if games_enabled():
     app.include_router(games_router)
 
-# The eligibility card talks to these directly too, and for a second reason beyond latency: the answers tapped…
+# The eligibility card calls these directly too, and for the same reason.
 if eligibility_enabled():
     app.include_router(eligibility_router)
 
@@ -249,9 +254,9 @@ async def _provider_ready() -> bool | None:
         return _provider_reachable
 
     try:
-        # One process-wide client (P14-D): a fresh AsyncClient per probe paid a new TCP + TLS handshake every time, and…
+        # One process-wide client: a fresh AsyncClient per probe paid a new TCP + TLS handshake.
         response = await _probe_client().get(url, headers=headers)
-        # 401 and 403 are answers: the provider is up and the key is wrong, which is a configuration failure and still…
+        # 401/403 mean the provider is up but misconfigured, which still must not report ready.
         _provider_reachable = response.status_code < 400
     except Exception:
         logger.warning("Model provider did not answer a readiness check.", exc_info=True)
@@ -277,13 +282,13 @@ async def ready() -> Response:
             "ready": ok,
             "database": database,
             "cache": cache,
-            # `null` means no key is configured, which is a legitimate local setup and not a readiness failure.
+            # `null` means no key configured: a legitimate local setup, not a readiness failure.
             "provider": provider,
         },
     )
 
 
-# -- the v1 turn pipeline lived here ----------------------------------------- Roughly 830 lines: `/chat`, `/ch…
+# The v1 turn pipeline lived here; the graph router at /v2 replaced it.
 
 
 @app.post("/api/title", response_model=TitleResponse)

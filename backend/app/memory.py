@@ -104,7 +104,7 @@ def build_prompt(
     for stored in context.recent:
         messages.append(_to_message(stored.role, stored.content))
 
-    # A HUMAN message, not a system one, and that is a security property rather than a stylistic choice.
+    # A HUMAN message, not a system one: retrieved text must not carry system authority.
     if knowledge is not None:
         messages.append(HumanMessage(content=KNOWLEDGE_CONTEXT_PREFACE + knowledge))
 

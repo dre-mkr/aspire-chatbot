@@ -197,7 +197,7 @@ def make_tutor(
         )
 
         if resolution.source in ("rag", "none"):
-            # Fire and forget: the authoring backlog must never be the thing that delays a child's lesson.
+            # Fire and forget: the authoring backlog must never delay a child's lesson.
             asyncio.create_task(
                 enqueue_candidate(utterance, band=band, locale=locale, resolution=resolution)
             )

@@ -37,7 +37,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 	const panelRef = useRef<HTMLDivElement>(null);
 	const compact = useMediaQuery(COMPACT);
 
-	// The portal only exists on the client; rendering it during SSR would look for a document that is not there.
+	// The portal is client-only: during SSR there is no document to look for.
 	const [mounted, setMounted] = useState(false);
 	useEffect(() => setMounted(true), []);
 
@@ -73,7 +73,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 			}
 		};
 
-		// The sheet is portalled out of this subtree, so "inside" has to mean either the trigger's wrapper or the panel…
+		// The sheet is portalled out, so "inside" means the trigger's wrapper or the panel.
 		const onPointer = (event: PointerEvent) => {
 			const target = event.target as Node;
 			if (wrapRef.current?.contains(target)) return;
@@ -89,7 +89,7 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 		};
 	}, [open]);
 
-	// Move focus in when it opens, so the trap has something to hold and a keyboard user is not left behind on the…
+	// Move focus in on open, so the trap has something to hold.
 	useEffect(() => {
 		if (!open) return;
 		panelRef.current?.querySelector<HTMLElement>("button")?.focus();

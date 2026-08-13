@@ -37,7 +37,7 @@ def password_problem(password: str) -> str | None:
     if len(password) < MIN_PASSWORD_LENGTH:
         return f"Use at least {MIN_PASSWORD_LENGTH} characters."
     if len(password.encode("utf-8")) > 72:
-        # bcrypt truncates silently at 72 bytes, which would make two different long passwords equivalent.
+        # bcrypt truncates at 72 bytes, which would make two long passwords equivalent.
         return "That password is too long. Use 72 characters or fewer."
     return None
 
@@ -67,14 +67,14 @@ async def sign_in(email: str, password: str) -> SignInResult | None:
         ).first()
 
     if row is None:
-        # A bcrypt round against a throwaway hash, so a missing account costs the same as a wrong password.
+        # A bcrypt round on a throwaway hash, so a missing account costs the same as a wrong one.
         bcrypt.checkpw(b"x", bcrypt.gensalt())
         return None
 
     if not bcrypt.checkpw(password.encode("utf-8"), row[3].encode("ascii")):
         return None
     if not row[5]:
-        # Checked AFTER the password, so a disabled account is indistinguishable from a wrong one -- otherwise disablin…
+        # Checked after the password, so a disabled account is indistinguishable from a wrong one.
         logger.warning("Sign-in refused for disabled staff account %s.", row[1])
         return None
 

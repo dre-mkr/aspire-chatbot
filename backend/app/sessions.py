@@ -44,7 +44,7 @@ async def _record_cap_bypass() -> None:
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-#: A client-minted id: a UUID, or the `t-<base36>-<base36>` fallback used where `crypto.randomUUID` is unavailab…
+#: A client-minted id: a UUID, or the `t-<base36>-<base36>` fallback used without randomUUID.
 _DEVICE_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 
 
@@ -63,14 +63,14 @@ class SessionResponse(BaseModel):
     expires_in: int
     #: Who the account is for, as chosen at sign-up.
     role: str = "participant"
-    #: The persona this account resolves to, so the client can show the right one immediately instead of leaving the…
+    #: The persona this account resolves to, so the client can show the right one at once.
     persona: str = "stella"
 
 
 def to_session(user: User, token: str) -> SessionResponse:
     from app.graph.account import YOUNGEST_BAND, band_for, persona_for
 
-    # An anonymous row has no date of birth and `is_minor` False, which `band_for` reads as `adult` -- it cannot di…
+    # An anonymous row has no date of birth, which `band_for` would read as `adult`.
     if user.account_type == ACCOUNT_ANONYMOUS:
         band, role = YOUNGEST_BAND, "participant"
     else:
@@ -106,7 +106,7 @@ async def _within_limit(ip: str) -> bool:
             await client.expire(key, 3600)
         return count <= settings.anonymous_sessions_per_ip_per_hour
     except Exception:
-        # DECISION (P1-010, 2026-08-04): fail OPEN, and make it visible.
+        # A deliberate decision: fail OPEN, and make it visible.
         logger.warning("Rate-limit check failed; allowing the session.", exc_info=True)
         await _record_cap_bypass()
         return True
@@ -147,7 +147,7 @@ async def create_anonymous_session(
         db.add(user)
         await db.flush()
         token = mint_token(user.id, user.account_type, user.session_epoch)
-        # Enough to investigate a burst, and no more: which identity, from which (hashed) source, seeded by which brows…
+        # Enough to investigate a burst and no more: identity, hashed source, hashed device.
         logger.info(
             "anonymous session created user=%s ip_hash=%s device_hash=%s",
             user.id,

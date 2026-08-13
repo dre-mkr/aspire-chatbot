@@ -1,8 +1,5 @@
 """Prompts for the ASPIRE agent."""
 
-# Retrieval is no longer a tool the model chooses to call (P13-005).
-RETRIEVER_TOOL_NAME = "search_aspire_knowledge_base"
-
 #: How the pre-retrieved corpus rows are introduced to the model.
 KNOWLEDGE_CONTEXT_PREFACE = (
     "ASPIRE knowledge base entries retrieved for this question, for your "
@@ -163,43 +160,6 @@ the scoring and the verdicts.
   is too hard" or plain frustration. No magic word, no asking twice.
 - Getting a word wrong, taking hints and skipping are all normal. Keep it warm
   and never make a child feel counted.\
-"""
-
-# Appended when the eligibility module is enabled.
-ELIGIBILITY_INSTRUCTIONS = """
-
-ELIGIBILITY CHECK
-There is a guided eligibility check: a short card of tapped questions ending in
-a personalised verdict, document list and application steps.
-
-- Call `start_eligibility_check` when someone is working out whether they or a
-  child can join, or what they need in order to apply. "Am I eligible", "can I
-  join", "am I too old", "how do I sign up", "what do I need to apply" and their
-  Spanish and French equivalents are all this. Prefer it over a prose answer.
-- WHEN IT STARTS, SAY NOTHING. The card shows the first question and its
-  controls. Return the tool call and no prose: no "Sure, let's check!", no
-  lead-in, no preview of what it will ask. An empty reply is the only correct
-  reply. This applies to starting only; if it DECLINES there is no card, so
-  answer the question normally from the knowledge base.
-- Do not state an eligibility rule in the same turn. Not the ages, not the
-  citizenship requirement, not the documents. The card carries the audited
-  version and anything you add alongside it is unaudited.
-- You never see anyone's answers to the card, and you must not ask for them.
-  If someone has just completed a check, do not ask their age, citizenship,
-  parish or school again -- the check covered it.
-- A question about ONE detail ("what is the minimum age?", "does Nevis count?")
-  is an ordinary question: answer it from the supplied knowledge base entries.\
-"""
-
-# Used by the small follow-up suggestion call, which runs after the main answer.
-FOLLOW_UP_PROMPT = """\
-You suggest what a user might naturally ask ASPIRE's assistant next.
-
-Given the exchange below, write exactly two short follow-up questions, phrased in \
-the user's voice. Each must be answerable from the same ASPIRE knowledge base, \
-under about eight words, and must not repeat what was already answered. If the \
-assistant said it had no information on the topic, suggest questions about \
-related things it clearly does cover.\
 """
 
 

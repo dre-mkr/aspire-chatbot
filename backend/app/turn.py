@@ -10,6 +10,7 @@ from typing import Any
 from app.config import get_settings
 from app.db import database_enabled, session
 from app.db.repository import append_turn, ensure_conversation
+from app.messages import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ async def open_conversation(record: TurnRecord) -> None:
     if not database_enabled():
         return
     if not record.question.strip():
-        # An interaction turn -- a widget moved, an upload resumed -- which by construction continues a conversation th…
+        # An interaction turn -- a widget moved, an upload resumed -- continues a conversation.
         record.opened = True
         return
 
@@ -150,7 +151,7 @@ async def open_conversation(record: TurnRecord) -> None:
                 language=record.language,
                 persona=record.persona,
                 account_status=record.account_status,
-                # Recorded on creation only, so the first turn settles whose conversation this is and no later request can take…
+                # Recorded on creation only: the first turn settles ownership for good.
                 owner_id=record.owner_id,
                 title=provisional_title(record.question),
             )
@@ -174,14 +175,14 @@ async def persist_turn(record: TurnRecord) -> None:
 
     content = history_content(record)
     if not content.strip():
-        # Nothing was said and no card opened -- an interrupted turn waiting on an upload, for instance.
+        # Nothing said and no card opened -- an interrupted turn waiting on an upload, say.
         return
 
     try:
         async with session() as db:
             if db is None:
                 return
-            # `open_conversation` already created the row and recorded the question before the graph ran.
+            # `open_conversation` already made the row and recorded the question.
             if not record.opened:
                 await ensure_conversation(
                     db,
@@ -317,7 +318,7 @@ async def summarise_thread(graph: Any, config: dict[str, Any]) -> bool:
 
     from app.graph.main_graph import SUMMARY_AFTER_MESSAGES
 
-    # A graph compiled without a checkpointer has no state to read back, and that is a supported configuration rath…
+    # A graph compiled without a checkpointer has no state to read back, and that is supported.
     if getattr(graph, "checkpointer", None) is None:
         return False
 
@@ -336,9 +337,9 @@ async def summarise_thread(graph: Any, config: dict[str, Any]) -> bool:
 
     older = messages[:-SUMMARY_AFTER_MESSAGES]
     redacted = [
-        pii.redact_for_summary(_text_of(message))
+        pii.redact_for_summary(text_of(message))
         for message in older
-        if _text_of(message).strip()
+        if text_of(message).strip()
     ]
     if not redacted:
         return False
@@ -361,15 +362,3 @@ async def summarise_thread(graph: Any, config: dict[str, Any]) -> bool:
         return False
     return True
 
-
-def _text_of(message: Any) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""

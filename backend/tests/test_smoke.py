@@ -7,13 +7,13 @@ from app.main import app
 
 
 def test_health_returns_ok():
-    # Used outside a context manager, TestClient skips the lifespan, so this touches neither the embedding model no…
+    # Used outside a context manager, TestClient skips the lifespan, so no model or database loads.
     response = TestClient(app).get("/health")
     assert response.status_code == 200
 
     body = response.json()
     assert body["status"] == "ok"
-    # The probe also reports whether the data layer connected, so a deployment that fell back to in-process memory…
+    # The probe also reports whether the data layer connected, so a fallback is visible.
     assert set(body) >= {"status", "database", "cache", "cache_stats"}
 
 

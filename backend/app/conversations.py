@@ -174,7 +174,7 @@ async def rename_conversation(
     async with session() as db:
         if db is None:
             raise _unavailable()
-        # Ownership in the WHERE clause, so a rename cannot be aimed at somebody else's conversation by guessing its id.
+        # Ownership in the WHERE clause, so a guessed id cannot rename somebody else's row.
         result = await db.execute(
             update(Conversation)
             .where(Conversation.id == conversation_id, Conversation.owner_id == owner)
@@ -230,7 +230,7 @@ async def delete_conversation(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="No such conversation.")
 
-    # Outside the transaction: the row is committed gone, and none of these three stores can participate in it anyw…
+    # Outside the transaction: the row is committed gone, and these stores cannot join it.
     await _purge_thread_state(conversation_id)
 
 

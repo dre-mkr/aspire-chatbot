@@ -30,7 +30,7 @@ OPTIONS: dict[str, tuple[str, ...]] = {
     "registrant": ("guardian", "self", "unsure"),
 }
 
-# The source rows behind each criterion, carried so the reasoning is checkable from the code rather than from a…
+# The source rows behind each criterion, so the reasoning is checkable from the code.
 SOURCES: dict[str, tuple[str, ...]] = {
     "citizenship": ("ASP-027", "ASP-028", "ASP-038", "ASP-039", "ASP-240", "ASP-245"),
     "age_minimum": ("ASP-029", "ASP-041", "ASP-042", "ASP-241"),

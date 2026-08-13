@@ -16,7 +16,7 @@ class SpeakRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     persona: Persona
     language: Language
-    # Only mp3 is offered for now; the field exists so the client can ask and get a clean 400 rather than silently…
+    # Only mp3 for now; the field exists so another format gets a clean 400.
     format: str = "mp3"
     # Optional, used only for rate-limit bucketing.
     thread_id: str | None = None

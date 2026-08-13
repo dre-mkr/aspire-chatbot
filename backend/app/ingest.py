@@ -35,7 +35,7 @@ LANGUAGE_COLUMNS = {"language", "lang", "locale"}
 #: Used when the CSV names no language.
 DEFAULT_LANGUAGE = "en"
 
-#: An advisory lock key, so two processes booting at once cannot both decide the table is empty and both rewrite…
+#: Advisory lock key, so two processes booting at once cannot both rewrite an empty table.
 _INGEST_LOCK_KEY = 0x4153503133  # "ASP13"
 
 
@@ -65,7 +65,7 @@ def row_to_document(
     category_key = first_match(CATEGORY_COLUMNS)
 
     if question_key and answer_key:
-        # QA-shaped row: lead with the question so semantic search matches on it, then any extra columns that aren't al…
+        # QA-shaped row: lead with the question so semantic search matches on it.
         lines = []
         if category_key:
             lines.append(f"Category: {values[category_key]}")
@@ -81,7 +81,7 @@ def row_to_document(
         page_content = "\n".join(f"{key}: {value}" for key, value in values.items())
 
     metadata: dict[str, str | int] = {
-        # Scalars only, exactly as the Chroma implementation stored them: this dict is handed back to the client as a s…
+        # Scalars only, as Chroma stored them: this dict is handed back to the client as a source.
         **values,
         "source": source,
         "row": row_number,
@@ -141,7 +141,7 @@ def _rows_for(chunks: list[LangchainDocument], vectors: list[list[float]]) -> li
             f"Embedded {len(vectors)} vectors for {len(chunks)} chunks; refusing to write."
         )
 
-    # Per source row, so a long row's chunks are numbered 0, 1, 2 rather than all carrying the splitter's character…
+    # Counted per source row, so a long row's chunks are numbered 0, 1, 2 within that row.
     seen: dict[str, int] = {}
     rows: list[Document] = []
 
@@ -213,7 +213,7 @@ async def ingest(settings: Settings | None = None) -> int:
                 "No database configured. Postgres is the source of truth for the "
                 "knowledge base -- set DATABASE_URL and run `alembic upgrade head`."
             )
-        # Empty-and-rewrite in one transaction: readers see the old corpus until commit, then the new one.
+        # Empty-and-rewrite in one transaction: readers see the old corpus until commit.
         await db.execute(delete(Document))
         db.add_all(rows)
 
@@ -224,7 +224,7 @@ async def ingest(settings: Settings | None = None) -> int:
         len(rows),
     )
 
-    # A reloaded knowledge base must never be served from cache (P14-B).
+    # A reloaded knowledge base must never be served from cache.
     try:
         from app.cache import flush_answers
 

@@ -1,12 +1,8 @@
-/** Shared parts every widget is built from: tokens, a panel, a coin, and the two affordances that are not option… */
+/** Shared parts every widget is built from: tokens, panel, coin, actions. */
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import type { ColourToken } from "../../../lib/stream/types";
 
-export type ColourToken =
-	| "neutral"
-	| "accent"
-	| "positive"
-	| "caution"
-	| "muted";
+export type { ColourToken };
 
 /** The five tokens, as the CSS variables the stylesheet defines. */
 export function tone(token: ColourToken | undefined): {
@@ -67,14 +63,6 @@ export function useReducedMotion(): boolean {
 	return reduced;
 }
 
-/** Money in minor units, as a reader sees it. Mirrors `registry.money_display`. */
-export function money(cents: number, currency = "EC$"): string {
-	const sign = cents < 0 ? "-" : "";
-	const whole = Math.floor(Math.abs(cents) / 100);
-	const part = Math.abs(cents) % 100;
-	return `${sign}${currency}${whole.toLocaleString("en-US")}.${String(part).padStart(2, "0")}`;
-}
-
 /** The text equivalent, for a screen reader. */
 export function A11yText({ children }: { children: ReactNode }) {
 	const hidden: CSSProperties = {
@@ -107,41 +95,11 @@ export function Panel({
 }) {
 	return (
 		// `<figure>` rather than `<section role="group">`.
-		<figure
-			style={{
-				position: "relative",
-				margin: "0.75rem 0",
-				padding: "1rem",
-				borderRadius: "1rem",
-				border: "1px solid var(--hairline)",
-				background: "var(--wash-3)",
-			}}
-		>
+		<figure className="w-panel">
 			<A11yText>{a11yText}</A11yText>
-			<h3
-				style={{
-					margin: 0,
-					fontSize: "calc(var(--band-type, 16px) + 1px)",
-					fontWeight: 700,
-					color: "var(--plum-deep)",
-				}}
-			>
-				{title}
-			</h3>
-			{caption ? (
-				<p
-					style={{
-						margin: "0.25rem 0 0.75rem",
-						fontSize: "var(--band-type, 16px)",
-						color: "var(--slate)",
-					}}
-				>
-					{caption}
-				</p>
-			) : (
-				<div style={{ height: "0.75rem" }} />
-			)}
-			{children}
+			<h3 className="w-panel__title">{title}</h3>
+			{caption ? <p className="w-panel__caption">{caption}</p> : null}
+			<div className="w-panel__body">{children}</div>
 			{footer}
 		</figure>
 	);
@@ -153,53 +111,25 @@ export function WidgetActions({
 	onSkip,
 	doneLabel = "Got it",
 	skipLabel = "Skip",
+	/* Quiet while a step remains, so the card has one loud control at a time. */
+	doneTone = "primary",
 }: {
 	onDone: () => void;
 	onSkip: () => void;
 	doneLabel?: string;
 	skipLabel?: string;
+	doneTone?: "primary" | "quiet";
 }) {
-	const base: CSSProperties = {
-		minHeight: "var(--band-target, 44px)",
-		minWidth: "44px",
-		padding: "0.5rem 1rem",
-		borderRadius: "0.75rem",
-		fontSize: "var(--band-type, 16px)",
-		fontWeight: 600,
-		cursor: "pointer",
-	};
-
 	return (
-		<div
-			style={{
-				display: "flex",
-				gap: "0.5rem",
-				marginBlockStart: "0.875rem",
-				flexWrap: "wrap",
-			}}
-		>
+		<div className="w-actions">
 			<button
 				type="button"
 				onClick={onDone}
-				style={{
-					...base,
-					border: "1px solid var(--plum)",
-					background: "var(--plum)",
-					color: "white",
-				}}
+				className={`w-btn w-btn--${doneTone}`}
 			>
 				{doneLabel}
 			</button>
-			<button
-				type="button"
-				onClick={onSkip}
-				style={{
-					...base,
-					border: "1px solid var(--hairline)",
-					background: "transparent",
-					color: "var(--quiet)",
-				}}
-			>
+			<button type="button" onClick={onSkip} className="w-btn w-btn--quiet">
 				{skipLabel}
 			</button>
 		</div>
@@ -218,25 +148,20 @@ export function Coin({
 	size?: number;
 	delayMs?: number;
 }) {
-	const reduced = useReducedMotion();
-	const colours = tone(token);
 	return (
 		<span
 			aria-hidden="true"
-			style={{
-				display: "inline-block",
-				width: size,
-				height: size,
-				borderRadius: "50%",
-				background: filled ? colours.fill : "transparent",
-				border: `2px solid ${filled ? colours.line : "var(--hairline)"}`,
-				// Staggered entry, capped well under 600ms in total.
-				animation: reduced || !filled ? undefined : "none",
-				opacity: 1,
-				transition: reduced
-					? undefined
-					: `background-color 200ms ease ${Math.min(delayMs, 300)}ms`,
-			}}
+			className={filled ? "w-coin" : "w-coin w-coin--empty"}
+			// `accent` is the only token drawn differently; the rest are plain discs.
+			data-token={filled && token === "accent" ? "accent" : undefined}
+			style={
+				{
+					width: size,
+					height: size,
+					// Staggered entry, capped well under 600ms in total.
+					"--coin-delay": `${Math.min(delayMs, 300)}ms`,
+				} as CSSProperties
+			}
 		/>
 	);
 }
@@ -251,35 +176,21 @@ export function Bar({
 	token: ColourToken;
 	label: string;
 }) {
-	const reduced = useReducedMotion();
 	const colours = tone(token);
 	return (
-		<div style={{ marginBlockEnd: "0.5rem" }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					fontSize: "calc(var(--band-type, 16px) - 2px)",
-					color: "var(--slate)",
-				}}
-			>
+		<div className="w-bar">
+			<div className="w-bar__label">
 				<span>{label}</span>
 			</div>
-			<div
-				style={{
-					height: "0.75rem",
-					borderRadius: "999px",
-					background: "var(--wash-6)",
-					overflow: "hidden",
-				}}
-			>
+			<div className="w-bar__track">
 				<div
-					style={{
-						width: `${Math.max(0, Math.min(1, fraction)) * 100}%`,
-						height: "100%",
-						background: colours.line,
-						transition: reduced ? undefined : "width 320ms ease",
-					}}
+					className="w-bar__fill"
+					style={
+						{
+							"--fill": Math.max(0, Math.min(1, fraction)),
+							background: colours.line,
+						} as CSSProperties
+					}
 				/>
 			</div>
 		</div>

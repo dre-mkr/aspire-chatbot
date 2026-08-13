@@ -31,10 +31,16 @@ class SessionClaims:
     age_band: str
     account_status: str
     locale: str
+    #: Whether anybody proved who this is. False for a visitor who has not signed in.
+    #:
+    #: Distinct from `user_id`: a signed-out visitor is still given an anonymous
+    #: account row so their chats can be claimed when they sign up, so the id alone
+    #: cannot tell a visitor from a member.
+    identity_proven: bool = True
 
     @property
     def is_anonymous(self) -> bool:
-        return self.user_id is None
+        return self.user_id is None or not self.identity_proven
 
 
 def mint_session_token(
@@ -46,6 +52,7 @@ def mint_session_token(
     age_band: str,
     account_status: str,
     locale: str = "en",
+    identity_proven: bool = True,
     ttl: timedelta = TOKEN_TTL,
 ) -> str:
     """Sign a session's identity."""
@@ -58,6 +65,7 @@ def mint_session_token(
         "band": age_band,
         "acc": account_status,
         "loc": locale,
+        "prv": bool(identity_proven),
         "iat": int(now.timestamp()),
         "exp": int((now + ttl).timestamp()),
         "jti": uuid.uuid4().hex,
@@ -97,10 +105,14 @@ def decode_session_token(token: str | None, *, grace: timedelta = GRACE) -> Sess
         age_band=str(claims["band"]),
         account_status=str(claims["acc"]),
         locale=str(claims.get("loc") or "en"),
+        # A token minted before this claim existed is short-lived: the client mints a
+        # graph session per page load, so treating an absent claim as proven only ever
+        # applies to a signed-in member's token.
+        identity_proven=bool(claims.get("prv", True)),
     )
 
 
-#: Body fields a client is never allowed to set, because each of them is an identity claim the server mints.
+#: Body fields a client may never set -- each one is an identity claim the server mints.
 CLIENT_FORBIDDEN_FIELDS: tuple[str, ...] = (
     "persona",
     "age_band",

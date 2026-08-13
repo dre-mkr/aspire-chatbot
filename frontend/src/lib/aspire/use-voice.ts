@@ -120,11 +120,11 @@ export function useVoice({
 	const [captured, setCaptured] = useState(0);
 	const [level, setLevel] = useState(2);
 	const [note, setNote] = useState<VoiceNote | null>(null);
-	// Defaults on the server render, real preferences once mounted — unless the URL says, in which case the server…
+	// Defaults during SSR, stored preferences once mounted — unless the URL overrides.
 	const [storedLanguage, setStoredLanguage] = useState<VoiceLanguage>(
 		DEFAULT_PREFS.language,
 	);
-	/** The language in force: the address when it has an opinion, otherwise this device's remembered preference. */
+	/** The language in force: the URL if it says, else this device's preference. */
 	const language = languageFromUrl ?? storedLanguage;
 
 	/** Both places, deliberately. */
@@ -175,7 +175,7 @@ export function useVoice({
 		}
 	}, [autoSpeak, language, prefsLoaded, speed]);
 
-	// A 404 or a disabled module both mean "no voice", which the mic button shows as unavailable rather than as an…
+	// A 404 or a disabled module both mean "no voice": unavailable, not an error.
 	useEffect(() => {
 		let live = true;
 		fetchVoiceConfig().then((config) => {
@@ -373,10 +373,10 @@ export function useVoice({
 			synthesis.current = controller;
 			let url: string;
 			try {
-				// Streaming (P14-C): playback starts on the vendor's first chunk instead of after the whole file is synthesised…
+				// Playback starts on the vendor's first chunk, not after the whole file.
 				url = await speakStream(text, language, threadId, controller.signal);
 			} catch (error) {
-				// An abort is this component's own doing -- another answer was played, the reader stopped it, the shell unmount…
+				// An abort is always this component's own doing, so it earns no note.
 				if (error instanceof VoiceError) {
 					if (error.failure !== "aborted") showNote(error.failure);
 				} else {
@@ -411,7 +411,7 @@ export function useVoice({
 		[language, pausedId, playingId, showNote, speed, stopPlayback, threadId],
 	);
 
-	// Changing the speed mid-sentence applies to what is already playing rather than only to the next answer.
+	// A speed change applies to what is already playing, not just the next answer.
 	useEffect(() => {
 		if (audio.current) audio.current.playbackRate = Number(speed) || 1;
 	}, [speed]);

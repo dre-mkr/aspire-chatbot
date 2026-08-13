@@ -160,7 +160,7 @@ class TestTheWidgetPathAbsorbsEverything:
 
         outcome = await build_widget(a_request(), plan=plan, compose=rubbish, cache=None)
         assert not outcome.emitted
-        # Named, because "gate parse fired 40 times" is a prompt to fix and "the widget was rejected" is not.
+        # Named: "gate parse fired 40 times" is actionable; "rejected" is not.
         assert outcome.gate == "parse"
 
     @pytest.mark.asyncio
@@ -386,7 +386,7 @@ class TestNothingAfterTheProseCanTakeItAway:
 
         from app.learning.concepts import set_store
 
-        # An empty store is what forces the RAG path: nothing to resolve against, so `concept` is None and `select_chec…
+        # An empty store forces the RAG path: no concept, so no check item.
         empty = ConceptStore()
         empty.load([])
         set_store(empty)

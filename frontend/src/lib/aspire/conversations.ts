@@ -1,16 +1,24 @@
 /** Conversations, read back from the service. */
 
+import { API_URL } from "../config";
 import type { Source } from "./api";
 import type { StoredConversation, StoredMessage } from "./history";
 import { parseAnswer } from "./knowledge";
 import { authHeaders } from "./session";
 
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
-
 /** Long enough for a cold Neon instance, short enough not to hang the rail. */
 const TIMEOUT_MS = 12000;
+
+/**
+ * Mints the id for a conversation, in the browser, before anything is sent.
+ * The service adopts whatever it is given, which is what lets the landing page
+ * know a chat's address before it knows anything else about it.
+ */
+export function newThreadId(): string {
+	const uuid = globalThis.crypto?.randomUUID?.();
+	if (uuid) return uuid;
+	return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 interface WireMessage {
 	role: string;

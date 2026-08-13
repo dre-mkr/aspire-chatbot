@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-#: Deliberately not angle brackets, not backticks, and not any character a model reaches for on its own.
+#: Deliberately not brackets or backticks — not characters a model reaches for on its own.
 OPEN = "⟦widget⟧"
 CLOSE = "⟦/widget⟧"
 
