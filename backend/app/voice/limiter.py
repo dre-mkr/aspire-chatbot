@@ -1,44 +1,28 @@
-"""Per-session sliding-window rate limiting."""
+"""Per-session sliding-window rate limiting, with the voice settings applied."""
 
 from __future__ import annotations
 
-import threading
-import time
-from collections import defaultdict, deque
-from dataclasses import dataclass
-
+from app.limits import RateDecision, SlidingWindowLimiter as _Window
 from app.voice.config import VoiceSettings, get_voice_settings
 
-
-@dataclass(frozen=True)
-class RateDecision:
-    allowed: bool
-    retry_after_seconds: int
+__all__ = ["RateDecision", "SlidingWindowLimiter", "get_limiter"]
 
 
 class SlidingWindowLimiter:
+    """The shared limiter, with the window and the caps read from voice settings."""
+
     def __init__(self, settings: VoiceSettings | None = None) -> None:
         self._settings = settings or get_voice_settings()
-        self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
-        self._lock = threading.Lock()
+        # Its own window, so voice throttling never shares buckets with the chat limiter.
+        self._window = _Window()
 
     def check(self, bucket: str, session: str, limit: int) -> RateDecision:
-        window = self._settings.rate_window_seconds
-        now = time.monotonic()
-        key = (bucket, session)
-
-        with self._lock:
-            hits = self._hits[key]
-            while hits and now - hits[0] > window:
-                hits.popleft()
-
-            if len(hits) >= limit:
-                # Room frees up when the oldest hit falls out of the window.
-                retry_after = max(1, int(window - (now - hits[0])) + 1)
-                return RateDecision(False, retry_after)
-
-            hits.append(now)
-            return RateDecision(True, 0)
+        return self._window.check(
+            bucket,
+            session,
+            limit=limit,
+            window=self._settings.rate_window_seconds,
+        )
 
     def check_transcription(self, session: str) -> RateDecision:
         return self.check("stt", session, self._settings.max_transcriptions_per_window)
@@ -47,8 +31,7 @@ class SlidingWindowLimiter:
         return self.check("tts", session, self._settings.max_speech_per_window)
 
     def reset(self) -> None:
-        with self._lock:
-            self._hits.clear()
+        self._window.reset()
 
 
 _limiter: SlidingWindowLimiter | None = None

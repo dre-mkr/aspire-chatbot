@@ -51,7 +51,7 @@ def test_a_wrong_answer_reveals_nothing(all_words):
     payload = tools_module.submit_answer.invoke({"answer": "banana"}, config=cfg())
 
     assert payload["correct"] is False
-    # No answer, and no "close!" either: a near-miss signal is a side channel that narrows the word for anyone prob…
+    # No answer, and no "close!" either: a near-miss signal narrows the word.
     assert "teaching_note" not in payload
     assert_no_answers(payload, all_words, where="submit_answer(wrong)")
 
@@ -62,7 +62,7 @@ def test_a_correct_answer_returns_the_meaning_not_the_key(all_words):
 
     assert payload["correct"] is True
     assert payload["teaching_note"] == "what we use to buy the things we need"
-    # The word just solved is now known to the user anyway; what must not appear is any *unsolved* answer, includin…
+    # The solved word is known to the user anyway; no *unsolved* answer may appear.
     assert "INTEREST" not in json.dumps(payload).upper()
     assert payload["next_text"] == "STERINTE"
 
@@ -109,7 +109,7 @@ def test_an_entire_played_game_leaks_nothing_outside_a_reveal(all_words):
     seen.append(("quit_game", tools_module.quit_game.invoke({}, config=cfg())))
 
     for name, payload in seen:
-        # A reveal is the sanctioned exception, and only ever for the item the engine has already moved past.
+        # A reveal is the sanctioned exception, only for an item already passed.
         if payload.get("revealed") or "revealed_answer" in payload:
             assert payload.get("answer") or payload.get("revealed_answer")
             continue
@@ -156,7 +156,7 @@ def test_chat_response_schema_cannot_carry_an_answer():
         "eligibility_started",
     }
 
-    # The nested objects, because a closed model is only a guarantee while its own fields are checked.
+    # The nested objects too: a closed model guarantees only its own fields.
     assert set(StartedGame.model_fields) == {
         "game_type",
         "display_name",
@@ -164,7 +164,7 @@ def test_chat_response_schema_cannot_carry_an_answer():
         "total",
     }
 
-    # The eligibility card fetches its own question from its own endpoint, so nothing about the flow rides here --…
+    # The card fetches its own question from its own endpoint; nothing rides here.
     assert set(StartedEligibilityCheck.model_fields) == {"check", "language"}
 
 

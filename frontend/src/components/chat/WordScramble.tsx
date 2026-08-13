@@ -108,18 +108,7 @@ export function WordScramble({
 		setWrong(null);
 	}, [wordKey]);
 
-	/**
-	 * Which tray tiles are spent — DERIVED, never stored.
-	 *
-	 * It was a second `useState` kept in step with `slots` by hand, and the two
-	 * desynchronised: every placement read `slots` from a stale closure, so
-	 * clicks landing in one render batch all targeted the first empty slot while
-	 * each still marked its own tile used. The result was a card with four
-	 * letters consumed, no letters placed, and no way to finish the word.
-	 *
-	 * A tile is used exactly when a slot holds it. Deriving that makes the two
-	 * incapable of disagreeing, rather than merely unlikely to.
-	 */
+	/** Which tray tiles are spent — derived, never stored, so it cannot desync from `slots`. */
 	const used = useMemo(
 		() => tray.map((_, index) => slots.some((slot) => slot?.from === index)),
 		[tray, slots],
@@ -132,10 +121,7 @@ export function WordScramble({
 	const place = useCallback(
 		(index: number) => {
 			if (resolved) return;
-			// Both the guard and the target slot are decided against the CURRENT
-			// slots inside the updater, not against a closure. Two placements in
-			// one render batch would otherwise both aim at the first empty slot,
-			// and the second would overwrite the first.
+			// Guard and target slot are read from CURRENT slots in the updater, never a closure.
 			setSlots((current) => {
 				if (current.some((slot) => slot?.from === index)) return current;
 				const target = current.indexOf(null);
@@ -170,8 +156,7 @@ export function WordScramble({
 		}
 		const remap = new Map(order.map((old, next) => [old, next]));
 		setTray(order.map((i) => tray[i]));
-		// Slots keep their letters; only the tray index each came from moves --
-		// and `used` follows from that, so there is nothing else to re-map.
+		// Slots keep their letters; only the tray index moves, and `used` follows from that.
 		setSlots((current) =>
 			current.map((s) =>
 				s ? { ch: s.ch, from: remap.get(s.from) ?? s.from } : null,
@@ -185,7 +170,7 @@ export function WordScramble({
 			setLearned((current) => [...current, entry]);
 			setResolved(entry);
 			setSummary(done);
-			// The final numbers go up the moment they exist -- the launcher needs them to report the real score, and `onCha…
+			// Numbers go up as soon as they exist: the launcher needs them to report the real score.
 			if (done) onSummary?.(done);
 			if (next) onChanged(next);
 		},
@@ -293,7 +278,7 @@ export function WordScramble({
 				<span className="game__title">{copy.title}</span>
 				<span className="game__sub">{copy.sub(state.prompt.total)}</span>
 
-				{/* Decorative: the section's own label already announces which word this is, and four unlabelled dots read as no… */}
+				{/* Decorative: the section label already names the word, so bare dots would be noise. */}
 				<div className="game__steps" aria-hidden="true">
 					{Array.from({ length: state.prompt.total }, (_, i) => {
 						const n = i + 1;
@@ -411,7 +396,7 @@ export function WordScramble({
 							))}
 						</div>
 
-						{/* <output> rather than a div with role=status: this announces the result of the check the child just ran. */}
+						{/* <output>, not a role=status div: it announces the result of the check just run. */}
 						{wrong ? (
 							<output className="game__wrong">
 								<RetryIcon />

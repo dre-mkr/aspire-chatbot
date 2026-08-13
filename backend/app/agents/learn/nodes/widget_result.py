@@ -71,7 +71,7 @@ def recompute(interaction: Interaction) -> dict[str, Any]:
         }
 
     if interaction.widget_kind == "simulator":
-        # The formula the widget named is not in the interaction payload, so the client's computed value is what there…
+        # The formula is not in the payload, so the client's computed value is all there is.
         return dict(interaction.computed)
 
     return dict(interaction.computed)

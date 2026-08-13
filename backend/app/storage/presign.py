@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import logging
@@ -76,7 +75,7 @@ async def owns_application(application_id: str, claims: Any) -> bool:
     """Whether this caller may upload into this application."""
     from app.db import database_enabled, session
 
-    # No database means no applications table, so there is nothing this could be granting access to beyond the call…
+    # No database means no applications table, so the caller's own session id is all there is.
     if not database_enabled():
         return application_id == str(getattr(claims, "session_id", ""))
 
@@ -189,7 +188,8 @@ def presign_download(storage_key: str, *, ttl_seconds: int | None = None) -> str
     )
 
 
-# ── SigV4 ──────────────────────────────────────────────────────────────────── Implemented rather than pulled…
+# ── SigV4 ──
+# Implemented here rather than pulling in an AWS SDK for one signature.
 
 
 def _sign(
@@ -230,7 +230,7 @@ def _sign(
         for name in sorted(query)
     )
 
-    # Path-style (`endpoint/bucket/key`) or virtual-hosted (`bucket.endpoint/key`), decided by whether the endpoint…
+    # Path-style or virtual-hosted, decided by whether the endpoint host already names the bucket.
     bucket_in_host = host.split(":", 1)[0].startswith(f"{bucket}.")
     path = key if bucket_in_host else f"{bucket}/{key}"
 
@@ -244,7 +244,7 @@ def _sign(
             canonical_query,
             canonical_headers,
             header_names,
-            # Unsigned payload: the body is the file, and hashing 10MB in this process to sign a URL the browser will use w…
+            # Unsigned payload: the file bytes never pass through this process.
             "UNSIGNED-PAYLOAD",
         ]
     )
@@ -269,20 +269,6 @@ def _derive(secret: str, day: str, region: str) -> bytes:
         return hmac.new(key, message.encode(), hashlib.sha256).digest()
 
     return step(step(step(step(f"AWS4{secret}".encode(), day), region), "s3"), "aws4_request")
-
-
-def checksum(data: bytes) -> str:
-    """Base64 SHA-256, matching what storage returns, for integrity checks."""
-    return base64.b64encode(hashlib.sha256(data).digest()).decode("ascii")
-
-
-def storage_configured() -> bool:
-    """Whether uploads are possible at all. Read by the health endpoint."""
-    try:
-        _config()
-        return True
-    except StorageUnavailable:
-        return False
 
 
 def document_record(

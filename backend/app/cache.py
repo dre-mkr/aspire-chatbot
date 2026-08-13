@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import hashlib
 import json
@@ -72,14 +71,14 @@ def cache_key(
             "persona": persona or "",
             "status": account_status or "",
             "band": age_band or "",
-            # See `corpus_fingerprint`: an edited knowledge base must not keep serving answers built from the old one.
+            # An edited knowledge base must not keep serving answers built from the old one.
             "kb": corpus_fingerprint(),
         },
         sort_keys=True,
         ensure_ascii=False,
     )
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
-    # Namespaced, which it was not until P13-006 -- `namespace()` existed, said "any key this module invents needs…
+    # Namespaced: `namespace()` exists so every key this module invents is scoped to it.
     return f"{namespace()}answer:v2:{digest}"
 
 
@@ -178,12 +177,10 @@ async def put_answer(
         logger.warning("Cache write failed; the answer was still served.", exc_info=True)
 
 
-# --- Hit-rate accounting --------------------------------------------------- Two counters, so the hit rate is…
+# --- Hit-rate accounting ----------------------------------------------------
 
 #: How many hourly buckets make up the reported window.
 _WINDOW_HOURS = 6
-#: Long enough that the oldest bucket in the window is still readable.
-_BUCKET_TTL_SECONDS = (_WINDOW_HOURS + 1) * 3600
 
 
 def _bucket(hit: bool, hour: int) -> str:
@@ -192,20 +189,6 @@ def _bucket(hit: bool, hour: int) -> str:
 
 def _current_hour() -> int:
     return int(time.time()) // 3600
-
-
-async def record(hit: bool) -> None:
-    if not cache_enabled():
-        return
-    try:
-        key = _bucket(hit, _current_hour())
-        pipe = get_client().pipeline()
-        pipe.incr(key)
-        # Re-set on every write rather than only on creation.
-        pipe.expire(key, _BUCKET_TTL_SECONDS)
-        await pipe.execute()
-    except Exception:
-        pass  # accounting must never affect the request
 
 
 async def stats() -> dict[str, float | int | bool]:
@@ -236,102 +219,6 @@ async def stats() -> dict[str, float | int | bool]:
     }
 
 
-# --- Card-start rate ------------------------------------------------------- P8-003: `GAMES_INSTRUCTIONS` (648…
-
-async def record_turn(started_card: bool) -> None:
-    if not cache_enabled():
-        return
-    try:
-        hour = _current_hour()
-        pipe = get_client().pipeline()
-        for name in ("turns",) + (("cards",) if started_card else ()):
-            key = f"{namespace()}{name}:{hour}"
-            pipe.incr(key)
-            pipe.expire(key, _BUCKET_TTL_SECONDS)
-        await pipe.execute()
-    except Exception:
-        pass
-
-
-async def card_rate() -> dict[str, float | int]:
-    """How many turns started a card, over the reported window."""
-    if not cache_enabled():
-        return {"turns": 0, "cards": 0, "card_rate": 0.0}
-    hour = _current_hour()
-    hours = [hour - offset for offset in range(_WINDOW_HOURS)]
-    try:
-        values = await get_client().mget(
-            [f"{namespace()}turns:{h}" for h in hours]
-            + [f"{namespace()}cards:{h}" for h in hours]
-        )
-    except Exception:
-        return {"turns": 0, "cards": 0, "card_rate": 0.0}
-
-    counts = [int(value or 0) for value in values]
-    turns = sum(counts[:_WINDOW_HOURS])
-    cards = sum(counts[_WINDOW_HOURS:])
-    return {
-        "turns": turns,
-        "cards": cards,
-        "card_rate": round(cards / turns, 4) if turns else 0.0,
-    }
-
-
-# --- Stampede protection --------------------------------------------------- A miss let every concurrent calle…
-
-#: Long enough for a slow turn, short enough that a crashed worker does not block the next caller for meaningful…
-_LEASE_SECONDS = 30
-#: How long a loser waits before giving up and computing it itself.
-_WAIT_SECONDS = 8.0
-_POLL_SECONDS = 0.25
-
-
-async def acquire_lease(key: str) -> bool:
-    """True when this caller should compute. False means somebody else is."""
-    if not cache_enabled():
-        return True
-    try:
-        # `NX` is the whole mechanism: exactly one caller can create the key.
-        return bool(await get_client().set(f"{key}:lease", "1", nx=True, ex=_LEASE_SECONDS))
-    except Exception:
-        # A cache that cannot answer must not stop anyone computing.
-        return True
-
-
-async def release_lease(key: str) -> None:
-    if not cache_enabled():
-        return
-    try:
-        await get_client().delete(f"{key}:lease")
-    except Exception:
-        pass
-
-
-async def await_leader(key: str) -> dict[str, Any] | None:
-    """Wait briefly for the caller holding the lease to write its answer."""
-    if not cache_enabled():
-        return None
-    deadline = time.monotonic() + _WAIT_SECONDS
-    while time.monotonic() < deadline:
-        await asyncio.sleep(_POLL_SECONDS)
-        try:
-            raw = await get_client().get(key)
-        except Exception:
-            return None
-        if raw:
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                return None
-        try:
-            # The leader died, or finished without caching.
-            if not await get_client().exists(f"{key}:lease"):
-                return None
-        except Exception:
-            return None
-    return None
-
-
 async def ping() -> bool:
     """Verify Valkey answers, so a bad URL surfaces at boot and not mid-request."""
     client = get_client()
@@ -345,7 +232,8 @@ async def ping() -> bool:
         return False
 
 
-# --- Query-embedding cache (P14-D) ------------------------------------------ Embedding a query is a ~400 ms n…
+# --- Query-embedding cache ---
+# Embedding a query is a ~400 ms network round trip, so the vector is cached.
 
 def _pack_vector(vector: list[float]) -> str:
     return base64.b64encode(struct.pack(f"<{len(vector)}f", *vector)).decode("ascii")
@@ -362,7 +250,7 @@ def embedding_key(text: str, model: str) -> str:
 
 
 def _embedding_cache_on() -> bool:
-    # Deliberately NOT gated on `response_cache_enabled`: they are different trade-offs and one being off says noth…
+    # Deliberately NOT gated on `response_cache_enabled`: the two are independent trade-offs.
     return get_client() is not None and get_settings().embedding_cache_enabled
 
 
@@ -398,7 +286,8 @@ async def put_embedding(text: str, model: str, vector: list[float]) -> None:
         logger.warning("Embedding-cache write failed.", exc_info=True)
 
 
-# --- Semantic response cache, layer 2 (P14-B) -------------------------------- Layer 1 collapses different SPE…
+# --- Semantic response cache, layer 2 ---
+# Layer 1 collapses different spellings; this layer catches paraphrases by embedding distance.
 
 _SEMANTIC_DIMS = 384
 
@@ -548,12 +437,13 @@ async def semantic_register(
         logger.warning("Semantic-shelf write failed.", exc_info=True)
 
 
-# --- Flush on knowledge-base reload (P14-B) ---------------------------------- Belt and braces, not the primar…
+# --- Flush on knowledge-base reload ---
+# Belt and braces, not the primary defence: the corpus fingerprint already keys answers.
 
 #: Every key version this cache has ever written, live and retired.
 _FLUSH_PREFIXES = (
     "answer:v2:",
-    "answer:v1:",  # retired by P15-009
+    "answer:v1:",  # retired
     "semindex:v2:",
     "semindex:v1:",  # retired alongside it
     "embed:v1:",

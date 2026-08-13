@@ -1,4 +1,5 @@
 /** This browser's session, and the only thing that proves who it is. */
+import { API_URL } from "../config";
 
 const DEVICE_KEY = "aspire.device.v1";
 const TOKEN_KEY = "aspire.session.v1";
@@ -17,10 +18,6 @@ export interface Session {
 	/** When this token stops being accepted, in epoch milliseconds. */
 	expiresAt?: number;
 }
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
 
 /** Storage that degrades instead of throwing. */
 const memory = new Map<string, string>();

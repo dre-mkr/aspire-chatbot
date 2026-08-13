@@ -17,7 +17,8 @@ from typing import Any
 
 logger = logging.getLogger("aspire.timing")
 
-# --- Stage names --------------------------------------------------------- Spelled as constants so a typo is a…
+# --- Stage names ---
+# Spelled as constants so a typo is an ImportError, not a silently missing stage.
 
 T_LANG = "t_lang"
 T_PERSONA = "t_persona"
@@ -35,30 +36,30 @@ T_TTS_FIRST_BYTE = "t_tts_first_byte"
 T_IDENTITY = "t_identity"
 T_OPEN_CONVERSATION = "t_open_conversation"
 
-#: Wall time waiting for the identity lookup and the history window read, which P13-007 made concurrent (P13-005…
+#: Wall time waiting for the identity lookup and the history window read, run concurrently.
 T_SESSION_WAIT = "t_session_wait"
 
-#: What the reader waits for the response-cache lookup (P13-006).
+#: What the reader waits for the response-cache lookup.
 T_CACHE_LOOKUP = "t_cache_lookup"
 
-#: Cost of *starting* the concurrent corpus search, not of running it (P13-005).
+#: Cost of *starting* the concurrent corpus search, not of running it.
 T_RETRIEVE_KICKOFF = "t_retrieve_kickoff"
 
-#: Wall time waiting for everything that runs concurrently before the model: the corpus search and the conversat…
+#: Wall time waiting for the concurrent pre-model work: the corpus search and the write.
 T_CONCURRENT_WAIT = "t_concurrent_wait"
 
 #: Of that concurrent block, how long the corpus search specifically took to arrive.
 T_RETRIEVE_WAIT = "t_retrieve_wait"
 
-#: The layer-2 semantic cache's shelf read and comparison (P14-B), NOT counting the wait for the query embedding…
+#: The semantic cache's shelf read and comparison, NOT the wait for the query embedding.
 T_SEMANTIC_LOOKUP = "t_semantic_lookup"
 
-#: Two stages the brief does not name, added because without them the table measures everything except the thing…
+#: First tool call out of the agent, without which the table never measures the agent itself.
 T_AGENT_FIRST_TOOL = "t_agent_first_tool"
 #: First raw delta out of the agent, before `TurnBuffer` decides whether it may be forwarded.
 T_AGENT_FIRST_DELTA = "t_agent_first_delta"
 
-#: Durations derived by subtraction, because the model calls cannot be timed directly from out here -- the agent…
+#: Durations derived by subtraction: the model calls cannot be timed directly from out here.
 D_MODEL_CALL = "d_model_call"
 D_BUFFER_HOLD = "d_buffer_hold"
 
@@ -109,7 +110,7 @@ AUXILIARY_STAGES: tuple[str, ...] = (
 #: Every stage this module can report, in the order a table should show them.
 STAGES: tuple[str, ...] = DURATION_STAGES + MILESTONE_STAGES + AUXILIARY_STAGES
 
-#: Why a stage is expected to be missing or near-zero, printed beside `n/a` so the baseline explains itself with…
+#: Why a stage is expected to be missing, printed beside `n/a` so the table explains itself.
 ABSENT_REASONS: dict[str, str] = {
     T_LANG: "no detection: `language` is supplied by the client (ChatRequest.language)",
     T_PERSONA: "no resolution: `persona` is forwarded to the agent config unread",
@@ -158,12 +159,12 @@ class TurnTimings:
     output_token_count: int | None = None
     retrieved_chunk_count: int | None = None
     cache_hit: bool = False
-    #: Which layer answered a hit: "exact" or "semantic" (P14-B). None on a miss.
+    #: Which layer answered a hit: "exact" or "semantic". None on a miss.
     cache_layer: str | None = None
-    #: The provider's own count of the prompt, and how much of it was served from its prefix cache (P14-A).
+    #: The provider's own prompt count, and how much of it came from its prefix cache.
     provider_input_tokens: int | None = None
     provider_cached_input_tokens: int | None = None
-    #: The query embedding came from Valkey rather than the provider (P14-D).
+    #: The query embedding came from Valkey rather than the provider.
     embed_cache_hit: bool = False
     cold_start: bool = False
     endpoint: str = ""
@@ -188,11 +189,11 @@ class TurnTimings:
         """Fill in the stages that are differences between other stages."""
         got = self.stages
 
-        # The retriever span contains the embedding call, because Chroma embeds the query inside `similarity_search` an…
+        # Chroma embeds inside `similarity_search`, so the retrieve span includes the embedding.
         if T_RETRIEVE_TOTAL in got and T_EMBED in got:
             got.setdefault(T_RETRIEVE, max(0.0, round(got[T_RETRIEVE_TOTAL] - got[T_EMBED], 3)))
 
-        # The answering model call: from the request arriving to text existing, less every pre-model stage we measured…
+        # The answering model call: time to the first delta, less every pre-model stage measured.
         if T_AGENT_FIRST_DELTA in got:
             before_model = sum(got.get(stage, 0.0) for stage in PRE_MODEL_STAGES)
             got.setdefault(
@@ -330,7 +331,8 @@ def annotate(**facts: Any) -> None:
             setattr(timings, key, value)
 
 
-# --- Cold start ---------------------------------------------------------- True for the first measured turn in…
+# --- Cold start ---
+# True for the first measured turn in this process, and false for every one after.
 _cold_start_pending = True
 _cold_lock = threading.Lock()
 
@@ -429,7 +431,7 @@ def percentile(sorted_values: list[float], pct: float) -> float:
     return round(sorted_values[index], 3)
 
 
-#: Capacity is read from the environment rather than Settings because this is diagnostic plumbing that must be u…
+#: Capacity comes from the environment, not Settings: diagnostic plumbing is configured on its own.
 RING = TimingRing(capacity=int(os.environ.get("TIMINGS_RING_CAPACITY", "500") or 500))
 
 

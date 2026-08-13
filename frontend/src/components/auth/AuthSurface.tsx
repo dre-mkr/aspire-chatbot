@@ -42,7 +42,7 @@ export function AuthSurface({
 	return (
 		<div className="auth">
 			<div className="auth__panel">
-				{/* Ambient only, and hidden from assistive tech: two blurred washes that give the flat gradient some depth. */}
+				{/* Ambient only: two blurred washes that give the gradient depth. */}
 				<div className="auth__orb auth__orb--a" aria-hidden="true" />
 				<div className="auth__orb auth__orb--b" aria-hidden="true" />
 
@@ -105,7 +105,7 @@ export function AuthSurface({
 
 					{step ? (
 						<div className="auth__steps">
-							{/* The bars are decorative: the line beneath them says "Step 2 of 4" in words, which is the thing worth announci… */}
+							{/* Decorative: the line beneath states the step in words. */}
 							<div className="auth__segs" aria-hidden="true">
 								{Array.from({ length: step.total }, (_, index) => (
 									<span

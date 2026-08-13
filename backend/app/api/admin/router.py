@@ -297,7 +297,7 @@ async def document_url(
 
 class Transition(BaseModel):
     to: Status
-    #: Required, and non-empty. See the module docstring.
+    #: Required and non-empty: every transition records why it was made.
     reason: str = Field(min_length=3, max_length=2000)
     #: For `info_requested` only: the specific slot paths to reopen.
     slots: list[str] = Field(default_factory=list)
@@ -363,7 +363,7 @@ async def transition(
             {
                 "id": application_id,
                 "to": body.to,
-                # Cleared on every transition that is not info_requested, so a corrected application does not carry its old fla…
+                # Cleared on any transition that is not info_requested, so old flags do not linger.
                 "slots": body.slots if body.to == "info_requested" else [],
             },
         )
@@ -413,7 +413,7 @@ def _base_path(key: str) -> str:
     return key
 
 
-# ── the widget review queue (F3) ─────────────────────────────────────────────
+# ── the widget review queue ──────────────────────────────────────────────────
 
 
 class WidgetReview(BaseModel):
@@ -547,7 +547,7 @@ async def sign_in(body: Credentials, request: Request) -> dict[str, Any]:
         "token": result.token,
         "role": result.staff.role,
         "email": result.staff.email,
-        # The portal refuses to show the queue until this is cleared, so a seeded temporary password cannot become a pe…
+        # The portal blocks the queue until this is cleared, so a temporary password cannot stick.
         "must_change_password": result.must_change_password,
     }
 

@@ -466,7 +466,7 @@ async def render_teach(
 
     # ── tier 2: one retry, with the violation quoted ────────────────────────
     if invoke is not None:
-        # Every violation is quoted, not only the blocking ones: the model is rewriting anyway, so it may as well fix t…
+        # Every violation is quoted, not only blocking ones: the model is rewriting anyway.
         retry_block = (
             f"{turn_block}\n\n"
             "YOUR PREVIOUS ATTEMPT WAS REJECTED. What was wrong with it:\n"
@@ -490,7 +490,7 @@ async def render_teach(
         if retried and second.servable:
             return _finish(RenderResult(text=retried, tier=1, retry=True, contract=second), context)
 
-        # A retry that is merely IMPERFECT still beats the template, and the template is only better than a retry that…
+        # An imperfect retry still beats the template, unless it came out far too short.
         if retried and second.words >= contract_for(context.band).min_words * 0.6:
             logger.info(
                 "Serving an imperfect retry (%d words, %s) rather than the template.",
@@ -578,7 +578,7 @@ async def _generate(
             extra_instruction=turn_block,
         )
     else:
-        # No resolved session context: a unit test driving the renderer directly, or a turn where `resolve_context` did…
+        # No resolved session context: a unit test, or a turn where resolution did not run.
         messages = [
             SystemMessage(content=f"{role}\n\n{turn_block}"),
             HumanMessage(content=utterance),

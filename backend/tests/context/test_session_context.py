@@ -81,7 +81,7 @@ class TestEveryCellIsPresent:
         assert context.now.tzinfo is not None
 
     async def test_the_clock_is_st_kitts_not_utc(self):
-        """A deadline question answered in UTC is answered wrong by four hours, and the diagnosis found no prompt receiv…"""
+        """A deadline question answered in UTC is wrong by four hours."""
         context = await _resolve()
 
         assert context.now.utcoffset() == ST_KITTS.utcoffset(context.now.replace(tzinfo=None))
@@ -195,7 +195,7 @@ class TestMasteryIsAFraction:
 
 class TestItRunsBeforeRouting:
     async def test_the_node_is_wired_between_safety_in_and_cards(self):
-        """The whole value of the object is that the router and every agent read the same one, which requires it to be r…"""
+        """Router and agents read one object, so it must resolve before routing."""
         import inspect
 
         from app.graph import main_graph

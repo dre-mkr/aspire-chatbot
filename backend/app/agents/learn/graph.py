@@ -67,7 +67,7 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
             rows,
             last_lesson_id=learning.get("lesson_id"),
             last_seen_at=max((row.last_seen for row in rows if row.last_seen), default=None),
-            # A wrong answer does not raise mastery, so without this the lesson just revealed is still "the first unmastere…
+            # Wrong answers do not raise mastery, so without this the same lesson gets re-picked.
             covered_this_session=set(learning.get("concepts_touched") or []),
         )
         logger.info(
@@ -195,7 +195,7 @@ def grade_answer(question: CheckQuestion, answer: str) -> bool:
         correct = question.options[question.answer].strip().lower()
         if text == correct or correct in text:
             return True
-        # A tapped chip sends the option text; a typed answer might be the option's first word, or its index.
+        # A tapped chip sends the option text; a typed answer may be the option's index.
         if text in {str(question.answer), str(question.answer + 1)}:
             return True
         return False
@@ -504,7 +504,7 @@ def _entry(state: AspireState) -> str:
 
     learning = state.get("learning") or {}
 
-    # ── the tutor's claim on the turn ─────────────────────────────────────── Three ways in, and the first two are…
+    # ── the tutor's claim on the turn ───────────────────────────────────────
     from app.graph.nodes.safety_in import latest_user_text
 
     # An empty concept store means nothing has been seeded, and the tutor would decline every turn.
@@ -512,7 +512,19 @@ def _entry(state: AspireState) -> str:
 
     if len(get_store()):
         text = latest_user_text(state)
-        if learning.get("active_concept_id") and learning.get("resolution_source") != "none":
+        # Asking to move on is a request the phase table already knows how to honour
+        # (`branch` places another lesson). The claim below would swallow it, and then
+        # nothing could ever leave a concept: `branch` is only reached from the phase
+        # table, which this claim returns before.
+        if wants_a_different_lesson(text):
+            # `branch` is where the request is honoured, and it can only be reached
+            # from the phase table below; without a lesson to move on from, place one.
+            return "branch" if learning.get("lesson_id") else "resume_or_place"
+
+        if (
+            learning.get("active_concept_id")
+            and learning.get("resolution_source") != "none"
+        ):
             return "tutor"
         if asks_about_a_topic(text) and not learning.get("question_id"):
             return "tutor"
@@ -558,7 +570,7 @@ def build_learn_graph(
     graph = StateGraph(AspireState)
 
     graph.add_node("resume_or_place", make_resume_or_place(curriculum, store))
-    # The name is load-bearing: `INTERNAL_NODES` suppresses this node's model call by name, and without that the pl…
+    # Name is load-bearing: `INTERNAL_NODES` suppresses "plan_widget", so its JSON never streams.
     graph.add_node("plan_widget", make_plan_widget(curriculum, retrieve=retrieve, plan=plan))
     graph.add_node("teach", make_teach(curriculum, invoke=invoke))
     graph.add_node("check", make_check(curriculum))
@@ -700,7 +712,7 @@ def _structured(model_setting: str):
             return {}
 
         text = _text_of_response(response).strip()
-        # The composer returns a widget object; the planner and the disambiguator return a small decision object.
+        # Planner and disambiguator return a small decision object; the composer a widget.
         from app.agents.learn.widgets import _unfence
 
         try:

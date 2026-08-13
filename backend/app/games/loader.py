@@ -81,7 +81,7 @@ def _common(raw: dict, *, set_language: Language, where: str) -> dict[str, Any]:
                     f"{where}: verified_on must be YYYY-MM-DD, got {verified_raw!r}"
                 ) from exc
 
-    # A volatile item with no date can never be served, which is the safe outcome — but it is almost always an auth…
+    # A volatile item with no date is never served: safe, but almost always an authoring slip.
     if volatility is Volatility.VOLATILE and verified_on is None:
         logger.warning(
             "%s: marked volatile with no verified_on, so it will never be served.",
@@ -212,7 +212,7 @@ def _set_from(path: Path) -> GameSet:
     except ValueError as exc:
         raise SeedError(f"{where}: unknown language {raw['language']!r}") from exc
 
-    # The folder is the authority: a file claiming `language: es` under en/ is a copy-paste that would otherwise se…
+    # The folder is the authority, so a mislabelled file cannot serve the wrong language.
     folder = path.parent.name
     _require(
         folder == language.value,

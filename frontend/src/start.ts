@@ -3,7 +3,7 @@ import { createStart } from "@tanstack/react-start";
 import { securityHeadersMiddleware, timingMiddleware } from "./middleware";
 
 export const startInstance = createStart(() => ({
-	/** Full document SSR is the default: every route renders to HTML on the server unless it opts out. */
+	/** Full document SSR by default; a route must opt out. */
 	defaultSsr: true,
 	requestMiddleware: [securityHeadersMiddleware],
 	functionMiddleware: [timingMiddleware],

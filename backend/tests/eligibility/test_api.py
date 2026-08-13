@@ -53,7 +53,7 @@ def test_the_labels_come_back_in_the_flow_s_language(client: TestClient):
 
 
 def test_an_unknown_language_falls_back_rather_than_refusing(client: TestClient):
-    """A flow that will not start because a client sent an unfamiliar locale is worse than one that starts in Englis…"""
+    """An unfamiliar locale starts the flow in English rather than refusing to start at all."""
     body = start(client, language="pt-BR")
     assert body["active"] is True
     assert body["language"] == "en"

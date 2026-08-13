@@ -12,7 +12,7 @@ os.environ.setdefault(
 
 from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
 
-from app.agents.escalate import graph as esc  # noqa: E402
+from app.agents.escalation import graph as esc  # noqa: E402
 from app.graph.state import initial_state  # noqa: E402
 
 
@@ -55,7 +55,7 @@ class TestTriage:
         assert decision.notify_guardian is True
 
     def test_an_adult_in_distress_is_high_without_a_guardian_notification(self):
-        """There is no guardian record to notify, and inventing one would be telling somebody's next of kin about their…"""
+        """An adult has no guardian record, and inventing one would breach privacy."""
         decision = esc.triage(
             state_for(persona="aurora", age_band="adult", safety_flags={"distress": True})
         )
@@ -105,7 +105,7 @@ class TestRedaction:
         assert "[collected: national_id]" in summary
 
     def test_a_summary_written_upstream_is_not_rewritten(self):
-        """The QA agent redacts at the point of escalating; doing it twice would turn `[collected: email]` into a second…"""
+        """The QA agent already redacted; a second pass would mangle its markers."""
         state = state_for(escalation_summary="already done")
         assert esc.summarise(state) == {}
 

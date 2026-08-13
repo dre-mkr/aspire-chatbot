@@ -8,7 +8,7 @@ from app.voice.registry import (
     VoiceRegistryError,
     validate_registry,
 )
-# Exported as `voice_router`, not `router`: re-exporting the name `router` here would shadow the `app.voice.rou…
+# Named `voice_router` so it does not shadow the `app.voice.router` submodule.
 from app.voice.router import router as voice_router
 from app.voice.speakable import speakable
 

@@ -2,6 +2,7 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { AlertIcon } from "#/components/icons";
 import {
 	changePassword,
 	type Role,
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/admin")({
 type Session = { role: Role; email: string; mustChange: boolean } | null;
 
 function AdminShell() {
-	// Restored from the tab, but WITHOUT a role read back from storage — a role the client remembered is a role the…
+	// Restored from the tab, but never the role: a remembered role is forgeable.
 	const [session, setSession] = useState<Session>(() =>
 		token() ? { role: "reviewer", email: "", mustChange: false } : null,
 	);
@@ -33,73 +34,46 @@ function AdminShell() {
 	}
 
 	return (
-		<div
-			style={{
-				minHeight: "100vh",
-				background: "var(--wash-3)",
-				fontFamily: "var(--font-sans)",
-				color: "var(--prose)",
-			}}
-		>
-			<header
-				style={{
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "space-between",
-					gap: "1rem",
-					padding: "0.75rem 1.25rem",
-					background: "white",
-					borderBottom: "1px solid var(--hairline)",
-				}}
-			>
-				<nav style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
-					<strong style={{ color: "var(--plum-deep)" }}>ASPIRE admin</strong>
+		<div className="adm-shell">
+			<header className="adm-bar">
+				<nav className="adm-nav">
+					<img
+						className="adm-nav__mark"
+						src="/brand/aspire-wordmark.png"
+						width={190}
+						height={48}
+						alt="ASPIRE"
+					/>
 					<Link
 						to="/admin/applications"
-						style={{ color: "var(--plum)", textDecoration: "none" }}
-						activeProps={{ style: { fontWeight: 700 } }}
+						className="adm-nav__link"
+						activeProps={{ "data-active": "" }}
 					>
 						Applications
 					</Link>
 					<Link
 						to="/admin/widgets"
-						style={{ color: "var(--plum)", textDecoration: "none" }}
-						activeProps={{ style: { fontWeight: 700 } }}
+						className="adm-nav__link"
+						activeProps={{ "data-active": "" }}
 					>
 						Widgets
 					</Link>
 				</nav>
-				<span
-					style={{
-						display: "flex",
-						gap: "0.75rem",
-						alignItems: "center",
-						fontSize: "0.85rem",
-						color: "var(--quiet)",
-					}}
-				>
+				<span className="adm-who">
 					{session.email}
 					<button
 						type="button"
+						className="adm-signout"
 						onClick={() => {
 							setToken(null);
 							setSession(null);
-						}}
-						style={{
-							minHeight: "44px",
-							padding: "0.375rem 0.875rem",
-							borderRadius: "0.5rem",
-							border: "1px solid var(--hairline)",
-							background: "transparent",
-							color: "var(--slate)",
-							cursor: "pointer",
 						}}
 					>
 						Sign out
 					</button>
 				</span>
 			</header>
-			<main style={{ padding: "1.25rem", maxWidth: "84rem", margin: "0 auto" }}>
+			<main className="adm-main">
 				<Outlet />
 			</main>
 		</div>
@@ -119,6 +93,7 @@ function SignInForm({
 	return (
 		<Centred>
 			<form
+				className="adm-card"
 				onSubmit={async (event) => {
 					event.preventDefault();
 					setBusy(true);
@@ -138,10 +113,16 @@ function SignInForm({
 						setBusy(false);
 					}
 				}}
-				style={card}
 			>
-				<h1 style={heading}>ASPIRE admin</h1>
-				<p style={subheading}>
+				<img
+					className="adm-card__mark"
+					src="/brand/aspire-wordmark.png"
+					width={190}
+					height={48}
+					alt="ASPIRE"
+				/>
+				<h1 className="adm-card__title">Staff sign-in</h1>
+				<p className="adm-card__sub">
 					A separate sign-in from the chat. Your session is held for this tab
 					only.
 				</p>
@@ -153,6 +134,7 @@ function SignInForm({
 					value={email}
 					onChange={setEmail}
 					autoComplete="username"
+					placeholder="you@aspire.kn"
 				/>
 				<Field
 					id="staff-password"
@@ -161,11 +143,12 @@ function SignInForm({
 					value={password}
 					onChange={setPassword}
 					autoComplete="current-password"
+					placeholder="Your password"
 				/>
 
 				{problem ? <Problem>{problem}</Problem> : null}
 
-				<button type="submit" disabled={busy} style={primary}>
+				<button type="submit" disabled={busy} className="adm-primary">
 					{busy ? "Checking…" : "Sign in"}
 				</button>
 			</form>
@@ -183,6 +166,7 @@ function ChangePasswordForm({ onChanged }: { onChanged: () => void }) {
 	return (
 		<Centred>
 			<form
+				className="adm-card"
 				onSubmit={async (event) => {
 					event.preventDefault();
 					if (next !== confirm) {
@@ -202,10 +186,16 @@ function ChangePasswordForm({ onChanged }: { onChanged: () => void }) {
 						setBusy(false);
 					}
 				}}
-				style={card}
 			>
-				<h1 style={heading}>Choose a password</h1>
-				<p style={subheading}>
+				<img
+					className="adm-card__mark"
+					src="/brand/aspire-wordmark.png"
+					width={190}
+					height={48}
+					alt="ASPIRE"
+				/>
+				<h1 className="adm-card__title">Choose a password</h1>
+				<p className="adm-card__sub">
 					Your account was set up with a temporary password. Change it before
 					going any further — the queue is not available until you do.
 				</p>
@@ -238,7 +228,7 @@ function ChangePasswordForm({ onChanged }: { onChanged: () => void }) {
 
 				{problem ? <Problem>{problem}</Problem> : null}
 
-				<button type="submit" disabled={busy} style={primary}>
+				<button type="submit" disabled={busy} className="adm-primary">
 					{busy ? "Saving…" : "Save and continue"}
 				</button>
 			</form>
@@ -249,20 +239,7 @@ function ChangePasswordForm({ onChanged }: { onChanged: () => void }) {
 /* ── the small shared pieces ────────────────────────────────────────────── */
 
 function Centred({ children }: { children: ReactNode }) {
-	return (
-		<div
-			style={{
-				minHeight: "100vh",
-				display: "grid",
-				placeItems: "center",
-				background: "var(--wash-6)",
-				fontFamily: "var(--font-sans)",
-				padding: "1rem",
-			}}
-		>
-			{children}
-		</div>
-	);
+	return <div className="adm-page">{children}</div>;
 }
 
 function Field({
@@ -273,6 +250,7 @@ function Field({
 	onChange,
 	autoComplete,
 	hint,
+	placeholder,
 }: {
 	id: string;
 	label: string;
@@ -281,44 +259,27 @@ function Field({
 	onChange: (value: string) => void;
 	autoComplete: string;
 	hint?: string;
+	placeholder?: string;
 }) {
+	const hintId = `${id}-hint`;
 	return (
-		<div style={{ marginBlockEnd: "0.875rem" }}>
-			<label
-				htmlFor={id}
-				style={{
-					display: "block",
-					fontSize: "0.85rem",
-					marginBlockEnd: "0.25rem",
-					color: "var(--slate)",
-				}}
-			>
+		<div className="adm-field">
+			<label className="adm-field__label" htmlFor={id}>
 				{label}
 			</label>
 			<input
 				id={id}
+				className="adm-field__input"
 				type={type}
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				autoComplete={autoComplete}
+				placeholder={placeholder}
+				aria-describedby={hint ? hintId : undefined}
 				required
-				style={{
-					width: "100%",
-					minHeight: "44px",
-					padding: "0.5rem 0.75rem",
-					borderRadius: "0.5rem",
-					border: "1px solid var(--hairline)",
-					fontSize: "1rem",
-				}}
 			/>
 			{hint ? (
-				<p
-					style={{
-						margin: "0.25rem 0 0",
-						fontSize: "0.8rem",
-						color: "var(--quiet)",
-					}}
-				>
+				<p className="adm-field__hint" id={hintId}>
 					{hint}
 				</p>
 			) : null}
@@ -328,52 +289,9 @@ function Field({
 
 function Problem({ children }: { children: ReactNode }) {
 	return (
-		<p
-			role="alert"
-			style={{
-				margin: "0 0 0.875rem",
-				padding: "0.5rem 0.75rem",
-				borderRadius: "0.5rem",
-				background: "var(--danger-wash)",
-				border: "1px solid var(--danger-line)",
-				color: "var(--danger)",
-				fontSize: "0.9rem",
-			}}
-		>
+		<p role="alert" className="adm-problem">
+			<AlertIcon size={17} />
 			{children}
 		</p>
 	);
 }
-
-const card = {
-	width: "min(26rem, 100%)",
-	padding: "1.5rem",
-	borderRadius: "1rem",
-	background: "white",
-	border: "1px solid var(--hairline)",
-} as const;
-
-const heading = {
-	margin: "0 0 0.5rem",
-	fontSize: "1.25rem",
-	color: "var(--plum-deep)",
-} as const;
-
-const subheading = {
-	margin: "0 0 1.25rem",
-	color: "var(--quiet)",
-	fontSize: "0.9rem",
-	lineHeight: 1.45,
-} as const;
-
-const primary = {
-	width: "100%",
-	minHeight: "44px",
-	borderRadius: "0.5rem",
-	border: "1px solid var(--plum)",
-	background: "var(--plum)",
-	color: "white",
-	fontWeight: 600,
-	fontSize: "1rem",
-	cursor: "pointer",
-} as const;

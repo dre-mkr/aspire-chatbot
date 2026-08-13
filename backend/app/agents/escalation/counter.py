@@ -5,10 +5,9 @@ from __future__ import annotations
 import re
 from typing import Final
 
+#: `LIMIT` is the contract's clarification limit, under this module's own name.
+from app.agents.escalation.contract import CLARIFICATION_LIMIT as LIMIT
 from app.agents.escalation.contract import EscalationReason
-
-#: Consecutive unresolved turns on one intent before a person is fetched.
-from app.agents.escalate.graph import CLARIFICATION_LIMIT as LIMIT  # noqa: E402
 
 __all__ = ["LIMIT", "intent_key", "bump", "clear", "at_limit", "escalation_for"]
 

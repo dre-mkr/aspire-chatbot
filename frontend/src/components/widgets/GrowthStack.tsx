@@ -1,9 +1,9 @@
 /** Two coin stacks and a "Next year" button. */
 import { useState } from "react";
+import { ChevronRightIcon } from "#/components/icons";
 import type { GrowthStackWidget } from "../../lib/stream/types";
 import { compoundInterest, moneyDisplay } from "../../lib/widgets/formulas";
-import { useAgeBand } from "../chat/AgeBandProvider";
-import { Coin, Panel, useReducedMotion, WidgetActions } from "./primitives";
+import { Coin, Panel, WidgetActions } from "./primitives";
 
 /** Above this, one coin stands for several and the caption says so. */
 const MAX_COINS = 24;
@@ -21,8 +21,6 @@ export function GrowthStack({
 	onSkip: () => void;
 }) {
 	const [period, setPeriod] = useState(0);
-	const band = useAgeBand();
-	const reduced = useReducedMotion();
 
 	const result = compoundInterest(
 		widget.principal_cents,
@@ -68,6 +66,8 @@ export function GrowthStack({
 			a11yText={widget.a11y_text}
 			footer={
 				<WidgetActions
+					// Loud only once there is no year left to run.
+					doneTone={finished ? "primary" : "quiet"}
 					onDone={() =>
 						onSettle(
 							{ periods: period },
@@ -78,51 +78,26 @@ export function GrowthStack({
 				/>
 			}
 		>
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "1fr 1fr",
-					gap: "0.75rem",
-					alignItems: "end",
-				}}
-			>
+			<div className="w-stats">
 				<Stack
 					label={widget.saved_label}
 					amount={saved}
 					coins={Math.round(saved / perCoinSaved)}
 					token="neutral"
-					reduced={reduced}
 				/>
 				<Stack
 					label={widget.earned_label}
 					amount={earned}
 					coins={Math.round(earned / perCoinEarned)}
 					token="accent"
-					reduced={reduced}
 				/>
 			</div>
 
 			{perCoinSaved > 100 ? (
-				<p
-					style={{
-						marginBlockStart: "0.5rem",
-						fontSize: "calc(var(--band-type, 16px) - 3px)",
-						color: "var(--faint)",
-					}}
-				>
-					Each coin is {moneyDisplay(perCoinSaved)}
-				</p>
+				<p className="w-note">Each coin is {moneyDisplay(perCoinSaved)}</p>
 			) : null}
 
-			<p
-				aria-live="polite"
-				style={{
-					marginBlockStart: "0.75rem",
-					fontSize: "var(--band-type, 16px)",
-					fontWeight: 600,
-					color: "var(--plum-deep)",
-				}}
-			>
+			<p aria-live="polite" className="w-running">
 				{period === 0
 					? `Starting out: ${moneyDisplay(saved)}`
 					: `After ${period} ${widget.period_label}${period === 1 ? "" : "s"}: ${result.display}`}
@@ -130,40 +105,20 @@ export function GrowthStack({
 
 			{finished && widget.reveal_line ? (
 				// Only after the final period.
-				<p
-					style={{
-						marginBlockStart: "0.5rem",
-						padding: "0.75rem",
-						borderRadius: "0.75rem",
-						background: "var(--wash-m-10)",
-						fontSize: "var(--band-type, 16px)",
-						color: "var(--plum-deep)",
-						fontWeight: 600,
-					}}
-				>
-					{widget.reveal_line}
-				</p>
+				<p className="w-reveal">{widget.reveal_line}</p>
 			) : null}
 
 			{finished ? null : (
-				<button
-					type="button"
-					onClick={advance}
-					style={{
-						marginBlockStart: "0.75rem",
-						minHeight: `${band.touchTarget}px`,
-						width: "100%",
-						borderRadius: "0.875rem",
-						border: "1px solid var(--plum)",
-						background: "var(--plum)",
-						color: "white",
-						fontSize: "var(--band-type, 16px)",
-						fontWeight: 700,
-						cursor: "pointer",
-					}}
-				>
-					Next {widget.period_label} ▶
-				</button>
+				<div className="w-advance">
+					<button
+						type="button"
+						onClick={advance}
+						className="w-btn w-btn--primary"
+					>
+						Next {widget.period_label}
+						<ChevronRightIcon size={17} />
+					</button>
+				</div>
 			)}
 		</Panel>
 	);
@@ -189,55 +144,24 @@ function Stack({
 	amount,
 	coins,
 	token,
-	reduced,
 }: {
 	label: string;
 	amount: number;
 	coins: number;
 	token: "neutral" | "accent";
-	reduced: boolean;
 }) {
 	const shown = Math.max(0, Math.min(coins, MAX_COINS));
 	return (
 		<div>
-			<div
-				aria-hidden="true"
-				style={{
-					display: "flex",
-					flexDirection: "column-reverse",
-					gap: "0.15rem",
-					minHeight: "6rem",
-					justifyContent: "flex-start",
-				}}
-			>
+			{/* The pile wraps: one column of 24 coins ran ~400px tall. */}
+			<div aria-hidden="true" className="w-coins">
 				{/* Keyed by a minted id rather than by the loop index. */}
 				{coinIds(shown).map((id, index) => (
-					<Coin
-						key={id}
-						filled
-						token={token}
-						size={16}
-						delayMs={reduced ? 0 : index * 10}
-					/>
+					<Coin key={id} filled token={token} size={16} delayMs={index * 10} />
 				))}
 			</div>
-			<p
-				style={{
-					margin: "0.5rem 0 0",
-					fontSize: "calc(var(--band-type, 16px) - 2px)",
-					color: "var(--slate)",
-				}}
-			>
-				{label}
-			</p>
-			<p
-				style={{
-					margin: 0,
-					fontSize: "var(--band-type, 16px)",
-					fontWeight: 700,
-					color: token === "accent" ? "var(--magenta)" : "var(--plum-deep)",
-				}}
-			>
+			<p className="w-stat__label">{label}</p>
+			<p className="w-stat__value" data-token={token}>
 				{moneyDisplay(amount)}
 			</p>
 		</div>

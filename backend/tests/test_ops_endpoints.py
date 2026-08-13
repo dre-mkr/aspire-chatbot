@@ -45,7 +45,7 @@ def test_disabled_debug_route_is_indistinguishable_from_an_absent_one(client):
         "yes",
         "on",
     }:
-        # A dev box that deliberately enables the endpoint cannot assert the disabled behaviour; skipping keeps the sui…
+        # A box that enables the endpoint cannot test the disabled path, so skip rather than fail.
         pytest.skip("TIMINGS_ENDPOINT_ENABLED is set; the disabled path is not testable here")
 
     disabled = client.get("/debug/timings")

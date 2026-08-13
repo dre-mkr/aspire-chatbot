@@ -1,13 +1,10 @@
 /** Conversations, read back from the service. */
 
+import { API_URL } from "../config";
 import type { Source } from "./api";
 import type { StoredConversation, StoredMessage } from "./history";
 import { parseAnswer } from "./knowledge";
 import { authHeaders } from "./session";
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
 
 /** Long enough for a cold Neon instance, short enough not to hang the rail. */
 const TIMEOUT_MS = 12000;

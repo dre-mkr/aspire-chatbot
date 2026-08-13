@@ -69,7 +69,8 @@ class SessionContext(BaseModel):
     #: The rolling summary `persist` has been writing all along.
     running_summary: str = ""
 
-    # ── learning ───────────────────────────────────────────────────────────── `concept_id -> 0.0-1.0`.
+    # ── learning ──
+    #: `concept_id -> 0.0-1.0`.
     mastery: dict[str, float] = Field(default_factory=dict)
     concepts_seen_today: list[str] = Field(default_factory=list)
     #: The last game played, by name.
@@ -79,7 +80,8 @@ class SessionContext(BaseModel):
     open_application: ApplicationRef | None = None
     last_escalation: TicketRef | None = None
 
-    # ── environment ────────────────────────────────────────────────────────── The corpus fingerprint already used…
+    # ── environment ──
+    #: The corpus fingerprint from `app.cache`.
     kb_version: str = ""
     now: datetime = Field(default_factory=now_local)
 

@@ -9,7 +9,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-#: Thresholds from §12 of the Track L brief. Above these is a regression.
+#: Thresholds for the learning agent. Above these is a regression.
 TEACH_FALLBACK_MAX = 0.02
 WIDGET_GATE_FAILED_MAX = 0.15
 RESOLUTION_NONE_MAX = 0.08

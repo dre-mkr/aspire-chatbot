@@ -255,7 +255,7 @@ async def _build(
 
     key = plan_hash(request, kind)
 
-    # ── cache ─────────────────────────────────────────────────────────────── Before composition, so a hit skips B…
+    # Checked before composition, so a hit skips the compose call entirely.
     if cache is not None:
         try:
             hit = await cache.get(request.concept.id, request.band, request.locale, key)

@@ -1,1 +1,1 @@
-"""The escalation contract: what a handoff to a person must carry."""
+"""Escalation: the contract for a handoff to a person, and the subgraph that makes one."""

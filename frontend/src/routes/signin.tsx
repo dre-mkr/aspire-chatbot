@@ -61,7 +61,7 @@ function SignIn() {
 		try {
 			const result = await signIn(email.trim(), password);
 			resetScopedCaches();
-			// The claimed conversations have to appear without a manual reload, so the list is asked for again the moment t…
+			// Refetched at once so claimed conversations appear without a reload.
 			await queryClient.invalidateQueries({
 				queryKey: keys.allConversations(),
 			});

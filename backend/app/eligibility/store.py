@@ -38,7 +38,7 @@ class InMemorySessionStore:
                 return None
             if self._expired(session, now):
                 del self._sessions[session_id]
-                # No session id in the message: it is the conversation id, and this line would otherwise be the one place a log…
+                # No session id: it is the conversation id, and logs must not carry it.
                 logger.info("An eligibility session expired and was discarded.")
                 return None
             return session
@@ -48,7 +48,7 @@ class InMemorySessionStore:
         session.updated_at = now
         with self._lock:
             self._sessions[session.session_id] = session
-            # Opportunistic sweep, so abandoned answers are cleared by the next writer rather than by a background task nob…
+            # Opportunistic sweep: the next writer clears abandoned answers, no background task.
             if len(self._sessions) > 1:
                 for key in [
                     k

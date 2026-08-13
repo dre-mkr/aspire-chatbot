@@ -184,7 +184,7 @@ class TeachingConcept:
 
         embedding = get("embedding", None)
         if embedding is not None and not isinstance(embedding, list):
-            # asyncpg returns pgvector as a string unless a codec is registered; `np.ndarray` arrives from the SQLAlchemy p…
+            # pgvector arrives as a string without a codec, or as a numpy array; coerce either.
             embedding = _as_vector(embedding)
 
         return cls(
@@ -341,7 +341,7 @@ class ConceptStore:
         self._matrix_ids = [concept_id for concept_id, _ in vectors]
         matrix = np.asarray([vector for _, vector in vectors], dtype=np.float32)
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-        # A zero vector would divide by zero and poison the whole matrix with NaN, taking every OTHER concept's score w…
+        # A zero vector would divide by zero and poison every other concept's score with NaN.
         norms[norms == 0] = 1.0
         self._matrix = matrix / norms
 
@@ -419,12 +419,12 @@ class ConceptStore:
                 alias_words = _content_words(alias)
                 if not alias_words:
                     continue
-                # A whole alias appearing in the utterance is as good a signal as this method has, and is scored above the reso…
+                # A whole alias in the utterance is this method's strongest signal.
                 if alias.lower() in lowered:
                     score = max(score, 0.90)
                     continue
                 overlap = len(alias_words & words) / len(alias_words)
-                # Scaled to peak at 0.72 -- above the resolve threshold when every word of an alias is present and below it oth…
+                # Peaks at 0.72: full alias overlap clears the resolve threshold, partial does not.
                 score = max(score, overlap * 0.72)
 
             slug_words = _content_words(concept.slug.replace("_", " "))

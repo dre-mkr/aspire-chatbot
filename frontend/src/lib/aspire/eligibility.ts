@@ -1,8 +1,5 @@
 /** The eligibility half of the ASPIRE backend client. */
-
-const API_URL = (
-	import.meta.env.VITE_ASPIRE_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+import { API_URL } from "../config";
 
 /** Every action is a tap away from the next; a slow one reads as broken. */
 const TIMEOUT_MS = 10_000;
@@ -248,7 +245,7 @@ export function loadEligibilityResult(
 	threadId: string,
 ): StoredEligibility | null {
 	const stored = readMap<StoredEligibility>(RESULT_KEY)[threadId];
-	// Storage is shared with older builds and with hand-editing, so nothing out of it is trusted structurally.
+	// Storage is shared with older builds and hand-edits, so trust no shape from it.
 	if (!stored?.result?.verdict || !Array.isArray(stored.result.body))
 		return null;
 	return stored;

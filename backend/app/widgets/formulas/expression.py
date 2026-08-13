@@ -68,7 +68,7 @@ def parse(source: str, allowed_names: set[str]) -> ast.Expression:
 
         if isinstance(node, ast.Constant):
             if not isinstance(node.value, (int, float)) or isinstance(node.value, bool):
-                # `bool` is a subclass of `int`, so it passes the numeric check and must be excluded explicitly.
+                # `bool` subclasses `int`, so it passes the numeric check and needs excluding.
                 raise ExpressionError("only numeric literals are allowed")
 
         if isinstance(node, ast.Name):

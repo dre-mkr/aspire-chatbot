@@ -42,7 +42,7 @@ export function RouteError({ error }: { error: Error }) {
 				This page could not be loaded. Trying again often works.
 			</p>
 			<div className="route-state__actions">
-				{/* A real reload, not a router navigation: whatever failed may have left state behind that a soft retry would me… */}
+				{/* A real reload: a soft retry would keep whatever state broke. */}
 				<button
 					type="button"
 					className="route-state__action"
@@ -66,7 +66,7 @@ export function RoutePending() {
 				className="route-state__orb route-state__orb--pulse"
 				aria-hidden="true"
 			/>
-			{/* `<output>` rather than `<p role="status">`: it carries the role implicitly, so the semantics are identical an… */}
+			{/* `<output>` carries `role="status"` implicitly, with less markup. */}
 			<output className="sr-only">Loading.</output>
 		</div>
 	);

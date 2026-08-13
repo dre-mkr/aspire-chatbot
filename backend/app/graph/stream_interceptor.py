@@ -11,10 +11,11 @@ from typing import Any
 from app.config import get_settings
 from app.schemas.directives import WidgetDirective, directive_payload
 from app.widgets.sentinel import CLOSE, OPEN
+from app.messages import text_of
 
 logger = logging.getLogger(__name__)
 
-# `OPEN` / `CLOSE` (U+27E6 / U+27E7) are re-exported from `widgets.sentinel`, which is also what `safety_out` s…
+# `OPEN` / `CLOSE` (U+27E6 / U+27E7) are re-exported from `widgets.sentinel`, their one definition.
 __all__ = ["OPEN", "CLOSE", "WIDGET_AGENTS", "INTERNAL_NODES", "StreamInterceptor"]
 
 #: The agents that may emit widgets.
@@ -32,7 +33,7 @@ INTERNAL_NODES: frozenset[str] = frozenset(
         "doc_check",       # a vision verdict, as JSON
         "persist",         # the rolling summary
         "summarise",       # the escalation summary
-        # The tutor is here for a DIFFERENT reason than the rest of this list, and it is the more important one.
+        # The tutor is here for a different reason: its lesson is republished once validated.
         "tutor",
     }
 )
@@ -67,13 +68,13 @@ def _partial_citation_suffix(text: str) -> int:
     """How many trailing characters might still become a citation marker."""
     open_at = text.rfind("[")
     if open_at == -1:
-        # No bracket, but a trailing space might be the one that precedes the marker in the next chunk.
+        # No bracket, but a trailing space may be the one preceding a marker in the next chunk.
         trailing = len(text) - len(text.rstrip(" \t"))
         return trailing
 
     tail = text[open_at:]
     if "]" in tail or len(tail) > _CITATION_MAX:
-        # Either it is already complete -- and `strip_citation_markers` will deal with it -- or it is too long to be on…
+        # Either complete, which `strip_citation_markers` handles, or too long to be a marker.
         return len(text) - len(text.rstrip(" \t"))
 
     # `[`, then letters, then optionally a hyphen and digits.
@@ -114,7 +115,7 @@ class StreamInterceptor:
     #: Every character of prose that actually crossed the wire, in order.
     prose: str = ""
 
-    #: A citation marker was stripped from the front of the reply, so the space it left behind is still owed a remov…
+    #: A marker was stripped from the reply's front, so the space it left is still owed removal.
     _eat_leading_space: bool = False
 
     _ordinal: int = 0
@@ -124,7 +125,7 @@ class StreamInterceptor:
     _pending: str = ""
     #: Widget JSON accumulated between the sentinels.
     _widget: str | None = None
-    #: Per-gate failure counts, surfaced by `stats()` for the metrics D7 wants.
+    #: Per-gate failure counts, surfaced by `stats()` for metrics.
     _gate_failures: dict[str, int] = field(default_factory=dict)
     _widgets_emitted: int = 0
 
@@ -135,13 +136,7 @@ class StreamInterceptor:
     # ── the entry point ─────────────────────────────────────────────────────
 
     async def process(self, chunk: Any) -> list[WireEvent]:
-        """One graph chunk in, zero or more wire events out.
-
-        `(mode, payload)` from `astream`. The three-element form that
-        `subgraphs=True` produces is accepted too, so that turning the flag on
-        cannot silently drop every event -- but the transport does not use it;
-        see the note in `api/stream.py` for what it cost.
-        """
+        """One `astream` chunk in, zero or more wire events out; `subgraphs=True` 3-tuples work too."""
         if not isinstance(chunk, tuple):
             return []
         if len(chunk) == 3:
@@ -170,7 +165,7 @@ class StreamInterceptor:
         if node in INTERNAL_NODES:
             return []
 
-        text = _text_of(message)
+        text = text_of(message)
         if not text:
             return []
 
@@ -277,7 +272,7 @@ class StreamInterceptor:
                 self._eat_leading_space = False
 
         text = stripped
-        # Accumulated as it goes out, so the turn's reply is what the READER received rather than what the model produc…
+        # Accumulated as it goes out: what the reader received, not what the model produced.
         self.prose += text
         return WireEvent("token", {"i": self._next(), "t": text})
 
@@ -329,7 +324,7 @@ class StreamInterceptor:
                 self.locale = meta["locale"]
             return []
 
-        # `turn` is the closing summary `persist` writes: the chips, the citations, the directives a node put in state,…
+        # `turn` is the closing summary `persist` writes: chips, citations, and state directives.
         turn = payload.get("turn")
         if isinstance(turn, dict):
             self.turn = turn
@@ -364,7 +359,7 @@ class StreamInterceptor:
         self._gate_failures[gate] = self._gate_failures.get(gate, 0) + 1
 
     def stats(self) -> dict[str, Any]:
-        """Per-turn counters, for the metrics D7 surfaces."""
+        """Per-turn counters, for metrics."""
         return {
             "events": self._ordinal,
             "widgets_emitted": self._widgets_emitted,
@@ -375,15 +370,3 @@ class StreamInterceptor:
 def _buffer_limit() -> int:
     return get_settings().widget_buffer_limit_bytes
 
-
-def _text_of(message: Any) -> str:
-    content = getattr(message, "content", None)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""

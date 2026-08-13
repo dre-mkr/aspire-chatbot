@@ -1,16 +1,7 @@
-# Claude Code session state.
-#
-# `launch.json` is shared dev configuration and IS tracked -- it records how to
-# start the API and the Vite server, including the `app.serve` entry point that
-# the checkpointer needs on Windows (see P15-023).
-#
-# Everything else under `.claude/` is per-session scratch. `worktrees/` in
-# particular holds a full checked-out git worktree, so committing it would nest
-# a second copy of the repository inside this one.
+# Claude Code session state. `launch.json` is tracked shared dev config; the rest
+# is per-session scratch, and `worktrees/` would nest a second copy of the repo.
 .claude/*
 !.claude/launch.json
 
-# Seeding checkpoints. Regenerable by `scripts/seed_concepts.py`, ~2.5MB of
-# intermediate model output, and the DELIVERABLES beside them (taxonomy.json,
-# concepts-review.csv, KB-GAPS.md) are what a reviewer actually reads.
-learning/.seed/
+# Checkpoints and deliverables of `scripts/seed_concepts.py` -- all regenerable.
+learning/

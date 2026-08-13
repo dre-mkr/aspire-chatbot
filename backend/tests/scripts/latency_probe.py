@@ -27,7 +27,7 @@ from app.timing import (  # noqa: E402
     percentile,
 )
 
-# The console this runs on is cp1252 by default, and a table full of box-drawing characters killed the first re…
+# The console here is cp1252 by default, and box-drawing characters would kill the report.
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -106,7 +106,7 @@ def graph_session(
 
 def ask(base_url: str, case: dict[str, Any], timeout: float) -> dict[str, Any]:
     """One turn."""
-    # A fresh session per case, so every probe turn is an opening turn -- the turn a first-time reader actually wai…
+    # A fresh session per case, so every probe turn is an opening turn.
     token, _ = graph_session(base_url, timeout=timeout)
 
     payload = json.dumps({"message": case["q"]}).encode()

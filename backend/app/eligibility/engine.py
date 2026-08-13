@@ -164,7 +164,7 @@ class EligibilityEngine:
         year = reminder_year(session.answers, self._today or date.today())
         if decision.copy_key == "age_minimum" and year is not None:
             body.append(str(strings["year"]).format(year=year))
-        # "Here is what you can do instead" is the part that stops a not-yet reading as a door closing, so it is append…
+        # The "meanwhile" line stops a not-yet reading as a door closing, so it goes last.
         if "meanwhile" in strings:
             body.append(str(strings["meanwhile"]))
 
@@ -233,7 +233,7 @@ class EligibilityEngine:
 
         session.answers[question_id] = value
 
-        # Answering `age` can change the plan underneath us -- picking "Under 5" inserts `age_exact` at index 1, pickin…
+        # Answering `age` reshapes the plan, so re-derive the index from the new question list.
         questions = plan(session.answers)
         session.index = questions.index(question_id) + 1
 

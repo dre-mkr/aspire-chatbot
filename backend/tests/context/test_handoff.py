@@ -136,7 +136,7 @@ class TestDoNotReaskIsStructural:
         draft = _draft()
         slot = pick_slot(draft, handoff=_handoff(do_not_reask=every))
 
-        # Guardian section exhausted, so the walk moves to the child section rather than returning None or looping.
+        # Guardian slots exhausted, so the walk moves on to the child section.
         assert slot is None or slot.path.startswith("child.")
 
     def test_next_missing_takes_the_barred_set_directly(self):

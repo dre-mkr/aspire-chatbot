@@ -100,6 +100,6 @@ def test_chat_is_metered_without_requiring_a_session(client):
 
     refused = client.post("/v2/chat/stream", json=body)
     assert refused.status_code == 429
-    # And the 429 outranks the 401: the limiter is consulted first, so a throttled caller is told they are throttle…
+    # The limiter runs first, so a throttled caller gets 429 rather than 401.
     assert refused.status_code != 401
     assert "Retry-After" in refused.headers

@@ -214,7 +214,7 @@ def test_concurrent_retrieval_is_not_in_the_ttft_budget():
     assert T_EMBED in AUXILIARY_STAGES
     assert T_RETRIEVE in AUXILIARY_STAGES
     assert T_CONCURRENT_WAIT in DURATION_STAGES
-    # The write and the search overlap each other, so neither is a budget line; the single `t_concurrent_wait` that…
+    # The write and the search overlap, so only the single `t_concurrent_wait` is a budget line.
     assert T_OPEN_CONVERSATION in AUXILIARY_STAGES
     assert T_RETRIEVE_WAIT in AUXILIARY_STAGES
 

@@ -123,6 +123,25 @@ _REGISTRATION_CHIPS: dict[str, dict[str, list[str]]] = {
 }
 
 
+def _holding_agent(state: AspireState) -> str | None:
+    """Who the turn is recorded against when a card answers instead of an agent.
+
+    A card is claimed before the router runs, so nothing has chosen an agent this
+    turn. Defaulting to the literal "qa_agent" stamped readers with an agent their
+    row never granted -- a 9-12 reader was recorded as `qa_agent` when only
+    `qa_agent_limited` is theirs -- and, because stickiness ignores an active agent
+    outside the allowed list, silently dropped stickiness on the following turn.
+
+    The access matrix orders every row with that reader's default agent first, which
+    is exactly the fallback wanted here.
+    """
+    active = state.get("active_agent")
+    if active:
+        return str(active)
+    allowed = state.get("allowed_agents") or []
+    return str(allowed[0]) if allowed else None
+
+
 def _last_human(state: AspireState) -> str:
     for message in reversed(state.get("messages") or []):
         if getattr(message, "type", None) == "human":
@@ -148,11 +167,7 @@ def make_intent_gate(
     """The node that decides whether this turn is a card."""
 
     async def intent_gate(state: AspireState) -> dict[str, Any]:
-        # A continuation turn (widget interaction, game result) carries no new
-        # message; `_last_human` would re-read the PREVIOUS turn's text from the
-        # checkpoint and re-open the card it already opened. Measured: closing a
-        # finished game re-launched it, because "can we play true or false" was
-        # still the last human message.
+        # A continuation turn has no new message; `_last_human` would re-open the previous card.
         flags = state.get("safety_flags") or {}
         if any(flags.get(name) for name in ("widget_interaction", "game_result")):
             return {}
@@ -171,12 +186,12 @@ def make_intent_gate(
             if card is not None:
                 return card
 
-        # Before the registration help and before the router: somebody who has asked for a person is not asking anythin…
+        # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
             return asked
 
-        # Before the registration help, because it is the more specific of the two: "create a guardian account" is an a…
+        # Before registration help: "create a guardian account" is the more specific intent.
         card = _open_signup(state, message)
         if card is not None:
             return card
@@ -240,7 +255,7 @@ def _open_signup(state: AspireState, message: str) -> dict[str, Any] | None:
         "ui_directives": [
             directive_payload(SignupDirective(role=role))  # type: ignore[arg-type]
         ],
-        "active_agent": state.get("active_agent") or "qa_agent",
+        "active_agent": _holding_agent(state),
         "safety_flags": {"card": "signup"},
     }
 
@@ -348,7 +363,7 @@ def _open_eligibility(
         "ui_directives": [
             directive_payload(EligibilityDirective(language=locale))  # type: ignore[arg-type]
         ],
-        "active_agent": state.get("active_agent") or "qa_agent",
+        "active_agent": _holding_agent(state),
         "safety_flags": {"card": "eligibility"},
     }
 
@@ -368,7 +383,7 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
         return {
             "quick_replies": [_GAME_LABELS.get(name, name) for name in playable],
             "messages": [_ask_which(band)],
-            "active_agent": state.get("active_agent") or "qa_agent",
+            "active_agent": _holding_agent(state),
         }
 
     learning = state.get("learning") or {}
@@ -379,13 +394,13 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
         return {
             "quick_replies": [_GAME_LABELS.get(name, name) for name in playable],
             "messages": [_ask_which(band)],
-            "active_agent": state.get("active_agent") or "qa_agent",
+            "active_agent": _holding_agent(state),
         }
 
     logger.info("game card opened game=%s concept=%s band=%s", chosen, concept, band)
     return {
         "ui_directives": [directive],
-        "active_agent": state.get("active_agent") or "qa_agent",
+        "active_agent": _holding_agent(state),
         "safety_flags": {"card": "game"},
     }
 

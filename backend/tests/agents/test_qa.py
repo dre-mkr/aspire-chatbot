@@ -132,7 +132,7 @@ class TestAudienceFilter:
         assert nodes._audience(state_for("x", active_agent=agent)) == audience
 
     def test_an_untagged_row_is_visible_to_everyone(self):
-        """Defaulting to hidden would empty the corpus for two agents on the day the tags were added."""
+        """Defaulting to hidden would empty the corpus for two agents the day tags were added."""
         chunk = KBChunk(kb_id="ASP-001", content="x")
         assert nodes._permitted(chunk, "public")
         assert nodes._permitted(chunk, "youth")
@@ -217,7 +217,7 @@ class TestGroundCheck:
     async def test_an_invented_figure_escalates(self):
         """The failure RAG systems actually have."""
         state = state_for("what is the minimum deposit")
-        # The right chunk WAS retrieved -- coverage is total, so the relevance gate passes and this test is about the a…
+        # The right chunk WAS retrieved, so this isolates the figure check from the relevance gate.
         state["retrieved"] = chunks_for("ASP-003")
         state["messages"].append(
             AIMessage(content="The minimum opening deposit is EC$500 [ASP-003].")
@@ -280,7 +280,7 @@ class TestGroundCheck:
 
     @pytest.mark.asyncio
     async def test_the_escalation_summary_is_redacted(self):
-        """The summary only exists once the third attempt earns a person, so the redaction has to be asserted there."""
+        """The summary only exists on the third attempt, so redaction has to be asserted there."""
         from app.agents.escalation import counter
 
         node = nodes.make_ground_check()
@@ -553,11 +553,7 @@ class TestFollowUpChips:
         assert nodes.follow_up_chips(state_for("q"), [], set()) == []
 
     def test_the_snippet_drops_the_column_scaffolding(self):
-        """A reader must never be shown `id:` and `subcategory:`.
-
-        `ingest.row_to_document` stores a row as labelled column lines, and the
-        sources panel is reader-facing copy, not a database dump.
-        """
+        """A reader must never be shown `id:` and `subcategory:` in the sources panel."""
         row = (
             "Category: Eligibility\n"
             "Question: What is the maximum age to join ASPIRE?\n"
@@ -574,14 +570,7 @@ class TestFollowUpChips:
         )
 
     def test_a_fully_cited_answer_still_offers_chips(self):
-        """The failure this pool exists for, measured against the live service.
-
-        `qa_rerank_k` is 4, so a good answer is handed four extracts and cites
-        all four -- and every candidate is then excluded as already-cited. The
-        turn produced NO quick_replies directive at all. The reranker's dropped
-        hits are the fallback, and they are the right one: real corpus
-        questions, ranked by the same retrieval, that the answer did not use.
-        """
+        """An answer citing every extract still gets chips, from the reranker's dropped hits."""
         cited = self._chunks("What is ASPIRE?", "Who can join?")
         related = [
             KBChunk(
@@ -600,12 +589,7 @@ class TestFollowUpChips:
         assert chips == ["What documents are needed?"]
 
     def test_a_chip_restating_a_cited_row_is_not_offered(self):
-        """Two rows, one question. Excluding by id alone is not enough.
-
-        Measured: an eligibility answer that cited the maximum-age row offered
-        "What is the maximum age cap for ASPIRE participation?" straight back,
-        because it is a different row asking the same thing.
-        """
+        """Two rows, one question: excluding by id alone offers the same thing straight back."""
         chunks = self._chunks("What is the maximum age to join ASPIRE?")
         related = [
             KBChunk(
@@ -630,11 +614,7 @@ class TestFollowUpChips:
         assert chips == ["How do I apply?"]
 
     def test_a_question_asked_earlier_in_the_thread_is_not_offered(self):
-        """Deduping against the last turn alone is not enough.
-
-        A chip offering something answered six turns ago reads as the assistant
-        not having listened, and the reader cannot know it would only repeat.
-        """
+        """Dedupe against the whole thread: a chip answered six turns ago would only repeat."""
         state = state_for("What documents are needed?")
         state["messages"] = [
             HumanMessage(content="Who can join ASPIRE?"),

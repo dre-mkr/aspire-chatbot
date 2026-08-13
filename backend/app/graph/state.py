@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 
 from app.schemas.directives import UIDirective
 
-# ── the four closed vocabularies identity is drawn from ────────────────────── Literal rather than str through…
+# ── the four closed vocabularies identity is drawn from ──
+# Literal rather than str, so an out-of-set value is a type error and not a runtime surprise.
 
 Persona = Literal["stella", "orion", "aurora", "nova"]
 AgeBand = Literal["5-8", "9-12", "13-15", "16-18", "adult"]
@@ -57,11 +58,9 @@ class Citation(BaseModel):
     title: str = ""
     #: The question this row was authored to answer.
     question: str = ""
-    #: The opening of the row's text. The inline `[ASP-xxx]` marker is stripped
-    #: before the prose reaches the reader, so this panel is the only provenance
-    #: there is -- and a bare title is not provenance.
+    #: Row text opening -- the `[ASP-xxx]` marker is stripped, so this panel is the only provenance.
     snippet: str = ""
-    #: The sentence or clause in the answer this reference supports, when the grounding check could attribute one.
+    #: The clause in the answer this reference supports, when grounding could attribute one.
     supports: str = ""
 
 
@@ -97,7 +96,8 @@ def merge_citations(
     return merged
 
 
-# ── agent-local state ──────────────────────────────────────────────────────── TODO(C2/E1): these become real…
+# ── agent-local state ──
+# TODO: these stay `Any` until the agent subgraphs declare their own state schemas.
 
 LearningState = Any
 RegistrationState = Any
@@ -109,7 +109,11 @@ class AspireState(TypedDict, total=False):
     # ── identity: written by `hydrate`, from token claims only ──────────────
     session_id: str
     #: None for an anonymous caller, which is a first-class state rather than an error.
+    #: Present but unproven for a visitor: a signed-out caller is still given an
+    #: anonymous account row so their chats survive until they sign up.
     user_id: str | None
+    #: Whether anybody proved who this is. `guard` reads this, not `user_id`.
+    identity_proven: bool
     device_id: str
     persona: Persona
     age_band: AgeBand
@@ -128,9 +132,7 @@ class AspireState(TypedDict, total=False):
 
     # ── retrieval ───────────────────────────────────────────────────────────
     retrieved: list[KBChunk]
-    #: Fused hits the reranker dropped, still ranked. Not shown to the model --
-    #: they are where follow-up chips come from, because a good answer cites
-    #: every chunk it was given and would otherwise offer nothing to tap.
+    #: Ranked hits the reranker dropped, kept out of the model but used to build follow-up chips.
     qa_related: list[KBChunk]
     citations: Annotated[list[Citation], merge_citations]
     #: 0.0-1.0.
@@ -138,10 +140,10 @@ class AspireState(TypedDict, total=False):
     #: The pronoun-resolved search query.
     qa_query: str
 
-    # ── escalation ────────────────────────────────────────────────────────── Why this turn is going to a person,…
+    # ── escalation: why this turn is going to a person, and the ticket that records it ──
     escalation_reason: str | None
     escalation_summary: str | None
-    #: Written by `escalate_agent` once the ticket exists, so the reference is in state for the transcript and for a…
+    #: Written by `escalate_agent` once the ticket exists, so later turns can quote the reference.
     escalation_ticket: str | None
     escalation_priority: str | None
     #: `{intent_key: consecutive_unresolved_turns}`, at most one entry.
@@ -158,9 +160,9 @@ class AspireState(TypedDict, total=False):
     #: Whether the client should speak this turn.
     speak: bool
 
-    # ── safety bookkeeping ────────────────────────────────────────────────── Flags raised by `safety_in`, consume…
+    # ── safety bookkeeping: flags raised by `safety_in` and read by the nodes after it ──
     safety_flags: dict[str, Any]
-    #: Set when a node has decided the turn is over and no agent should run -- a guard refusal, an injection block.
+    #: Set when a node ends the turn early -- a guard refusal, an injection block.
     halt_reason: str | None
 
 

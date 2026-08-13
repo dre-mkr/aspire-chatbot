@@ -94,3 +94,38 @@ def test_every_minted_claim_is_a_forbidden_body_field():
     """A claim the server mints must be one `hydrate` refuses from a body."""
     minted = {"persona", "age_band", "account_status", "user_id", "session_id", "device_id"}
     assert minted <= set(CLIENT_FORBIDDEN_FIELDS)
+
+
+class TestProvenIdentityCrossesTheToken:
+    """`user_id` cannot answer "is this a member": a signed-out visitor has one too."""
+
+    def test_an_unproven_session_round_trips_as_anonymous(self):
+        token = mint_session_token(
+            session_id="s-1",
+            user_id="0f8e0f57-0000-4000-8000-000000000000",
+            device_id="d-1",
+            persona="aurora",
+            age_band="adult",
+            account_status="prospect",
+            identity_proven=False,
+        )
+        claims = decode_session_token(token)
+        assert claims is not None
+        assert claims.identity_proven is False
+        # It still carries the id, so the visitor's chats remain claimable.
+        assert claims.user_id == "0f8e0f57-0000-4000-8000-000000000000"
+        assert claims.is_anonymous is True
+
+    def test_a_member_session_is_proven(self):
+        token = mint_session_token(
+            session_id="s-2",
+            user_id="0f8e0f57-0000-4000-8000-000000000001",
+            device_id="d-1",
+            persona="aurora",
+            age_band="adult",
+            account_status="guardian",
+        )
+        claims = decode_session_token(token)
+        assert claims is not None
+        assert claims.identity_proven is True
+        assert claims.is_anonymous is False

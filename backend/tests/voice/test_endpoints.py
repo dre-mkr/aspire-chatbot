@@ -69,7 +69,7 @@ def settings(tmp_path) -> VoiceSettings:
         voice_nova="v-nova",
         voice_cache_dir=tmp_path / "voice_cache",
         max_transcriptions_per_window=3,
-        # Deliberately above breaker_failure_threshold (3) so the breaker test exercises the breaker rather than trippi…
+        # Above breaker_failure_threshold (3) so the breaker trips before this window limit does.
         max_speech_per_window=10,
     )
 

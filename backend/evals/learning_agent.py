@@ -361,7 +361,7 @@ async def l5(_live: bool) -> Result:
     # Mastery decrements and floors.
     from app.learning.mastery import Evidence, MasteryRow, apply
 
-    # The rule is "wrong TWICE decrements", not "every wrong decrements", and that distinction is the hint ladder's…
+    # The rule is "wrong TWICE decrements", not "every wrong decrements".
     row = MasteryRow(concept_id="CON-0042", score=1)
     after_one = apply(row, Evidence.WRONG)
     after_two = apply(after_one, Evidence.WRONG)
@@ -521,18 +521,12 @@ async def l10(live: bool) -> Result:
     result = Result("L10", "every number traces to a KB row or an anchor")
     concept = a_concept()
 
-    try:
-        from scripts.seed_concepts import numbers_in
-    except ModuleNotFoundError:
-        # `scripts/` is not in every checkout; the helper is three lines, so a
-        # local twin keeps the grounding gate running rather than skipping it.
-        import re as _re
-
-        def numbers_in(text: str) -> set[float]:
-            return {
-                float(match.replace(",", ""))
-                for match in _re.findall(r"\d[\d,]*(?:\.\d+)?", text or "")
-            }
+    def numbers_in(text: str) -> set[float]:
+        """Every number in the text, commas stripped."""
+        return {
+            float(match.replace(",", ""))
+            for match in re.findall(r"\d[\d,]*(?:\.\d+)?", text or "")
+        }
 
     permitted = set(concept.numeric_anchors.values()) | {0.0, 1.0, 2.0, 3.0}
     mapping: list[str] = []

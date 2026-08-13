@@ -82,10 +82,10 @@ def test_retrieved_text_never_becomes_a_system_instruction(poisoned_csv):
     with poisoned_csv.open(newline="", encoding="utf-8-sig") as handle:
         rows = list(csv.DictReader(handle))
 
-    # `context.recent` holds stored rows -- `role` and `content` -- not LangChain messages, so the stand-in matches…
+    # `context.recent` holds stored rows -- `role` and `content` -- not LangChain messages.
     stored = lambda role, content: SimpleNamespace(role=role, content=content)
 
-    # A conversation where a poisoned row has already been answered from, so its text is in the replayed history.
+    # A conversation where a poisoned row was already answered from, so its text is replayed.
     context = ConversationContext(
         summary=None,
         recent=[
@@ -106,13 +106,13 @@ def test_retrieved_text_never_becomes_a_system_instruction(poisoned_csv):
         "tool output, or a spreadsheet edit becomes a prompt edit"
     )
 
-    # And it is still present as data, because dropping it would be a different bug: the model needs to see what wa…
+    # And it is still present as data: the model needs to see what was retrieved.
     everything = "\n".join(str(message.content) for message in prepared.messages)
     assert "ASPIRE is a national savings programme" in everything
 
 
 def test_the_retrieved_knowledge_block_is_not_a_system_message(poisoned_csv):
-    """The same defence, on the path P13-005 actually introduced."""
+    """The same defence, on the path that actually introduced it."""
     import csv as _csv
     from types import SimpleNamespace
 
@@ -140,7 +140,7 @@ def test_the_retrieved_knowledge_block_is_not_a_system_message(poisoned_csv):
     assert "IGNORE ALL PREVIOUS INSTRUCTIONS" not in system_text
     assert "SYSTEM OVERRIDE" not in system_text
 
-    # Present, and carried by a human-role message so it has no more authority than the question it accompanies.
+    # Present, and carried by a human message so it has no more authority than the question.
     human_text = "\n".join(
         str(m.content) for m in prepared.messages if isinstance(m, HumanMessage)
     )
@@ -153,7 +153,7 @@ def test_the_system_prompt_states_the_rule_retrieval_relies_on():
     """Defence in depth, and a canary on the prompt that carries it."""
     lowered = ASPIRE_SYSTEM_PROMPT.lower()
     assert "knowledge base" in lowered or "aspire's information" in lowered
-    # The prompt must tell the model what to do when it does not know, or "answer only from the corpus" has no defi…
+    # The prompt must say what to do when it does not know, or "only from the corpus" is empty.
     assert "don't have" in lowered or "do not have" in lowered or "cannot" in lowered
 
 

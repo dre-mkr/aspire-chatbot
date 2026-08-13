@@ -41,13 +41,13 @@ class TestNoRouterPathTerminatesAtEscalation:
         assert "escalate_agent" not in ROUTABLE_AGENTS
 
     async def test_the_router_is_never_shown_it(self):
-        """Filtered from `allowed`, not merely omitted from the menu -- omitting it would still leave `_coerce` rung 1 a…"""
+        """Filtered from `allowed`, not merely omitted from the classifier's menu."""
         assert "escalate_agent" not in AGENT_DESCRIPTIONS
         assert "escalate_agent" in UNROUTABLE
 
     @pytest.mark.parametrize(("persona", "band", "status"), SIGNED_IN)
     async def test_filtering_never_empties_a_permitted_row(self, persona, band, status):
-        """If `routable()` emptied a granted row, a permitted caller would take the `access_denied` branch in `classify`…"""
+        """An emptied row would send a permitted caller down `access_denied`."""
         granted = allowed_agents(persona, band, status, user_id="u")
         if not granted:
             return
@@ -97,7 +97,7 @@ class TestAskingForAPerson:
         ],
     )
     async def test_these_are_questions_and_stay_with_the_knowledge_base(self, message):
-        """A false positive here hands somebody to a support queue they did not ask for -- the exact failure this track…"""
+        """A false positive hands somebody to a support queue they did not ask for."""
         assert wants_human(message) is False
 
     async def test_a_request_escalates_on_turn_one(self):
@@ -121,7 +121,7 @@ class TestAskingForAPerson:
     async def test_every_persona_can_ask_including_the_one_with_no_tools(
         self, persona, band
     ):
-        """Stella's only routable agent is `learn_agent`, and the lesson machine makes no model calls at all -- so a too…"""
+        """Even Stella, whose only routable agent makes no model calls, can ask."""
         gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: False)
         update = await gate(_state("i want to talk to a real person", persona, band))
 

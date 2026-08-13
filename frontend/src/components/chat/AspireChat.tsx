@@ -57,7 +57,7 @@ const STICK_THRESHOLD_PX = 160;
 const ELIGIBILITY_SPEECH_ID = -1;
 
 export function AspireChat() {
-	// Read-aloud has to start the moment an answer lands, but the voice layer needs the thread id the conversation…
+	// A ref: onAnswer is needed now, but voice needs the threadId useConversation returns.
 	const speakArrival = useRef<(id: number, text: string) => void>(() => {});
 
 	const navigate = useNavigate();
@@ -88,11 +88,7 @@ export function AspireChat() {
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
 
-	/**
-	 * The live game's identity and score. The summary is the authority on the
-	 * numbers; the card closing (`onChanged(null)`) is what sends them, so the
-	 * agent's next turn can reference what the child actually scored.
-	 */
+	/** The live game's score; the card closing (`onChanged(null)`) is what reports it. */
 	const liveGame = useRef<{
 		gameType: string;
 		concept: string;
@@ -127,7 +123,7 @@ export function AspireChat() {
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
 		persona,
-		// Titles are written in the language the interface is set to, read from the existing voice setting rather than…
+		// Titles follow the interface language, read at call time since voice is built below.
 		getLanguage: () => voice.language,
 		// The first message of a chat gives it an address.
 		onGameStart: (id, gameType, concept) => {
@@ -141,10 +137,7 @@ export function AspireChat() {
 				completed: false,
 				reported: false,
 			};
-			// START the game — the directive names it, the engine owns it. The state
-			// poll alone can never start one, which is exactly how the card used to
-			// sit on "{active:false}" forever. If the agent's own tools already
-			// started it server-side, the start declines and the state fetch wins.
+			// Start it here: the state poll alone never starts one, so the card sat inactive forever.
 			const engineName =
 				{ scramble: "word_scramble", true_false: "true_false" }[gameType] ??
 				gameType;
@@ -161,7 +154,7 @@ export function AspireChat() {
 						.catch(() => undefined),
 				);
 		},
-		// The card carries the whole turn, so it is fetched rather than taken from the chat response: the eligibility e…
+		// The card carries the whole turn, so it is fetched rather than read off the chat response.
 		onEligibilityStart: (id, language) => {
 			clearEligibilityResult(id);
 			setEligibility(null);
@@ -204,7 +197,7 @@ export function AspireChat() {
 		});
 	}, [navigate]);
 
-	// `replace`, like the toggle above and for the same reason: choosing who is at the screen adjusts the current v…
+	// `replace`, like the toggle above: picking a persona adjusts the view, not the history.
 	const setPersona = useCallback(
 		(next: PersonaId | null) => {
 			void navigate({
@@ -238,7 +231,7 @@ export function AspireChat() {
 	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
 
-	// `replace`, like the other two answer settings: switching language adjusts the current view rather than going…
+	// `replace`, like the other two settings: language adjusts the view, not the history.
 	const setLanguageInUrl = useCallback(
 		(next: "en" | "es" | "fr") => {
 			void navigate({
@@ -325,7 +318,7 @@ export function AspireChat() {
 		});
 	}, [eligibilityQuery.data, threadId]);
 
-	// The rail is a drawer whenever it has nowhere to sit as a column: on a narrow screen, and on the landing scree…
+	// The rail is a drawer wherever it cannot sit as a column: narrow screens, and the landing.
 	const drawerMode = compact || phase === "landing";
 	const railClosed = drawerMode ? !drawerOpen : railCollapsed;
 	const drawerModal = drawerMode && drawerOpen;
@@ -355,7 +348,7 @@ export function AspireChat() {
 	/** Which thread the follow-the-stream effect is currently chasing. */
 	const following = useRef<string | null>(null);
 
-	// Follow the answer as it streams, but only while the reader is already at the bottom — scrolling up to re-read…
+	// Follow the stream only from the bottom; scrolling up to re-read must not be yanked back.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: change trigger
 	useEffect(() => {
 		const thread = threadRef.current;
@@ -385,7 +378,7 @@ export function AspireChat() {
 
 		restoredFor.current = threadId;
 		const saved = scrollTops.current.get(threadId);
-		// Suppress the `scroll` this assignment provokes, so restoring a position cannot overwrite the position being r…
+		// Suppress the `scroll` this fires, or the restore overwrites the offset being restored.
 		restoring.current = true;
 		thread.scrollTop = saved ?? thread.scrollHeight;
 		requestAnimationFrame(() => {
@@ -398,7 +391,7 @@ export function AspireChat() {
 	const draftKey = useRef("");
 	const liveDraft = useRef(draft);
 
-	// Declared before the swap below so that, on the commit where the thread changes, the value being banked is the…
+	// Runs before the swap below, so the draft banked on a thread change is the outgoing one.
 	useEffect(() => {
 		liveDraft.current = draft;
 	}, [draft]);
@@ -410,7 +403,7 @@ export function AspireChat() {
 		setDraft(drafts.current.get(scrollKey) ?? "");
 	}, [scrollKey]);
 
-	// Captured when the drawer is opened, not when the effect runs: by then the workspace is already inert and the…
+	// Captured on open, not in the effect: by then the workspace is inert and focus has moved.
 	const railTrigger = useRef<HTMLElement | null>(null);
 
 	const openDrawer = useCallback(() => {
@@ -418,7 +411,7 @@ export function AspireChat() {
 		setDrawerOpen(true);
 	}, []);
 
-	// A drawer that leaves the page behind it reachable is not a drawer: Tab walks straight out of it and into the…
+	// Trap focus and Escape, or Tab walks straight out of the drawer into the page behind it.
 	useEffect(() => {
 		if (!drawerModal) return;
 
@@ -444,10 +437,10 @@ export function AspireChat() {
 		else setRailCollapsed((collapsed) => !collapsed);
 	}, [drawerMode]);
 
-	// Asking something new, reopening a conversation, or starting a fresh one all make whatever is being read aloud…
+	// Asking, reopening, or starting a chat all make the current read-aloud stale.
 	const { stopPlayback } = voice;
 
-	// simpleMode is read at send time rather than captured per conversation, so toggling it changes the next answer…
+	// simpleMode is read at send time, so toggling it changes the next answer, not past ones.
 	const ask = useCallback(
 		(question: string) => {
 			stopPlayback();
@@ -462,7 +455,7 @@ export function AspireChat() {
 			threadId: threadId ?? undefined,
 			send: ask,
 			onWidgetInteraction: sendInteraction,
-			// Sent through its own channel (`/v2/game/result`), not as prose: the score rides on `safety_flags` server-side…
+			// Own channel (`/v2/game/result`), not prose: the score rides on `safety_flags` server-side.
 			onGameResult: sendGameResult,
 			onUpload: (
 				_slot: string,
@@ -486,7 +479,7 @@ export function AspireChat() {
 		],
 	);
 
-	// Carries the id of the answer being retried, so it replaces that one rather than whatever happens to be last i…
+	// Carries the retried answer's id, so it replaces that one and not whatever is last.
 	const handleRegenerate = useCallback(
 		(messageId: number) => {
 			stopPlayback();
@@ -530,7 +523,7 @@ export function AspireChat() {
 		if (cached && cached.messages.length > 0) {
 			stopPlayback();
 			setGame(null);
-			// Cleared rather than carried across: the restore effect above reads the new thread's own card, and showing the…
+			// Cleared, not carried: the restore effect fetches the new thread's own card.
 			setEligibility(null);
 			openPast(cached);
 			return;
@@ -547,7 +540,7 @@ export function AspireChat() {
 				openPast(stored);
 			})
 			.catch(() => {
-				// An address for a conversation this account does not have: a link from another device, a cleared identity, a h…
+				// An address this account has no conversation for: another device, a cleared identity.
 				if (!live) return;
 				void navigate({
 					to: "/",
@@ -576,7 +569,7 @@ export function AspireChat() {
 				to: "/chat/$chatId",
 				params: { chatId: conversation.threadId },
 				search: (previous: ShellSearch): ShellSearch => ({
-					// "Explain it simply" belongs to the reader, not to the conversation, so it survives moving between them — exac…
+					// "Explain it simply" belongs to the reader, so it survives moving between conversations.
 					...previous,
 					// Language does not.
 					...(conversation.language ? { lang: conversation.language } : {}),
@@ -596,7 +589,7 @@ export function AspireChat() {
 		if (startingNew.current) return;
 		startingNew.current = true;
 
-		// A deliberate move to the empty state outranks a first send that is still settling, so the gap-holder is dropp…
+		// A deliberate new chat outranks a first send still settling, so the pending id is dropped.
 		awaitingUrl.current = null;
 		stopPlayback();
 		setDrawerOpen(false);
@@ -625,7 +618,7 @@ export function AspireChat() {
 			: undefined;
 		if (stored) return displayTitle(stored);
 
-		// Nothing is stored yet -- the first answer is still arriving, so there is no thread id and no record.
+		// Nothing stored yet: the first answer is still arriving, so there is no record.
 		const firstQuestion = messages.find((m) => m.role === "user");
 		return firstQuestion?.role === "user" ? titleFor(firstQuestion.text) : "";
 	}, [threadId, activeStoredTitle, messages]);
@@ -649,7 +642,7 @@ export function AspireChat() {
 
 			if (!open) return;
 			setDrawerOpen(false);
-			// Everything else follows from the address: no chat id means the reconciler stops the audio, drops the cards, a…
+			// The rest follows from the address: no chat id makes the reconciler stop audio and reset.
 			void navigate({
 				to: "/",
 				search: (previous: ShellSearch) => previous,
@@ -742,7 +735,7 @@ export function AspireChat() {
 						<AccountControl variant="corner" />
 					</div>
 
-					{/* No bar on the empty state: the hero already carries the product's identity, and a bar saying "New chat" above… */}
+					{/* No bar on the empty state: the hero already carries the product's identity. */}
 					{phase === "chat" ? (
 						<ChatTitleBar
 							title={activeTitle}
@@ -759,9 +752,9 @@ export function AspireChat() {
 						<div
 							className="thread"
 							ref={threadRef}
-							// Banked continuously rather than on the way out: a chat can also be left by the back button or a keyboard shor…
+							// Banked on every scroll: a chat can also be left by the back button or a shortcut.
 							onScroll={(event) => {
-								// Not while a restore is mid-assignment: that event is this component's own, and banking it overwrites the posi…
+								// Not during a restore: that scroll is ours, and banking it overwrites the saved offset.
 								if (restoring.current) return;
 								scrollTops.current.set(
 									scrollKey,
@@ -809,8 +802,7 @@ export function AspireChat() {
 																live.solved = state.solved;
 																live.total = state.prompt.total;
 															}
-															// Null means the card closed; report the real
-															// numbers once, through the game-result channel.
+															// Card closed: report the score once, on the game-result channel.
 															if (!state && live && !live.reported) {
 																live.reported = true;
 																sendGameResult({
@@ -872,7 +864,7 @@ export function AspireChat() {
 							</div>
 						) : null}
 
-						{/* Sits directly above the picker that caused it, in the slot the voice notes use — the control and the explanat… */}
+						{/* Sits in the voice-note slot, directly above the picker that caused it. */}
 						{personaNotice ? (
 							<div className="voice-slot">
 								<output className="voice-note" data-tone="warn">
@@ -922,17 +914,15 @@ export function AspireChat() {
 						</div>
 					</div>
 
-					{/* The hero h1 goes inert with the hero, so the conversation supplies the page heading once it takes over. */}
+					{/* The hero h1 goes inert with it, so this supplies the page heading in chat. */}
 					{phase === "chat" ? (
 						<h1 className="sr-only">Conversation with ASPIRE AI</h1>
 					) : null}
 
 					<output className="sr-only">{announcement}</output>
 
-					<p className="disclaimer">
-						ASPIRE AI can
-						<strong>make mistakes</strong>
-					</p>
+					{/* One text node: as two, the flex gap made "can" and "make" run together when copied. */}
+					<p className="disclaimer">ASPIRE AI can make mistakes.</p>
 				</main>
 			</div>
 		</div>

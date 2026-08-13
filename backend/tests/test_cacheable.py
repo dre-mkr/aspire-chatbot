@@ -74,5 +74,5 @@ class TestWhatStillIs:
         )
 
     def test_an_unknown_agent_is_cacheable(self):
-        """Permissive by default, because the exclusion list is the thing that gets updated when an agent gains state --…"""
+        """Permissive by default: the exclusion list is updated when an agent gains state."""
         assert cacheable(record(agent="servicing_agent")) is True

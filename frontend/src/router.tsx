@@ -39,13 +39,3 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-/** The Start-side registration, moved here out of the generated route tree. */
-import type { startInstance } from "./start";
-
-declare module "@tanstack/react-start" {
-	interface Register {
-		ssr: true;
-		router: Awaited<ReturnType<typeof getRouter>>;
-		config: Awaited<ReturnType<typeof startInstance.getOptions>>;
-	}
-}

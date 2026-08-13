@@ -127,7 +127,7 @@ class TestPrecedence:
             seen.append(user)
             return {"concept_id": target.id}
 
-        # An utterance equidistant from every concept scores 1/sqrt(3) = 0.577 against each -- above the disambiguation…
+        # Equidistant from every concept scores 0.577 each, inside the disambiguation band.
         resolution = await resolve_concept(
             "money things",
             band="9-12",
@@ -345,3 +345,51 @@ class TestTheStoreIsActuallyLoaded:
             assert _entry(state) == "tutor"
         finally:
             store.load(saved)
+
+
+class TestLeavingAConceptBehind:
+    """`wants_a_different_lesson` is checked in `branch`, and `branch` is only
+    reachable from the phase table. The tutor's claim returns before that table, so
+    without an escape here a learner can never move on once a concept is resolved.
+    """
+
+    @staticmethod
+    def _state(text: str, **learning):
+        from langchain_core.messages import HumanMessage
+
+        return {
+            "messages": [HumanMessage(content=text)],
+            "learning": {"active_concept_id": "CON-1", "resolution_source": "vector", **learning},
+            "safety_flags": {},
+        }
+
+    @staticmethod
+    def _with_store(fn):
+        from app.learning.concepts import get_store
+
+        store = get_store()
+        saved = list(store._by_id.values())
+        try:
+            store.load([concept("compound_interest", vector=[1.0, 0.0, 0.0])])
+            return fn()
+        finally:
+            store.load(saved)
+
+    def test_asking_to_move_on_reaches_the_node_that_honours_it(self):
+        from app.agents.learn.graph import _entry
+
+        state = self._state("Give me a different lesson.", lesson_id="l01")
+        assert self._with_store(lambda: _entry(state)) == "branch"
+
+    def test_without_a_lesson_to_leave_it_places_one(self):
+        from app.agents.learn.graph import _entry
+
+        state = self._state("Can we do something else?")
+        assert self._with_store(lambda: _entry(state)) == "resume_or_place"
+
+    def test_an_ordinary_follow_up_still_belongs_to_the_tutor(self):
+        """The guard rail: this is what the claim is for."""
+        from app.agents.learn.graph import _entry
+
+        state = self._state("Why does that matter?", lesson_id="l01")
+        assert self._with_store(lambda: _entry(state)) == "tutor"

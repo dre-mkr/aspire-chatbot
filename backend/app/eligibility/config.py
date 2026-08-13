@@ -17,7 +17,7 @@ class EligibilitySettings(BaseSettings):
 
     eligibility_enabled: bool = True
 
-    # Six questions is a few minutes at most, and someone who wanders off should find the flow where they left it.
+    # Six questions take minutes, and someone who wanders off should find their place.
     session_ttl_seconds: float = Field(default=3600.0, ge=60.0)
 
     # Whether the anonymised outcome row is written at all.

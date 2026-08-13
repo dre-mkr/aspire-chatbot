@@ -145,7 +145,7 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 	let usage: TurnUsage = {};
 	let failure: { code: string; message: string } | null = null;
 
-	/** The one place the result shape is written, so an early return cannot drift from the normal one. */
+	/** One place the result shape is written, so early returns cannot drift. */
 	const result = () => ({
 		text: buffer.text(),
 		directives: buffer
@@ -168,7 +168,7 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 		});
 
 		if (!response.ok || !response.body) {
-			// A refusal decided BEFORE the stream opens arrives as a real status code carrying the same `{code, message}` s…
+			// A refusal before the stream opens arrives as a status with the same shape.
 			const refusal = await response
 				.json()
 				.then((body: unknown) =>
@@ -196,7 +196,7 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 		for (;;) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			// `stream: true` matters: a multi-byte character split across two chunks decodes to a replacement character wit…
+			// `stream: true` matters: multi-byte chars split across chunks decode wrong.
 			pending += decoder.decode(value, { stream: true });
 
 			const { frames, rest } = splitFrames(pending);

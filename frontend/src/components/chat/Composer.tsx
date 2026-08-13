@@ -124,7 +124,7 @@ export function Composer({
 			return;
 		}
 
-		// Space is hold-to-talk, but only in an empty box — otherwise it is just a space in the middle of a sentence.
+		// Space is hold-to-talk only in an empty box; otherwise it is just a space.
 		if (event.code === "Space" && !event.repeat && !draft && holdToTalk) {
 			event.preventDefault();
 			setSpaceHeld(true);
@@ -153,7 +153,7 @@ export function Composer({
 		if (listening) voice.stop();
 	}
 
-	// The Space hint is the only thing that tells anyone hold-to-talk exists, but it is addressed to a keyboard.
+	// The Space hint is the only sign hold-to-talk exists, so it is keyboard-only.
 	const placeholder = listening
 		? "Speak now — your words appear here"
 		: transcribing
@@ -189,7 +189,7 @@ export function Composer({
 						placeholder={placeholder}
 						aria-describedby={nearLimit ? counterId : undefined}
 					/>
-					{/* `role="status"` and polite: a screen reader is told how much room is left as it runs out, without interruptin… */}
+					{/* Polite status: the room left is announced as it runs out, without interrupting. */}
 					{nearLimit ? (
 						<p
 							id={counterId}
@@ -219,7 +219,7 @@ export function Composer({
 					/>
 				) : (
 					<div className="composer__tools">
-						{/* First in the row, because it is the widest-reaching of these controls: it changes the reading level, the voic… */}
+						{/* First in the row: it is the widest-reaching control here, reading level included. */}
 						<PersonaPicker persona={persona} onChange={onPersonaChange} />
 
 						{/* Voice settings live here, not beside the mic. */}
@@ -229,8 +229,8 @@ export function Composer({
 							</Suspense>
 						) : null}
 
-						{/* The label collapses to the icon on a narrow screen rather than the whole control disappearing — this is the p… */}
-						{/* The title carries the label when the visible one is hidden under 620px — otherwise this is a bare sparkle who… */}
+						{/* Narrow screens collapse the label to the icon rather than dropping the control. */}
+						{/* The title carries the label under 620px, where it is otherwise a bare sparkle. */}
 						<button
 							type="button"
 							className="tool-btn"
@@ -241,7 +241,7 @@ export function Composer({
 							}
 						>
 							<SparkIcon />
-							{/* Clipped, not removed, under 620px — so it still names the button for a screen reader at every width. */}
+							{/* Clipped, not removed, under 620px: it still names the button at every width. */}
 							<span className="tool-btn__label">Explain it simply</span>
 						</button>
 
@@ -258,7 +258,7 @@ export function Composer({
 								<span className="sr-only">{MIC_TITLE[voice.micState]}</span>
 							</button>
 
-							{/* While a reply is in flight the send button becomes a stop, rather than sitting there enabled and quietly orph… */}
+							{/* In flight, send becomes stop rather than sitting enabled and orphaned. */}
 							{/* The keys matter. */}
 							{busy ? (
 								<button
@@ -266,7 +266,7 @@ export function Composer({
 									type="button"
 									className="composer__send composer__send--stop"
 									onClick={(event) => {
-										// Belt and braces: this button lives inside the form, so nothing it does should ever reach the submit path.
+										// This button lives inside the form; nothing it does should reach submit.
 										event.preventDefault();
 										handleStop();
 									}}

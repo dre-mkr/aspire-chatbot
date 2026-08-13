@@ -24,13 +24,7 @@ class Game(Protocol):
     """How many items one game serves, or None to play the whole set in order."""
 
     advance_on_wrong: bool
-    """Whether a wrong answer resolves the item.
-
-    A scramble says no: the letters are still there and trying again is the
-    activity. True/false says yes — re-asking a binary question is just waiting
-    for the coin to land the other way, so the explanation is shown and the
-    round moves on. The teaching is the point, not the score.
-    """
+    """Whether a wrong answer resolves the item; a scramble retries, true/false moves on."""
 
     def sets_for(self, language: Language) -> list[GameSet]:
         """Every playable set in a language. Empty is a normal answer."""

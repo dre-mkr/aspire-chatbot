@@ -6,7 +6,7 @@ import re
 
 from app.prompts import ASPIRE_SYSTEM_PROMPT
 
-#: The prompt is hard-wrapped for editing, so a phrase these tests care about is as likely to straddle a newline…
+#: The prompt is hard-wrapped, so flatten whitespace before matching phrases across newlines.
 FLAT = " ".join(ASPIRE_SYSTEM_PROMPT.split()).lower()
 
 #: How the "last checked" stamp reads once the model has put it into prose.

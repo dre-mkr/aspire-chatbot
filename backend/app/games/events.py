@@ -28,7 +28,7 @@ class GameEvent:
     game_type: str
     language: str
     persona: str | None
-    # Seconds since the game started, so a duration is available on every event rather than only at the end.
+    # Seconds since the game started, so every event carries a duration, not just the last.
     elapsed_seconds: float
     timestamp: float = field(default_factory=time.time)
     data: dict[str, Any] = field(default_factory=dict)
@@ -76,13 +76,6 @@ class JsonlEventSink:
                 self._warned = True
 
 
-class NullEventSink:
-    """Drops everything. The default in tests that do not assert on events."""
-
-    def emit(self, event: GameEvent) -> None:  # noqa: D102
-        return None
-
-
 class MemoryEventSink:
     """Keeps events in a list, for the tests that do assert on them."""
 
@@ -107,7 +100,3 @@ def get_sink() -> EventSink:
     return _sink
 
 
-def set_sink(sink: EventSink | None) -> None:
-    """Swap the sink. Used by tests, and by whoever adds a real event pipeline."""
-    global _sink
-    _sink = sink

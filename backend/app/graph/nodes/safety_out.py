@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage
 from app.graph.state import AspireState, band_index
 from app.safety import pii, vocab
 from app.widgets import sentinel
+from app.messages import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ QA_WORD_CAPS: dict[str, int | None] = {
 
 
 def cap_for(band: str, agent: str | None) -> int | None:
-    """The word ceiling for this turn: lesson cap when teaching, QA cap when answering, else the chat cap."""
+    """The word ceiling for this turn: the lesson cap, the QA cap, or the plain chat cap."""
     if agent in LEARNING_AGENTS:
         table = LESSON_WORD_CAPS
     elif agent in QA_AGENTS:
@@ -108,7 +109,7 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
         return text
 
     budget = " ".join(words[:max_words])
-    # Search the ORIGINAL text up to the budget's length so the terminator's trailing whitespace is present to matc…
+    # Search the original text, so the terminator's trailing whitespace is there to match.
     window = text[: len(budget) + 1]
     ends = list(_SENTENCE_END.finditer(window))
     if ends:
@@ -253,19 +254,6 @@ def locale_instruction(locale: str) -> str:
 # ── the node ─────────────────────────────────────────────────────────────────
 
 
-def _text_of(message: Any) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return ""
-
-
 def make_safety_out(reprompt: Reprompt | None = None):
     """Build the outbound gate."""
 
@@ -280,10 +268,10 @@ def make_safety_out(reprompt: Reprompt | None = None):
 
         band = state.get("age_band", "adult")
         persona = state.get("persona", "")
-        # Read once, used by gate (a) to pick the ceiling and by gate (e) to decide whether chips are required.
+        # Read once: gate (a) picks the ceiling, gate (e) decides whether chips are required.
         agent = state.get("active_agent")
         locale = state.get("locale", "en")
-        original = _text_of(last)
+        original = text_of(last)
         replies = list(state.get("quick_replies") or [])
         report: dict[str, Any] = {}
 
@@ -357,7 +345,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
 
         # ── (e) quick replies, during a lesson ──────────────────────────────
         if agent in LEARNING_AGENTS:
-            # The model may have written its chips as a trailing bulleted list rather than filling `quick_replies`.
+            # The model may write its chips as a trailing bulleted list instead of `quick_replies`.
             prose, harvested = parse_chips(text)
             if harvested:
                 text = prose
@@ -411,7 +399,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
 
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
         if text != original:
-            # Rewritten in place, keeping the message id, so `add_messages` REPLACES the message rather than appending a se…
+            # Same message id, so `add_messages` replaces the message instead of appending one.
             update["messages"] = [AIMessage(content=text, id=getattr(last, "id", None))]
         return update
 

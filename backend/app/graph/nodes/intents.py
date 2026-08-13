@@ -70,7 +70,7 @@ _ELIGIBILITY: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
-#: "Let's play." Asking to play is the ONLY thing that starts a game -- v1's tool description said so in as many…
+#: "Let's play." Asking to play is the only thing that starts a game.
 _PLAY: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (
@@ -191,7 +191,7 @@ _WANTS_HUMAN: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
-#: A complaint, which is its own `EscalationReason` and had no detector at all.
+#: A complaint, which is its own `EscalationReason`.
 _COMPLAINT: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (

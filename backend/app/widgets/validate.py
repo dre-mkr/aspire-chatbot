@@ -229,7 +229,7 @@ def gate_numeric(widget: Any, context: GateContext) -> GateResult:
         if widget.principal_cents < 0 or widget.contribution_cents < 0:
             return GateResult.fail("numeric", "money cannot be negative")
         if widget.principal_cents == 0 and widget.contribution_cents == 0:
-            # Not a schema violation and still a broken lesson: two empty stacks that never grow teach the opposite of the…
+            # Not a schema violation but a broken lesson: two flat stacks teach the opposite.
             return GateResult.fail("numeric", "nothing is being saved")
 
     if widget.kind == "allocator":
@@ -284,7 +284,7 @@ def gate_formula(widget: Any, context: GateContext) -> GateResult:
                 f"{widget.formula} is for {spec.band_min} and up, not "
                 f"{context.age_band}",
             )
-        # A parameter no control drives is fine IF the registry has an inert default for it -- `savings_goal_time` take…
+        # A parameter no control drives is fine when the registry has an inert default for it.
         missing = set(spec.parameters) - set(variables) - set(registry._DEFAULTS)
         if missing:
             return GateResult.fail(
@@ -382,18 +382,6 @@ _MODEL_GATES: tuple[Callable[[Any, GateContext], GateResult], ...] = (
     gate_copy,
     gate_budget,
 )
-
-#: Every gate name, in order.
-GATE_NAMES: tuple[str, ...] = (
-    "parse",
-    "schema",
-    "band",
-    "numeric",
-    "formula",
-    "copy",
-    "budget",
-)
-
 
 def validate_widget(
     raw: str,

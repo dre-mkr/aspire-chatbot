@@ -70,7 +70,7 @@ def get_engine() -> AsyncEngine | None:
         return None
 
     if POOLED_HOST_MARKER not in settings.database_url:
-        # Loud, and deliberately not fatal: a one-off script against the direct endpoint is fine, serving traffic from…
+        # Loud but not fatal: a one-off script may use the direct endpoint, serving traffic may not.
         logger.warning(
             "DATABASE_URL does not look like Neon's pooled endpoint (no %r in the "
             "host). The direct endpoint holds one backend per connection and will "
@@ -87,7 +87,7 @@ def get_engine() -> AsyncEngine | None:
         pool_recycle=280,
         pool_pre_ping=True,
         connect_args={
-            # pgbouncer in transaction mode cannot hold prepared statements across checkouts, which is asyncpg's default be…
+            # pgbouncer in transaction mode cannot hold prepared statements across checkouts.
             "statement_cache_size": 0,
             **_ssl_mode(url),
         },
@@ -157,7 +157,7 @@ async def check_schema() -> bool:
 @asynccontextmanager
 async def session() -> AsyncIterator[AsyncSession | None]:
     """One transactional session, or None when there is no database."""
-    # `database_enabled`, not merely "is there a URL": an unmigrated database has a perfectly good engine and a ses…
+    # `database_enabled`, not just "is there a URL": an unmigrated database still has an engine.
     factory = get_sessionmaker() if database_enabled() else None
     if factory is None:
         yield None

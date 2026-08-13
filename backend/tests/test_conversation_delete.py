@@ -149,7 +149,7 @@ def test_one_identity_cannot_delete_anothers_conversation(client: TestClient):
     response = client.delete(
         f"/api/conversations/{thread_id}", headers=auth(attacker)
     )
-    # 404, not 403: "not yours" and "does not exist" must stay indistinguishable, or the API becomes an oracle for…
+    # 404, not 403: "not yours" and "does not exist" must look alike, or the API leaks what exists.
     assert response.status_code == 404
 
     still_there = client.get(f"/api/conversations/{thread_id}", headers=auth(victim))

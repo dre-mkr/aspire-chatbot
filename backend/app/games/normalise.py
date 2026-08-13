@@ -10,7 +10,7 @@ _REPEATED_LETTER = re.compile(r"(.)\1+")
 
 def normalise(text: str) -> str:
     """Fold a typed answer to its comparable form."""
-    # NFKD splits an accented letter into base + combining mark, so dropping category Mn removes the accent and kee…
+    # NFKD splits an accented letter into base + mark, so dropping the marks keeps the letter.
     decomposed = unicodedata.normalize("NFKD", text)
     stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
     return "".join(c for c in stripped if c.isalnum()).casefold()

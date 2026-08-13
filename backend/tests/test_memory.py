@@ -45,7 +45,7 @@ class TestWindow:
         first = prepared.messages[0]
         assert first.type == "system"
         assert "bicycle" in first.content
-        # Framed as reference material, so a summary that happens to contain an instruction is far less likely to be ob…
+        # Framed as reference material, so an instruction inside it is less likely to be obeyed.
         assert first.content.startswith(SUMMARY_PREFACE)
 
     def test_no_summary_means_no_extra_message(self):
@@ -75,7 +75,7 @@ class TestPromptCost:
         prepared = build_prompt("q", window, full_history=everything)
 
         assert prepared.tokens < prepared.tokens_if_full_history
-        # At sixty messages with a window of six the drop should be substantial, not marginal -- if it is not, the chan…
+        # At sixty messages with a window of six the drop should be substantial, not marginal.
         assert prepared.saved_percent > 80
 
     def test_saving_is_zero_when_nothing_was_dropped(self):
@@ -86,7 +86,7 @@ class TestPromptCost:
         assert prepared.saved_percent == 0.0
 
     def test_token_count_is_not_a_character_count(self):
-        # Guards the accounting itself: a broken encoder returning len() would make every before/after number meaningle…
+        # Guards the accounting: an encoder returning len() would make every number meaningless.
         text = "the quick brown fox jumps over the lazy dog"
         assert 0 < count_tokens(text) < len(text)
 
@@ -114,7 +114,7 @@ def test_the_window_requires_a_database():
     assert "memory_window_enabled and database_enabled()" in source
 
 
-# --- what replaced the window read (P13-003, P13-007) ---------------------- Five tests stood here.
+# --- what replaced the window read ---
 
 
 @pytest.mark.anyio
@@ -123,7 +123,7 @@ async def test_a_short_thread_is_not_summarised(monkeypatch):
     from app import turn as turn_service
 
     class _Graph:
-        # Present because `summarise_thread` refuses to read state back from a graph compiled without one -- a supporte…
+        # `summarise_thread` refuses to read state from a graph with no checkpointer.
         checkpointer = object()
 
         async def aget_state(self, config):

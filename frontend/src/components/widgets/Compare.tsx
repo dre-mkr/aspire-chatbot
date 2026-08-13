@@ -100,7 +100,7 @@ export function Compare({
 									{panel.detail}
 								</span>
 							) : (
-								// Not "Tap to reveal" as a separate element: the whole panel is the control, and a second affordance inside a b…
+								// A hint, not a control: the whole panel is already the button.
 								<span
 									aria-hidden="true"
 									style={{

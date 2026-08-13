@@ -29,7 +29,7 @@ _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 
 # A connector left stranded by a removed URL or address ("apply online at .").
 _DANGLING_CONNECTOR = re.compile(
-    # Anchored to the text immediately before a removed link, so stripping a conjunction here cannot touch one in t…
+    # Anchored with `$`, so only a connector just before the removed link is stripped.
     r"\b(?:"
     r"at|on|via|from|email|e-?mail|visit|or|and"  # en
     r"|en|por|desde|correo|visita|o|y"  # es
@@ -124,13 +124,13 @@ def _strip_structure(text: str) -> str:
 
 def _strip_links(text: str) -> str:
     """Drop URLs and emails, and any connector they leave stranded."""
-    # Longest-first so an explicit URL is consumed before the bare-domain rule can bite a fragment of it.
+    # Longest-first, so an explicit URL is consumed before the bare-domain rule bites it.
     for pattern in (_EXPLICIT_URL, _EMAIL, _BARE_DOMAIN):
         out: list[str] = []
         last = 0
         for match in pattern.finditer(text):
             head = text[last : match.start()]
-            # "Apply online at https://..." must not become "Apply online at." Applied repeatedly so "or email info@..." lo…
+            # "Apply online at <link>" must not end on "at"; repeated to strip chained connectors.
             trimmed = head.rstrip()
             while True:
                 shorter = _DANGLING_CONNECTOR.sub("", trimmed).rstrip()
@@ -190,7 +190,7 @@ def _normalise_numbers(text: str, language: Language) -> str:
     def plain(match: re.Match[str]) -> str:
         return _decimal(match.group(0), language)
 
-    # Dates first: an ISO date contains hyphens that the range rule would otherwise read as "two thousand twenty-fo…
+    # Dates first: the hyphens in an ISO date would otherwise be read as a numeric range.
     text = re.sub(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", iso_date, text)
     text = re.sub(
         r"\b(?P<day>\d{1,2})(?:st|nd|rd|th)?\s+(?:de\s+)?(?P<month>[A-Za-zéûàî]+)\.?,?\s+"
@@ -251,7 +251,7 @@ def _truncate(text: str, limit: int) -> str:
 
     window = text[:limit]
     boundary = max(window.rfind(". "), window.rfind("! "), window.rfind("? "))
-    # Only honour a boundary that keeps most of the budget; otherwise a reply whose first sentence is short would b…
+    # Only honour a boundary that keeps most of the budget, or a short first sentence wins.
     if boundary >= limit * 0.6:
         return window[: boundary + 1].strip()
 

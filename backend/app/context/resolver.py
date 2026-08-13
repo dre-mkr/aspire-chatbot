@@ -188,7 +188,7 @@ def make_resolve_context(loader=None):
         application = payload.get("open_application")
         ticket = payload.get("last_escalation")
 
-        # The registration draft's own step pointer wins over the database row: it is this turn's state and the row is…
+        # The draft's own step pointer wins over the database row: it is this turn's state.
         registration = state.get("registration")
         if isinstance(registration, dict) and registration.get("application_id"):
             application = {

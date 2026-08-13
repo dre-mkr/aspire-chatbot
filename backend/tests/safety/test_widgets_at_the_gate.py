@@ -32,7 +32,7 @@ class TestTheOutboundGateWithAWidget:
     async def test_a_clean_turn_keeps_the_widget_exactly_where_it_was(
         self, state_for
     ):
-        """No gate fired, so the message is returned byte-for-byte -- the widget stays mid-paragraph if that is where th…"""
+        """No gate fired, so the message is returned byte-for-byte."""
         node = so.make_safety_out(None)
         text = f"Two ways to use it. {WIDGET} Which one?"
         state = state_for(age_band="5-8", messages=[AIMessage(content=text)])
@@ -44,7 +44,7 @@ class TestTheOutboundGateWithAWidget:
     async def test_a_rewritten_turn_keeps_its_widget_at_the_end(
         self, state_for, recorder
     ):
-        """A widget that survives a rewrite is the only outcome here that is not a deletion, even though it has lost its…"""
+        """A rewrite keeps the widget, reattached at the end of the new text."""
         recorder.scripted("Money you keep is money you still have.")
         node = so.make_safety_out(recorder)
         long = " ".join(["Saving means putting money away for later"] * 8)
@@ -92,7 +92,7 @@ class TestTheOutboundGateWithAWidget:
         assert update["safety_flags"]["outbound"]["widgets_carried"] == 1
 
     async def test_a_widget_cannot_smuggle_a_link_past_the_link_gate(self, state_for):
-        """Not a real risk -- `widgets/schemas.py` rejects `http` in every string field at parse time -- and asserted an…"""
+        """The smuggled link is rejected by `validate_widget`, not by this gate."""
         node = so.make_safety_out(None)
         smuggled = '⟦widget⟧{"kind": "compare", "a11y_text": "see https://evil.example"}⟦/widget⟧'
         state = state_for(
@@ -103,7 +103,7 @@ class TestTheOutboundGateWithAWidget:
 
         update = await node(state)
 
-        # The block is carried through this gate untouched, and is then rejected by `validate_widget` before it can be…
+        # Carried through this gate untouched, then rejected by `validate_widget`.
         from app.widgets.validate import validate_widget
 
         carried = sentinel.split(update["messages"][0].content)[1] if "messages" in update else [smuggled]
@@ -120,7 +120,7 @@ class TestWhoMayEmitOne:
         assert WIDGET_AGENTS == {"learn_agent", "learning_preview", "learning_sample"}
 
     async def test_the_chip_requirement_covers_the_same_three(self):
-        """Gate (e) and the widget gate must name the same set, or a preview gets widgets with no way to reply to them."""
+        """Both gates must name the same set, or a preview gets unanswerable widgets."""
         from app.graph.stream_interceptor import WIDGET_AGENTS
 
         assert so.LEARNING_AGENTS == WIDGET_AGENTS

@@ -56,7 +56,7 @@ def test_the_stream_starts_the_conversation_write_before_the_graph(monkeypatch):
     """And it starts it before the graph, not after."""
     from app.api import stream
 
-    # Matched on the code rather than on the names: the docstring draws the same ordering as a diagram, and a subst…
+    # Matched on the source text, because the ordering is what this regression is about.
     source = inspect.getsource(stream._events)
     started = source.index("asyncio.create_task(turn_service.open_conversation")
     graph_runs = source.index("async for chunk in graph.astream")

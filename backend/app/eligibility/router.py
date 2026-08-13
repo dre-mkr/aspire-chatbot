@@ -124,7 +124,7 @@ def _envelope(snapshot: Snapshot | None, language: Language) -> StateEnvelope:
         )
 
     return StateEnvelope(
-        # A finished flow has no session left, so it is not "active" -- but the result travels in this same response an…
+        # A finished flow has no session, so it is not active, but the result still rides along.
         active=snapshot.question is not None,
         language=snapshot.language.value,
         question=question,
