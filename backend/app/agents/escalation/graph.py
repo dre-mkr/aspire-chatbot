@@ -218,10 +218,18 @@ def tell_the_user(state: AspireState) -> dict[str, Any]:
     decision = triage(state)
     ticket_id = str(state.get("escalation_ticket") or "")
 
-    directive = EscalatedDirective(
-        ticket_id=ticket_id,
-        eta=_ETA_LOCALISED.get(str(state.get("locale") or "en"), _ETA)[decision.priority],
-    )
+    # `user_message` withholds the reference and the wait from a child on purpose.
+    # The directive renders both right under that copy, so it has to withhold them
+    # too -- a distressed child was being handed a case number and an SLA.
+    if _is_child(state):
+        directive = EscalatedDirective(ticket_id="", eta="")
+    else:
+        directive = EscalatedDirective(
+            ticket_id=ticket_id,
+            eta=_ETA_LOCALISED.get(str(state.get("locale") or "en"), _ETA)[
+                decision.priority
+            ],
+        )
 
     return {
         "messages": [AIMessage(content=user_message(state, ticket_id, decision))],
