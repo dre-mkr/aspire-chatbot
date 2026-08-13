@@ -271,3 +271,72 @@ class TestCitationMarkers:
         interceptor = StreamInterceptor(widgets_enabled=True)
         events = interceptor.feed("see [this very long bracketed aside that never closes")
         assert events, "the stream stalled on an unclosed bracket"
+
+
+class TestChipsThatRunLong:
+    """A chip too long for the schema must not take the answer down with it.
+
+    The follow-ups are written by a model, so their length is not guaranteed, and
+    the 60-character cap is about what fits on a chip. Enforcing it by raising
+    inside the SSE generator lost an answer that had already been generated: the
+    reader saw "The connection to the assistant was lost."
+    """
+
+    LONG = "What documentation is needed to confirm a child's eligibility during sign-up?"
+
+    def test_a_long_chip_is_shortened_rather_than_raised(self):
+        from app.api.stream import CHIP_LABEL_CHARS, _closing_directives
+
+        out = _closing_directives({"quick_replies": [self.LONG]})
+        options = next(d for d in out if d["t"] == "quick_replies")["options"]
+
+        assert len(options[0]["label"]) <= CHIP_LABEL_CHARS
+        assert options[0]["label"].endswith("…")
+        # Tapping still asks the whole question.
+        assert options[0]["value"] == self.LONG
+
+    def test_a_chip_that_fits_is_left_exactly_alone(self):
+        from app.api.stream import _closing_directives
+
+        out = _closing_directives({"quick_replies": ["Tell me more"]})
+        options = next(d for d in out if d["t"] == "quick_replies")["options"]
+        assert options == [{"label": "Tell me more", "value": "Tell me more"}]
+
+    def test_the_label_is_cut_at_a_word_boundary(self):
+        from app.api.stream import _closing_directives
+
+        out = _closing_directives({"quick_replies": [self.LONG]})
+        label = next(d for d in out if d["t"] == "quick_replies")["options"][0]["label"]
+        assert " " not in label[-2:], f"cut mid-word: {label!r}"
+        assert self.LONG.startswith(label[:-1].rstrip())
+
+    def test_a_blank_chip_is_dropped_not_rejected(self):
+        """min_length=1 would raise on the empty string."""
+        from app.api.stream import _closing_directives
+
+        out = _closing_directives({"quick_replies": ["", "   ", "Tell me more"]})
+        options = next(d for d in out if d["t"] == "quick_replies")["options"]
+        assert [option["label"] for option in options] == ["Tell me more"]
+
+    def test_chips_that_are_all_blank_emit_no_directive(self):
+        from app.api.stream import _closing_directives
+
+        assert _closing_directives({"quick_replies": ["", "  "]}) == []
+
+    def test_the_builder_and_the_wire_agree_on_the_cap(self):
+        """They drifted once -- builder 72, schema 60 -- and every corpus question
+        between them was admitted and then rejected on the wire, killing the turn.
+        """
+        from app.agents.qa.nodes import CHIP_MAX_CHARS
+        from app.schemas.directives import CHIP_LABEL_CHARS
+
+        assert CHIP_MAX_CHARS == CHIP_LABEL_CHARS
+
+    def test_a_chip_at_exactly_the_cap_survives_untouched(self):
+        from app.api.stream import _closing_directives
+        from app.schemas.directives import CHIP_LABEL_CHARS
+
+        chip = "q" * CHIP_LABEL_CHARS
+        out = _closing_directives({"quick_replies": [chip]})
+        options = next(d for d in out if d["t"] == "quick_replies")["options"]
+        assert options[0]["label"] == chip

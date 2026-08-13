@@ -13,6 +13,7 @@ from langgraph.types import Command
 from app.config import get_settings
 from app.graph.state import AspireState, Citation, KBChunk
 from app.messages import text_of
+from app.schemas.directives import CHIP_LABEL_CHARS
 
 logger = logging.getLogger(__name__)
 
@@ -587,7 +588,9 @@ def snippet_of(content: str) -> str:
 FOLLOW_UP_CHIPS = 3
 
 #: A chip's character cap, set from the corpus: 72 keeps 96% of the authored questions.
-CHIP_MAX_CHARS = 72
+#: Taken from the wire schema rather than restated, so the builder and the thing that
+#: validates it can never drift apart again.
+CHIP_MAX_CHARS = CHIP_LABEL_CHARS
 
 
 def follow_up_chips(

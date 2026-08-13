@@ -23,6 +23,8 @@ from app.graph.main_graph import build_main_graph
 from app.graph.nodes.hydrate import Unauthenticated
 from app.graph.stream_interceptor import StreamInterceptor, WireEvent
 from app.schemas.directives import (
+    CHIP_LABEL_CHARS,
+    CHIP_VALUE_CHARS,
     CitationsDirective,
     CitationRef,
     QuickRepliesDirective,
@@ -310,19 +312,36 @@ async def _replay(
     await turn_service.persist_turn(record)
 
 
+def _chip(text: str) -> QuickReplyOption:
+    """One follow-up, shortened to fit rather than rejected.
+
+    The QA builder respects the cap, but the learning, registration and escalation
+    agents write their own chips with nothing checking the length. The cap is
+    cosmetic; raising here would discard a turn that has already been answered and
+    paid for -- so the label is trimmed at a word boundary and the full question
+    stays as what gets sent.
+    """
+    said = " ".join(text.split())
+    label = said
+    if len(label) > CHIP_LABEL_CHARS:
+        clipped = label[: CHIP_LABEL_CHARS - 1]
+        cut = clipped.rfind(" ")
+        if cut >= CHIP_LABEL_CHARS // 2:
+            clipped = clipped[:cut]
+        label = f"{clipped.rstrip(' ,;:.') or clipped}…"
+    return QuickReplyOption(label=label, value=said[:CHIP_VALUE_CHARS])
+
+
 def _closing_directives(turn: dict[str, Any]) -> list[dict[str, Any]]:
     """The directives derivable from the finished turn, in render order."""
     out: list[dict[str, Any]] = list(turn.get("ui_directives") or [])
 
-    chips = turn.get("quick_replies") or []
+    chips = [str(chip).strip() for chip in (turn.get("quick_replies") or [])]
+    chips = [chip for chip in chips if chip]
     if chips:
         out.append(
             directive_payload(
-                QuickRepliesDirective(
-                    options=[
-                        QuickReplyOption(label=chip, value=chip) for chip in chips[:4]
-                    ]
-                )
+                QuickRepliesDirective(options=[_chip(chip) for chip in chips[:4]])
             )
         )
 

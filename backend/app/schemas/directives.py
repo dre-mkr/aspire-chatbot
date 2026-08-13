@@ -17,14 +17,24 @@ class _Directive(BaseModel):
 
 # ── quick replies ────────────────────────────────────────────────────────────
 
+#: A chip's character cap, set from the corpus: 72 keeps 96% of the authored
+#: questions. THE ONE PLACE it is written down -- the chip builder in
+#: `agents/qa/nodes.py` imports it. When these two disagreed (builder 72, schema 60)
+#: every corpus question between them was admitted and then rejected on the wire,
+#: which killed the turn after the answer had already been generated.
+CHIP_LABEL_CHARS = 72
+
+#: What tapping a chip sends. Longer than the label, which may be shortened to fit.
+CHIP_VALUE_CHARS = 280
+
 
 class QuickReplyOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     #: What the child reads.
-    label: str = Field(min_length=1, max_length=60)
+    label: str = Field(min_length=1, max_length=CHIP_LABEL_CHARS)
     #: What is actually sent when they tap.
-    value: str = Field(min_length=1, max_length=280)
+    value: str = Field(min_length=1, max_length=CHIP_VALUE_CHARS)
 
 
 class QuickRepliesDirective(_Directive):
