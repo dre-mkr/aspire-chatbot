@@ -5853,3 +5853,58 @@ body {
 	margin: 0 auto;
 	padding: 24px 20px 48px;
 }
+
+/* ── Landing → chat, as one movement ────────────────────────────────────── */
+
+/* The two screens are separate pages now, so the composer that used to shrink
+   in place is unmounted and a new one mounted. Naming it hands the browser both
+   boxes and lets it tween between them, which is the same movement by other
+   means. Everything else -- the greeting fading, the panel turning white, the
+   chips leaving -- rides the implicit `root` snapshot.
+
+   `.workspace` is deliberately NOT named: `.composer` sits inside it, and a
+   named element inside a named ancestor is painted twice, which ghosts. */
+.composer {
+	view-transition-name: aspire-composer;
+}
+
+/* Safe to name: a sibling of `.workspace`, with no named ancestor of its own.
+   On the landing it is parked at translateX(-100%), so it slides in rather
+   than appearing, which is a better arrival than the old width transition. */
+.rail {
+	view-transition-name: aspire-rail;
+}
+
+/* The composer changes height, not width. Left alone the browser stretches each
+   snapshot to fill the other's box, and the tool row squashes on the way. */
+::view-transition-old(aspire-composer),
+::view-transition-new(aspire-composer) {
+	height: 100%;
+	object-fit: none;
+	object-position: top center;
+}
+
+::view-transition-group(aspire-composer),
+::view-transition-group(aspire-rail),
+::view-transition-group(root) {
+	/* The 560ms the phase morph used to take, and the same curve. */
+	animation-duration: 560ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The gradient giving way to the white panel. Shorter than the travel, so the
+   composer is still moving once the background behind it has settled. */
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 320ms;
+}
+
+/* None of the blanket rules above reach these. They name elements, and these
+   are pseudo-elements running animations rather than transitions. */
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation-duration: 1ms !important;
+	}
+}

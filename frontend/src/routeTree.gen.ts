@@ -9,20 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ResetRouteImport } from './routes/reset'
 import { Route as SigninRouteImport } from './routes/signin'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyRouteImport } from './routes/verify'
-import { Route as ShellIndexRouteImport } from './routes/_shell/index'
 import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminWidgetsRouteImport } from './routes/admin/widgets'
-import { Route as ShellChatChatIdRouteImport } from './routes/_shell/chat.$chatId'
+import { Route as ChatChatIdRouteImport } from './routes/chat.$chatId'
 import { Route as AdminApplicationsIdRouteImport } from './routes/admin/applications.$id'
 
-const ShellRoute = ShellRouteImport.update({
-  id: '/_shell',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -50,11 +50,6 @@ const VerifyRoute = VerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ShellIndexRoute = ShellIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ShellRoute,
-} as any)
 const AdminApplicationsRoute = AdminApplicationsRouteImport.update({
   id: '/applications',
   path: '/applications',
@@ -65,10 +60,10 @@ const AdminWidgetsRoute = AdminWidgetsRouteImport.update({
   path: '/widgets',
   getParentRoute: () => AdminRoute,
 } as any)
-const ShellChatChatIdRoute = ShellChatChatIdRouteImport.update({
+const ChatChatIdRoute = ChatChatIdRouteImport.update({
   id: '/chat/$chatId',
   path: '/chat/$chatId',
-  getParentRoute: () => ShellRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminApplicationsIdRoute = AdminApplicationsIdRouteImport.update({
   id: '/$id',
@@ -77,7 +72,7 @@ const AdminApplicationsIdRoute = AdminApplicationsIdRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof ShellIndexRoute
+  '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/reset': typeof ResetRoute
   '/signin': typeof SigninRoute
@@ -85,10 +80,11 @@ export interface FileRoutesByFullPath {
   '/verify': typeof VerifyRoute
   '/admin/applications': typeof AdminApplicationsRouteWithChildren
   '/admin/widgets': typeof AdminWidgetsRoute
-  '/chat/$chatId': typeof ShellChatChatIdRoute
+  '/chat/$chatId': typeof ChatChatIdRoute
   '/admin/applications/$id': typeof AdminApplicationsIdRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/reset': typeof ResetRoute
   '/signin': typeof SigninRoute
@@ -96,13 +92,12 @@ export interface FileRoutesByTo {
   '/verify': typeof VerifyRoute
   '/admin/applications': typeof AdminApplicationsRouteWithChildren
   '/admin/widgets': typeof AdminWidgetsRoute
-  '/': typeof ShellIndexRoute
-  '/chat/$chatId': typeof ShellChatChatIdRoute
+  '/chat/$chatId': typeof ChatChatIdRoute
   '/admin/applications/$id': typeof AdminApplicationsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_shell': typeof ShellRouteWithChildren
+  '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/reset': typeof ResetRoute
   '/signin': typeof SigninRoute
@@ -110,8 +105,7 @@ export interface FileRoutesById {
   '/verify': typeof VerifyRoute
   '/admin/applications': typeof AdminApplicationsRouteWithChildren
   '/admin/widgets': typeof AdminWidgetsRoute
-  '/_shell/': typeof ShellIndexRoute
-  '/_shell/chat/$chatId': typeof ShellChatChatIdRoute
+  '/chat/$chatId': typeof ChatChatIdRoute
   '/admin/applications/$id': typeof AdminApplicationsIdRoute
 }
 export interface FileRouteTypes {
@@ -129,6 +123,7 @@ export interface FileRouteTypes {
     | '/admin/applications/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/admin'
     | '/reset'
     | '/signin'
@@ -136,12 +131,11 @@ export interface FileRouteTypes {
     | '/verify'
     | '/admin/applications'
     | '/admin/widgets'
-    | '/'
     | '/chat/$chatId'
     | '/admin/applications/$id'
   id:
     | '__root__'
-    | '/_shell'
+    | '/'
     | '/admin'
     | '/reset'
     | '/signin'
@@ -149,27 +143,27 @@ export interface FileRouteTypes {
     | '/verify'
     | '/admin/applications'
     | '/admin/widgets'
-    | '/_shell/'
-    | '/_shell/chat/$chatId'
+    | '/chat/$chatId'
     | '/admin/applications/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  ShellRoute: typeof ShellRouteWithChildren
+  IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   ResetRoute: typeof ResetRoute
   SigninRoute: typeof SigninRoute
   SignupRoute: typeof SignupRoute
   VerifyRoute: typeof VerifyRoute
+  ChatChatIdRoute: typeof ChatChatIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/_shell': {
-      id: '/_shell'
-      path: ''
+    '/': {
+      id: '/'
+      path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof ShellRouteImport
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -207,13 +201,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_shell/': {
-      id: '/_shell/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof ShellIndexRouteImport
-      parentRoute: typeof ShellRoute
-    }
     '/admin/applications': {
       id: '/admin/applications'
       path: '/applications'
@@ -228,12 +215,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminWidgetsRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/_shell/chat/$chatId': {
-      id: '/_shell/chat/$chatId'
+    '/chat/$chatId': {
+      id: '/chat/$chatId'
       path: '/chat/$chatId'
       fullPath: '/chat/$chatId'
-      preLoaderRoute: typeof ShellChatChatIdRouteImport
-      parentRoute: typeof ShellRoute
+      preLoaderRoute: typeof ChatChatIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/applications/$id': {
       id: '/admin/applications/$id'
@@ -244,18 +231,6 @@ declare module '@tanstack/react-router' {
     }
   }
 }
-
-interface ShellRouteChildren {
-  ShellIndexRoute: typeof ShellIndexRoute
-  ShellChatChatIdRoute: typeof ShellChatChatIdRoute
-}
-
-const ShellRouteChildren: ShellRouteChildren = {
-  ShellIndexRoute: ShellIndexRoute,
-  ShellChatChatIdRoute: ShellChatChatIdRoute,
-}
-
-const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 interface AdminApplicationsRouteChildren {
   AdminApplicationsIdRoute: typeof AdminApplicationsIdRoute
@@ -281,12 +256,13 @@ const AdminRouteChildren: AdminRouteChildren = {
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  ShellRoute: ShellRouteWithChildren,
+  IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   ResetRoute: ResetRoute,
   SigninRoute: SigninRoute,
   SignupRoute: SignupRoute,
   VerifyRoute: VerifyRoute,
+  ChatChatIdRoute: ChatChatIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

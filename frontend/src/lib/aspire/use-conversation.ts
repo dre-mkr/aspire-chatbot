@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Directive,
@@ -8,14 +8,6 @@ import type {
 } from "../stream/types";
 import { type AskResult, AspireError, type Source } from "./api";
 import {
-	claimConversations,
-	deleteConversation,
-	HttpError,
-	renameConversation,
-} from "./conversations";
-import {
-	forgetLocalConversation,
-	loadConversations,
 	type StoredConversation,
 	type StoredMessage,
 	titleFor,
@@ -26,22 +18,11 @@ import {
 	answerToText,
 	parseAnswer,
 } from "./knowledge";
-import {
-	clearTitleLockInCache,
-	conversationQuery,
-	conversationsQuery,
-	keys,
-	readConversation,
-	removeConversationFromCache,
-	retitleInCache,
-	titleSnapshot,
-	upsertConversation,
-} from "./queries";
-import { ensureSession } from "./session";
+import { readConversation, upsertConversation } from "./queries";
 import { blockIsClosed, settledBlocks } from "./settled";
 import { streamAspire } from "./stream";
 import { requestTitle } from "./title";
-import { useSession } from "./use-session";
+import { useConversationList } from "./use-conversation-list";
 
 export type ChatMessage =
 	| { id: number; role: "user"; text: string }
@@ -75,8 +56,6 @@ export interface StreamingAnswer {
 	sources: Array<Source>;
 	followUps: Array<string>;
 }
-
-export type Phase = "landing" | "chat";
 
 /** Pacing of the typewriter reveal. Tuned to read as thinking, not as lag. */
 const TICK_MS = 40;
@@ -161,13 +140,6 @@ function prefersReducedMotion() {
 	);
 }
 
-/** Mints the id for a conversation, in the browser, before anything is sent. */
-function newThreadId(): string {
-	const uuid = globalThis.crypto?.randomUUID?.();
-	if (uuid) return uuid;
-	return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 /** What to call a conversation that opened with a game. */
 const GAME_TITLES: Record<string, Record<string, string>> = {
 	word_scramble: {
@@ -244,8 +216,6 @@ export interface UseConversationOptions {
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
 	persona?: string | null;
-	/** Fired synchronously inside `send`, the instant a conversation is minted. */
-	onThreadStart?: (threadId: string) => void;
 	/** Fired when a turn started a game instead of answering; carries game name and concept. */
 	onGameStart?: (threadId: string, gameType: string, concept: string) => void;
 	/** Fired when a turn opened the eligibility check instead of answering. */
@@ -256,32 +226,27 @@ export function useConversation({
 	onAnswer,
 	persona = null,
 	getLanguage = () => "en",
-	onThreadStart,
 	onGameStart,
 	onEligibilityStart,
 }: UseConversationOptions = {}) {
-	const [phase, setPhase] = useState<Phase>("landing");
 	const [messages, setMessages] = useState<Array<ChatMessage>>([]);
 	const [streaming, setStreaming] = useState<StreamingAnswer | null>(null);
 	const [isThinking, setIsThinking] = useState(false);
 	const queryClient = useQueryClient();
 
-	// Subscribed to the session: a sign-in or sign-out re-renders and requeries the new owner.
-	const { session } = useSession();
 	const [threadId, setThreadId] = useState<string | null>(null);
 
-	/** What this hook needs from the conversation list, and nothing more. */
-	const ownerId = session?.userId ?? "anon";
-	// Drives the layout: whether there is anything for the rail to offer at all.
-	const { data: hasHistory = false } = useQuery({
-		...conversationsQuery(ownerId),
-		select: (rows) => rows.length > 0,
-	});
-	/** The open conversation's stored name, as the title bar's change trigger. */
-	const { data: activeStoredTitle } = useQuery({
-		...conversationsQuery(ownerId),
-		select: (rows) => rows.find((row) => row.threadId === threadId)?.title,
-	});
+	/** The rail's list and its row actions, which the landing page shares. */
+	const {
+		hasHistory,
+		activeStoredTitle,
+		nameConversation,
+		markTitled,
+		hasTitled,
+		renameChat,
+		regenerateTitle,
+		deleteChat,
+	} = useConversationList({ activeThreadId: threadId, getLanguage });
 	/** The oldest message id allowed to play its entry animation. */
 	const [animateAfterId, setAnimateAfterId] = useState(0);
 
@@ -300,8 +265,6 @@ export function useConversation({
 		inFlight.current?.abort();
 		inFlight.current = null;
 	}, []);
-	/** Threads this session has already tried to name. */
-	const titledThreads = useRef(new Set<string>());
 	/** Mirrors `isThinking` for the in-flight guard in `send`. */
 	const isThinkingRef = useRef(false);
 	// Held in a ref so a changing callback never re-creates the send pipeline.
@@ -315,12 +278,6 @@ export function useConversation({
 	useEffect(() => {
 		getLanguageRef.current = getLanguage;
 	}, [getLanguage]);
-
-	// Same again: `send` has to stay stable, and the shell's navigate callback is not.
-	const onThreadStartRef = useRef(onThreadStart);
-	useEffect(() => {
-		onThreadStartRef.current = onThreadStart;
-	}, [onThreadStart]);
 
 	const onGameStartRef = useRef(onGameStart);
 	useEffect(() => {
@@ -339,95 +296,6 @@ export function useConversation({
 	useEffect(() => {
 		isThinkingRef.current = isThinking;
 	}, [isThinking]);
-
-	/** Adopt the conversations this browser started before ownership existed. */
-	// biome-ignore lint/correctness/useExhaustiveDependencies: once, on mount
-	useEffect(() => {
-		// An identity first, because everything user-scoped is gated on having one.
-		void ensureSession()
-			.then(async (session) => {
-				if (!session) return;
-				// The queries were disabled while there was no session.
-				await queryClient.invalidateQueries({
-					queryKey: conversationsQuery().queryKey,
-				});
-
-				const stranded = loadConversations().map((c) => c.threadId);
-				if (stranded.length === 0) return;
-				const claimed = await claimConversations(stranded).catch(() => 0);
-				if (claimed > 0) {
-					await queryClient.invalidateQueries({
-						queryKey: conversationsQuery().queryKey,
-					});
-				}
-			})
-			.catch(() => undefined);
-	}, []);
-
-	/** Names a conversation, in the cache and on the server. */
-	const renameMutation = useMutation({
-		mutationFn: ({
-			id,
-			title,
-			source,
-		}: {
-			id: string;
-			title: string;
-			source: "generated" | "manual";
-		}) => renameConversation(id, title, source),
-		onMutate: ({ id, title, source }) => {
-			const previous = titleSnapshot(queryClient, id);
-			retitleInCache(queryClient, id, title, source);
-			return { id, previous };
-		},
-		onError: (_error, _variables, context) => {
-			if (!context) return;
-			retitleInCache(
-				queryClient,
-				context.id,
-				context.previous.title,
-				context.previous.titleSource,
-			);
-		},
-		// Runs on success and on failure alike.
-		onSettled: () =>
-			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
-	});
-
-	// Deliberately fire-and-forget: a name that fails to save is not worth interrupting for.
-	const nameConversation = useCallback(
-		(id: string, title: string, source: "generated" | "manual") => {
-			renameMutation.mutate({ id, title, source });
-		},
-		[renameMutation.mutate],
-	);
-
-	/** Deletes a conversation, for good. */
-	const deleteMutation = useMutation({
-		mutationFn: (id: string) => deleteConversation(id),
-		onMutate: (id: string) => ({
-			removed: removeConversationFromCache(queryClient, id),
-		}),
-		onSuccess: (_result, id) => {
-			// The device-local copy still holds transcripts from before history moved server-side.
-			forgetLocalConversation(id);
-		},
-		onError: (error, _id, context) => {
-			if (error instanceof HttpError && error.status === 404) return;
-			if (context?.removed) upsertConversation(queryClient, context.removed);
-		},
-		// Ordering after a rollback comes from this refetch: the restore puts the row on top.
-		onSettled: () =>
-			queryClient.invalidateQueries({ queryKey: keys.allConversations() }),
-	});
-
-	/** Deletes one conversation. */
-	const deleteChat = useCallback(
-		(id: string) => {
-			deleteMutation.mutate(id);
-		},
-		[deleteMutation.mutate],
-	);
 
 	const clearTimers = useCallback(() => {
 		clearInterval(streamTimer.current);
@@ -576,6 +444,13 @@ export function useConversation({
 			interaction?: WidgetInteraction,
 			uploadResult?: UploadResult,
 			gameResult?: GameResultPayload,
+			/**
+			 * The language to ask in, when the caller knows it better than the
+			 * voice layer does. It reads its stored preference in an effect, so
+			 * on this page's first tick it still says "en" — and the handoff's
+			 * first turn happens inside exactly that tick.
+			 */
+			language?: string,
 		) => {
 			const controller = new AbortController();
 			inFlight.current?.abort(); // a previous turn should never outlive this one
@@ -640,8 +515,8 @@ export function useConversation({
 						result.startedGame.gameType,
 						getLanguageRef.current(),
 					);
-					if (named && !titledThreads.current.has(result.threadId)) {
-						titledThreads.current.add(result.threadId);
+					if (named && !hasTitled(result.threadId)) {
+						markTitled(result.threadId);
 						nameConversation(result.threadId, named, "generated");
 					}
 
@@ -663,8 +538,8 @@ export function useConversation({
 
 					// Name the chat now, while we know what it is.
 					const named = eligibilityTitle(result.startedEligibility.language);
-					if (!titledThreads.current.has(result.threadId)) {
-						titledThreads.current.add(result.threadId);
+					if (!hasTitled(result.threadId)) {
+						markTitled(result.threadId);
 						nameConversation(result.threadId, named, "generated");
 					}
 
@@ -734,7 +609,7 @@ export function useConversation({
 					simpleMode,
 					persona,
 					// Read at call time: the voice layer is built after this hook.
-					language: getLanguageRef.current(),
+					language: language ?? getLanguageRef.current(),
 				});
 
 				// Usually a no-op: `onTurn` already settled this when the turn was announced.
@@ -761,7 +636,32 @@ export function useConversation({
 			}
 		},
 		// `nameConversation` and `settleRevealed` are stable, so listing them costs no rebuilds.
-		[beginStream, persona, nameConversation, settleRevealed],
+		[
+			beginStream,
+			persona,
+			nameConversation,
+			settleRevealed,
+			hasTitled,
+			markTitled,
+		],
+	);
+
+	/** Puts the question on screen and starts the turn. The thread must exist. */
+	const dispatch = useCallback(
+		(text: string, simpleMode: boolean, language?: string) => {
+			dropStream();
+			lastQuestion.current = text;
+			const token = ++turnToken.current;
+
+			setIsThinking(true);
+			setMessages((current) => [
+				...current,
+				{ id: nextId.current++, role: "user", text },
+			]);
+
+			void ask(text, simpleMode, token, undefined, undefined, undefined, language);
+		},
+		[ask, dropStream],
 	);
 
 	const send = useCallback(
@@ -770,39 +670,31 @@ export function useConversation({
 			if (!text) return;
 			// Ignore a second question while one is in flight, rather than discarding the first reply.
 			if (isThinkingRef.current || cursor.current) return;
+			// Conversations are opened at `/`, which mints the id; this hook only continues them.
+			if (!threadRef.current) return;
 
-			dropStream();
-			lastQuestion.current = text;
-			const token = ++turnToken.current;
-
-			// The first message makes the conversation real: an id, an address, and a rail row.
-			const opening = !threadRef.current;
-			if (opening) {
-				const minted = newThreadId();
-				threadRef.current = minted;
-				setThreadId(minted);
-
-				// Committed now, not when the answer settles.
-				upsertConversation(queryClient, {
-					threadId: minted,
-					title: titleFor(text),
-					updatedAt: Date.now(),
-					messages: [{ role: "user", text }],
-				});
-
-				onThreadStartRef.current?.(minted);
-			}
-
-			setPhase("chat");
-			setIsThinking(true);
-			setMessages((current) => [
-				...current,
-				{ id: nextId.current++, role: "user", text },
-			]);
-
-			void ask(text, simpleMode, token);
+			dispatch(text, simpleMode);
 		},
-		[ask, dropStream, queryClient],
+		[dispatch],
+	);
+
+	/**
+	 * Sends the question the landing page staged, into the conversation it
+	 * already minted and committed. The user's message is appended here and
+	 * nowhere else, which is why the chat page must take the pending turn
+	 * before it reads the cache.
+	 */
+	const resumeFirstTurn = useCallback(
+		(id: string, question: string, simpleMode: boolean, language: string) => {
+			const text = question.trim();
+			if (!text) return;
+			if (isThinkingRef.current || cursor.current) return;
+
+			threadRef.current = id;
+			setThreadId(id);
+			dispatch(text, simpleMode, language);
+		},
+		[dispatch],
 	);
 
 	/** Re-asks the question behind one specific answer, replacing that answer. */
@@ -894,7 +786,7 @@ export function useConversation({
 
 	/** Name the conversation, once, after its first answer has landed. */
 	useEffect(() => {
-		if (!threadId || titledThreads.current.has(threadId)) return;
+		if (!threadId || hasTitled(threadId)) return;
 
 		const tail = messages.at(-1);
 		if (tail?.role !== "assistant") return;
@@ -909,7 +801,7 @@ export function useConversation({
 		const stored = readConversation(queryClient, threadId);
 		if (stored?.titleSource) return; // already named, or named by hand
 
-		titledThreads.current.add(threadId);
+		markTitled(threadId);
 
 		void requestTitle({
 			message: firstQuestion.text,
@@ -920,44 +812,14 @@ export function useConversation({
 			if (!title) return;
 			nameConversation(threadId, title, "generated");
 		});
-	}, [messages, threadId, queryClient, nameConversation]);
-
-	/** Renames a conversation by hand. */
-	const renameChat = useCallback(
-		(id: string, title: string) => {
-			titledThreads.current.add(id);
-			nameConversation(id, title, "manual");
-		},
-		[nameConversation],
-	);
-
-	/** Asks for a fresh title for one conversation. */
-	const regenerateTitle = useCallback(
-		(id: string) => {
-			// The rail's rows carry no transcripts, so the opening exchange is fetched.
-			void queryClient
-				.ensureQueryData(conversationQuery(id))
-				.then((stored) => {
-					const question = stored.messages.find((m) => m.role === "user");
-					const answer = stored.messages.find((m) => m.role === "assistant");
-					if (question?.role !== "user" || answer?.role !== "assistant") return;
-
-					clearTitleLockInCache(queryClient, id);
-					titledThreads.current.add(id);
-
-					return requestTitle({
-						message: question.text,
-						answer: answerToText(answer.blocks),
-						language: getLanguageRef.current(),
-					}).then((title) => {
-						if (!title) return;
-						nameConversation(id, title, "generated");
-					});
-				})
-				.catch(() => undefined);
-		},
-		[queryClient, nameConversation],
-	);
+	}, [
+		messages,
+		threadId,
+		queryClient,
+		nameConversation,
+		hasTitled,
+		markTitled,
+	]);
 
 	/** Reopens a stored conversation; everything lands already finished. */
 	const openPast = useCallback(
@@ -1004,7 +866,6 @@ export function useConversation({
 
 			threadRef.current = conversation.threadId;
 			setThreadId(conversation.threadId);
-			setPhase("chat");
 			setIsThinking(false);
 			setMessages(restored);
 			// Everything just restored is older than this, so none of it animates.
@@ -1047,25 +908,12 @@ export function useConversation({
 		[ask],
 	);
 
-	const reset = useCallback(() => {
-		abortInFlight();
-		dropStream();
-		lastQuestion.current = "";
-		turnToken.current += 1;
-		threadRef.current = null;
-		setThreadId(null);
-		setPhase("landing");
-		setMessages([]);
-		setIsThinking(false);
-	}, [dropStream, abortInFlight]);
-
 	// Follow-ups belong to the settled answer, never to one still being revealed.
 	const tail = messages.at(-1);
 	const followUps =
 		!streaming && tail?.role === "assistant" ? tail.followUps : [];
 
 	return {
-		phase,
 		messages,
 		streaming,
 		isThinking,
@@ -1075,13 +923,13 @@ export function useConversation({
 		threadId,
 		animateAfterId,
 		send,
+		resumeFirstTurn,
 		sendInteraction,
 		sendUploadResult,
 		sendGameResult,
 		regenerate,
 		stop,
 		openPast,
-		reset,
 		renameChat,
 		regenerateTitle,
 		deleteChat,

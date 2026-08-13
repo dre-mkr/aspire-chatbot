@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import {
 	useCallback,
 	useEffect,
@@ -9,7 +9,8 @@ import {
 	useState,
 } from "react";
 import { AccountControl } from "#/components/auth/AccountControl";
-import { CloseIcon, MenuIcon } from "#/components/icons";
+import { CloseIcon } from "#/components/icons";
+import { fetchConversation } from "#/lib/aspire/conversations";
 import {
 	clearEligibilityResult,
 	type EligibilityState,
@@ -17,38 +18,33 @@ import {
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
 import { type GameState, startGame } from "#/lib/aspire/games";
+import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
 import {
 	displayTitle,
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
-import { answerToText, starterPrompts } from "#/lib/aspire/knowledge";
+import { answerToText } from "#/lib/aspire/knowledge";
 import {
-	asPersonaId,
-	type PersonaId,
-	personaById,
-} from "#/lib/aspire/personas";
-import {
-	conversationQuery,
 	eligibilityStateQuery,
 	gameStateQuery,
 	invalidateAfterTurn,
 	readConversation,
+	upsertConversation,
 } from "#/lib/aspire/queries";
+import type { AnswerSearch } from "#/lib/aspire/search";
+import { ensureSession } from "#/lib/aspire/session";
+import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
+import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
-import { useSession } from "#/lib/aspire/use-session";
 import { useVoice } from "#/lib/aspire/use-voice";
-import { onPersonaRefused } from "#/lib/stream/session";
 import { useMediaQuery } from "#/lib/use-media-query";
-import type { ShellSearch } from "#/routes/_shell";
 import { ChatTitleBar } from "./ChatTitleBar";
 import { Composer } from "./Composer";
 import { Rail } from "./Rail";
 import { Transcript } from "./Transcript";
 import { VoiceConsent, VoiceNote } from "./Voice";
 
-/** The one route that carries a conversation id. */
-const CHAT_PREFIX = "/chat/";
 /** Below this the rail stops being a column and becomes a modal drawer. */
 const COMPACT = "(max-width: 860px)";
 /** How far from the bottom still counts as "following along". */
@@ -56,35 +52,35 @@ const STICK_THRESHOLD_PX = 160;
 /** The playback id the eligibility card speaks under. */
 const ELIGIBILITY_SPEECH_ID = -1;
 
-export function AspireChat() {
+/**
+ * One conversation, and nothing else. The landing screen is a separate page:
+ * it mints the conversation and stages its first question, and this page is
+ * what sends it.
+ */
+export function ChatScreen() {
 	// A ref: onAnswer is needed now, but voice needs the threadId useConversation returns.
 	const speakArrival = useRef<(id: number, text: string) => void>(() => {});
 
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	/** Which conversation the URL is pointing at, or undefined at `/`. */
-	const pathname = useRouterState({ select: (s) => s.location.pathname });
-	const chatId = pathname.startsWith(CHAT_PREFIX)
-		? decodeURIComponent(pathname.slice(CHAT_PREFIX.length))
-		: undefined;
+	/** Which conversation the URL is pointing at. The only source of truth for it. */
+	const chatId = useParams({
+		from: "/chat/$chatId",
+		select: (params) => params.chatId,
+	});
 
-	/** A chat that has been minted and navigated to, but whose URL has not landed. */
-	const awaitingUrl = useRef<string | null>(null);
-	/** One press of "New chat" is one navigation, however fast it is repeated. */
-	const startingNew = useRef(false);
-
-	/** The two answer settings, read from the address rather than from state. */
+	/** The three answer settings, read from the address. */
 	const {
-		simple,
-		persona: personaParam,
+		simpleMode,
+		toggleSimpleMode,
+		persona,
+		setPersona,
 		lang,
-	} = useSearch({ from: "/_shell" });
+		setLanguageInUrl,
+		personaNotice,
+		dismissPersonaNotice,
+	} = useAnswerSettings();
 
-	/** The persona the signed-in account resolves to, derived server-side. */
-	const { session } = useSession();
-	const accountPersona =
-		session?.accountType === "registered" ? asPersonaId(session.persona) : null;
-	const persona = personaParam ?? accountPersona ?? null;
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
 
@@ -100,23 +96,21 @@ export function AspireChat() {
 	} | null>(null);
 
 	const {
-		phase,
 		messages,
 		streaming,
 		isThinking,
 		followUps,
-		hasHistory,
 		activeStoredTitle,
 		threadId,
 		animateAfterId,
 		send,
+		resumeFirstTurn,
 		sendInteraction,
 		sendUploadResult,
 		sendGameResult,
 		regenerate,
 		stop,
 		openPast,
-		reset,
 		renameChat,
 		regenerateTitle,
 		deleteChat,
@@ -125,7 +119,6 @@ export function AspireChat() {
 		persona,
 		// Titles follow the interface language, read at call time since voice is built below.
 		getLanguage: () => voice.language,
-		// The first message of a chat gives it an address.
 		onGameStart: (id, gameType, concept) => {
 			setGame(null);
 			liveGame.current = {
@@ -168,83 +161,14 @@ export function AspireChat() {
 				})
 				.catch(() => undefined);
 		},
-		onThreadStart: (id) => {
-			awaitingUrl.current = id;
-			void navigate({
-				to: "/chat/$chatId",
-				params: { chatId: id },
-				// Carried, not dropped.
-				search: (previous: ShellSearch) => previous,
-				replace: true,
-			});
-		},
 	});
 
 	const compact = useMediaQuery(COMPACT);
 	const [railCollapsed, setRailCollapsed] = useState(false);
 	const [drawerOpen, setDrawerOpen] = useState(false);
 
-	const simpleMode = simple === true;
-	const toggleSimpleMode = useCallback(() => {
-		void navigate({
-			to: ".",
-			// Spread, not replace.
-			search: (previous: ShellSearch): ShellSearch =>
-				previous.simple
-					? { ...previous, simple: undefined }
-					: { ...previous, simple: true },
-			replace: true,
-		});
-	}, [navigate]);
-
-	// `replace`, like the toggle above: picking a persona adjusts the view, not the history.
-	const setPersona = useCallback(
-		(next: PersonaId | null) => {
-			void navigate({
-				to: ".",
-				search: (previous: ShellSearch): ShellSearch => ({
-					...previous,
-					persona: next ?? undefined,
-				}),
-				replace: true,
-			});
-		},
-		[navigate],
-	);
-
-	/** A persona the server would not grant, said out loud and then corrected. */
-	const [personaNotice, setPersonaNotice] = useState<string | null>(null);
-	useEffect(() => {
-		return onPersonaRefused(({ requested, granted }) => {
-			const grantedId = asPersonaId(granted);
-			const requestedName =
-				personaById(asPersonaId(requested))?.name ?? requested;
-			const grantedName = personaById(grantedId)?.name ?? granted;
-			setPersonaNotice(
-				`${requestedName} is not available on this account, so answers stay with ${grantedName}.`,
-			);
-			// Corrected rather than left disagreeing with the session.
-			setPersona(grantedId);
-		});
-	}, [setPersona]);
-
 	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
-
-	// `replace`, like the other two settings: language adjusts the view, not the history.
-	const setLanguageInUrl = useCallback(
-		(next: "en" | "es" | "fr") => {
-			void navigate({
-				to: ".",
-				search: (previous: ShellSearch): ShellSearch => ({
-					...previous,
-					lang: next,
-				}),
-				replace: true,
-			});
-		},
-		[navigate],
-	);
 
 	const voice = useVoice({
 		onTranscript: setDraft,
@@ -318,10 +242,9 @@ export function AspireChat() {
 		});
 	}, [eligibilityQuery.data, threadId]);
 
-	// The rail is a drawer wherever it cannot sit as a column: narrow screens, and the landing.
-	const drawerMode = compact || phase === "landing";
-	const railClosed = drawerMode ? !drawerOpen : railCollapsed;
-	const drawerModal = drawerMode && drawerOpen;
+	// The rail is a drawer only where it cannot sit as a column.
+	const railClosed = compact ? !drawerOpen : railCollapsed;
+	const drawerModal = compact && drawerOpen;
 
 	// Announce discrete events, not the stream.
 	const latest = messages.at(-1);
@@ -342,7 +265,7 @@ export function AspireChat() {
 	const scrollTops = useRef(new Map<string, number>());
 	/** True while the restore below is assigning an offset. */
 	const restoring = useRef(false);
-	/** `""` is the new chat, which has no id and cannot collide with one. */
+	/** `""` is a thread not yet adopted, which cannot collide with an id. */
 	const scrollKey = threadId ?? "";
 
 	/** Which thread the follow-the-stream effect is currently chasing. */
@@ -352,7 +275,7 @@ export function AspireChat() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: change trigger
 	useEffect(() => {
 		const thread = threadRef.current;
-		if (!thread || phase !== "chat") return;
+		if (!thread) return;
 
 		// A different conversation just arrived.
 		if (following.current !== threadId) {
@@ -365,7 +288,7 @@ export function AspireChat() {
 		if (distance < STICK_THRESHOLD_PX) {
 			thread.scrollTop = thread.scrollHeight;
 		}
-	}, [messages, streaming, isThinking, phase, threadId]);
+	}, [messages, streaming, isThinking, threadId]);
 
 	// Restore before paint, so a reopened conversation is never briefly shown at the wrong offset.
 	const restoredFor = useRef<string | null>(null);
@@ -433,9 +356,9 @@ export function AspireChat() {
 	}, [drawerModal]);
 
 	const toggleRail = useCallback(() => {
-		if (drawerMode) setDrawerOpen((open) => !open);
+		if (compact) setDrawerOpen((open) => !open);
 		else setRailCollapsed((collapsed) => !collapsed);
-	}, [drawerMode]);
+	}, [compact]);
 
 	// Asking, reopening, or starting a chat all make the current read-aloud stale.
 	const { stopPlayback } = voice;
@@ -493,74 +416,105 @@ export function AspireChat() {
 		stop();
 	}, [stop, stopPlayback]);
 
-	/** Bumped whenever the composer should take the cursor. */
-	const [focusSignal, setFocusSignal] = useState(1);
-	const focusComposer = useCallback(() => setFocusSignal((n) => n + 1), []);
+	/**
+	 * Which conversation this page has already gone to open. A ref, and not
+	 * `threadId`, because it has to be true the instant the work starts: the
+	 * callbacks below are rebuilt when the voice layer loads its preferences,
+	 * which re-runs this effect a tick later, while `threadId` is still the
+	 * state it was before. Guarding on state alone let that second run walk
+	 * past a first turn it had already sent and restore the cached row over
+	 * the top of it.
+	 */
+	const openedFor = useRef<string | null>(null);
+
+	/** The claimed first question, waiting for a mount that will last. */
+	const firstTurn = useRef<PendingTurn | null>(null);
+	/** Bumped once a first question has been claimed and is ready to go out. */
+	const [armed, setArmed] = useState(0);
+
+	/**
+	 * Sends the handed-off question, one commit after it was claimed.
+	 *
+	 * The router re-commits this page as it finishes its navigation, so the
+	 * mount effects run, are torn down, and run again — with refs intact, and
+	 * before any state from the first pass has landed. `useConversation` ends
+	 * whatever is in flight when it is torn down, so a turn started during the
+	 * mount commit is aborted in that gap and arrives as "that took too long".
+	 * Waiting for `armed` to land puts the request past it.
+	 */
+	useEffect(() => {
+		if (armed === 0) return;
+		const turn = firstTurn.current;
+		if (!turn) return;
+		firstTurn.current = null;
+		resumeFirstTurn(turn.threadId, turn.question, turn.simple, turn.language);
+	}, [armed, resumeFirstTurn]);
 
 	/** Makes the conversation match the URL, in one direction only. */
 	useEffect(() => {
-		// A chat has been started but the router has not committed its URL yet.
-		if (awaitingUrl.current) {
-			if (chatId === awaitingUrl.current) awaitingUrl.current = null;
+		if (openedFor.current === chatId) return;
+		// The first turn's id, now committed. Nothing to open: it is already here.
+		if (chatId === threadId) {
+			openedFor.current = chatId;
 			return;
 		}
+		openedFor.current = chatId;
 
-		if (!chatId) {
-			startingNew.current = false;
-			if (threadId || messages.length > 0) {
-				stopPlayback();
-				setGame(null);
-				setEligibility(null);
-				reset();
-			}
+		stopPlayback();
+		setGame(null);
+		// Cleared, not carried: the restore effect fetches the new thread's own card.
+		setEligibility(null);
+
+		/**
+		 * Before the cache, and that ordering is the whole trick: the landing
+		 * page wrote this question into the cache to give the rail its row, so
+		 * restoring from there first would put the message on screen and then
+		 * `resumeFirstTurn` would append it a second time.
+		 */
+		const pending = takePendingTurn(chatId);
+		if (pending) {
+			firstTurn.current = pending;
+			setArmed((n) => n + 1);
 			return;
 		}
-
-		if (chatId === threadId) return;
 
 		// Read from the cache first, and that is not an optimisation.
 		const cached = readConversation(queryClient, chatId);
 		if (cached && cached.messages.length > 0) {
-			stopPlayback();
-			setGame(null);
-			// Cleared, not carried: the restore effect fetches the new thread's own card.
-			setEligibility(null);
 			openPast(cached);
 			return;
 		}
 
-		let live = true;
-		void queryClient
-			.ensureQueryData(conversationQuery(chatId))
+		/**
+		 * An identity first, because a conversation is only readable as its
+		 * owner. Then the service directly rather than through Query: this is
+		 * the one read whose *failure* has to be acted on, and a rejection is
+		 * the only thing that tells an unknown address apart from an empty one.
+		 * The result is written back to the cache so the rail and every later
+		 * read see it, exactly as the query would have left it.
+		 */
+		void ensureSession()
+			.then((identity) => {
+				if (!identity)
+					throw new Error("no session to read a conversation with");
+				return fetchConversation(chatId);
+			})
 			.then((stored) => {
-				if (!live) return;
-				stopPlayback();
-				setGame(null);
-				setEligibility(null);
+				// The reader moved on while this was in flight.
+				if (openedFor.current !== chatId) return;
+				upsertConversation(queryClient, stored);
 				openPast(stored);
 			})
 			.catch(() => {
 				// An address this account has no conversation for: another device, a cleared identity.
-				if (!live) return;
+				if (openedFor.current !== chatId) return;
 				void navigate({
 					to: "/",
-					search: (previous: ShellSearch) => previous,
+					search: (previous: AnswerSearch) => previous,
 					replace: true,
 				});
 			});
-		return () => {
-			live = false;
-		};
-	}, [
-		chatId,
-		threadId,
-		messages.length,
-		navigate,
-		openPast,
-		reset,
-		stopPlayback,
-		queryClient,
-	]);
+	}, [chatId, threadId, navigate, openPast, stopPlayback, queryClient]);
 
 	const handleOpenPast = useCallback(
 		(conversation: StoredConversation) => {
@@ -568,34 +522,27 @@ export function AspireChat() {
 			void navigate({
 				to: "/chat/$chatId",
 				params: { chatId: conversation.threadId },
-				search: (previous: ShellSearch): ShellSearch => ({
+				search: (previous: AnswerSearch): AnswerSearch => ({
 					// "Explain it simply" belongs to the reader, so it survives moving between conversations.
 					...previous,
 					// Language does not.
 					...(conversation.language ? { lang: conversation.language } : {}),
 				}),
+				viewTransition: true,
 			});
 		},
 		[navigate],
 	);
 
 	const startNewChat = useCallback(() => {
-		// Already on an empty new chat: this is a no-op with a cursor.
-		if (!chatId && messages.length === 0) {
-			setDrawerOpen(false);
-			focusComposer();
-			return;
-		}
-		if (startingNew.current) return;
-		startingNew.current = true;
-
-		// A deliberate new chat outranks a first send still settling, so the pending id is dropped.
-		awaitingUrl.current = null;
 		stopPlayback();
 		setDrawerOpen(false);
-		void navigate({ to: "/", search: (previous: ShellSearch) => previous });
-		focusComposer();
-	}, [chatId, messages.length, focusComposer, navigate, stopPlayback]);
+		void navigate({
+			to: "/",
+			search: (previous: AnswerSearch) => previous,
+			viewTransition: true,
+		});
+	}, [navigate, stopPlayback]);
 
 	/** Cmd/Ctrl+Shift+O — the same binding both reference products use. */
 	useEffect(() => {
@@ -609,7 +556,6 @@ export function AspireChat() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [startNewChat]);
 
-	/** Writes out one conversation from the rail. */
 	/** What the open conversation is called. */
 	// biome-ignore lint/correctness/useExhaustiveDependencies: activeStoredTitle is the trigger
 	const activeTitle = useMemo(() => {
@@ -628,7 +574,12 @@ export function AspireChat() {
 		if (typeof document === "undefined") return;
 		document.title = activeTitle
 			? `${activeTitle} · ASPIRE AI`
-			: "ASPIRE AI · Financial literacy assistant";
+			: DEFAULT_DOCUMENT_TITLE;
+		// Set by hand, so it has to be put back by hand — leaving here for the
+		// landing screen, or for `/signin`, must not keep this chat's name.
+		return () => {
+			document.title = DEFAULT_DOCUMENT_TITLE;
+		};
 	}, [activeTitle]);
 
 	/** Deletes one conversation, and leaves it if it is the one on screen. */
@@ -642,11 +593,12 @@ export function AspireChat() {
 
 			if (!open) return;
 			setDrawerOpen(false);
-			// The rest follows from the address: no chat id makes the reconciler stop audio and reset.
+			// Nothing is left to read here, so the landing screen is where this lands.
 			void navigate({
 				to: "/",
-				search: (previous: ShellSearch) => previous,
+				search: (previous: AnswerSearch) => previous,
 				replace: true,
+				viewTransition: true,
 			});
 		},
 		[threadId, deleteChat, navigate],
@@ -667,7 +619,7 @@ export function AspireChat() {
 	return (
 		<div
 			className="app"
-			data-phase={phase}
+			data-phase="chat"
 			data-rail={railClosed ? "collapsed" : "expanded"}
 		>
 			<div className="atmosphere" aria-hidden="true">
@@ -680,7 +632,7 @@ export function AspireChat() {
 			<div className="frame">
 				<Rail
 					collapsed={railClosed}
-					unreachable={drawerMode && !drawerOpen}
+					unreachable={compact && !drawerOpen}
 					activeThreadId={threadId}
 					onToggle={toggleRail}
 					onNewChat={startNewChat}
@@ -710,20 +662,6 @@ export function AspireChat() {
 					<a href="#aspire-composer" className="skip-link">
 						Skip to the message box
 					</a>
-					{/* The top bar is gone. */}
-					{/* Only on the landing screen, where there is no bar to hold it. */}
-					{phase === "landing" && hasHistory ? (
-						<button
-							type="button"
-							className="rail-open"
-							onClick={openDrawer}
-							aria-controls="aspire-rail"
-							aria-expanded={drawerOpen}
-						>
-							<MenuIcon />
-							<span className="sr-only">Open conversations</span>
-						</button>
-					) : null}
 
 					{/* The way into an account, whenever the sidebar is not there to carry it. */}
 					{/* `inert` as well as the CSS, because they cover different people. */}
@@ -735,18 +673,15 @@ export function AspireChat() {
 						<AccountControl variant="corner" />
 					</div>
 
-					{/* No bar on the empty state: the hero already carries the product's identity. */}
-					{phase === "chat" ? (
-						<ChatTitleBar
-							title={activeTitle}
-							showDrawerTrigger={drawerMode}
-							drawerOpen={drawerOpen}
-							onOpenRail={openDrawer}
-							onRename={(title) => {
-								if (threadId) renameChat(threadId, title);
-							}}
-						/>
-					) : null}
+					<ChatTitleBar
+						title={activeTitle}
+						showDrawerTrigger={compact}
+						drawerOpen={drawerOpen}
+						onOpenRail={openDrawer}
+						onRename={(title) => {
+							if (threadId) renameChat(threadId, title);
+						}}
+					/>
 
 					<div className="stage">
 						<div
@@ -763,17 +698,6 @@ export function AspireChat() {
 							}}
 						>
 							<div className="thread__inner">
-								<div className="hero" inert={phase === "chat" || undefined}>
-									<div className="orb orb--hero" aria-hidden="true" />
-									<h1 className="hero__title">
-										What do you want to learn about money today?
-									</h1>
-									<p className="hero__sub">
-										Ask me about investing, your ASPIRE modules, or the
-										programme itself.
-									</p>
-								</div>
-
 								<section aria-label="Conversation">
 									<Transcript
 										messages={messages}
@@ -872,7 +796,7 @@ export function AspireChat() {
 									<button
 										type="button"
 										className="icon-btn icon-btn--sm"
-										onClick={() => setPersonaNotice(null)}
+										onClick={dismissPersonaNotice}
 									>
 										<CloseIcon />
 										<span className="sr-only">Dismiss</span>
@@ -891,33 +815,13 @@ export function AspireChat() {
 							onPersonaChange={setPersona}
 							draft={draft}
 							onDraftChange={setDraft}
-							focusSignal={focusSignal}
+							focusSignal={0}
 							voice={voice}
 						/>
-
-						<div className="starters">
-							<div
-								className="starters__row"
-								inert={phase === "chat" || undefined}
-							>
-								{starterPrompts.map((prompt) => (
-									<button
-										key={prompt}
-										type="button"
-										className="starter"
-										onClick={() => ask(prompt)}
-									>
-										{prompt}
-									</button>
-								))}
-							</div>
-						</div>
 					</div>
 
-					{/* The hero h1 goes inert with it, so this supplies the page heading in chat. */}
-					{phase === "chat" ? (
-						<h1 className="sr-only">Conversation with ASPIRE AI</h1>
-					) : null}
+					{/* There is no hero here to carry it, so this supplies the page heading. */}
+					<h1 className="sr-only">Conversation with ASPIRE AI</h1>
 
 					<output className="sr-only">{announcement}</output>
 

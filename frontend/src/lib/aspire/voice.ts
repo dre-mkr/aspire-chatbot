@@ -45,18 +45,30 @@ export class VoiceError extends Error {
 	}
 }
 
+/**
+ * Held for the life of the page: the composer is mounted fresh on every move
+ * between the landing and a chat, and without this each one re-asks and blinks
+ * the mic and its settings out of the toolbar while the answer is in flight.
+ */
+let configRequest: Promise<VoiceConfig | null> | null = null;
+
 /** Ask the server what voice can do. */
-export async function fetchVoiceConfig(): Promise<VoiceConfig | null> {
-	try {
-		const response = await fetch(`${API_URL}/api/voice/config`, {
-			signal: AbortSignal.timeout(4000),
-		});
-		if (!response.ok) return null;
-		const body = (await response.json()) as VoiceConfig;
-		return body.enabled ? body : null;
-	} catch {
-		return null;
-	}
+export function fetchVoiceConfig(): Promise<VoiceConfig | null> {
+	configRequest ??= (async () => {
+		try {
+			const response = await fetch(`${API_URL}/api/voice/config`, {
+				signal: AbortSignal.timeout(4000),
+			});
+			if (!response.ok) return null;
+			const body = (await response.json()) as VoiceConfig;
+			return body.enabled ? body : null;
+		} catch {
+			// A timeout is not an answer: forget it, so the next mount asks again.
+			configRequest = null;
+			return null;
+		}
+	})();
+	return configRequest;
 }
 
 /** A filename whose extension matches what was actually recorded. */
