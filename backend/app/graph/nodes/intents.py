@@ -33,7 +33,44 @@ _LOOKUP: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
-#: "Can *I* join?" -- somebody working out their own position, not looking a rule up.
+#: Questions ABOUT the rules and the process. These get a cited answer.
+#:
+#: They lived in `_ELIGIBILITY` and opened the wizard, which is a form carrying
+#: no prose at all -- so someone who asked a question was handed a form and
+#: never answered. The two tests either side of this file already name the
+#: intended line: `personal_eligibility_questions_open_the_card` against
+#: `lookups_stay_prose`, "a question about ONE rule gets a cited answer, not a
+#: form". These twelve were simply on the wrong side of it.
+#:
+#: The corpus agreed all along. `evals/golden.yaml` en-02 ("Who is eligible to
+#: join ASPIRE?" -> ASP-026) and en-03 ("How do I apply for ASPIRE?" -> ASP-045)
+#: both expect an answer, and the latency probe measured five of thirty golden
+#: questions producing no visible token at all -- en-02, en-03, es-02, es-03,
+#: fr-03 -- because the card claimed them.
+_ELIGIBILITY_LOOKUP: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        # ── English ──────────────────────────────────────────────────────────
+        r"\bwho (?:is|are) eligible\b",
+        r"\bwho can (?:join|apply|sign up|register|participate)\b",
+        r"\bhow (?:can|do) (?:i|we) (?:apply|join|sign up|register|enrol|enroll)\b",
+        r"\bhow (?:to|do you) (?:apply|join|sign up|register)\b",
+        r"\bwhat do (?:i|we) need to (?:apply|join|sign up|register)\b",
+        r"\bwhat (?:documents|papers|paperwork) do (?:i|we) need\b",
+        # ── Spanish ──────────────────────────────────────────────────────────
+        r"\bquien(?:es)? puede(?:n)? participar\b",
+        r"\bcomo (?:me inscribo|puedo inscribirme|me registro|solicito)\b",
+        r"\bque necesito para (?:inscribirme|participar|solicitar)\b",
+        # ── French ───────────────────────────────────────────────────────────
+        r"\bqui peut participer\b",
+        r"\bcomment (?:s'?inscrire|m'?inscrire|postuler|faire une demande)\b",
+        r"\bque faut-?il pour s'?inscrire\b",
+    )
+)
+
+#: "Can *I* join?" -- somebody working out their own position, not looking a rule
+#: up. Only these open the card, because only these are a question the card can
+#: actually answer: it asks about one person and returns a verdict on them.
 _ELIGIBILITY: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (
@@ -42,30 +79,18 @@ _ELIGIBILITY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:can|could|may) (?:i|we|my (?:son|daughter|child|kid|children|kids|boy|girl))\b"
         r".{0,24}\b(?:join|apply|sign up|register|enrol|enroll|participate|take part|get an account)\b",
         r"\bdo(?:es)? (?:i|we|my (?:son|daughter|child|kid)) (?:qualify|meet)\b",
-        r"\bwho (?:is|are) eligible\b",
-        r"\bwho can (?:join|apply|sign up|register|participate)\b",
         r"\bam i (?:the )?right age\b",
-        r"\bhow (?:can|do) (?:i|we) (?:apply|join|sign up|register|enrol|enroll)\b",
-        r"\bhow (?:to|do you) (?:apply|join|sign up|register)\b",
-        r"\bwhat do (?:i|we) need to (?:apply|join|sign up|register)\b",
-        r"\bwhat (?:documents|papers|paperwork) do (?:i|we) need\b",
         r"\b(?:eligibility|elegibility) check\b",
         # ── Spanish ──────────────────────────────────────────────────────────
-        r"\bquien(?:es)? puede(?:n)? participar\b",
         r"\bpuedo (?:participar|inscribirme|unirme|registrarme|apuntarme)\b",
         r"\bpuede mi (?:hijo|hija|nino|nina)\b",
         r"\bsoy (?:demasiado|muy) (?:mayor|joven)\b",
-        r"\bcomo (?:me inscribo|puedo inscribirme|me registro|solicito)\b",
-        r"\bque necesito para (?:inscribirme|participar|solicitar)\b",
         r"\bcalifico\b",
         # ── French ───────────────────────────────────────────────────────────
-        r"\bqui peut participer\b",
         # The apostrophe is optional in every one of these.
         r"\bpuis-?je (?:participer|m'?inscrire|adherer|postuler)\b",
         r"\bmon (?:fils|enfant|fille) peut-?il\b",
         r"\bsuis-?je trop (?:age|jeune|vieux)\b",
-        r"\bcomment (?:s'?inscrire|m'?inscrire|postuler|faire une demande)\b",
-        r"\bque faut-?il pour s'?inscrire\b",
         r"\bsuis-?je eligible\b",
     )
 )
@@ -106,6 +131,9 @@ def wants_eligibility(message: str) -> bool:
     if not folded:
         return False
     if any(pattern.search(folded) for pattern in _LOOKUP):
+        return False
+    # A question about the rules or the process is answered, not formed at.
+    if any(pattern.search(folded) for pattern in _ELIGIBILITY_LOOKUP):
         return False
     return any(pattern.search(folded) for pattern in _ELIGIBILITY)
 

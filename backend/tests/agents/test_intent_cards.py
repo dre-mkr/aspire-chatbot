@@ -42,16 +42,9 @@ def _state(message: str, **overrides):
         "Can I join ASPIRE?",
         "can my daughter sign up",
         "Do I qualify?",
-        "Who is eligible for ASPIRE?",
-        "who can join",
         "Am I too old?",
-        "How do I apply?",
-        "What documents do I need?",
         "¿Puedo inscribirme?",
-        "¿Quién puede participar?",
         "¿Soy demasiado mayor?",
-        "Qui peut participer ?",
-        "Puis-je m'inscrire ?",
         "Suis-je trop âgé ?",
         # No apostrophe at all, as a phone keyboard produces it.
         "puis-je minscrire",
@@ -64,6 +57,22 @@ def test_personal_eligibility_questions_open_the_card(question: str) -> None:
 @pytest.mark.parametrize(
     "question",
     [
+        # Questions about the RULES and the PROCESS. These used to open the
+        # card -- a form carrying no prose -- so asking one got you a form and
+        # no answer. `evals/golden.yaml` expected them answered all along
+        # (en-02 -> ASP-026, en-03 -> ASP-045), and the latency probe measured
+        # five of thirty golden questions producing no visible token because of
+        # it: en-02, en-03, es-02, es-03, fr-03.
+        "Who is eligible for ASPIRE?",
+        "who can join",
+        "How do I apply?",
+        "What documents do I need?",
+        "What documents do I need to register my child?",
+        "What do I need to apply?",
+        "¿Quién puede participar?",
+        "¿Cómo me inscribo?",
+        "Qui peut participer ?",
+        "Comment s'inscrire ?",
         "What is the minimum age?",
         "What is the maximum age for ASPIRE?",
         "What is the age limit?",
