@@ -103,3 +103,144 @@ def test_chat_is_metered_without_requiring_a_session(client):
     # The limiter runs first, so a throttled caller gets 429 rather than 401.
     assert refused.status_code != 401
     assert "Retry-After" in refused.headers
+
+
+# ── the mint endpoint, which had no limit at all ─────────────────────────────
+
+
+def test_minting_a_session_is_metered(client, monkeypatch):
+    """
+    `/v2/session` was unmetered, and it is where every metered endpoint's
+    token comes from.
+    """
+    import uuid as uuid_module
+
+    monkeypatch.setattr(get_settings(), "graph_sessions_per_window", 3, raising=False)
+
+    codes = [
+        client.post("/v2/session", json={"session_id": str(uuid_module.uuid4())}).status_code
+        for _ in range(5)
+    ]
+
+    assert codes[:3] == [200, 200, 200], codes
+    assert codes[-1] == 429, codes
+
+
+def test_a_turn_is_not_metered_against_the_id_the_caller_chose(monkeypatch):
+    """
+    Rotating `session_id` used to hand a caller a fresh budget.
+
+    The bucket was keyed `s:{session_id}` for anyone without an account, and
+    `session_id` arrives in the body of `/v2/session` unread -- so the value
+    being counted was the one the caller picks. Minting a new token with a new
+    id reset the count.
+
+    Asserted against `graph_rate_limit` rather than by driving real turns. The
+    end-to-end version worked, but tripping a 429 mid-stream left the Postgres
+    checkpointer holding a lock bound to that test's event loop, and the next
+    file to run inherited the wreckage. The property here is which key the
+    bucket uses; the transport is not part of it.
+    """
+    import uuid as uuid_module
+
+    from fastapi import HTTPException
+
+    from app.limits import graph_rate_limit
+
+    monkeypatch.setattr(get_settings(), "chat_messages_per_window", 2, raising=False)
+
+    class _Request:
+        client = type("C", (), {"host": "203.0.113.7"})()
+        headers: dict[str, str] = {}
+
+    request = _Request()
+    refused = 0
+    for _ in range(4):
+        try:
+            # A new id every time, which is exactly what re-minting gave you.
+            graph_rate_limit(request, str(uuid_module.uuid4()), None)
+        except HTTPException as exc:
+            assert exc.status_code == 429
+            refused += 1
+
+    assert refused, (
+        "four turns under a limit of two were all allowed; the bucket is keyed "
+        "on something the caller controls"
+    )
+
+
+def test_an_account_is_still_metered_on_its_own_id(monkeypatch):
+    """
+    Dropping the `s:` key must not push signed-in readers into one bucket.
+
+    A school visit is many children behind one NAT address, and each of them
+    has called `/api/auth/anonymous`, so each carries a real `sub` and meters
+    against `u:` -- not against the address they share.
+    """
+    from fastapi import HTTPException
+
+    from app.limits import graph_rate_limit
+
+    monkeypatch.setattr(get_settings(), "chat_messages_per_window", 2, raising=False)
+
+    class _Request:
+        client = type("C", (), {"host": "203.0.113.8"})()
+        headers: dict[str, str] = {}
+
+    request = _Request()
+    for index in range(6):
+        # Six turns from six accounts at one address: nobody is refused.
+        graph_rate_limit(request, "shared-thread", f"user-{index}")
+
+    with pytest.raises(HTTPException):
+        for _ in range(4):
+            graph_rate_limit(request, "shared-thread", "user-0")
+
+
+# ── what may be signed into a token ──────────────────────────────────────────
+
+
+def test_a_guessable_session_id_is_replaced(client):
+    """
+    The id is the conversation's address, and it was accepted verbatim.
+
+    The database still holds 56 conversations whose id is under thirty
+    characters -- `probe-stream-1` among them -- and any caller naming one of
+    those could pick up a thread that has no owner.
+    """
+    response = client.post("/v2/session", json={"session_id": "probe-stream-1"})
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] != "probe-stream-1"
+    assert len(response.json()["session_id"]) >= 16
+
+
+def test_a_thread_id_a_real_client_makes_is_kept(client):
+    """
+    Not a UUID requirement: `newThreadId` falls back to `t-<base36>-<base36>`
+    when `crypto.randomUUID` is missing -- an older Safari on a school tablet,
+    or a plain-HTTP staging box. Rejecting those would lock out the audience.
+    """
+    import uuid as uuid_module
+
+    for wanted in (str(uuid_module.uuid4()), "t-m1k2j3h4-a9b8c7d6"):
+        response = client.post("/v2/session", json={"session_id": wanted})
+        assert response.status_code == 200
+        assert response.json()["session_id"] == wanted, wanted
+
+
+def test_a_junk_device_id_does_not_become_a_signed_claim(client):
+    """`/api/auth/anonymous` always checked this shape; this endpoint did not."""
+    import uuid as uuid_module
+
+    from app.graph.identity import decode_session_token
+
+    response = client.post(
+        "/v2/session",
+        json={"session_id": str(uuid_module.uuid4()), "device_id": "x" * 500},
+    )
+
+    assert response.status_code == 200
+    claims = decode_session_token(response.json()["token"])
+    assert claims is not None
+    assert claims.device_id == "unknown"

@@ -203,6 +203,11 @@ class Settings(BaseSettings):
     # Counted per proven identity where there is one, and per address otherwise.
     chat_rate_window_seconds: int = Field(default=600, ge=10, le=3600)
     chat_messages_per_window: int = Field(default=30, ge=1, le=1000)
+    #: How many graph sessions one address may mint per window. `/v2/session`
+    #: had no limit of any kind, and it is the supply of tokens for everything
+    #: downstream that does. Generous on purpose: a real reader mints one per
+    #: conversation per page load, so this only bites a script.
+    graph_sessions_per_window: int = Field(default=120, ge=1, le=10_000)
     # Titles are one per conversation, so this only has to allow starting a lot of chats.
     title_requests_per_window: int = Field(default=20, ge=1, le=1000)
 

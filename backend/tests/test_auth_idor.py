@@ -189,19 +189,23 @@ def test_chat_works_with_no_identity_at_all(client: TestClient):
     """Part 1: sign-up is never required, and neither is an account."""
     minted = client.post("/v2/session", json={"session_id": str(uuid.uuid4())})
     assert minted.status_code == 200, minted.text
-    assert minted.json()["age_band"] == "adult", (
-        "an anonymous caller with no picked persona reads as the public default"
+    # Was `aurora`/`adult`. A signed-out caller is the one reader whose age is
+    # genuinely unknown, so the default is now the most restrictive band rather
+    # than the least -- see `_ANONYMOUS_DEFAULT` in graph/account.py. What this
+    # test is actually about is unchanged: no account is required to chat.
+    assert minted.json()["age_band"] == "5-8", (
+        "an anonymous caller with no picked persona reads as the youngest"
     )
-    assert minted.json()["persona"] == "aurora"
+    assert minted.json()["persona"] == "stella"
 
-    # A picked child persona keeps the child band and every child gate.
-    child = client.post(
+    # The picker still works, and picking wider is allowed for a visitor.
+    adult = client.post(
         "/v2/session",
-        json={"session_id": str(uuid.uuid4()), "persona": "stella"},
+        json={"session_id": str(uuid.uuid4()), "persona": "aurora"},
     )
-    assert child.status_code == 200
-    assert child.json()["persona"] == "stella"
-    assert child.json()["age_band"] == "5-8"
+    assert adult.status_code == 200
+    assert adult.json()["persona"] == "aurora"
+    assert adult.json()["age_band"] == "adult"
 
     response = client.post(
         "/v2/chat/stream",

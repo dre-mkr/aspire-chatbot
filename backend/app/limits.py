@@ -80,12 +80,24 @@ def _enforce(bucket: str, request: Request, principal: Principal | None, limit: 
 
 
 def graph_rate_limit(request: Request, session_id: str, user_id: str | None) -> None:
-    """Meter a graph turn."""
+    """Meter a graph turn.
+
+    `session_id` is deliberately NOT a key. It arrives in the body of
+    `/v2/session` and is signed into the token unread, so metering against it
+    let a caller reset their own budget by minting a new token with a different
+    one -- the bucket was keyed on the value the caller chooses. It stays in the
+    signature because the caller passes it and because a future keyed-on-server
+    -minted-id scheme would want it, but a client-controlled string cannot be
+    the thing that counts requests.
+
+    Falling through to the address instead does not lump a school behind one
+    NAT into a single bucket: a visitor who has called `/api/auth/anonymous`
+    carries a real `sub`, so `u:` applies to them. Only a caller with no
+    account at all shares the address bucket, which is the abuse case.
+    """
     settings = get_settings()
     if user_id:
         caller = f"u:{user_id}"
-    elif session_id:
-        caller = f"s:{session_id}"
     else:
         caller = f"ip:{hash_ip(client_ip(request))[:32]}"
 
@@ -100,6 +112,33 @@ def graph_rate_limit(request: Request, session_id: str, user_id: str | None) -> 
     raise HTTPException(
         status_code=429,
         detail="You're asking questions faster than I can answer. Wait a moment, then try again.",
+        headers={"Retry-After": str(decision.retry_after_seconds)},
+    )
+
+
+def session_mint_rate_limit(request: Request) -> None:
+    """Meter `/v2/session`, which had no limit of any kind.
+
+    Minting is cheap but not free -- each call reads the account, derives
+    claims and signs a token -- and an unmetered mint endpoint is also the
+    supply of tokens for everything downstream that IS metered.
+
+    Keyed on the address on purpose, including for a signed-in caller: the
+    thing being limited is how fast tokens can be produced from one place, not
+    how busy one account is.
+    """
+    settings = get_settings()
+    decision = get_limiter().check(
+        "session",
+        f"ip:{hash_ip(client_ip(request))[:32]}",
+        limit=settings.graph_sessions_per_window,
+        window=settings.chat_rate_window_seconds,
+    )
+    if decision.allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail="Too many sessions started from here. Wait a moment, then try again.",
         headers={"Retry-After": str(decision.retry_after_seconds)},
     )
 

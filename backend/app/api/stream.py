@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -49,6 +50,15 @@ TURN_TIMEOUT_SECONDS = 120.0
 
 #: The longest question this transport will read.
 MAX_MESSAGE_CHARS = 8_000
+
+#: What a client may name a conversation. Wide enough for a UUID and for
+#: `newThreadId`'s `t-<base36>-<base36>` fallback; the floor on length is what
+#: keeps a guessable id like `probe-stream-1` out of a signed token.
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]{16,128}$")
+
+#: The same shape `/api/auth/anonymous` has always required of a device id, and
+#: which this endpoint accepted anything in place of.
+_DEVICE_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 
 #: Directives that decorate an answer rather than being one. A turn carrying
 #: only these, and no words, has said nothing to the reader.
@@ -616,6 +626,11 @@ async def presign(
 async def mint_session(request: Request) -> dict[str, Any]:
     """Issue a graph session token for an already-authenticated caller."""
     from app.auth import optional_principal
+    from app.limits import session_mint_rate_limit
+
+    # Metered before anything is read or looked up: this endpoint had no limit
+    # at all, and it is where the tokens for every metered endpoint come from.
+    session_mint_rate_limit(request)
 
     principal = await optional_principal(request.headers.get("authorization"))
 
@@ -630,8 +645,30 @@ async def mint_session(request: Request) -> dict[str, Any]:
     except Exception:
         body = {}
 
-    session_id = str(body.get("session_id") or uuid.uuid4())
-    device_id = str(body.get("device_id") or "unknown")
+    # Both of these are signed into the token, and `sid` becomes the LangGraph
+    # thread id, the conversation id and — until now — the rate-limit key. They
+    # arrived from the request body unread: anything at all became a signed
+    # claim. The database still carries what that allowed, 56 conversations
+    # whose id is under thirty characters, `probe-stream-1` among them, and any
+    # caller naming one of those could pick up a thread that has no owner.
+    #
+    # Not a UUID requirement, deliberately. `newThreadId` falls back to
+    # `t-<base36>-<base36>` when `crypto.randomUUID` is unavailable — an older
+    # Safari on a school tablet, or a plain-HTTP staging box, which is a fair
+    # description of this audience. A charset and a floor on length keep those
+    # working and reject the guessable ones. Anything malformed is REPLACED
+    # rather than refused, so a bad client gets a fresh conversation instead of
+    # an error it cannot act on.
+    session_id = str(body.get("session_id") or "")
+    if not _SESSION_ID_RE.match(session_id):
+        if session_id:
+            logger.warning("Replacing an unusable session id (%d chars).", len(session_id))
+        session_id = str(uuid.uuid4())
+
+    device_id = str(body.get("device_id") or "")
+    if not _DEVICE_RE.match(device_id):
+        device_id = "unknown"
+
     locale = str(body.get("locale") or "en")
     if locale not in ("en", "es", "fr"):
         locale = "en"
