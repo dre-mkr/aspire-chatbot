@@ -731,3 +731,46 @@ class TestTheGraphStillHoldsItsShape:
         )
         assert grade_answer(question, "Saving") is True
         assert grade_answer(question, "Spending") is False
+
+
+# ── the tutor's decline, in the reader's language ────────────────────────────
+
+
+class TestTheDeclineSpeaksTheReadersLanguage:
+    """
+    `render.decline_text` was English with no locale parameter anywhere in
+    scope, so a Spanish or French child who asked about something the tutor
+    could not resolve was declined in English -- inside an otherwise translated
+    lesson. Both callers had the locale to hand; only the parameter was missing.
+    """
+
+    @pytest.mark.parametrize(
+        ("locale", "marker"),
+        [("en", "I do not know"), ("es", "todavía no me la sé"), ("fr", "je ne la sais pas encore")],
+    )
+    async def test_a_young_learner_is_declined_in_their_own_words(self, locale, marker):
+        from app.agents.learn.render import decline_text
+
+        assert marker in decline_text("5-8", (), locale)
+
+    async def test_an_unknown_locale_falls_back_to_english(self):
+        from app.agents.learn.render import decline_text
+
+        assert decline_text("5-8", (), "de") == decline_text("5-8", (), "en")
+
+    async def test_the_offer_is_localised_around_the_corpus_title(self):
+        """
+        The frame is translated; the concept title is quoted as the corpus has
+        it. Exactly what `escalation/decline.py` already does, and the same
+        reason: the corpus is English and translating a title would invent one.
+        """
+        from app.agents.learn.render import decline_text
+
+        class _Concept:
+            def __init__(self, title):
+                self.title = title
+
+        text = decline_text("9-12", [_Concept("Saving basics")], "es")
+
+        assert "Puedo enseñarte sobre" in text
+        assert "saving basics" in text

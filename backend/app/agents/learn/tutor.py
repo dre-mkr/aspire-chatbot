@@ -747,7 +747,7 @@ def _decline(
     started: float,
 ) -> dict[str, Any]:
     """Nothing resolved."""
-    text = decline_text(band, resolution.alternatives)
+    text = decline_text(band, resolution.alternatives, str(state.get("locale") or "en"))
     _emit_prose(text)
     logger.info(
         "learn_turn concept_id=None resolution_source=%s similarity=%.3f move=DECLINE "

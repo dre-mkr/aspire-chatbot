@@ -385,21 +385,67 @@ def template_lesson(
     return f"{text} {tail}".strip() if tail else text
 
 
-def decline_text(band: str, alternatives: Sequence[TeachingConcept]) -> str:
-    """What to say when nothing was resolved."""
-    offers = [concept.title.lower() for concept in alternatives[:2]]
-    if band == "5-8":
-        opening = "I do not know that one yet!"
-    elif band == "9-12":
-        opening = "That one is not something I have learned yet."
-    else:
-        opening = "I do not have anything solid on that one yet, and I would rather say so than guess."
+#: ES and FR are MARKED FOR NATIVE-SPEAKER REVIEW before the 20th.
+#:
+#: This whole function was English, with no locale parameter anywhere in scope,
+#: so a Spanish or French child who asked about something the tutor could not
+#: resolve was declined in English. Both callers had the locale to hand -- one
+#: on `TeachContext`, the other on the graph state -- so the only thing missing
+#: was the parameter.
+_DECLINE_OPENING: dict[str, dict[str, str]] = {
+    "en": {
+        "5-8": "I do not know that one yet!",
+        "9-12": "That one is not something I have learned yet.",
+        "adult": "I do not have anything solid on that one yet, and I would rather say so than guess.",
+    },
+    "es": {
+        "5-8": "¡Esa todavía no me la sé!",
+        "9-12": "Esa aún no la he aprendido.",
+        "adult": "Sobre eso todavía no tengo nada firme, y prefiero decirlo antes que adivinar.",
+    },
+    "fr": {
+        "5-8": "Celle-là, je ne la sais pas encore !",
+        "9-12": "Celle-là, je ne l'ai pas encore apprise.",
+        "adult": "Je n'ai rien de solide là-dessus pour l'instant, et je préfère le dire plutôt que deviner.",
+    },
+}
 
+#: The offer around the concept titles. The titles themselves stay in the
+#: corpus's own language, exactly as `escalation/decline.py` already does it:
+#: the frame is localised, the topic is quoted.
+_DECLINE_OFFER: dict[str, dict[str, str]] = {
+    "en": {
+        "two": "{opening} I could teach you about {first}, or about {second}. Which sounds better?",
+        "one": "{opening} I could teach you about {first} instead. Shall we?",
+        "none": "{opening} Ask me something else about money and I will see what I have.",
+    },
+    "es": {
+        "two": "{opening} Puedo enseñarte sobre {first}, o sobre {second}. ¿Cuál prefieres?",
+        "one": "{opening} Puedo enseñarte sobre {first}. ¿Empezamos?",
+        "none": "{opening} Pregúntame otra cosa sobre el dinero y veré qué tengo.",
+    },
+    "fr": {
+        "two": "{opening} Je peux t'expliquer {first}, ou {second}. Lequel préfères-tu ?",
+        "one": "{opening} Je peux t'expliquer {first} à la place. On commence ?",
+        "none": "{opening} Pose-moi une autre question sur l'argent et je verrai ce que j'ai.",
+    },
+}
+
+
+def decline_text(
+    band: str, alternatives: Sequence[TeachingConcept], locale: str = "en"
+) -> str:
+    """What to say when nothing was resolved."""
+    speech = _DECLINE_OPENING.get(locale, _DECLINE_OPENING["en"])
+    offer = _DECLINE_OFFER.get(locale, _DECLINE_OFFER["en"])
+    opening = speech.get(band, speech["adult"])
+
+    offers = [concept.title.lower() for concept in alternatives[:2]]
     if len(offers) >= 2:
-        return f"{opening} I could teach you about {offers[0]}, or about {offers[1]}. Which sounds better?"
+        return offer["two"].format(opening=opening, first=offers[0], second=offers[1])
     if offers:
-        return f"{opening} I could teach you about {offers[0]} instead. Shall we?"
-    return f"{opening} Ask me something else about money and I will see what I have."
+        return offer["one"].format(opening=opening, first=offers[0])
+    return offer["none"].format(opening=opening)
 
 
 # ── the three-tier renderer ──────────────────────────────────────────────────
@@ -538,7 +584,9 @@ async def render_teach(
         context.band,
         context.move.value,
     )
-    return _finish(RenderResult(text=decline_text(context.band, ()), tier=3), context)
+    return _finish(
+        RenderResult(text=decline_text(context.band, (), context.locale), tier=3), context
+    )
 
 
 def _finish(result: RenderResult, context: TeachContext) -> RenderResult:
