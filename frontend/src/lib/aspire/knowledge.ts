@@ -249,10 +249,26 @@ export function parseInline(
 	return nodes.filter((node) => node.kind !== "text" || node.text.length > 0);
 }
 
-/** Prompts offered on the landing screen, before there is any conversation. */
+/**
+ * Prompts offered on the landing screen, before there is any conversation.
+ *
+ * All four used to be programme questions, so nothing on the landing page
+ * revealed that the assistant also teaches lessons and runs games -- a reader
+ * had to already know to ask. Two of them additionally opened the eligibility
+ * wizard rather than answering, because they were worded exactly like the
+ * intent patterns; that half is fixed in `intents.py`, and these now cover the
+ * four things this assistant actually does: explain the programme, help you
+ * join it, teach, and play.
+ *
+ * The wording is load-bearing. "Can we play a game?" reaches `wants_game`
+ * without naming one, so the reply offers the games this reader's band may
+ * have rather than launching a game they cannot. "Teach me about saving"
+ * reaches `wants_lesson`. Both verified against the predicates rather than
+ * assumed -- the last set was not.
+ */
 export const starterPrompts = [
 	"What is the ASPIRE Programme?",
-	"Who is eligible to join ASPIRE?",
 	"How do I apply for ASPIRE?",
-	"Does it cost anything to join?",
+	"Teach me about saving",
+	"Can we play a game?",
 ] as const;
