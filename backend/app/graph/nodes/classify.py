@@ -380,8 +380,13 @@ async def default_invoke(system: str, user: str) -> str:
     """The real model call, used when the graph is built for production."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
+    from app.retry import with_retry
+
     model = _cached_model()
-    response = await model.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
+    response = await with_retry(
+        lambda: model.ainvoke([SystemMessage(content=system), HumanMessage(content=user)]),
+        what="classify.invoke",
+    )
     content = response.content
     if isinstance(content, str):
         return content

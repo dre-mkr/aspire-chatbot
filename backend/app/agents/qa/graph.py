@@ -193,8 +193,11 @@ async def _corpus(audience: str) -> list[tuple[str, str]]:
 
 async def _generate_invoke(messages: list[Any]) -> str:
     from app.agent import build_chat_model
+    from app.retry import with_retry
 
-    response = await build_chat_model().ainvoke(messages)
+    response = await with_retry(
+        lambda: build_chat_model().ainvoke(messages), what="qa.generate"
+    )
     content = response.content
     if isinstance(content, str):
         return content

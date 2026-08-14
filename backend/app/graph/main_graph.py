@@ -145,7 +145,12 @@ def make_persist(summarise: Summariser | None = None):
 
         messages = state.get("messages", [])
         if summarise is not None and len(messages) > SUMMARY_AFTER_MESSAGES:
-            older = messages[:-SUMMARY_AFTER_MESSAGES]
+            # The verbatim window's boundary, not the trigger's -- see
+            # `turn.summarise_thread`, which is the path production actually
+            # uses. Kept in step so the two cannot drift into disagreeing.
+            from app.context.session_context import RECENT_TURNS
+
+            older = messages[:-RECENT_TURNS]
             redacted = [
                 pii.redact_for_summary(text_of(message))
                 for message in older

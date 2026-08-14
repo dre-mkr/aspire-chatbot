@@ -316,6 +316,7 @@ async def summarise_thread(graph: Any, config: dict[str, Any]) -> bool:
     if not summarisation_wanted():
         return False
 
+    from app.context.session_context import RECENT_TURNS
     from app.graph.main_graph import SUMMARY_AFTER_MESSAGES
 
     # A graph compiled without a checkpointer has no state to read back, and that is supported.
@@ -335,7 +336,18 @@ async def summarise_thread(graph: Any, config: dict[str, Any]) -> bool:
 
     from app.safety import pii
 
-    older = messages[:-SUMMARY_AFTER_MESSAGES]
+    # Everything the verbatim window does NOT carry, which is not the same
+    # boundary as the trigger above.
+    #
+    # `SUMMARY_AFTER_MESSAGES` was doing both jobs: deciding WHEN to summarise
+    # (12 messages) and WHERE the summary ends (also 12). But the prompt carries
+    # the last `RECENT_TURNS` messages verbatim, which is 6 -- so messages 7 to
+    # 12 back were in neither the summary nor the window. Six messages, three
+    # exchanges, silently absent from what the model could see.
+    #
+    # The trigger stays at 12: summarising a four-message thread costs a model
+    # call to compress nothing.
+    older = messages[:-RECENT_TURNS]
     redacted = [
         pii.redact_for_summary(text_of(message))
         for message in older

@@ -290,7 +290,11 @@ async def embed_query_cached(text: str) -> list[float]:
         return cached
 
     # TimedEmbeddings records T_EMBED around the real call.
-    vector = await get_embeddings().aembed_query(text)
+    from app.retry import with_retry
+
+    vector = await with_retry(
+        lambda: get_embeddings().aembed_query(text), what="embed.query"
+    )
     await response_cache.put_embedding(text, model, vector)
     return vector
 

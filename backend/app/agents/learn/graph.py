@@ -692,7 +692,11 @@ async def _teach_invoke(messages):
     """The answer model, writing the lesson."""
     from app.agent import build_chat_model
 
-    response = await build_chat_model().ainvoke(messages)
+    from app.retry import with_retry
+
+    response = await with_retry(
+        lambda: build_chat_model().ainvoke(messages), what="learn.teach"
+    )
     content = response.content
     if isinstance(content, str):
         return content
