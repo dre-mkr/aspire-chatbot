@@ -135,6 +135,10 @@ class Settings(BaseSettings):
     qa_rrf_k: int = Field(default=60, ge=1, le=200)
     #: The QA relevance floor, as a COSINE similarity from the dense retriever.
     qa_relevance_floor: float = Field(default=0.55, ge=0.0, le=1.0)
+    #: Below this, retrieval found nothing and no citation rescues the answer.
+    #: Between this and `qa_relevance_floor` the score is marginal, and whether
+    #: the answer cites a retrieved extract decides. See `qa/nodes.ground_check`.
+    qa_relevance_hard_floor: float = Field(default=0.35, ge=0.0, le=1.0)
 
     #: Lexical fallback floor: the share of the question's content words that were retrieved.
     qa_coverage_floor: float = Field(default=0.25, ge=0.0, le=1.0)

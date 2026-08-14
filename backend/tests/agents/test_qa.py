@@ -214,6 +214,54 @@ class TestGroundCheck:
         assert_declined(command, "below_relevance_floor")
 
     @pytest.mark.asyncio
+    async def test_a_marginal_score_defers_to_the_citation(self):
+        """
+        A cosine score is a stand-in for groundedness; a citation is evidence.
+
+        Measured over 27 turns, five declined on scores of 0.457-0.542 against
+        the 0.550 floor while carrying correct, cited answers -- and because
+        `ground_check` runs after `generate` has already streamed, the reader got
+        the answer AND "I do not have an answer for that" welded onto the end.
+        0.542 and 0.550 are the same decision, so between the hard floor and the
+        ordinary one the citation decides.
+        """
+        state = state_for("what is compound interest")
+        state["retrieved"] = chunks_for("ASP-003", score=0.48)
+        state["messages"].append(AIMessage(content="It is EC$25 [ASP-003]."))
+
+        command = await nodes.make_ground_check()(state)
+
+        assert command.goto != "escalate_agent"
+        assert not (command.update or {}).get("safety_flags", {}).get("declined")
+
+    @pytest.mark.asyncio
+    async def test_a_marginal_score_still_declines_without_a_citation(self):
+        """The override is the citation, not the margin."""
+        state = state_for("what is compound interest")
+        state["retrieved"] = chunks_for("ASP-003", score=0.48)
+        state["messages"].append(AIMessage(content="It is about EC$25."))
+
+        command = await nodes.make_ground_check()(state)
+
+        assert_declined(command, "below_relevance_floor")
+
+    @pytest.mark.asyncio
+    async def test_below_the_hard_floor_no_citation_rescues_the_answer(self):
+        """
+        Retrieval found nothing, and citing one of the nothings proves nothing.
+
+        This is the line between "marginal" and "absent". Without it, a hedge
+        against a 0.05 chunk would be served for carrying a `[ASP-...]`.
+        """
+        state = state_for("something tangential")
+        state["retrieved"] = chunks_for("ASP-006", score=0.05)
+        state["messages"].append(AIMessage(content="Probably [ASP-006]."))
+
+        command = await nodes.make_ground_check()(state)
+
+        assert_declined(command, "below_relevance_floor")
+
+    @pytest.mark.asyncio
     async def test_an_invented_figure_escalates(self):
         """The failure RAG systems actually have."""
         state = state_for("what is the minimum deposit")

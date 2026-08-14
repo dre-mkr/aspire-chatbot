@@ -457,14 +457,50 @@ def make_ground_check(threshold: float | None = None):
 
         query = state.get("qa_query") or _latest_user_text(state)
 
+        # ── direct evidence of grounding, read BEFORE the proxies for it ──
+        #
+        # The two floors below score the RETRIEVAL. Whether the answer is
+        # actually grounded is a different question, and the checks further down
+        # measure it: does it cite a retrieved extract, does it invent one, does
+        # it state a figure no extract contains. Those are evidence; a cosine
+        # score is a stand-in for evidence.
+        #
+        # Ordered floors-first, the stand-in overruled the real thing. Measured
+        # across 27 turns, 5 declined on a retrieval score of 0.457-0.542 against
+        # a 0.550 floor while carrying correct, cited answers -- including
+        # "What is compound interest?" and a recall of something the reader had
+        # said earlier in the same conversation, which is not a corpus question
+        # at all and can never score against it. Each of those answers was
+        # delivered with "I do not have an answer for that" welded onto the end.
+        #
+        # But a citation is not a licence: "how do I renew a fishing licence"
+        # answered "At the fisheries office [ASP-006]" cites a retrieved id and
+        # is wholly invented, and a hedge like "Probably [ASP-006]" against a
+        # 0.05 chunk is not grounded in anything. Both have tests.
+        #
+        # So the dense floor splits in two. Below the HARD floor retrieval found
+        # nothing and no citation rescues it. Between the hard floor and the
+        # ordinary one the score is marginal -- 0.457 and 0.542 against 0.550 are
+        # the same decision as 0.550, not a different one -- and there the direct
+        # evidence decides. The lexical floor is untouched: it only runs when the
+        # dense side never ran at all, which is the fishing-licence case.
+        known = {chunk.kb_id for chunk in chunks}
+        cited = {
+            match.group(1)
+            for match in re.finditer(r"\[([A-Za-z]{2,6}-\d+)\]", answer)
+        }
+        grounded_citations = cited & known
+
         # ── the primary floor: the dense retriever's real cosine relevance ──
         best = max((chunk.relevance for chunk in chunks), default=0.0)
         dense_seen = any(chunk.relevance > 0.0 for chunk in chunks)
-        if dense_seen and best < floor:
+        hard_floor = settings.qa_relevance_hard_floor
+        if dense_seen and best < floor and (best < hard_floor or not grounded_citations):
             return _ungrounded(
                 state,
                 "below_relevance_floor",
-                f"The closest chunk scored {best:.3f}, below the {floor:.3f} floor.",
+                f"The closest chunk scored {best:.3f}, below the {floor:.3f} floor"
+                + ("." if best < hard_floor else " and the answer cites no retrieved extract."),
             )
 
         # ── the lexical floor: English only, and only when the dense side never ran ──
@@ -495,13 +531,8 @@ def make_ground_check(threshold: float | None = None):
             )
 
         # ── attribution: an answer citing no retrieved extract is ungrounded ──
-        known = {chunk.kb_id for chunk in chunks}
-        cited = {
-            match.group(1)
-            for match in re.finditer(r"\[([A-Za-z]{2,6}-\d+)\]", answer)
-        }
-        grounded_citations = cited & known
-
+        # `known`, `cited` and `grounded_citations` are read above, before the
+        # floors, because they decide whether those floors apply at all.
         if not grounded_citations:
             return _ungrounded(
                 state,
