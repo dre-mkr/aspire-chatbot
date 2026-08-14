@@ -1,0 +1,38 @@
+### after-phase3 run
+
+30 turns · cold-start turns: 1 · cache hits: 0 · turns with a visible token: 29
+
+| stage | n | p50 (ms) | p95 (ms) | p99 (ms) | share of p50 TTFT | share of p95 TTFT | what it is |
+|---|---:|---:|---:|---:|---:|---:|---|
+| *`n` is how many turns recorded the stage. A share is shown only when `n` covers TTFT's turns, and is an approximation when `n` is larger — which is why one can exceed 100%.* | | | | | | | |
+| **TTFT budget** (durations; these sum to t_ttft) | | | | | | | |
+| `t_lang` | 0 | n/a | n/a | n/a | — | — | no detection: `language` is supplied by the client (ChatRequest.language) |
+| `t_persona` | 0 | n/a | n/a | n/a | — | — | no resolution: `persona` is forwarded to the agent config unread |
+| `t_account` | 0 | n/a | n/a | n/a | — | — | no lookup: `account_status` arrives on the request; nothing reads it |
+| `t_retrieve_kickoff` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_cache_lookup` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_session_wait` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_concurrent_wait` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_prompt_build` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `d_model_call` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `d_buffer_hold` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| *no budget for this run* | | | | | — | — | every duration stage was recorded on a different set of turns than `t_ttft`, so the shares are not computable — see the `n` column |
+| **Milestones** (cumulative from request received) | | | | | | | |
+| `t_agent_first_tool` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_agent_first_delta` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_ttft` | 29 | 8526.4 | 11565.5 | 12533.3 | — | — | cumulative: request received -> first token to client |
+| `t_total` | 30 | 11476.3 | 14834.4 | 16273.2 | — | — | cumulative: request received -> last token to client |
+| **Auxiliary** | | | | | | | |
+| `t_identity` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_history` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_open_conversation` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_retrieve_wait` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_semantic_lookup` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_embed` | 27 | 3.3 | 642.1 | 1038.3 | — | — | concurrent: OpenAI embedding round trip (off the critical path) |
+| `t_retrieve` | 27 | 636.4 | 809.9 | 1318.2 | — | — | concurrent: Neon cosine scan over 706 rows (off the critical path) |
+| `t_retrieve_total` | 0 | n/a | n/a | n/a | — | — | not recorded |
+| `t_tts_first_byte` | 0 | n/a | n/a | n/a | — | — | voice path only; /voice/speak is a separate request |
+
+Client-observed TTFT (cross-check, n=29): p50 10438.1 ms · p95 13579.1 ms
+
+Turns that yielded no visible token (1): fr-03 — these opened the eligibility card, whose turn is silenced by design (`SILENT_TOOLS` in app/streaming.py). They have a `t_total` but no `t_ttft`, and are excluded from every TTFT figure above.

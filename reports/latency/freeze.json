@@ -1,0 +1,403 @@
+{
+  "label": "freeze",
+  "summary": {
+    "turns": 30,
+    "capacity": 500,
+    "cold_starts": 1,
+    "cache_hits": 0,
+    "stages": {
+      "t_lang": {
+        "count": 0,
+        "reason": "no detection: `language` is supplied by the client (ChatRequest.language)"
+      },
+      "t_persona": {
+        "count": 0,
+        "reason": "no resolution: `persona` is forwarded to the agent config unread"
+      },
+      "t_account": {
+        "count": 0,
+        "reason": "no lookup: `account_status` arrives on the request; nothing reads it"
+      },
+      "t_retrieve_kickoff": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_cache_lookup": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_session_wait": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_concurrent_wait": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_prompt_build": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "d_model_call": {
+        "count": 29,
+        "p50": 7463.461,
+        "p95": 10773.892,
+        "p99": 11198.714,
+        "min": 4648.599,
+        "max": 11198.714
+      },
+      "d_buffer_hold": {
+        "count": 29,
+        "p50": 1609.015,
+        "p95": 3033.862,
+        "p99": 4224.606,
+        "min": 886.379,
+        "max": 4224.606
+      },
+      "t_agent_first_tool": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_agent_first_delta": {
+        "count": 29,
+        "p50": 7463.461,
+        "p95": 10773.892,
+        "p99": 11198.714,
+        "min": 4648.599,
+        "max": 11198.714
+      },
+      "t_ttft": {
+        "count": 29,
+        "p50": 9338.496,
+        "p95": 12105.51,
+        "p99": 12350.307,
+        "min": 5709.158,
+        "max": 12350.307
+      },
+      "t_total": {
+        "count": 30,
+        "p50": 10395.384,
+        "p95": 13272.101,
+        "p99": 13507.993,
+        "min": 4743.909,
+        "max": 13507.993
+      },
+      "t_identity": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_history": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_open_conversation": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_retrieve_wait": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_semantic_lookup": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_embed": {
+        "count": 27,
+        "p50": 2.135,
+        "p95": 5.117,
+        "p99": 17.225,
+        "min": 1.403,
+        "max": 17.225
+      },
+      "t_retrieve": {
+        "count": 27,
+        "p50": 585.283,
+        "p95": 1177.188,
+        "p99": 1801.96,
+        "min": 514.571,
+        "max": 1801.96
+      },
+      "t_retrieve_total": {
+        "count": 0,
+        "reason": "not recorded"
+      },
+      "t_tts_first_byte": {
+        "count": 0,
+        "reason": "voice path only; /voice/speak is a separate request"
+      }
+    }
+  },
+  "turns": [
+    {
+      "id": "en-10",
+      "lang": "en",
+      "persona": "stella",
+      "client_ttft_ms": 12129.078,
+      "client_total_ms": 13295.676,
+      "characters": 42,
+      "error": null
+    },
+    {
+      "id": "en-02",
+      "lang": "en",
+      "persona": "orion",
+      "client_ttft_ms": 6988.825,
+      "client_total_ms": 8083.565,
+      "characters": 398,
+      "error": null
+    },
+    {
+      "id": "en-03",
+      "lang": "en",
+      "persona": "aurora",
+      "client_ttft_ms": 5711.097,
+      "client_total_ms": 6738.551,
+      "characters": 37,
+      "error": null
+    },
+    {
+      "id": "en-01",
+      "lang": "en",
+      "persona": "nova",
+      "client_ttft_ms": 8523.557,
+      "client_total_ms": 9618.594,
+      "characters": 489,
+      "error": null
+    },
+    {
+      "id": "en-11",
+      "lang": "en",
+      "persona": "stella",
+      "client_ttft_ms": 11647.267,
+      "client_total_ms": 12825.2,
+      "characters": 546,
+      "error": null
+    },
+    {
+      "id": "en-07",
+      "lang": "en",
+      "persona": "orion",
+      "client_ttft_ms": 9548.061,
+      "client_total_ms": 10716.232,
+      "characters": 340,
+      "error": null
+    },
+    {
+      "id": "en-06",
+      "lang": "en",
+      "persona": "aurora",
+      "client_ttft_ms": 8362.95,
+      "client_total_ms": 9534.682,
+      "characters": 371,
+      "error": null
+    },
+    {
+      "id": "en-04",
+      "lang": "en",
+      "persona": "nova",
+      "client_ttft_ms": 6600.204,
+      "client_total_ms": 7751.73,
+      "characters": 198,
+      "error": null
+    },
+    {
+      "id": "en-12",
+      "lang": "en",
+      "persona": "orion",
+      "client_ttft_ms": 6783.189,
+      "client_total_ms": 7884.439,
+      "characters": 165,
+      "error": null
+    },
+    {
+      "id": "en-09",
+      "lang": "en",
+      "persona": "aurora",
+      "client_ttft_ms": 8463.973,
+      "client_total_ms": 9635.229,
+      "characters": 309,
+      "error": null
+    },
+    {
+      "id": "es-10",
+      "lang": "es",
+      "persona": "stella",
+      "client_ttft_ms": 7556.037,
+      "client_total_ms": 8727.343,
+      "characters": 101,
+      "error": null
+    },
+    {
+      "id": "es-02",
+      "lang": "es",
+      "persona": "orion",
+      "client_ttft_ms": 10787.93,
+      "client_total_ms": 12015.306,
+      "characters": 369,
+      "error": null
+    },
+    {
+      "id": "es-03",
+      "lang": "es",
+      "persona": "aurora",
+      "client_ttft_ms": 6127.653,
+      "client_total_ms": 7231.083,
+      "characters": 37,
+      "error": null
+    },
+    {
+      "id": "es-01",
+      "lang": "es",
+      "persona": "nova",
+      "client_ttft_ms": 11302.472,
+      "client_total_ms": 12501.738,
+      "characters": 453,
+      "error": null
+    },
+    {
+      "id": "es-11",
+      "lang": "es",
+      "persona": "stella",
+      "client_ttft_ms": 11251.43,
+      "client_total_ms": 12456.527,
+      "characters": 388,
+      "error": null
+    },
+    {
+      "id": "es-07",
+      "lang": "es",
+      "persona": "orion",
+      "client_ttft_ms": 10260.506,
+      "client_total_ms": 11466.866,
+      "characters": 199,
+      "error": null
+    },
+    {
+      "id": "es-06",
+      "lang": "es",
+      "persona": "aurora",
+      "client_ttft_ms": 6487.743,
+      "client_total_ms": 7589.217,
+      "characters": 74,
+      "error": null
+    },
+    {
+      "id": "es-04",
+      "lang": "es",
+      "persona": "nova",
+      "client_ttft_ms": 9025.003,
+      "client_total_ms": 10223.252,
+      "characters": 117,
+      "error": null
+    },
+    {
+      "id": "es-12",
+      "lang": "es",
+      "persona": "orion",
+      "client_ttft_ms": 12364.506,
+      "client_total_ms": 13522.408,
+      "characters": 199,
+      "error": null
+    },
+    {
+      "id": "es-09",
+      "lang": "es",
+      "persona": "aurora",
+      "client_ttft_ms": 10179.309,
+      "client_total_ms": 11340.156,
+      "characters": 229,
+      "error": null
+    },
+    {
+      "id": "fr-10",
+      "lang": "fr",
+      "persona": "stella",
+      "client_ttft_ms": 6928.518,
+      "client_total_ms": 8086.593,
+      "characters": 44,
+      "error": null
+    },
+    {
+      "id": "fr-02",
+      "lang": "fr",
+      "persona": "orion",
+      "client_ttft_ms": 9220.513,
+      "client_total_ms": 10398.456,
+      "characters": 300,
+      "error": null
+    },
+    {
+      "id": "fr-03",
+      "lang": "fr",
+      "persona": "aurora",
+      "client_ttft_ms": null,
+      "client_total_ms": 4747.406,
+      "characters": 0,
+      "error": null
+    },
+    {
+      "id": "fr-01",
+      "lang": "fr",
+      "persona": "nova",
+      "client_ttft_ms": 9341.461,
+      "client_total_ms": 10502.137,
+      "characters": 478,
+      "error": null
+    },
+    {
+      "id": "fr-11",
+      "lang": "fr",
+      "persona": "stella",
+      "client_ttft_ms": 10384.388,
+      "client_total_ms": 11656.905,
+      "characters": 391,
+      "error": null
+    },
+    {
+      "id": "fr-07",
+      "lang": "fr",
+      "persona": "orion",
+      "client_ttft_ms": 9981.096,
+      "client_total_ms": 11139.128,
+      "characters": 194,
+      "error": null
+    },
+    {
+      "id": "fr-06",
+      "lang": "fr",
+      "persona": "aurora",
+      "client_ttft_ms": 9383.919,
+      "client_total_ms": 11162.65,
+      "characters": 342,
+      "error": null
+    },
+    {
+      "id": "fr-04",
+      "lang": "fr",
+      "persona": "nova",
+      "client_ttft_ms": 10617.269,
+      "client_total_ms": 11765.178,
+      "characters": 213,
+      "error": null
+    },
+    {
+      "id": "fr-12",
+      "lang": "fr",
+      "persona": "orion",
+      "client_ttft_ms": 8926.782,
+      "client_total_ms": 10094.329,
+      "characters": 153,
+      "error": null
+    },
+    {
+      "id": "fr-09",
+      "lang": "fr",
+      "persona": "aurora",
+      "client_ttft_ms": 10317.063,
+      "client_total_ms": 11457.324,
+      "characters": 322,
+      "error": null
+    }
+  ]
+}

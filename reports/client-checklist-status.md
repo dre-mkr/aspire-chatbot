@@ -58,7 +58,7 @@ The judging suite is **13 of 13**, from 8 of 12 when this work started.
 |---|---|---|
 | Network calls retry | **DONE** | `tests/test_retry.py`, 6 cases. Nothing in `app/` retried anything before |
 | Retrieval is not rebuilt per question | **DONE** | Measured: corpus read 610-720ms → 0.0ms, index build 114-200ms → 3.6ms, identical results |
-| Turn latency under 10s p50 | **SEE `reports/latency/freeze.txt`** | Baseline was `t_total` p50 10.2s. Holding prose for the gates moves cost from after-delivery to before it, so the honest number is `t_total`, not `t_ttft` |
+| Turn latency under 10s p50 | **NOT MET** | `t_total` p50 **10.4s**, p95 13.3s (`reports/latency/freeze.txt`, 30 golden questions, cache flushed). The target was "well under 10s". See the note below |
 | Composer does not drop keystrokes | **PARTLY** | The guaranteed half is fixed: the mount effect no longer overwrites what was typed. The rest depends on React hydration timing, which needs measuring in a browser rather than reasoning about |
 | Both email links work | **DONE** | `tests/test_email_links.py`, 4 cases, pinning both purposes in both directions |
 | Memory has no blind spot | **DONE** | The summary boundary now matches the verbatim window; messages 7-12 back were in neither |
@@ -76,6 +76,35 @@ The judging suite is **13 of 13**, from 8 of 12 when this work started.
 | Tests certify the prompt that ships | **DONE** | Retargeted at the live layers. Doing so revealed a rule the shipped prompt had lost |
 
 ---
+
+### Latency, in full
+
+Measured against a server carrying everything in this branch, 30 golden
+questions, answer cache flushed:
+
+| stage | p50 | p95 | what it is |
+|---|---|---|---|
+| `t_agent_first_delta` | 7.5s | 10.8s | the model has finished writing |
+| `d_buffer_hold` | **1.6s** | 3.0s | holding it while the outbound gates run |
+| `t_ttft` | 9.3s | 12.1s | the reader sees the answer |
+| `t_total` | 10.4s | 13.3s | the turn closes |
+
+The baseline before any of this work was `t_agent_first_delta` 7.9s and
+`t_total` 10.2s -- the old `t_ttft` measured the agent's emission, not the
+reader's, which is why it is compared against the agent stage here rather than
+against today's `t_ttft`.
+
+So the honest reading: **the retrieval work took about half a second off, and
+T3.1 added 1.6s back.** That 1.6s is the price of the reader getting the answer
+the gates approved instead of one they had not seen, and it is the single
+largest remaining item in the budget at 17% of TTFT. It is also the one the
+plan's out-of-scope list was written for -- prompt caching, the finished-but-
+unwired semantic cache, and the model-tier cascade all attack it, and all are
+queued for the 21st.
+
+`d_buffer_hold` is derived by `timing.py` and had never had a value: it was
+written for a `TurnBuffer` that was deleted before this work started. It
+measures the right thing again.
 
 ## Open decisions, all needing an answer before the 20th
 
