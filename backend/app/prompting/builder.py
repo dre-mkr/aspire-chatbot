@@ -15,6 +15,9 @@ _CONTEXT_HEADING = "Reference material for this question:"
 
 #: What the history block is introduced with.
 _HISTORY_HEADING = "The conversation so far:"
+
+#: Named rather than coded, because "es" is a string and Spanish is a language.
+_LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "fr": "French"}
 _SUMMARY_HEADING = "Earlier in this conversation:"
 
 
@@ -65,7 +68,17 @@ def _turn_context(context: SessionContext) -> str:
         blocks.append(f"{_HISTORY_HEADING}\n{lines}")
 
     # Facts the reader should not have to repeat.
+    #
+    # The band and the language were both carried on `SessionContext` and
+    # neither was ever written into a message: the reader's age reached the
+    # model only by implication, through which persona card got composed, and
+    # the language not at all. So the band was stated to the model for the first
+    # time in `safety_out`'s re-prompt -- after it had already written past the
+    # cap -- and the language likewise, after it had already answered in the
+    # wrong one. Both are cheaper said once, up front.
     facts = [f"Today is {context.now.strftime('%A %d %B %Y')}."]
+    facts.append(f"You are writing for a reader in the {context.age_band} age band.")
+    facts.append(f"This conversation is in {_LANGUAGE_NAMES.get(context.locale, context.locale)}.")
     if context.display_name:
         facts.append(f"You are speaking with {context.display_name}.")
     blocks.append(" ".join(facts))

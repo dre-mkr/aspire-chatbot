@@ -2,8 +2,29 @@
 import { API_URL } from "../config";
 import { authHeaders } from "./session";
 
-/** Personas map to voices on the server. */
-export const DEFAULT_PERSONA = "nova";
+/**
+ * Personas map to voices on the server, and this is the fallback -- not the
+ * answer.
+ *
+ * `speakStream` took no persona and sent this for every request, so every
+ * reader heard Nova: the STAFF voice, whose card opens "you are the ASPIRE
+ * assistant for teachers, staff and partners" and whose delivery is tuned
+ * flattest of the four. A six-year-old reading a lesson Stella wrote heard it
+ * read aloud by the staff voice.
+ *
+ * None of the machinery was missing. `voice/registry.py` builds all four
+ * personas across all three languages, resolves a language-specific voice
+ * before falling back to the persona's own, carries per-persona speed and
+ * style, and REFUSES TO START if any of the twelve pairs is unmapped. Only the
+ * client never said who was speaking.
+ *
+ * The fallback itself moves from `nova` to `stella` to match
+ * `_ANONYMOUS_DEFAULT` on the server. A signed-out visitor has no persona in
+ * the URL and none from an account, so they land here -- and they are banded as
+ * the youngest, so the staff voice was the wrong end of the range to default
+ * to. A registered reader never reaches this: their account supplies one.
+ */
+export const DEFAULT_PERSONA = "stella";
 
 export type VoiceLanguage = "en" | "es" | "fr";
 
@@ -132,6 +153,7 @@ export async function speakStream(
 	text: string,
 	language: VoiceLanguage,
 	threadId: string | null,
+	persona: string | null,
 	signal?: AbortSignal,
 ): Promise<string> {
 	// The timeout covers WAITING for audio, never the stream: long answers run long.
@@ -152,7 +174,7 @@ export async function speakStream(
 			headers: { "Content-Type": "application/json", ...authHeaders() },
 			body: JSON.stringify({
 				text,
-				persona: DEFAULT_PERSONA,
+				persona: persona ?? DEFAULT_PERSONA,
 				language,
 				thread_id: threadId,
 			}),

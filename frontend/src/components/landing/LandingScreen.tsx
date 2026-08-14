@@ -70,6 +70,7 @@ export function LandingScreen() {
 		onTranscript: setDraft,
 		threadId: null,
 		language: lang,
+		persona,
 		onLanguageChange: setLanguageInUrl,
 	});
 

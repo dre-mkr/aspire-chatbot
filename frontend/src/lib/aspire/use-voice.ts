@@ -103,6 +103,8 @@ export interface UseVoiceOptions {
 	threadId: string | null;
 	/** The language from the URL, when the URL says. */
 	language?: VoiceLanguage;
+	/** Who is speaking. Without it every reader is read to in the staff voice. */
+	persona?: string | null;
 	/** Where a change goes. */
 	onLanguageChange?: (next: VoiceLanguage) => void;
 }
@@ -111,6 +113,7 @@ export function useVoice({
 	onTranscript,
 	threadId,
 	language: languageFromUrl,
+	persona = null,
 	onLanguageChange,
 }: UseVoiceOptions) {
 	const [available, setAvailable] = useState(false);
@@ -374,7 +377,7 @@ export function useVoice({
 			let url: string;
 			try {
 				// Playback starts on the vendor's first chunk, not after the whole file.
-				url = await speakStream(text, language, threadId, controller.signal);
+				url = await speakStream(text, language, threadId, persona, controller.signal);
 			} catch (error) {
 				// An abort is always this component's own doing, so it earns no note.
 				if (error instanceof VoiceError) {

@@ -174,6 +174,7 @@ export function ChatScreen() {
 		onTranscript: setDraft,
 		threadId,
 		language: lang,
+		persona,
 		onLanguageChange: setLanguageInUrl,
 	});
 

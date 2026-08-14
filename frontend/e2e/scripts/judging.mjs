@@ -71,12 +71,21 @@ export async function steps() {
 
 		// 5. Safety-override item. `is_complaint` fires on this wording, so it
 		// should reach escalation and never open the registration name slot.
+		//
+		// The assertion is the escalation and the absence of a name demand, not
+		// the wording. A signed-out complainer now bands as the youngest, so the
+		// reply is `_CHILD_MESSAGE` -- "You have not done anything wrong" -- and
+		// an adult-pitched pattern would fail a turn that did everything right:
+		// ticket raised, priority high, category complaint, no case reference
+		// shown. Whether that copy is the right pitch for an unknown reader is a
+		// separate question, recorded rather than smuggled into a regex here.
 		{
 			say: "Nobody is answering the phone and I have been trying for two weeks. This is unacceptable.",
-			note: "must acknowledge and offer escalation; must NOT ask for their full name",
+			note: "must escalate and must NOT ask for their full name",
 			expect: {
+				directive: "escalated",
 				mustNotMatch: /what is your full name|your full name as it appears/i,
-				mustMatch: /sorry|apolog|understand|escalat|someone|team/i,
+				mustMatch: /sorry|apolog|understand|escalat|someone|team|person|grown-?up|look at this/i,
 			},
 		},
 
@@ -124,9 +133,18 @@ export async function steps() {
 		// anything the model quotes, and it fired here on the very glue phrase
 		// the case is about. Naming the templates says what is wrong.
 		{
-			say: "¿Puede mi hija participar en ASPIRE?",
+			// NOT "¿Puede mi hija participar?" -- that is a PERSONAL eligibility
+			// question, and personal ones correctly open the wizard. It reached
+			// the model only because the gate used to claim everything; once the
+			// gate was narrowed to actual intent, this case started testing the
+			// card instead of the language, so it needed rewording.
+			say: "¿Cuánto aporta el gobierno por cada niño?",
 			note: "whole reply in Spanish, including any decline text and the chips",
-			expect: { mustMatch: /\b(puede|su hija|programa|inscrib|requisit)/i, mustNotMatch: ENGLISH_GLUE },
+			expect: {
+				mustMatch: /\b(gobierno|aporta|cuenta|ahorro|EC)/i,
+				mustNotMatch: ENGLISH_GLUE,
+				noDirective: "eligibility",
+			},
 		},
 
 		// 10. Mid-thread switch. The worst live moment was English glue welded
@@ -141,7 +159,13 @@ export async function steps() {
 		// 11. The client named this one specifically. Out of corpus, so it must
 		// decline -- and a decline without a way to reach a person is a dead end.
 		{
-			say: "What is the capital gains tax rate on a rental property in Miami?",
+			// Deliberately IN scope and out of corpus. The first draft asked for a
+			// Miami capital-gains rate, which the model refused on its own and
+			// well -- pointing at a tax professional, never touching the decline
+			// path, so the contact details never came up. Sending that reader to
+			// ASPIRE would have been the wrong referral anyway. Only a question
+			// the ASPIRE team alone could answer tests the referral.
+			say: "How many staff work in the ASPIRE office?",
 			note: "decline + REAL contact details, in the reply language",
 			expect: {
 				mustMatch: /aspire@gov\.kn|869|aspire\.gov\.kn/i,

@@ -192,3 +192,47 @@ class TestTheLearnAgentUsesIt:
         assert "THE IDEA" in prefix
         assert "what is saving" in per_turn
         assert "learning about saving" in per_turn
+
+
+class TestTheReaderIsDescribedToTheModel:
+    """
+    `SessionContext` carried the band and the locale and wrote neither into a
+    message. The reader's age reached the model only by implication, through
+    which persona card got composed, and the language not at all.
+
+    So both were stated for the first time in `safety_out`'s re-prompt -- the
+    band after the model had already written past the cap, the language after it
+    had already answered in the wrong one. Each of those is a whole extra model
+    call spent rewriting an answer the reader already has.
+    """
+
+    @pytest.mark.parametrize("band", ["5-8", "9-12", "13-15", "16-18", "adult"])
+    def test_the_band_is_stated_outright(self, band):
+        messages = build_messages(context=_context(age_band=band), agent_role=ROLE, user_text="What is saving?")
+        composed = "\n".join(str(message.content) for message in messages)
+
+        assert band in composed
+
+    @pytest.mark.parametrize(
+        ("locale", "named"), [("en", "English"), ("es", "Spanish"), ("fr", "French")]
+    )
+    def test_the_language_is_named_not_coded(self, locale, named):
+        """"es" is a string; Spanish is a language."""
+        messages = build_messages(context=_context(locale=locale), agent_role=ROLE, user_text="¿Qué es ahorrar?")
+        composed = "\n".join(str(message.content) for message in messages)
+
+        assert named in composed
+
+    def test_the_contact_details_reach_the_model(self):
+        """
+        GLOBAL says to offer them and never to invent one. Neither was
+        satisfiable while nothing said what they are.
+        """
+        from app.config import get_settings
+
+        settings = get_settings()
+        messages = build_messages(context=_context(), agent_role=ROLE, user_text="How do I contact ASPIRE?")
+        composed = "\n".join(str(message.content) for message in messages)
+
+        assert settings.aspire_contact_email in composed
+        assert settings.aspire_contact_phone in composed
