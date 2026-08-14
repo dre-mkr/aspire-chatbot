@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
 
+from app.auth import Principal, chat_principal
 from app.timing import annotate as annotate_timings, turn as timed_turn
 from app.voice.cache import cache_key, get_cache
 from app.voice.client import VoiceUnavailable, get_client
@@ -30,12 +40,36 @@ router = APIRouter(prefix="/api/voice", tags=["voice"])
 _FALLBACK = {"error": "voice_unavailable", "fallback": "browser"}
 
 
-def _session_key(request: Request, thread_id: str | None) -> str:
-    """Bucket for rate limiting: the caller's thread, else its address."""
-    if thread_id:
-        return f"thread:{thread_id}"
-    client = request.client
-    return f"ip:{client.host}" if client else "ip:unknown"
+async def require_voice_principal(
+    principal: Principal | None = Depends(chat_principal),
+) -> Principal:
+    """A verified caller, or 401.
+
+    All three of these endpoints were open. No principal, no Authorization
+    header read, and the client sent none -- so anybody at all could spend the
+    programme's ElevenLabs budget, and the only brake was a window keyed on a
+    thread id they supplied themselves.
+
+    `chat_principal` rather than `optional_principal`: it allows the same grace
+    on a just-expired token that chat does, so a reader mid-conversation is not
+    cut off from the microphone for a few seconds of clock skew.
+    """
+    if principal is None:
+        raise HTTPException(
+            status_code=401, detail="A valid session is required to use voice."
+        )
+    return principal
+
+
+def _session_key(principal: Principal) -> str:
+    """Bucket for rate limiting: the account, which the caller cannot choose.
+
+    It used to be `thread:{thread_id}` off a form field, falling back to the raw
+    socket address -- so a new thread id per request was a new budget, and the
+    fallback ignored X-Forwarded-For and bucketed every reader behind the proxy
+    as one.
+    """
+    return f"u:{principal.user_id}"
 
 
 def _base_mime(raw: str | None) -> str:
@@ -88,6 +122,7 @@ async def transcribe(
     language: str | None = Form(default=None),
     persona: str | None = Form(default=None),
     thread_id: str | None = Form(default=None),
+    principal: Principal = Depends(require_voice_principal),
 ) -> TranscriptionResponse:
     settings = get_voice_settings()
 
@@ -124,7 +159,7 @@ async def transcribe(
             detail=f"Audio is longer than the {settings.max_duration_seconds:.0f} second limit.",
         )
 
-    decision = get_limiter().check_transcription(_session_key(request, thread_id))
+    decision = get_limiter().check_transcription(_session_key(principal))
     if not decision.allowed:
         raise HTTPException(
             status_code=429,
@@ -172,17 +207,21 @@ async def transcribe(
 
 
 @router.post("/speak")
-async def speak(request: Request, body: SpeakRequest) -> Response:
+async def speak(
+    request: Request,
+    body: SpeakRequest,
+    principal: Principal = Depends(require_voice_principal),
+) -> Response:
     """Text to audio."""
     with timed_turn(
         endpoint="/voice/speak",
         persona=body.persona.value,
         lang=body.language.value,
     ):
-        return await _speak(request, body)
+        return await _speak(request, body, principal)
 
 
-async def _speak(request: Request, body: SpeakRequest) -> Response:
+async def _speak(request: Request, body: SpeakRequest, principal: Principal) -> Response:
     settings = get_voice_settings()
 
     if body.format.lower() != "mp3":
@@ -202,6 +241,19 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
 
     key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
     cache = get_cache()
+
+    # Metered BEFORE the cache is consulted. A hit used to return audio without
+    # touching the limiter, so a caller who kept asking for the same line was
+    # never counted at all -- and the cache is shared, so the line only has to
+    # be warm for somebody, not for them.
+    decision = get_limiter().check_speech(_session_key(principal))
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many voice requests. Please wait a moment.",
+            headers={"Retry-After": str(decision.retry_after_seconds)},
+        )
+
     # `aget`/`aput`, not `get`/`put`: a whole MP3 on the event loop would block it.
     if (cached := await cache.aget(key)) is not None:
         annotate_timings(cache_hit=True)
@@ -209,14 +261,6 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
             content=cached,
             media_type="audio/mpeg",
             headers={"X-Voice-Cache": "hit", "Cache-Control": "private, max-age=86400"},
-        )
-
-    decision = get_limiter().check_speech(_session_key(request, body.thread_id))
-    if not decision.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many voice requests. Please wait a moment.",
-            headers={"Retry-After": str(decision.retry_after_seconds)},
         )
 
     try:
@@ -244,7 +288,11 @@ async def _speak(request: Request, body: SpeakRequest) -> Response:
 
 
 @router.post("/speak-stream")
-async def speak_stream(request: Request, body: SpeakRequest) -> Response:
+async def speak_stream(
+    request: Request,
+    body: SpeakRequest,
+    principal: Principal = Depends(require_voice_principal),
+) -> Response:
     """Text to audio, with the first byte sent before the last is synthesised."""
     with timed_turn(
         endpoint="/voice/speak-stream",
@@ -279,20 +327,24 @@ async def speak_stream(request: Request, body: SpeakRequest) -> Response:
 
         key = cache_key(spoken, profile.voice_id, model_id, profile.settings)
         cache = get_cache()
+
+        # Metered before the cache is read, as in `_speak`. This one mattered
+        # more: the hit returned above the limiter entirely, so replaying a warm
+        # line was free and uncounted however many times it was asked for.
+        decision = get_limiter().check_speech(_session_key(principal))
+        if not decision.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many voice requests. Please wait a moment.",
+                headers={"Retry-After": str(decision.retry_after_seconds)},
+            )
+
         if (cached := await cache.aget(key)) is not None:
             annotate_timings(cache_hit=True)
             return Response(
                 content=cached,
                 media_type="audio/mpeg",
                 headers={**headers, "X-Voice-Cache": "hit"},
-            )
-
-        decision = get_limiter().check_speech(_session_key(request, body.thread_id))
-        if not decision.allowed:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many voice requests. Please wait a moment.",
-                headers={"Retry-After": str(decision.retry_after_seconds)},
             )
 
         # The first chunk is awaited before the response exists, so a failure can still 503.

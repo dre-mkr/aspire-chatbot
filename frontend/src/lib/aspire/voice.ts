@@ -1,5 +1,6 @@
 /** The voice half of the ASPIRE backend client. */
 import { API_URL } from "../config";
+import { authHeaders } from "./session";
 
 /** Personas map to voices on the server. */
 export const DEFAULT_PERSONA = "nova";
@@ -101,6 +102,11 @@ export async function transcribe(
 	try {
 		response = await fetch(`${API_URL}/api/voice/transcribe`, {
 			method: "POST",
+			// The endpoint requires a verified caller now. It was open, and so
+			// were both speak routes: anybody at all could spend the programme's
+			// ElevenLabs budget, metered only against a thread id they sent
+			// themselves. `ensureSession` has run by the time a mic exists.
+			headers: authHeaders(),
 			body: form,
 			signal: AbortSignal.timeout(20_000),
 		});
@@ -110,6 +116,10 @@ export async function transcribe(
 
 	if (response.status === 429) throw new VoiceError("limited");
 	if (response.status === 403) throw new VoiceError("denied");
+	// A 401 falls through to "offline" on purpose. `denied` is about a blocked
+	// MICROPHONE and tells the reader to open the lock icon and allow it, which
+	// would be wrong and baffling advice for an expired session; "voice is
+	// offline, typing gets you the same answers" is both true and actionable.
 	if (!response.ok) throw new VoiceError("offline");
 
 	const body = (await response.json()) as Transcription;
@@ -139,7 +149,7 @@ export async function speakStream(
 	try {
 		response = await fetch(`${API_URL}/api/voice/speak-stream`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", ...authHeaders() },
 			body: JSON.stringify({
 				text,
 				persona: DEFAULT_PERSONA,

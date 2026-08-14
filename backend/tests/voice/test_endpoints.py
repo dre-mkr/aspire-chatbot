@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -11,6 +13,7 @@ import app.voice.client as client_module
 import app.voice.limiter as limiter_module
 import app.voice.registry as registry_module
 import app.voice.router as router_module
+from app.auth import Principal
 from app.voice.client import VoiceClient
 from app.voice.config import VoiceSettings
 from app.voice.limiter import SlidingWindowLimiter
@@ -96,6 +99,31 @@ def client(settings, sdk, monkeypatch) -> TestClient:
     limiter_module._limiter = SlidingWindowLimiter(settings)
     monkeypatch.setattr(router_module, "get_limiter", lambda: limiter_module._limiter)
 
+    client_module.set_client(VoiceClient(settings=settings, client=sdk))
+
+    app = FastAPI()
+    app.include_router(router)
+
+    # Voice now requires a verified caller. Overriding the dependency keeps every
+    # test below about the thing it was written for -- consent, MIME, limits,
+    # the breaker -- rather than about carrying a token. That the 401 itself
+    # works is asserted separately, on a client without the override.
+    app.dependency_overrides[router_module.require_voice_principal] = (
+        lambda: Principal(
+            user_id=uuid.UUID("00000000-0000-4000-8000-00000000beef"),
+            account_type="registered",
+            session_epoch=1,
+        )
+    )
+    yield TestClient(app)
+
+
+@pytest.fixture
+def anonymous_client(settings, sdk, monkeypatch) -> TestClient:
+    """The same app with the real dependency, for the endpoints' own front door."""
+    monkeypatch.setattr(router_module, "get_voice_settings", lambda: settings)
+    monkeypatch.setattr(cache_module, "get_voice_settings", lambda: settings)
+    monkeypatch.setattr(registry_module, "get_voice_settings", lambda: settings)
     client_module.set_client(VoiceClient(settings=settings, client=sdk))
 
     app = FastAPI()
@@ -321,3 +349,63 @@ def test_transcript_text_is_never_logged(client, caplog):
     with caplog.at_level("INFO"):
         client.post("/api/voice/transcribe", **upload())
     assert "How do I join ASPIRE?" not in caplog.text
+
+
+# ── the front door ───────────────────────────────────────────────────────────
+#
+# All three of these were open: no principal, no Authorization header read, and
+# a client that sent none. Anybody at all could spend the programme's
+# ElevenLabs budget, and the only brake was a window keyed on a `thread_id`
+# they supplied themselves.
+
+
+def test_transcribe_refuses_without_a_session(anonymous_client):
+    response = anonymous_client.post(
+        "/api/voice/transcribe",
+        files={"file": ("a.webm", b"x" * 32, WEBM)},
+        data={"voice_consent": "true"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("path", ["/api/voice/speak", "/api/voice/speak-stream"])
+def test_speaking_refuses_without_a_session(anonymous_client, path):
+    response = anonymous_client.post(
+        path, json={"text": "Hello there.", "persona": "stella", "language": "en"}
+    )
+    assert response.status_code == 401
+
+
+def test_the_refusal_comes_before_any_upstream_call(anonymous_client, sdk):
+    """A 401 that still paid ElevenLabs would be no gate at all."""
+    anonymous_client.post(
+        "/api/voice/speak", json={"text": "Hello.", "persona": "stella", "language": "en"}
+    )
+    assert sdk.tts_calls == []
+
+
+def test_a_cache_hit_is_still_metered(client, settings, monkeypatch):
+    """
+    The hit used to return above the limiter, so a warm line was free forever.
+
+    The cache is shared, so the line only has to be warm for somebody -- not for
+    the caller replaying it.
+    """
+    body = {"text": "Saving means keeping money for later.", "persona": "stella", "language": "en"}
+
+    first = client.post("/api/voice/speak", json=body)
+    assert first.status_code == 200
+    assert first.headers["X-Voice-Cache"] == "miss"
+
+    monkeypatch.setattr(settings, "max_speech_per_window", 1, raising=False)
+    limiter_module._limiter = SlidingWindowLimiter(settings)
+    monkeypatch.setattr(router_module, "get_limiter", lambda: limiter_module._limiter)
+
+    served = client.post("/api/voice/speak", json=body)
+    assert served.status_code == 200
+    assert served.headers["X-Voice-Cache"] == "hit", "expected the warm line"
+
+    refused = client.post("/api/voice/speak", json=body)
+    assert refused.status_code == 429, (
+        "a cached line was served without touching the limiter"
+    )
