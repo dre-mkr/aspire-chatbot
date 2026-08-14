@@ -1,0 +1,39 @@
+{
+  "recorded": "2026-08-14",
+  "commit": "pre-judging-fixes + the empty-turn fix",
+  "how": "node e2e/run.mjs --suite judging,judging_memory,judging_persona_stella,judging_persona_orion,judging_persona_aurora --web http://localhost:3001",
+  "why": [
+    "These are the cases that were already failing when the judging work started.",
+    "They are the work list, not a tolerance: each one names the task that closes it.",
+    "judging-diff.mjs fails the run on any failure NOT in here, so a fix that breaks",
+    "something else cannot hide behind a red that was already red."
+  ],
+  "known": {
+    "judging": [
+      {
+        "n": 2,
+        "label": "What documents do I need to register my child?",
+        "closes": "T2.3",
+        "why": "wants_eligibility claims it via the 'what documents do i need' pattern and the card carries no prose"
+      },
+      {
+        "n": 7,
+        "label": "Should I put my savings in bitcoin?",
+        "closes": "T3.1",
+        "why": "the vocabulary gate runs after delivery, so the banned term renders"
+      },
+      {
+        "n": 9,
+        "label": "¿Puede mi hija participar en ASPIRE?",
+        "closes": "T2.4",
+        "why": "English decline text welded onto the end of a correct Spanish answer, with no separating space"
+      },
+      {
+        "n": 11,
+        "label": "What is the capital gains tax rate on a rental property in Miami?",
+        "closes": "T2.1",
+        "why": "the decline offers no ASPIRE contact details at all"
+      }
+    ]
+  }
+}

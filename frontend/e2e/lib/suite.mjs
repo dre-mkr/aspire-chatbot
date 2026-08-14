@@ -17,6 +17,12 @@ function judge(step, record) {
 	const reasons = [];
 	const { wire, ui, backend } = record;
 
+	// Against a deployed origin there is no log to slice, so the third source is
+	// absent rather than silent. Those assertions are recorded as skipped on the
+	// record instead of counting as failures -- see lib/remote.mjs.
+	const readsLog = !backend?.remote;
+	const skipped = [];
+
 	if (wire?.error) reasons.push(`wire error: ${JSON.stringify(wire.error)}`);
 
 	if (want.agent !== undefined) {
@@ -31,7 +37,9 @@ function judge(step, record) {
 	}
 
 	// The wire and the log must agree; a disagreement means one of them is lying.
-	if (wire?.usage?.agent && backend.turnAgent && wire.usage.agent !== backend.turnAgent) {
+	if (!readsLog) {
+		skipped.push("wire/log agreement (no log)");
+	} else if (wire?.usage?.agent && backend.turnAgent && wire.usage.agent !== backend.turnAgent) {
 		reasons.push(`wire says ${wire.usage.agent}, log says ${backend.turnAgent}`);
 	}
 
@@ -65,25 +73,32 @@ function judge(step, record) {
 		}
 	}
 
-	for (const pattern of list(want.log)) {
-		if (!backend.lines.some((line) => pattern.test(line))) {
-			reasons.push(`no log line matching ${pattern}`);
+	if (!readsLog) {
+		for (const key of ["log", "noLog", "route", "noRoute"]) {
+			if (want[key] !== undefined) skipped.push(`${key} (no log)`);
 		}
-	}
-	for (const pattern of list(want.noLog)) {
-		if (backend.lines.some((line) => pattern.test(line))) {
-			reasons.push(`log line matched forbidden ${pattern}`);
+	} else {
+		for (const pattern of list(want.log)) {
+			if (!backend.lines.some((line) => pattern.test(line))) {
+				reasons.push(`no log line matching ${pattern}`);
+			}
 		}
-	}
+		for (const pattern of list(want.noLog)) {
+			if (backend.lines.some((line) => pattern.test(line))) {
+				reasons.push(`log line matched forbidden ${pattern}`);
+			}
+		}
 
-	if (want.noRoute && backend.route) {
-		reasons.push(`the router was consulted (${backend.route.agent}) but should not have been`);
-	}
-	if (want.route && !backend.route) {
-		reasons.push("the router was never consulted");
+		if (want.noRoute && backend.route) {
+			reasons.push(`the router was consulted (${backend.route.agent}) but should not have been`);
+		}
+		if (want.route && !backend.route) {
+			reasons.push("the router was never consulted");
+		}
 	}
 	if (want.citations && !ui?.sources) reasons.push("no citations panel");
 
+	record.skipped = skipped;
 	return reasons;
 }
 
@@ -96,6 +111,7 @@ async function observe(page, backendServer, cursor, wire) {
 		ui: await readSurfaces(page),
 		backend: {
 			lines,
+			remote: backendServer.remote === true,
 			route: readRoute(lines),
 			sticky: readSticky(lines),
 			turnAgent: turnLine ? turnLine.match(SIGNALS.turn)[2] : null,
@@ -131,7 +147,7 @@ export async function runSteps(ctx, steps) {
 		}
 
 		const observed = failure && !wire
-			? { wire: null, ui: await readSurfaces(page).catch(() => null), backend: { lines: backend.since(cursor), route: null, sticky: null, turnAgent: null } }
+			? { wire: null, ui: await readSurfaces(page).catch(() => null), backend: { lines: backend.since(cursor), remote: backend.remote === true, route: null, sticky: null, turnAgent: null } }
 			: await observe(page, backend, cursor, wire);
 
 		const record = {

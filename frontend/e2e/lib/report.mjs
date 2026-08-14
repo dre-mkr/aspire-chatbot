@@ -34,6 +34,9 @@ export function writeSuite(dir, suite, records, extra = {}) {
 		if (kinds.length) lines.push("", `directives: ${kinds.join(", ")}`);
 		if (record.ui?.chips?.length) lines.push("", `chips: ${record.ui.chips.join(" | ")}`);
 		if (!record.pass) lines.push("", ...record.reasons.map((reason) => `- ${reason}`));
+		// A skipped assertion is not a passed one. Said out loud so a green
+		// deployed run is not mistaken for a green local one.
+		if (record.skipped?.length) lines.push("", `skipped: ${record.skipped.join(", ")}`);
 		lines.push("");
 	}
 	fs.writeFileSync(path.join(dir, "transcript.md"), lines.join("\n"));
@@ -43,10 +46,10 @@ export function writeSummary(root, results) {
 	fs.mkdirSync(root, { recursive: true });
 	fs.writeFileSync(path.join(root, "summary.json"), JSON.stringify(results, null, 2));
 
-	const rows = ["# ASPIRE agent suites", "", "| suite | identity | turns | passed | failed |", "|---|---|---|---|---|"];
+	const rows = ["# ASPIRE agent suites", "", "| suite | identity | turns | passed | failed | skipped |", "|---|---|---|---|---|---|"];
 	for (const result of results) {
 		rows.push(
-			`| ${result.suite} | ${result.identity} | ${result.total} | ${result.passed} | ${result.failed} |`,
+			`| ${result.suite} | ${result.identity} | ${result.total} | ${result.passed} | ${result.failed} | ${result.skipped ?? 0} |`,
 		);
 	}
 	rows.push("");
@@ -70,6 +73,8 @@ export function summarise(suite, records) {
 		total: real.length,
 		passed: real.filter((record) => record.pass).length,
 		failed: real.filter((record) => !record.pass).length,
+		// Assertions the run could not make, not ones it made and cleared.
+		skipped: real.reduce((count, record) => count + (record.skipped?.length ?? 0), 0),
 		failures: real
 			.filter((record) => !record.pass)
 			.map(({ n, label, reasons }) => ({ n, label, reasons })),

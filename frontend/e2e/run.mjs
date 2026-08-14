@@ -5,9 +5,16 @@
  *   node e2e/run.mjs --preflight
  *   node e2e/run.mjs --suite all
  *   node e2e/run.mjs --suite routing_one_chat --headed
+ *   node e2e/run.mjs --suite judging --against https://aspire.eccugenai.app
  *
  * The frontend must already be serving on --web (start it from .claude/launch.json).
  * The backend is started here, because the harness needs to slice its log per turn.
+ *
+ * `--against <origin>` runs the same suites over a DEPLOYED origin instead: the
+ * site and the API are both taken from there, nothing is spawned, and the log
+ * slice is unavailable, so `log`/`route` expectations are reported as SKIPPED
+ * rather than failed. Two sources instead of three -- which is what the judges
+ * will see, and the only way to test the thing that is actually shipped.
  */
 
 import fs from "node:fs";
@@ -16,6 +23,7 @@ import { fileURLToPath } from "node:url";
 
 import { launch, newIdentityContext, newPage } from "./lib/browser.mjs";
 import { IDENTITIES, withCredentials } from "./lib/identities.mjs";
+import { RemoteBackend } from "./lib/remote.mjs";
 import { summarise, writeSuite, writeSummary } from "./lib/report.mjs";
 import { Backend } from "./lib/server.mjs";
 import { anonymous, signUp } from "./lib/signup.mjs";
@@ -44,7 +52,7 @@ export const SUITES = [
 ];
 
 function parseArgs(argv) {
-	const args = { suite: null, headed: false, slowMo: 0, preflight: false, web: "http://localhost:3000", port: 8010 };
+	const args = { suite: null, headed: false, slowMo: 0, preflight: false, web: "http://localhost:3000", port: 8010, against: null };
 	for (let i = 0; i < argv.length; i++) {
 		const flag = argv[i];
 		if (flag === "--preflight") args.preflight = true;
@@ -54,7 +62,11 @@ function parseArgs(argv) {
 		else if (flag === "--web") args.web = argv[++i];
 		else if (flag === "--port") args.port = Number(argv[++i]);
 		else if (flag === "--run-id") args.runId = argv[++i];
+		else if (flag === "--against") args.against = argv[++i];
 	}
+	// A deployed origin serves the site and the API from one host, so it is both.
+	// Set after the loop so flag order does not matter.
+	if (args.against) args.web = args.against.replace(/\/$/, "");
 	return args;
 }
 
@@ -68,6 +80,50 @@ async function checkWeb(url) {
 				`launch config first — it points VITE_ASPIRE_API_URL at the backend.`,
 		);
 	}
+}
+
+/**
+ * Is the site actually talking to the backend this run owns?
+ *
+ * Nothing connects the two. The harness spawns a backend on --port, but the
+ * site's API base is baked into its bundle from VITE_ASPIRE_API_URL and falls
+ * back to `http://localhost:8000` when that is unset (src/lib/config.ts). Point
+ * the harness at a dev server someone else started and the run is green, the
+ * log slice is empty, and every result came from a service nobody is testing --
+ * which is exactly what happened the first time this ran.
+ *
+ * Read after the first page load, off the browser's own resource timings, so it
+ * reports where the requests really went rather than where they should have.
+ */
+async function checkWiring(page, args) {
+	const calls = await page.evaluate(() =>
+		performance
+			.getEntriesByType("resource")
+			.map((entry) => entry.name)
+			.filter((name) => /\/(api|v2)\//.test(name)),
+	);
+	if (!calls.length) return;
+
+	const hosts = [...new Set(calls.map((name) => {
+		try {
+			return new URL(name).host;
+		} catch {
+			return name;
+		}
+	}))];
+
+	// Locally the site says `localhost` and the backend binds 127.0.0.1, so the
+	// port is the only part worth comparing. A deployed run shares one origin.
+	const want = args.against ? new URL(args.against).host : String(args.port);
+	const ok = hosts.some((host) => (args.against ? host === want : host.endsWith(`:${want}`)));
+	if (ok) return;
+
+	throw new Error(
+		`the site at ${args.web} is calling ${hosts.join(", ")}, not ${args.against || `port ${args.port}`}.\n` +
+			`Nothing this run measures would come from the backend it started. Start the ` +
+			`"frontend-e2e" launch config (port 3001, VITE_ASPIRE_API_URL=http://localhost:8010) ` +
+			`and pass --web http://localhost:3001.`,
+	);
 }
 
 /** Everything that must be true before a run means anything. */
@@ -115,30 +171,39 @@ async function main() {
 
 	await checkWeb(args.web);
 
-	const backend = new Backend({
-		repoRoot: REPO,
-		port: args.port,
-		logPath: path.join(root, "backend.log"),
-		env: {
-			ASPIRE_CACHE_NAMESPACE: `e2e-${runId}`,
-			// A layer-1 hit reports agent "cache" and never runs the graph, which would
-			// turn a routing failure into a pass. Off for the whole run.
-			RESPONSE_CACHE_ENABLED: "false",
-			SEMANTIC_CACHE_ENABLED: "false",
-			// No Valkey on this machine: left set, every turn pays several connect
-			// timeouts and buries the log in tracebacks. It fails open either way.
-			VALKEY_URL: "",
-			CHAT_MESSAGES_PER_WINDOW: "1000",
-			ANONYMOUS_SESSIONS_PER_IP_PER_HOUR: "1000",
-			VOICE_ENABLED: "false",
-		},
-	});
+	// A deployed run takes the service as it is: no spawning, and none of the env
+	// below. That is the point of it -- the caches, the rate limits and the voice
+	// flag are whatever production has, which is what a judge will meet.
+	const backend = args.against
+		? new RemoteBackend({ baseUrl: args.against })
+		: new Backend({
+				repoRoot: REPO,
+				port: args.port,
+				logPath: path.join(root, "backend.log"),
+				env: {
+					ASPIRE_CACHE_NAMESPACE: `e2e-${runId}`,
+					// A layer-1 hit reports agent "cache" and never runs the graph, which would
+					// turn a routing failure into a pass. Off for the whole run.
+					RESPONSE_CACHE_ENABLED: "false",
+					SEMANTIC_CACHE_ENABLED: "false",
+					// No Valkey on this machine: left set, every turn pays several connect
+					// timeouts and buries the log in tracebacks. It fails open either way.
+					VALKEY_URL: "",
+					CHAT_MESSAGES_PER_WINDOW: "1000",
+					ANONYMOUS_SESSIONS_PER_IP_PER_HOUR: "1000",
+					VOICE_ENABLED: "false",
+				},
+			});
 
-	console.log("starting the backend...");
+	console.log(args.against ? `waiting for ${args.against} to answer...` : "starting the backend...");
 	await backend.start();
 	console.log(`backend ready on ${backend.baseUrl}`);
 
-	const checks = preflight(backend);
+	// Preflight reads the startup log, so a deployed run cannot run it. `/ready`
+	// answering is the whole of the check there, and `start()` has just done it.
+	const checks = args.against
+		? { problems: [], notes: ["deployed run: startup preflight skipped, /ready answered"] }
+		: preflight(backend);
 	for (const note of checks.notes) console.log(`  ${note}`);
 	fs.writeFileSync(path.join(root, "preflight.json"), JSON.stringify(checks, null, 2));
 
@@ -192,6 +257,7 @@ async function main() {
 
 	const names = args.suite && args.suite !== "all" ? args.suite.split(",") : SUITES;
 	const results = [];
+	let wiringChecked = false;
 
 	try {
 		for (const name of names) {
@@ -208,6 +274,11 @@ async function main() {
 			});
 			await page.goto(args.web, { waitUntil: "networkidle2" });
 			await page.waitForSelector("#aspire-composer", { visible: true });
+			// Once is enough: the bundle's API base cannot change mid-run.
+			if (!wiringChecked) {
+				await checkWiring(page, args);
+				wiringChecked = true;
+			}
 
 			const dir = path.join(root, suite.name);
 			const ctx = {
@@ -272,11 +343,15 @@ async function main() {
 	} finally {
 		fs.writeFileSync(path.join(root, "identities.json"), JSON.stringify(accounts, null, 2));
 
-		// Run-wide negatives: an unbuilt agent must never answer anybody.
+		// Run-wide negatives: an unbuilt agent must never answer anybody. Both are
+		// read off the log, so a deployed run cannot assert them either way --
+		// silence here would read as a pass, so say nothing rather than imply one.
 		const log = backend.lines.join("\n");
 		const runWide = [];
-		if (/Stub agent (\S+) handled a turn/.test(log)) runWide.push("a stub agent handled a turn");
-		if (/active_agent.?.?servicing_agent/.test(log)) runWide.push("servicing_agent appeared");
+		if (!args.against) {
+			if (/Stub agent (\S+) handled a turn/.test(log)) runWide.push("a stub agent handled a turn");
+			if (/active_agent.?.?servicing_agent/.test(log)) runWide.push("servicing_agent appeared");
+		}
 		if (runWide.length) results.push({ suite: "(run-wide)", identity: "-", total: runWide.length, passed: 0, failed: runWide.length, failures: runWide.map((reason) => ({ n: 0, label: "run-wide", reasons: [reason] })) });
 
 		console.log(`\n${writeSummary(root, results)}`);
