@@ -167,6 +167,13 @@ class _BaseWidget(_WidgetModel):
     @field_validator("concept_id", mode="before")
     @classmethod
     def _fold_case(cls, value: Any) -> Any:
+        """Case only. The separator is deliberately left alone.
+
+        Both spellings are legitimate here -- the store seeds ids as `CON-0064`
+        and slugs as `compound_interest` -- so folding `_` to `-` or the reverse
+        would mangle whichever family it did not pick. Gate 3 flattens both sides
+        instead; see `app.safety.vocab._flatten_id`.
+        """
         return value.strip().lower() if isinstance(value, str) else value
     title: SafeText
     caption: SafeBody = ""
