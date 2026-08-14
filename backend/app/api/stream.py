@@ -220,11 +220,22 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
             stream_mode=["messages", "custom"],
         ):
             for event in await interceptor.process(chunk):
-                # Time to first token, which for this service is time to the
-                # WHOLE answer: nothing here streams tokens (every prose call is
-                # `ainvoke`), so LangGraph emits one message and this fires once.
+                # Prose is HELD, not sent. Every outbound safety gate runs a
+                # graph step after the agent that produced the text -- the word
+                # caps, the banned vocabulary, the PII redaction, the link
+                # stripping, and `ground_check`'s decline -- so anything sent
+                # here is pre-correction and cannot be taken back. Measured:
+                # "bitcoin" reached the screen four times, and a decline arrived
+                # welded onto the end of a finished answer.
+                #
+                # This costs nothing in perceived speed, which is the whole
+                # reason it is possible. Nothing streams tokens: every prose
+                # call is `ainvoke`, so LangGraph emits one message and this
+                # branch fires exactly once per turn with the entire answer.
+                # There is no incremental output to preserve.
                 if event.event == "token":
                     timing.mark_stage(timing.T_TTFT)
+                    continue
                 yield event.encode()
             if time.monotonic() - started > TURN_TIMEOUT_SECONDS:
                 logger.warning(
@@ -240,6 +251,8 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
 
         # Anything the sentinel machine was still holding.
         for event in interceptor.flush():
+            if event.event == "token":
+                continue
             yield event.encode()
     except Unauthenticated:
         await _settle(opening)
@@ -256,9 +269,34 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
         ).encode()
         return
 
+    # ── the answer, once every gate has had it ──
+    #
+    # `persist` is the last node, so the reply it publishes has been through the
+    # word caps, the vocabulary excision, the PII redaction, the link stripping
+    # and `ground_check`'s decline. That is the text the reader gets, and it is
+    # also the text that gets stored -- the two used to disagree, with Postgres
+    # and the response cache keeping the uncorrected version while the
+    # checkpoint kept the corrected one, so the model read back an answer the
+    # reader had never seen.
+    #
+    # The fallback is what actually crossed the interceptor. A turn that halts
+    # before `persist` publishes -- an upstream failure, a timeout -- has no
+    # corrected text to serve, and silence would be worse than uncorrected
+    # prose.
+    turn = interceptor.turn or {}
+    delivered = str(turn.get("reply") or "").strip() or interceptor.prose.strip()
+    # Reset first, so `prose` ends up as exactly what the reader received rather
+    # than the held text plus the corrected text. `record.reply` reads it below,
+    # and so does the did-this-turn-say-anything check. The ordinals go back to
+    # the start with it, because the held events took numbers with them.
+    interceptor.restart_numbering()
+    if delivered:
+        # Through `token` rather than around it: citation markers are stripped
+        # for display there, and the final message still carries them.
+        yield interceptor.token(delivered).encode()
+
     # ── the turn's directives ──
     # Emitted after the prose, from the closing summary `persist` published.
-    turn = interceptor.turn or {}
     directives = _closing_directives(turn)
 
     # A paused `interrupt()` is asking the reader for something, and its payload is the directive.

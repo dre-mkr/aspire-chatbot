@@ -280,3 +280,42 @@ class TestAnUnknownAgeGetsAChannel:
 
         assert "grown-up" in text
         assert "aspire.gov.kn" not in text
+
+
+class TestTheDeclineFollowsWhatTheyWrote:
+    """
+    The session's locale comes from the token, and a reader who switches
+    language mid-thread does not re-mint one -- so a question asked in French
+    was declined in English, inside a conversation the model was otherwise
+    answering in French.
+
+    That was a blemish while the decline merely trailed the answer. Once it
+    REPLACED the answer, it became the whole reply, and a French speaker got
+    nothing they could read.
+    """
+
+    async def test_a_french_question_in_an_english_session_declines_in_french(self):
+        state = _state("Et pour un enfant de huit ans, quelles sont les conditions ?")
+        state["locale"] = "en"
+
+        text = decline_text(state, [CHUNK])
+
+        assert "Je n'ai pas de réponse" in text
+        assert "I do not have an answer" not in text
+
+    async def test_a_short_message_keeps_the_sessions_language(self):
+        """
+        `detect_locale` wants about eight words and a clear margin, and says
+        None when it cannot tell. An override on good evidence, and the
+        session's own answer otherwise -- never a guess.
+        """
+        state = _state("Bonjour")
+        state["locale"] = "es"
+
+        assert "No tengo una respuesta" in decline_text(state, [CHUNK])
+
+    async def test_an_english_question_is_unaffected(self):
+        state = _state(UNANSWERABLE)
+        state["locale"] = "en"
+
+        assert "I do not have an answer for that." in decline_text(state, [CHUNK])

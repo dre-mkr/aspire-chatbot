@@ -12,7 +12,7 @@ os.environ.setdefault(
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from langchain_core.messages import AIMessage  # noqa: E402
+from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
 
 from app.api.stream import parse_sse, router  # noqa: E402
 from app.graph.identity import mint_session_token  # noqa: E402
@@ -105,6 +105,17 @@ class TestTheHappyTurn:
         ]
 
     def test_every_content_event_carries_a_monotonic_ordinal(self, client):
+        """
+        Contiguous from 1, not merely increasing.
+
+        Monotonic-and-unique was too weak to notice a GAP, and one appeared the
+        moment prose started being held back for the outbound gates: the held
+        events still ran through `_token` and took ordinals with them, so the
+        reader's first frame arrived numbered 2. `OrdinalBuffer.text()` skips
+        absent ordinals rather than waiting, so nothing broke and nothing said
+        so -- which is the argument for pinning the sequence rather than its
+        direction.
+        """
         _status, events = post(client, auth=token(), message="what is saving")
         ordinals = [
             event["data"]["i"]
@@ -113,6 +124,9 @@ class TestTheHappyTurn:
         ]
         assert ordinals == sorted(ordinals)
         assert len(set(ordinals)) == len(ordinals)
+        assert ordinals == list(range(1, len(ordinals) + 1)), (
+            f"ordinals are not contiguous from 1: {ordinals}"
+        )
 
     def test_the_directive_ordinal_follows_the_last_token(self, client):
         """Position is what the ordinal is for."""
@@ -436,3 +450,146 @@ class TestATurnThatSaysNothing:
             event["data"]["d"]["t"] for event in events if event["event"] == "directive"
         ]
         assert "game" in kinds
+
+
+class TestTheReaderGetsTheCorrectedAnswer:
+    """
+    Every outbound gate runs a graph step AFTER the agent that produced the
+    text, so anything sent during the agent's step is pre-correction and cannot
+    be taken back. Measured on the deployed app: "bitcoin" reached the screen
+    four times, and a decline arrived welded onto the end of a finished answer.
+
+    Asserted with the two gates that need no model call, so the test measures
+    delivery rather than a stub: PII redaction and link stripping are both
+    deterministic rewrites.
+    """
+
+    def _saying(self, monkeypatch, text: str):
+        from app.graph import main_graph
+
+        async def agent(state):
+            return {
+                "messages": [AIMessage(content=text)],
+                "active_agent": "learn_agent",
+            }
+
+        monkeypatch.setitem(main_graph.AGENT_BUILDERS, "learn_agent", lambda: agent)
+
+    def _prose(self, events) -> str:
+        return "".join(
+            event["data"]["t"] for event in events if event["event"] == "token"
+        )
+
+    def test_a_phone_number_is_redacted_before_it_is_sent(self, client, monkeypatch):
+        self._saying(monkeypatch, "Ring the family on +1 (869) 555-0123 about it.")
+
+        _status, events = post(client, auth=token(), message="what is saving")
+        prose = self._prose(events)
+
+        assert "555-0123" not in prose, "the reader received a phone number"
+        assert "[a phone number]" in prose
+
+    def test_a_link_is_stripped_before_it_is_sent(self, client, monkeypatch):
+        """`stella` never gets a link, at any band."""
+        self._saying(monkeypatch, "Read more at https://example.com/savings today.")
+
+        _status, events = post(client, auth=token(), message="what is saving")
+        prose = self._prose(events)
+
+        assert "https://example.com/savings" not in prose
+        assert "Read more" in prose
+
+    def test_the_answer_is_still_delivered_when_no_gate_changes_it(self, client):
+        """The common path: holding must not swallow an ordinary answer."""
+        _status, events = post(client, auth=token(), message="what is saving")
+
+        assert "Saving means keeping money for later." in self._prose(events)
+
+    def test_what_is_stored_is_what_was_sent(self, client, monkeypatch):
+        """
+        The two used to disagree. `record.reply` read the interceptor's
+        accumulated prose -- the UNCORRECTED text -- so Postgres and the
+        response cache kept one version while the checkpoint kept another, and
+        the model read back an answer the reader had never seen.
+        """
+        import app.turn as turn_service
+
+        seen: list[str] = []
+
+        original = turn_service.persist_turn
+
+        async def capture(record):
+            seen.append(record.reply)
+            return await original(record)
+
+        monkeypatch.setattr(turn_service, "persist_turn", capture)
+        self._saying(monkeypatch, "Ring the family on +1 (869) 555-0123 about it.")
+
+        _status, events = post(client, auth=token(), message="what is saving")
+        prose = self._prose(events)
+
+        assert seen, "the turn was never persisted"
+        assert seen[-1] == prose, "stored text differs from delivered text"
+
+
+class TestWhichMessageIsDelivered:
+    """
+    `final_reply` decides what the reader receives once the gates have run.
+
+    Asserted directly rather than through the transport: the stream fixture
+    runs without a checkpointer, so nothing carries between requests and the
+    thread never HAS a previous answer to serve by mistake. A test driven
+    through HTTP passed against the bug and against the fix alike, which is
+    worse than no test.
+    """
+
+    def _state(self, *messages):
+        return {"messages": list(messages)}
+
+    def test_the_assistants_answer_is_delivered(self):
+        from app.graph.main_graph import final_reply
+
+        state = self._state(
+            HumanMessage(content="what is saving"),
+            AIMessage(content="Saving keeps money for later."),
+        )
+
+        assert final_reply(state) == "Saving keeps money for later."
+
+    def test_a_decline_appended_after_the_answer_wins(self):
+        """`ground_check` appends; the decline is the thing that may be served."""
+        from app.graph.main_graph import final_reply
+
+        state = self._state(
+            HumanMessage(content="what is the rate"),
+            AIMessage(content="It is 4.5%."),
+            AIMessage(content="I do not have an answer for that."),
+        )
+
+        assert final_reply(state) == "I do not have an answer for that."
+
+    def test_a_card_turn_delivers_nothing(self):
+        """
+        The regression this function was extracted for.
+
+        A game or the eligibility wizard speaks through a directive and adds no
+        message, so the thread ends on the reader's question. Looking backwards
+        past it served the previous turn's answer again -- measured in the
+        browser as an answer reappearing under an unrelated question, with the
+        app never settling.
+        """
+        from app.graph.main_graph import final_reply
+
+        state = self._state(
+            HumanMessage(content="what is saving"),
+            AIMessage(content="Saving keeps money for later."),
+            HumanMessage(content="can we play true or false"),
+        )
+
+        assert final_reply(state) == ""
+
+    def test_an_empty_thread_delivers_nothing(self):
+        from app.graph.main_graph import final_reply
+
+        assert final_reply({"messages": []}) == ""
+        assert final_reply({}) == ""

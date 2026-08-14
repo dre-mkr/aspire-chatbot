@@ -86,6 +86,25 @@ def _band(state: AspireState) -> str:
 
 
 def _locale(state: AspireState) -> str:
+    """The language to decline in: what they WROTE, then what the session says.
+
+    The session's locale comes from the token, and a reader who switches
+    language mid-thread does not re-mint one -- so someone who asked in French
+    was declined in English, inside a conversation the model was otherwise
+    answering in French. Once the decline replaced the answer rather than
+    trailing it, that stopped being a blemish and became the whole reply.
+
+    `detect_locale` needs about eight words and a clear margin, and returns
+    None when it cannot tell. That is the right shape here: an override when
+    the evidence is good, and the session's own answer when it is not.
+    """
+    from app.graph.nodes.safety_in import latest_user_text
+    from app.graph.nodes.safety_out import detect_locale
+
+    written = detect_locale(latest_user_text(state) or "")
+    if written in _OPENING:
+        return str(written)
+
     locale = str(state.get("locale") or "en")
     return locale if locale in _OPENING else "en"
 

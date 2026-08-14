@@ -179,6 +179,30 @@ def make_persist(summarise: Summariser | None = None):
     return persist
 
 
+def final_reply(state: AspireState) -> str:
+    """The answer this turn produced, after every outbound gate has had it.
+
+    `persist` is the last node, so the assistant's message here has been through
+    the word caps, the banned-vocabulary excision, the PII redaction and the
+    link stripping -- `safety_out` replaces it in place, same id -- and
+    `ground_check` has appended a decline if the answer could not be served.
+    None of that could reach the reader before, because the agent's own message
+    went out during the agent's step and the corrections landed a step later, in
+    state only.
+
+    The LAST message, and only if it is the assistant's. NOT the most recent
+    assistant message anywhere in the thread: a card turn -- a game, the
+    eligibility wizard -- speaks entirely through a directive and adds no
+    message, so the thread ends on the reader's own question. Searching
+    backwards past that found the PREVIOUS turn's answer and served it again,
+    and the reader watched their last answer reappear under a question it had
+    nothing to do with.
+    """
+    messages = state.get("messages") or []
+    last = messages[-1] if messages else None
+    return text_of(last) if getattr(last, "type", None) == "ai" else ""
+
+
 def _publish_turn(state: AspireState) -> None:
     """Hand the transport what it needs to close the turn."""
     try:
@@ -208,6 +232,17 @@ def _publish_turn(state: AspireState) -> None:
             }
         )
 
+    # The FINAL text, which is not the text the agent streamed.
+    #
+    # `persist` is the last node, so `messages[-1]` here has been through every
+    # outbound gate: `safety_out` replaces the agent's message in place (same
+    # id) after capping its length, excising banned vocabulary, redacting PII
+    # and stripping links, and `ground_check` appends a decline when the answer
+    # cannot be served. None of that could reach the reader, because the agent's
+    # own message went out during the agent's step and the corrections landed
+    # one step later, in state only.
+    reply = final_reply(state)
+
     writer(
         {
             "turn": {
@@ -217,6 +252,7 @@ def _publish_turn(state: AspireState) -> None:
                 "ui_directives": directives,
                 "citations": citations,
                 "halt_reason": state.get("halt_reason"),
+                "reply": reply,
             }
         }
     )

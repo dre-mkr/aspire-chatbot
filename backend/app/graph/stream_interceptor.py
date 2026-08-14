@@ -256,6 +256,22 @@ class StreamInterceptor:
             self._widget = None
         return events
 
+    def restart_numbering(self) -> None:
+        """Forget the prose held so far, and the ordinals it consumed.
+
+        The transport holds every prose event until the outbound gates have had
+        the text, then sends the corrected version. The held events still ran
+        through `_token`, so they took ordinals with them and left a gap at the
+        front of what the reader actually receives. `OrdinalBuffer` on the
+        client tolerates a gap -- `text()` skips absent ordinals rather than
+        waiting for them -- but a numbering that starts at 2 is a puzzle for
+        whoever reads a frame dump next, and `placed()` measures directive
+        offsets against exactly this sequence.
+        """
+        self.prose = ""
+        self._ordinal = 0
+        self._eat_leading_space = False
+
     def token(self, text: str) -> WireEvent:
         """Emit prose that did not come from the model."""
         return self._token(text)
