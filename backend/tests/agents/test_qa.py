@@ -214,6 +214,42 @@ class TestGroundCheck:
         assert_declined(command, "below_relevance_floor")
 
     @pytest.mark.asyncio
+    async def test_our_own_phone_number_is_not_an_invented_figure(self):
+        """
+        The interaction that putting contacts in the prompt created.
+
+        `+1 (869) 667-5566` reaches the model from the prompt, not from a
+        retrieved extract, so the figure check read it as three inventions --
+        869, 667, 5566 -- and declined the answer for offering the number the
+        prompt had just told it to offer. Measured: three declines in one
+        thirteen-turn run, each an answer that had correctly given the contact
+        details and then had a decline welded onto the end of it.
+        """
+        from app.config import get_settings
+
+        state = state_for("how do I contact ASPIRE")
+        state["retrieved"] = chunks_for("ASP-003")
+        state["messages"].append(
+            AIMessage(
+                content=(
+                    f"You can reach the team on {get_settings().aspire_contact_phone} "
+                    f"[ASP-003]."
+                )
+            )
+        )
+
+        command = await nodes.make_ground_check()(state)
+
+        assert command.goto != "escalate_agent"
+        assert not (command.update or {}).get("safety_flags", {}).get("declined")
+
+    def test_a_figure_the_corpus_does_not_have_is_still_caught(self):
+        """The exemption is our contacts only; it must not blunt the check."""
+        chunks = chunks_for("ASP-003")
+
+        assert nodes.unattributed_figures("The rate is 4.5%.", chunks) == ["4.5%"]
+
+    @pytest.mark.asyncio
     async def test_a_marginal_score_defers_to_the_citation(self):
         """
         A cosine score is a stand-in for groundedness; a citation is evidence.

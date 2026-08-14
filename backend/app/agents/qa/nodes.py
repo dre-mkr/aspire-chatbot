@@ -384,10 +384,39 @@ def normalise_figure(text: str) -> str:
     return digits.lstrip("0") or "0"
 
 
+def _figures_in_our_own_contacts() -> set[str]:
+    """The digits of ASPIRE's own phone number, hotline and opening hours.
+
+    They reach the model from the prompt rather than from a retrieved extract,
+    so `unattributed_figures` reads `+1 (869) 667-5566` as three inventions --
+    `869`, `667`, `5566` -- and declines the answer for offering the number the
+    prompt just told it to offer. Measured: three declines in one thirteen-turn
+    run, every one of them an answer that had correctly given the contact
+    details, each then having a decline welded onto the end of it.
+
+    The same shape as the PII exemption in `safety/pii.py`, and for the same
+    reason: these are the programme's own published facts, not a model's
+    invention, and a check that cannot tell the difference turns a correct
+    answer into a refusal.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    supplied = " ".join(
+        (
+            settings.aspire_contact_phone,
+            settings.aspire_contact_office,
+            settings.aspire_contact_website,
+        )
+    )
+    return {normalise_figure(match.group(0)) for match in _FIGURE.finditer(supplied)}
+
+
 def unattributed_figures(answer: str, chunks: list[KBChunk]) -> list[str]:
     """Figures in the answer that appear in no chunk."""
     corpus = " ".join(chunk.content for chunk in chunks)
     known = {normalise_figure(match.group(0)) for match in _FIGURE.finditer(corpus)}
+    known |= _figures_in_our_own_contacts()
 
     missing: list[str] = []
     for match in _FIGURE.finditer(answer):

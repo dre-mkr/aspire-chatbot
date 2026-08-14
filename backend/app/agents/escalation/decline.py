@@ -118,8 +118,14 @@ def nearest_topic(chunks: list[KBChunk]) -> str | None:
 
 def decline_text(state: AspireState, chunks: list[KBChunk]) -> str:
     """The three-part decline, assembled for this reader."""
-    locale, band = _locale(state), _band(state)
-    audience = "child" if _writes_as_child(state) else "adult"
+    locale = _locale(state)
+    as_child = _writes_as_child(state)
+    # The opening follows the audience too, not the raw band. Split the two and
+    # an unproven reader got "I do not know that one!" -- the five-to-eight line
+    # -- followed by an email address and a phone number. Measured, and it reads
+    # exactly as mismatched as it sounds.
+    band = _band(state) if as_child else "adult"
+    audience = "child" if as_child else "adult"
 
     parts = [
         _OPENING[locale].get(band, _OPENING[locale]["adult"]),
