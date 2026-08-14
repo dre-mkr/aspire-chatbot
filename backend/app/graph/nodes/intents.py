@@ -9,7 +9,7 @@ import unicodedata
 logger = logging.getLogger(__name__)
 
 
-def _fold(text: str) -> str:
+def fold(text: str) -> str:
     """Lowercase, strip accents, normalise apostrophes, collapse whitespace."""
     lowered = unicodedata.normalize("NFKD", text.lower())
     stripped = "".join(ch for ch in lowered if not unicodedata.combining(ch))
@@ -102,7 +102,7 @@ _NAMED_GAME: tuple[tuple[re.Pattern[str], str], ...] = (
 
 def wants_eligibility(message: str) -> bool:
     """Whether this message is somebody working out if they can join."""
-    folded = _fold(message)
+    folded = fold(message)
     if not folded:
         return False
     if any(pattern.search(folded) for pattern in _LOOKUP):
@@ -134,7 +134,7 @@ _ASKING_ABOUT = re.compile(
 
 def wants_registration(message: str) -> bool:
     """Whether this message is somebody asking to APPLY, rather than asking about applying."""
-    folded = _fold(message)
+    folded = fold(message)
     if not folded:
         return False
     if _ASKING_ABOUT.match(folded):
@@ -159,7 +159,7 @@ _ACCOUNT: tuple[re.Pattern[str], ...] = tuple(
 
 def wants_account(message: str) -> bool:
     """Whether this message asks to create a sign-in account."""
-    folded = _fold(message)
+    folded = fold(message)
     if not folded:
         return False
     if _ASKING_ABOUT.match(folded):
@@ -209,13 +209,13 @@ _COMPLAINT: tuple[re.Pattern[str], ...] = tuple(
 
 def is_complaint(message: str) -> bool:
     """Whether this message is a complaint rather than a question."""
-    folded = _fold(message)
+    folded = fold(message)
     return bool(folded) and any(pattern.search(folded) for pattern in _COMPLAINT)
 
 
 def wants_human(message: str) -> bool:
     """Whether this message asks for a person."""
-    folded = _fold(message)
+    folded = fold(message)
     if not folded:
         return False
     return any(pattern.search(folded) for pattern in _WANTS_HUMAN)
@@ -241,7 +241,7 @@ _LESSON: tuple[re.Pattern[str], ...] = tuple(
 
 def wants_lesson(message: str) -> bool:
     """Whether this message asks to be taught, rather than asking a fact."""
-    folded = _fold(message)
+    folded = fold(message)
     if not folded:
         return False
     if _ASKING_ABOUT.match(folded):
@@ -252,13 +252,13 @@ def wants_lesson(message: str) -> bool:
 
 def wants_game(message: str) -> bool:
     """Whether this message is asking to play."""
-    folded = _fold(message)
+    folded = fold(message)
     return bool(folded) and any(pattern.search(folded) for pattern in _PLAY)
 
 
 def named_game(message: str) -> str | None:
     """Which game they named, or None if they just said "a game"."""
-    folded = _fold(message)
+    folded = fold(message)
     for pattern, name in _NAMED_GAME:
         if pattern.search(folded):
             return name

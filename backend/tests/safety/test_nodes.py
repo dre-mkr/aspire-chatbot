@@ -225,6 +225,69 @@ class TestSafetyIn:
         flags = si.safety_in(state)["safety_flags"]
         assert flags.get(level) is True
 
+    @pytest.mark.parametrize(
+        ("text", "level"),
+        [
+            # ── Spanish ──────────────────────────────────────────────────────
+            ("quiero morirme", "safeguarding"),
+            ("me quiero morir", "safeguarding"),
+            ("mi papá me pega", "safeguarding"),
+            ("mi tío me toca", "safeguarding"),
+            ("no me siento segura en casa", "safeguarding"),
+            ("me quiero hacer daño", "safeguarding"),
+            ("nadie me quiere", "distress"),
+            ("estoy muy triste", "distress"),
+            ("no puedo más", "distress"),
+            # ── French ───────────────────────────────────────────────────────
+            ("je veux mourir", "safeguarding"),
+            ("je veux me tuer", "safeguarding"),
+            ("il me frappe", "safeguarding"),
+            ("pas en sécurité à la maison", "safeguarding"),
+            ("je veux me faire du mal", "safeguarding"),
+            ("personne ne m'aime", "distress"),
+            ("je me déteste", "distress"),
+            # ── typed without the accents, as a phone keyboard produces ──────
+            ("quiero morirme", "safeguarding"),
+            ("je me deteste", "distress"),
+            ("QUIERO MORIRME", "safeguarding"),
+        ],
+    )
+    def test_distress_is_heard_in_all_three_languages(self, text, level, state_for):
+        """
+        The product ships in three languages and this path spoke one.
+
+        Measured before the fix: "I want to kill myself" was flagged,
+        "quiero morirme" and "je veux mourir" were not -- they went to the
+        router and were answered as ordinary questions.
+        """
+        state = state_for(messages=[HumanMessage(content=text)])
+        flags = si.safety_in(state)["safety_flags"]
+        assert flags.get(level) is True
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # "me toca" is also "it is my turn" / "I get". Without a required
+            # subject this matched, and an ordinary savings question raised a
+            # safeguarding ticket and notified a guardian.
+            "¿Cuánto me toca ahorrar cada mes?",
+            "Me toca a mí ahora",
+            "¿Cuánto dinero me toca?",
+            "Mi hermana toca el piano",
+            # How you say you are cutting your HAIR, in both languages.
+            "Mañana me corto el pelo",
+            "Je me coupe les cheveux demain",
+            # Ordinary programme questions.
+            "¿Puedo participar en ASPIRE?",
+            "Je me sens bien aujourd'hui",
+        ],
+    )
+    def test_ordinary_messages_do_not_raise_a_safeguarding_flag(self, text, state_for):
+        """Widening this net wrongly is worse than the gap it closes."""
+        flags = si.safety_in(state_for(messages=[HumanMessage(content=text)]))["safety_flags"]
+        assert flags.get("safeguarding") is not True
+        assert flags.get("distress") is not True
+
     def test_a_safety_signal_never_blocks(self, state_for):
         """Somebody frightened must get a reply, from a route ending in a human."""
         state = state_for(messages=[HumanMessage(content="i want to die")])

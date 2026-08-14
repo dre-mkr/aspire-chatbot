@@ -7,6 +7,7 @@ import re
 from typing import Any, Final
 
 from app.safety import pii
+from app.graph.nodes.intents import fold
 from app.graph.state import AspireState
 
 logger = logging.getLogger(__name__)
@@ -89,10 +90,20 @@ def injection_signals(text: str) -> list[str]:
 
 # ── distress and safeguarding ────────────────────────────────────────────────
 
+# These are matched against FOLDED text -- see `distress_level`. Accents are
+# stripped before matching, so every pattern below is written without them and
+# `quiero morirme`, `quiéro morírme` and `QUIERO MORIRME` are one case.
+#
+# The product ships in three languages and this path spoke one. Measured before
+# the fix: "I want to kill myself" -> safeguarding, "quiero morirme" -> None,
+# "je veux mourir" -> None. A Spanish or French disclosure went to the router
+# and was answered as an ordinary question.
+
 #: Signals that a child needs a person, not an assistant.
 _SAFEGUARDING = re.compile(
     r"""
     \b(?:
+      # ── English ──────────────────────────────────────────────────────────
         kill\s+my ?self | killing\s+my ?self | end\s+my\s+life
       | want\s+to\s+die | wanna\s+die | better\s+off\s+dead
       | hurt\s+my ?self | hurting\s+my ?self | cut\s+my ?self
@@ -101,6 +112,34 @@ _SAFEGUARDING = re.compile(
       | (?:being\s+)?abused | molest\w* | someone\s+is\s+hurting\s+me
       | not\s+safe\s+at\s+home | scared\s+to\s+go\s+home
       | run\s+away\s+from\s+home
+      # ── Spanish ──────────────────────────────────────────────────────────
+      | (?:me\s+)?quiero\s+morir(?:me)? | quiero\s+matarme | matarme
+      | no\s+quiero\s+vivir | mejor\s+muerto | mejor\s+muerta
+      | suicid\w*
+      | (?:hacerme|me\s+hago|me\s+quiero\s+hacer)\s+dano
+      | autolesion\w* | me\s+corto\s+(?:los\s+brazos|las\s+munecas|la\s+piel)
+      # A subject is REQUIRED, exactly as in the English rule above. Without one
+      # `me toca` matched "cuanto me toca ahorrar" -- how much do I get to save --
+      # and an ordinary savings question raised a safeguarding ticket and
+      # notified a guardian. Measured, not hypothetical.
+      | (?:el|ella|ellos|mi\s+(?:papa|mama|padre|madre|tio|tia|hermano|hermana|maestr[oa]|profesor[a]?)|alguien)
+        \s+me\s+(?:pega|pegan|golpea|golpean|toca|tocan|lastima|hace\s+dano)
+      | abusan\s+de\s+mi | abuso\s+sexual | me\s+abusan
+      | no\s+(?:estoy|me\s+siento)\s+segur[oa]\s+en\s+casa
+      | miedo\s+de\s+(?:ir|volver|regresar)\s+a\s+casa
+      | (?:escaparme|huir|irme)\s+de\s+casa
+      # ── French ───────────────────────────────────────────────────────────
+      | je\s+veux\s+mourir | envie\s+de\s+mourir | veux\s+mourir
+      | (?:je\s+veux\s+)?me\s+tuer | me\s+suicider | suicid\w*
+      | mieux\s+mort(?:e)?
+      | (?:me\s+faire|je\s+me\s+fais)\s+du\s+mal
+      # Not a bare "je me coupe": that is how you say you are cutting your hair.
+      | automutil\w* | me\s+couper\s+les\s+veines | je\s+me\s+coupe\s+les\s+bras
+      | (?:il|elle|on|papa|maman)\s+me\s+(?:frappe|tape|bat|touche)
+      | abus(?:e|ee|es)?\s+(?:de\s+moi|sexuel\w*) | on\s+me\s+fait\s+du\s+mal
+      | pas\s+en\s+securite\s+(?:a\s+la\s+maison|chez\s+moi)
+      | peur\s+de\s+rentrer | peur\s+de\s+retourner\s+a\s+la\s+maison
+      | fuguer | m'enfuir\s+de\s+la\s+maison
     )\b
     """,
     re.VERBOSE | re.IGNORECASE,
@@ -109,6 +148,7 @@ _SAFEGUARDING = re.compile(
 _DISTRESS = re.compile(
     r"""
     \b(?:
+      # ── English ──────────────────────────────────────────────────────────
         i(?:'m|\s+am)\s+(?:so\s+)?(?:sad|scared|frightened|terrified|alone|lonely|worthless|hopeless)
       | i\s+(?:feel|felt)\s+(?:so\s+)?(?:sad|scared|alone|lonely|hopeless|worthless|awful)
       | nobody\s+(?:likes|loves|cares\s+about)\s+me
@@ -117,6 +157,21 @@ _DISTRESS = re.compile(
       | i\s+can'?t\s+cope
       | we\s+(?:have|got)\s+no\s+(?:food|money\s+for\s+food)
       | i(?:'m|\s+am)\s+hungry\s+(?:all\s+the\s+time|every\s+day)
+      # ── Spanish ──────────────────────────────────────────────────────────
+      | (?:estoy|me\s+siento)\s+(?:muy\s+)?(?:triste|sol[oa]|asustad[oa]|inutil|desesperad[oa])
+      | nadie\s+me\s+(?:quiere|ama) | a\s+nadie\s+le\s+importo
+      | me\s+odio
+      | me\s+(?:acosan|molestan|hacen\s+bullying)
+      | no\s+puedo\s+mas
+      | no\s+tenemos\s+comida | tengo\s+hambre\s+(?:siempre|todo\s+el\s+tiempo)
+      # ── French ───────────────────────────────────────────────────────────
+      | je\s+(?:suis|me\s+sens)\s+(?:tres\s+)?(?:triste|seul(?:e)?|effray(?:e|ee)|nul(?:le)?|desespere(?:e)?)
+      | personne\s+ne\s+m'aime | personne\s+ne\s+se\s+soucie\s+de\s+moi
+      | je\s+me\s+deteste
+      | on\s+me\s+harcele | harcelement
+      | je\s+n'?en\s+peux\s+plus
+      | on\s+n'?a\s+pas\s+(?:de\s+)?(?:nourriture|a\s+manger)
+      | j'ai\s+faim\s+(?:tout\s+le\s+temps|tous\s+les\s+jours)
     )\b
     """,
     re.VERBOSE | re.IGNORECASE,
@@ -124,10 +179,16 @@ _DISTRESS = re.compile(
 
 
 def distress_level(text: str) -> str | None:
-    """`"safeguarding"`, `"distress"`, or None."""
-    if _SAFEGUARDING.search(text):
+    """`"safeguarding"`, `"distress"`, or None.
+
+    Folded first. Without it the Spanish and French patterns would only match
+    a reader who typed their accents, which is exactly the reader least likely
+    to be doing so on a phone keyboard in the middle of a disclosure.
+    """
+    folded = fold(text)
+    if _SAFEGUARDING.search(folded):
         return "safeguarding"
-    if _DISTRESS.search(text):
+    if _DISTRESS.search(folded):
         return "distress"
     return None
 
