@@ -16,6 +16,19 @@ export const suite = {
 	description: "The 20 Aug client checklist, signed out.",
 };
 
+/**
+ * The English decline templates, which get welded onto a finished answer.
+ *
+ * `escalation/decline.py` is properly localised; these reach a Spanish or French
+ * reader anyway because the decline is appended to prose the model has already
+ * produced, rather than replacing it. `ground_check` runs after `generate` has
+ * streamed, so it can only follow the answer -- with no separating space, so it
+ * lands mid-sentence:
+ *
+ *     ...contribution de 1 000 EC$.I do not have an answer for that.
+ */
+const ENGLISH_GLUE = /I do not have an answer for that|The ASPIRE team can answer it/i;
+
 export async function steps() {
 	return [
 		// 1. The plainest question there is. If this fails nothing else matters.
@@ -104,18 +117,25 @@ export async function steps() {
 		// 9. Typed in Spanish on an English session -- which is what a Spanish
 		// speaker actually does. No layered prompt tells the model to match the
 		// reader's language, so this is the case that exposes it.
+		//
+		// The forbidden pattern names the ACTUAL English templates rather than
+		// English words in general. "no \b(the|and)\b" reads as a language check
+		// but is really a coin toss: it fires on a citation, a proper noun, or
+		// anything the model quotes, and it fired here on the very glue phrase
+		// the case is about. Naming the templates says what is wrong.
 		{
 			say: "¿Puede mi hija participar en ASPIRE?",
 			note: "whole reply in Spanish, including any decline text and the chips",
-			expect: { mustMatch: /\b(puede|su hija|programa|inscrib|requisit)/i, mustNotMatch: /\b(the|your child|please|sorry)\b/i },
+			expect: { mustMatch: /\b(puede|su hija|programa|inscrib|requisit)/i, mustNotMatch: ENGLISH_GLUE },
 		},
 
 		// 10. Mid-thread switch. The worst live moment was English glue welded
-		// into the middle of a French answer.
+		// into the middle of a French answer -- and it is welded on with no
+		// separating space, so it lands mid-sentence.
 		{
 			say: "Et pour un enfant de huit ans, quelles sont les conditions ?",
-			note: "no English glue anywhere in the reply",
-			expect: { mustMatch: /\b(enfant|conditions|ans|programme)/i, mustNotMatch: /\b(the|and|please|sorry|I do not know)\b/i },
+			note: "no English decline template glued onto a French answer",
+			expect: { mustMatch: /\b(enfant|conditions|ans|programme)/i, mustNotMatch: ENGLISH_GLUE },
 		},
 
 		// 11. The client named this one specifically. Out of corpus, so it must

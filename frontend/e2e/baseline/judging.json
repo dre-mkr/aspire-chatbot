@@ -1,12 +1,15 @@
 {
   "recorded": "2026-08-14",
-  "commit": "pre-judging-fixes + the empty-turn fix",
+  "commit": "after the grounding fix (45a957d) and the band fix (ee6f144)",
   "how": "node e2e/run.mjs --suite judging,judging_memory,judging_persona_stella,judging_persona_orion,judging_persona_aurora --web http://localhost:3001",
   "why": [
-    "These are the cases that were already failing when the judging work started.",
+    "These are the cases still failing as the judging work proceeds.",
     "They are the work list, not a tolerance: each one names the task that closes it.",
     "judging-diff.mjs fails the run on any failure NOT in here, so a fix that breaks",
-    "something else cannot hide behind a red that was already red."
+    "something else cannot hide behind a red that was already red.",
+    "Shrink this file as tasks land. It started at four in `judging`; case 6 and case 9's",
+    "spurious half went when the relevance floor stopped overruling the citation check,",
+    "which took spurious declines from 7 turns in 27 down to 2, both of them legitimate."
   ],
   "known": {
     "judging": [
@@ -14,7 +17,7 @@
         "n": 2,
         "label": "What documents do I need to register my child?",
         "closes": "T2.3",
-        "why": "wants_eligibility claims it via the 'what documents do i need' pattern and the card carries no prose"
+        "why": "wants_eligibility claims it via the 'what documents do i need' pattern and the card carries no prose. The latency probe sees the same thing from the other side: en-02, en-03, es-02, es-03 and fr-03 produce no visible token at all."
       },
       {
         "n": 7,
@@ -25,14 +28,28 @@
       {
         "n": 9,
         "label": "¿Puede mi hija participar en ASPIRE?",
-        "closes": "T2.4",
-        "why": "English decline text welded onto the end of a correct Spanish answer, with no separating space"
+        "closes": "T3.1",
+        "why": "passes whenever no gate fires; fails when a legitimate decline is appended to a finished Spanish answer instead of replacing it"
+      },
+      {
+        "n": 10,
+        "label": "Et pour un enfant de huit ans, quelles sont les conditions ?",
+        "closes": "T3.1",
+        "why": "measured: unattributed_figure correctly caught 'contribution de 1 000 EC$', and the English decline was then welded onto the French answer with no separating space. The gate is right; the delivery is not."
       },
       {
         "n": 11,
         "label": "What is the capital gains tax rate on a rental property in Miami?",
         "closes": "T2.1",
         "why": "the decline offers no ASPIRE contact details at all"
+      }
+    ],
+    "judging_memory": [
+      {
+        "n": 14,
+        "label": "recall #2 first -- this is the turn where it sits in the blind spot",
+        "closes": "unassigned",
+        "why": "Nondeterministic, and the interesting kind. One run recalled 'Marisol's secondary-school uniform' correctly; the next answered 'You mentioned a laptop or a trip as savings goals' -- invented, and cited. A question about what the reader said earlier is not a corpus question, but it is answered from the corpus anyway, so neither the citation check nor the relevance floor discriminates. Needs a decision before the freeze."
       }
     ]
   }
