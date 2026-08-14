@@ -209,8 +209,29 @@ def make_branch(curriculum=None):
         book = curriculum or load_all()
         learning = state.get("learning") or {}
         lesson = _lesson(book, learning)
-        if lesson is None:  # pragma: no cover
-            return {}
+        if lesson is None:
+            # There is no lesson to answer against -- the tutor taught this
+            # conversation and never set one, or a phase outlived its lesson.
+            # Returning nothing here ends the turn without a word, which is how
+            # a reader gets an empty message; place a lesson instead, which is
+            # what the phase this arrived in was already asking for.
+            logger.warning(
+                "branch reached with no lesson (phase=%s lesson_id=%r); placing one "
+                "rather than ending the turn silently.",
+                learning.get("phase"),
+                learning.get("lesson_id"),
+            )
+            return {
+                "learning": merge(
+                    learning,
+                    phase="placing",
+                    question_id=None,
+                    attempts=0,
+                    hint_rung=0,
+                    digression_count=0,
+                    outcome=None,
+                )
+            }
 
         from app.graph.nodes.safety_in import latest_user_text
 
@@ -520,6 +541,16 @@ def _entry(state: AspireState) -> str:
             # `branch` is where the request is honoured, and it can only be reached
             # from the phase table below; without a lesson to move on from, place one.
             return "branch" if learning.get("lesson_id") else "resume_or_place"
+
+        # The tutor declined last turn and offered concepts instead, so this
+        # message is the learner choosing one. A bare title -- "Building a
+        # saving habit" -- asks nothing and names no lesson, so every claim
+        # below reads False and the phase table sent it to `branch`, which had
+        # no lesson to answer it against and ended the turn in silence. Only
+        # the tutor can resolve a topic, and it resolves these: the titles it
+        # offers come out of its own store.
+        if learning.get("awaiting_topic_choice"):
+            return "tutor"
 
         if (
             learning.get("active_concept_id")

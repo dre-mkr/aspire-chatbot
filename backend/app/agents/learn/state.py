@@ -71,6 +71,10 @@ class LearningState(TypedDict, total=False):
     move: str
     #: A check question is outstanding and the next message is its answer.
     awaiting_check_answer: bool
+    #: The tutor resolved nothing and offered concepts instead, so the next
+    #: message is the learner picking one. It is a TOPIC, not a check answer,
+    #: and only the tutor can resolve it -- see `graph._entry`.
+    awaiting_topic_choice: bool
     #: Which item from the concept's bank is outstanding.
     pending_check_id: str | None
     #: Check ids this learner has already seen, so the bank is not repeated before it is exhausted.
@@ -141,6 +145,7 @@ def new_session(*, learner_id: str | None = None, now: datetime | None = None) -
         resolution_similarity=0.0,
         move="",
         awaiting_check_answer=False,
+        awaiting_topic_choice=False,
         pending_check_id=None,
         seen_check_ids=[],
         consecutive_wrong=0,

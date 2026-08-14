@@ -49,6 +49,27 @@ TURN_TIMEOUT_SECONDS = 120.0
 #: The longest question this transport will read.
 MAX_MESSAGE_CHARS = 8_000
 
+#: Directives that decorate an answer rather than being one. A turn carrying
+#: only these, and no words, has said nothing to the reader.
+DECORATIONS: frozenset[str] = frozenset({"quick_replies", "citations"})
+
+#: What to say when the graph produced no answer at all -- a bug, said out loud
+#: rather than served as an empty message the reader cannot tell from a hang.
+EMPTY_TURN: dict[str, str] = {
+    "en": (
+        "Sorry -- I lost my thread there and did not get an answer out. Could "
+        "you ask me that again?"
+    ),
+    "es": (
+        "Perdona, me perdí y no llegué a responderte. ¿Puedes preguntármelo "
+        "otra vez?"
+    ),
+    "fr": (
+        "Désolé, j'ai perdu le fil et je n'ai pas répondu. Peux-tu me le "
+        "redemander?"
+    ),
+}
+
 
 async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]:
     """The turn, as encoded SSE frames."""
@@ -202,6 +223,23 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
 
     # A paused `interrupt()` is asking the reader for something, and its payload is the directive.
     directives.extend(await _pending_interrupts(graph, config))
+
+    # A turn that says nothing is a bug, and the reader should not be the one
+    # who discovers it. Cards, widgets and a paused `interrupt()` all speak
+    # through directives of their own, so only the decorations count as silence.
+    if not interceptor.prose.strip() and all(
+        directive.get("t") in DECORATIONS for directive in directives
+    ):
+        logger.error(
+            "The turn for session %s produced no prose and nothing to act on "
+            "(agent=%s, directives=%s); serving the fallback.",
+            thread_id,
+            turn.get("active_agent"),
+            [directive.get("t") for directive in directives],
+        )
+        yield interceptor.token(
+            EMPTY_TURN.get(claims.locale, EMPTY_TURN["en"])
+        ).encode()
 
     for directive in directives:
         yield interceptor.directive(directive).encode()

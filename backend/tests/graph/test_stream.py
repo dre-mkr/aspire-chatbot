@@ -340,3 +340,99 @@ class TestChipsThatRunLong:
         out = _closing_directives({"quick_replies": [chip]})
         options = next(d for d in out if d["t"] == "quick_replies")["options"]
         assert options[0]["label"] == chip
+
+
+class TestATurnThatSaysNothing:
+    """The transport's backstop.
+
+    A learning turn was measured ending with no prose, no directive and no row
+    in `messages`: the reader got an empty bubble with a Play button and no way
+    to tell it from a hang, and nothing in the log said so. The graph bugs
+    behind that one are fixed; this is the net under the next one.
+    """
+
+    @pytest.fixture
+    def silent_client(self, monkeypatch):
+        """The same app, with an agent that returns nothing at all."""
+        from app.api import stream as stream_module
+        from app.graph import main_graph
+
+        async def no_checkpointer():
+            return None
+
+        async def classifier(system: str, user: str) -> str:
+            return '{"agent": "learn_agent", "confidence": 0.95, "reason": "lesson"}'
+
+        monkeypatch.setattr(stream_module, "get_checkpointer", no_checkpointer)
+        monkeypatch.setattr(stream_module, "_classifier_invoke", classifier)
+
+        async def mute(state):
+            return {"active_agent": "learn_agent"}
+
+        monkeypatch.setitem(main_graph.AGENT_BUILDERS, "learn_agent", lambda: mute)
+
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+
+    def test_the_reader_gets_a_sentence_rather_than_an_empty_message(
+        self, silent_client
+    ):
+        from app.api.stream import EMPTY_TURN
+
+        status, events = post(
+            silent_client, auth=token(), message="Building a saving habit"
+        )
+        assert status == 200
+
+        prose = "".join(
+            event["data"]["t"] for event in events if event["event"] == "token"
+        )
+        assert prose.strip() == EMPTY_TURN["en"]
+        assert events[-1]["event"] == "done"
+
+    def test_it_is_logged_as_an_error_not_swallowed(self, silent_client, caplog):
+        import logging
+
+        with caplog.at_level(logging.ERROR, logger="app.api.stream"):
+            post(silent_client, auth=token(), message="Building a saving habit")
+
+        assert any(
+            "no prose and nothing to act on" in record.getMessage()
+            for record in caplog.records
+        ), "a silent turn must leave a record naming the agent"
+
+    def test_the_reader_is_answered_in_their_own_language(self, silent_client):
+        from app.api.stream import EMPTY_TURN
+
+        _status, events = post(
+            silent_client, auth=token(locale="fr"), message="Une habitude d'épargne"
+        )
+        prose = "".join(
+            event["data"]["t"] for event in events if event["event"] == "token"
+        )
+        assert prose.strip() == EMPTY_TURN["fr"]
+
+    def test_a_card_turn_says_nothing_and_is_left_alone(self, client, monkeypatch):
+        """Cards, widgets and a paused upload all speak through directives."""
+        from app.graph import main_graph
+
+        async def card_only(state):
+            return {
+                "active_agent": "learn_agent",
+                "ui_directives": [{"t": "game", "game": "true_false", "concept": "save"}],
+            }
+
+        monkeypatch.setitem(main_graph.AGENT_BUILDERS, "learn_agent", lambda: card_only)
+
+        # Not "play a game": the card intent gate answers that one in prose
+        # before any agent runs, and this is about the agent's own silence.
+        _status, events = post(client, auth=token(), message="Building a saving habit")
+        prose = "".join(
+            event["data"]["t"] for event in events if event["event"] == "token"
+        )
+        assert prose == ""
+        kinds = [
+            event["data"]["d"]["t"] for event in events if event["event"] == "directive"
+        ]
+        assert "game" in kinds

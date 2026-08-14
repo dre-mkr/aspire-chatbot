@@ -393,3 +393,69 @@ class TestLeavingAConceptBehind:
 
         state = self._state("Why does that matter?", lesson_id="l01")
         assert self._with_store(lambda: _entry(state)) == "tutor"
+
+
+class TestAnsweringADecline:
+    """A decline ends in a question, and the answer to it is a topic.
+
+    Measured in a real conversation: the tutor offered "building a saving habit"
+    or "emergency savings", the reader tapped the first, and the turn produced
+    no message at all -- no prose, no directive, no row in `messages`. A bare
+    title asks nothing and names no lesson, so every claim in `_entry` read
+    False and the phase table sent `checking` to `branch`, which had no
+    curriculum lesson to answer against and returned nothing.
+    """
+
+    @staticmethod
+    def _declined(**extra):
+        """The learning state a decline leaves behind."""
+        from app.agents.learn.resolve import ConceptResolution
+        from app.agents.learn.tutor import _decline
+
+        after = _decline(
+            {"learning": {}},
+            {},
+            ConceptResolution(concept=None, source="none", similarity=0.24),
+            "16-18",
+            0.0,
+        )
+        return {**after["learning"], **extra}
+
+    @staticmethod
+    def _state(text: str, learning: dict):
+        from langchain_core.messages import HumanMessage
+
+        return {
+            "messages": [HumanMessage(content=text)],
+            "learning": learning,
+            "safety_flags": {},
+        }
+
+    def test_the_decline_records_what_it_is_waiting_for(self):
+        assert self._declined()["awaiting_topic_choice"] is True
+
+    def test_the_chosen_topic_reaches_the_tutor(self):
+        """The tutor resolves these: it offered them out of its own store."""
+        from app.agents.learn.graph import _entry
+
+        state = self._state("Building a saving habit", self._declined())
+        assert TestLeavingAConceptBehind._with_store(lambda: _entry(state)) == "tutor"
+
+    def test_a_lesson_the_tutor_never_placed_does_not_end_the_turn_in_silence(self):
+        """`branch` with no lesson used to return nothing, and nothing said nothing.
+
+        This is the state every conversation declined before the fix is still
+        sitting in, so the guard has to hold without the flag above.
+        """
+        from app.agents.learn.graph import _after_branch, make_branch
+        from app.curriculum.schema import load_all
+
+        learning = {"phase": "checking", "lesson_id": None, "active_concept_id": None}
+        state = self._state("Building a saving habit", learning)
+
+        update = make_branch(load_all())(state)
+        assert update["learning"]["phase"] == "placing"
+        assert (
+            _after_branch({**state, "learning": update["learning"]})
+            == "resume_or_place"
+        )

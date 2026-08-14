@@ -773,6 +773,13 @@ def _decline(
             move="DECLINE",
             awaiting_check_answer=False,
             pending_check_id=None,
+            # The offer above ends in a question, and its answer is a TOPIC.
+            # Without this the reply fell through `_entry`'s claims -- a bare
+            # concept title asks nothing and names no lesson -- into the phase
+            # table, which sends `checking` to the curriculum `branch`. A
+            # tutor-taught conversation has no lesson there to answer against,
+            # so the turn ended having said nothing at all.
+            awaiting_topic_choice=True,
         ),
     }
 
@@ -834,6 +841,8 @@ def _state_after(
             concepts_touched=touched(learning, concept_id) if concept_id else learning.get("concepts_touched"),
             # A check was asked, so the next message is its answer.
             awaiting_check_answer=asked,
+            # Something was taught, so any outstanding offer has been answered.
+            awaiting_topic_choice=False,
             pending_check_id=check_item.id if asked else None,
             # A hint re-asks a question they have already met, so it is not
             # newly seen -- marking it seen would burn an item off the bank
