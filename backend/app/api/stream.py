@@ -234,7 +234,12 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
                 # branch fires exactly once per turn with the entire answer.
                 # There is no incremental output to preserve.
                 if event.event == "token":
-                    timing.mark_stage(timing.T_TTFT)
+                    # The agent's first text, NOT the reader's. `T_TTFT` is
+                    # marked at the delivery below, once the gates have run;
+                    # marking it here would keep reporting a moment when
+                    # nothing is sent, and `timing.py` already derives
+                    # `d_buffer_hold` as the difference between the two.
+                    timing.mark_stage(timing.T_AGENT_FIRST_DELTA)
                     continue
                 yield event.encode()
             if time.monotonic() - started > TURN_TIMEOUT_SECONDS:
@@ -291,6 +296,8 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
     # the start with it, because the held events took numbers with them.
     interceptor.restart_numbering()
     if delivered:
+        # Time to first token, measured where the reader actually gets one.
+        timing.mark_stage(timing.T_TTFT)
         # Through `token` rather than around it: citation markers are stripped
         # for display there, and the final message still carries them.
         yield interceptor.token(delivered).encode()

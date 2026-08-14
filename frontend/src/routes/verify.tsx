@@ -1,9 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AuthSurface } from "#/components/auth/AuthSurface";
-import { AuthError, redeemSignInLink } from "#/lib/aspire/auth";
+import { AuthError, confirmEmail } from "#/lib/aspire/auth";
 
-/** Where the confirm-your-email and sign-in links land, at `/verify?token=…`. */
+/** Where the confirm-your-email link lands, at `/verify?token=…`.
+ *
+ * The sign-in link lands on `/signin?token=…` -- `mail.py` addresses them
+ * separately, and they carry different purposes, which `_redeem` checks. */
 
 export const Route = createFileRoute("/verify")({
 	// Full-document SSR, stated rather than inherited.
@@ -23,7 +26,7 @@ function Verify() {
 	useEffect(() => {
 		if (!token || spent.current) return;
 		spent.current = true;
-		void redeemSignInLink(token)
+		void confirmEmail(token)
 			.then(() => navigate({ to: "/", replace: true }))
 			.catch((error) =>
 				setFailed(
@@ -37,10 +40,10 @@ function Verify() {
 	if (!token || failed) {
 		return (
 			<AuthSurface
-				title={failed ? "That link has been used" : "That link is incomplete"}
+				title={failed ? "That link did not work" : "That link is incomplete"}
 				subtitle={
 					failed
-						? "Sign-in links work once and expire quickly, which is what keeps them safe to send by email. Ask for a fresh one."
+						? "Confirmation links work once and expire after a day, which is what keeps them safe to send by email. Ask for a fresh one."
 						: "The link looks like it was cut short somewhere. Ask for a new one and it will arrive in a moment."
 				}
 				footText="Back to"

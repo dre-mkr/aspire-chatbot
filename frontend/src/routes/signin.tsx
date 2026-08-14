@@ -1,15 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AuthSurface } from "#/components/auth/AuthSurface";
 import { Field } from "#/components/auth/Field";
-import { AuthError, requestSignInLink, signIn } from "#/lib/aspire/auth";
+import {
+	AuthError,
+	redeemSignInLink,
+	requestSignInLink,
+	signIn,
+} from "#/lib/aspire/auth";
 import { keys } from "#/lib/aspire/queries";
 
 /** Signing in, at `/signin`. */
 
 interface SignInSearch {
 	next?: string;
+	/** From the passwordless email link, which `mail.py` sends here. */
+	token?: string;
 }
 
 /** Only same-origin paths. Anything else falls back to the empty state. */
@@ -24,8 +31,12 @@ export const Route = createFileRoute("/signin")({
 	// Full-document SSR, stated rather than inherited.
 	ssr: true,
 	validateSearch: (search: Record<string, unknown>): SignInSearch => {
+		// `token` was DROPPED here, so the passwordless link in the email landed
+		// on a plain sign-in form and its fifteen-minute token was never
+		// redeemed. `requestSignInLink` worked; the other half never fired.
 		const next = safeNext(search.next);
-		return next ? { next } : {};
+		const token = typeof search.token === "string" ? search.token : undefined;
+		return { ...(next ? { next } : {}), ...(token ? { token } : {}) };
 	},
 	component: SignIn,
 });
@@ -33,7 +44,7 @@ export const Route = createFileRoute("/signin")({
 function SignIn() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const { next } = Route.useSearch();
+	const { next, token } = Route.useSearch();
 
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
@@ -51,6 +62,41 @@ function SignIn() {
 		queryClient.removeQueries({ queryKey: keys.allGames() });
 		queryClient.removeQueries({ queryKey: keys.allEligibility() });
 	}
+
+	/**
+	 * Redeem a token that arrived in the URL, from the passwordless email link.
+	 *
+	 * `mail.py` sends `/signin?token=…`, and this route used to discard it in
+	 * `validateSearch`, so the link opened a plain sign-in form and the reader
+	 * typed a password they had asked not to need. Once, guarded by a ref: the
+	 * token is single-use, and a second attempt would fail against a link that
+	 * had just worked.
+	 */
+	const redeemed = useRef(false);
+	useEffect(() => {
+		if (!token || redeemed.current) return;
+		redeemed.current = true;
+		setBusy(true);
+		void redeemSignInLink(token)
+			.then(async () => {
+				resetScopedCaches();
+				await queryClient.invalidateQueries({
+					queryKey: keys.allConversations(),
+				});
+				void navigate({ to: safeNext(next) ?? "/", replace: true });
+			})
+			.catch((error) => {
+				setErrors({
+					form:
+						error instanceof AuthError
+							? error.message
+							: "That sign-in link has expired. Ask for a fresh one.",
+				});
+			})
+			.finally(() => setBusy(false));
+		// `resetScopedCaches` is stable for this component's life.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [token, next, navigate, queryClient]);
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();

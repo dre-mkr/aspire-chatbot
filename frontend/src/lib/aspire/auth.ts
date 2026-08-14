@@ -177,6 +177,21 @@ export async function completeReset(
 	return adopt(await post<WireSession>("/api/auth/reset", { token, password }));
 }
 
+/**
+ * Confirm an email address, from the link in the confirm-your-email message.
+ *
+ * `POST /api/auth/verify` has existed all along and had NO caller: `/verify`
+ * was redeeming against `signin-link/redeem` instead, and `_redeem` matches on
+ * the token's purpose as well as its hash. A verify token carries
+ * `purpose="verify"`, so the lookup missed every time and the reader was told
+ * "That link has been used" -- which was not true, and left them with no way
+ * to confirm an address. This endpoint also sets `email_verified_at`, which
+ * the sign-in path does not.
+ */
+export async function confirmEmail(token: string): Promise<AuthResult> {
+	return adopt(await post<WireSession>("/api/auth/verify", { token }));
+}
+
 export async function redeemSignInLink(token: string): Promise<AuthResult> {
 	return adopt(
 		await post<WireSession>("/api/auth/signin-link/redeem", { token }),
