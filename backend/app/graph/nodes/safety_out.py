@@ -9,6 +9,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 
+from app import timing
 from app.graph.state import AspireState, band_index
 from app.safety import pii, vocab
 from app.widgets import sentinel
@@ -285,6 +286,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
         if over_cap(text, band, agent):
             report["length_violation"] = word_count(text)
             if reprompt is not None:
+                timing.note_reprompt("length")
                 text = await reprompt(shorten_instruction(band, word_count(text), agent), text)
             if over_cap(text, band, agent):
                 cap = cap_for(band, agent)
@@ -304,6 +306,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
         if violations:
             report["vocab_violations"] = sorted({v.term for v in violations})
             if reprompt is not None:
+                timing.note_reprompt("vocab")
                 text = await reprompt(vocab.explain(violations, band), text)
                 # Re-checked, and a second failure is NOT re-prompted again.
                 remaining = vocab.check(text, band)
@@ -355,6 +358,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
             if not quick_replies_ok(replies):
                 report["quick_replies_missing"] = True
                 if reprompt is not None:
+                    timing.note_reprompt("chips")
                     retried = await reprompt(QUICK_REPLY_INSTRUCTION, text)
                     prose, harvested = parse_chips(retried)
                     if quick_replies_ok(harvested):
@@ -377,6 +381,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 locale,
             )
             if reprompt is not None:
+                timing.note_reprompt("locale")
                 retried = await reprompt(locale_instruction(locale), text)
                 # Accepted only if it actually moved.
                 if detect_locale(retried) in (locale, None):

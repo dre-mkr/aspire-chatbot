@@ -76,6 +76,9 @@ def build_qa_graph(
 
 async def _search(query: str, k: int):
     """Dense retrieval against the existing pgvector corpus."""
+    import time
+
+    from app import timing
     from app.graph.state import KBChunk
     from app.rag import embed_query_cached, get_retriever
     from app.rag import PgVectorRetriever
@@ -84,13 +87,24 @@ async def _search(query: str, k: int):
     if not isinstance(inner, PgVectorRetriever):  # pragma: no cover - config error
         raise RuntimeError("The configured retriever cannot search by vector.")
 
+    # Measured here rather than by `TimedRetriever`, which wraps `get_retriever()`
+    # and which this function deliberately reaches THROUGH -- `inner.k` has to be
+    # mutated for the wider QA fan-out. So the wrapper's instrumentation never
+    # sees a QA turn, and `t_embed` / `t_retrieve` would stay blank without this.
+    embed_started = time.perf_counter()
     vector = await embed_query_cached(query)
+    timing.record_stage(timing.T_EMBED, (time.perf_counter() - embed_started) * 1000.0)
+
     previous_k = inner.k
+    search_started = time.perf_counter()
     try:
         inner.k = k
         scored = await inner.asearch_with_scores(vector)
     finally:
         inner.k = previous_k
+        timing.record_stage(timing.T_RETRIEVE, (time.perf_counter() - search_started) * 1000.0)
+
+    timing.annotate(retrieved_chunk_count=len(scored))
 
     return [
         KBChunk(

@@ -439,3 +439,60 @@ def test_the_endpoint_gate_defaults_to_closed(monkeypatch, value, expected):
 def test_the_endpoint_gate_is_closed_when_unset(monkeypatch):
     monkeypatch.delenv("TIMINGS_ENDPOINT_ENABLED", raising=False)
     assert timing.timings_endpoint_enabled() is False
+
+
+# ── the chat path is actually measured ───────────────────────────────────────
+#
+# `app/timing.py` has defined twenty stage constants and a ring buffer since it
+# was written, and `app/api/stream.py` never imported it -- so every
+# `record_stage` and `annotate` on a chat turn was a no-op and only the two
+# voice endpoints ever produced a `turn_timing` line. Nothing failed, which is
+# why it survived: the module was fully tested in isolation and wired to
+# nothing. These two guard the wiring rather than the module.
+
+
+@pytest.mark.asyncio
+async def test_a_chat_turn_is_measured_at_all():
+    """The regression that matters: `_events` must publish a turn."""
+    from app.api import stream as stream_api
+    from app.timing import RING
+
+    before = len(RING.snapshot())
+
+    # An unusable token is enough. The turn stops early with an `unauthenticated`
+    # frame, but the wrapper still has to open and close a measured turn -- and
+    # if the binding is ever removed, this is the assertion that notices.
+    frames = [frame async for frame in stream_api._events(None, {"message": "hello"})]
+
+    assert any("unauthenticated" in frame for frame in frames)
+    after = RING.snapshot()
+    assert len(after) == before + 1, "the chat path recorded no turn timing"
+    assert after[-1]["endpoint"] == "/v2/chat/stream"
+    assert after[-1]["t_total"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_the_reprompt_counters_survive_a_turn():
+    """
+    T2.5's acceptance is "the length gate stops firing", so it has to be countable.
+
+    Each re-prompt is a whole extra model call spent rewriting an answer the
+    reader already has, and the four gates were indistinguishable in the log.
+    """
+    from app import timing
+
+    with timing.turn(endpoint="/test") as timings:
+        timing.note_reprompt("length")
+        timing.note_reprompt("length")
+        timing.note_reprompt("locale")
+        payload = timings.payload()
+
+    assert payload["reprompts"] == {"length": 2, "locale": 1}
+    assert payload["reprompt_count"] == 3
+
+
+def test_note_reprompt_outside_a_turn_is_harmless():
+    """Every other recorder no-ops off-turn; this one must too."""
+    from app import timing
+
+    timing.note_reprompt("length")  # must not raise

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
+from app import timing
 from app import turn as turn_service
 from app.auth import bearer_token
 from app.config import get_settings
@@ -72,6 +73,26 @@ EMPTY_TURN: dict[str, str] = {
 
 
 async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]:
+    """`_turn_frames`, measured.
+
+    `app/timing.py` defines twenty stage constants and a ring buffer behind
+    `/debug/timings`, and until now this module never imported it -- so
+    `record_stage`, `mark_stage` and `annotate` were no-ops on every chat turn
+    and only the two voice endpoints ever emitted a `turn_timing` line. The one
+    latency number a chat turn produced was `elapsed_ms` on the `done` frame.
+
+    A wrapper rather than a `with` around the body: the body is two hundred
+    lines with a dozen early returns, and re-indenting all of it days before a
+    demo is the kind of diff this work is meant to avoid. `bind` publishes
+    through a ContextVar, and the inner generator is resumed in this same task,
+    so everything it awaits sees the turn.
+    """
+    with timing.turn(endpoint="/v2/chat/stream"):
+        async for frame in _turn_frames(token, body):
+            yield frame
+
+
+async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]:
     """The turn, as encoded SSE frames."""
     interceptor = StreamInterceptor(widgets_enabled=get_settings().widgets_enabled)
     started = time.monotonic()
@@ -85,6 +106,9 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
 
     interceptor.age_band = claims.age_band
     interceptor.locale = claims.locale
+    # Who this turn is for. `begin` takes these, but the token is only decoded
+    # here, inside the generator the wrapper is already measuring.
+    timing.annotate(persona=claims.persona, lang=claims.locale, band=claims.age_band)
 
     interaction = body.get("__widget_interaction")
     game_score = body.get("__game_result")
@@ -142,6 +166,7 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
         )
         if cached is not None:
             logger.info("cache hit session=%s", thread_id)
+            timing.annotate(cache_hit=True, cache_layer="exact")
             async for frame in _replay(interceptor, record, cached, started):
                 yield frame
             return
@@ -185,6 +210,11 @@ async def _events(token: str | None, body: dict[str, Any]) -> AsyncIterator[str]
             stream_mode=["messages", "custom"],
         ):
             for event in await interceptor.process(chunk):
+                # Time to first token, which for this service is time to the
+                # WHOLE answer: nothing here streams tokens (every prose call is
+                # `ainvoke`), so LangGraph emits one message and this fires once.
+                if event.event == "token":
+                    timing.mark_stage(timing.T_TTFT)
                 yield event.encode()
             if time.monotonic() - started > TURN_TIMEOUT_SECONDS:
                 logger.warning(

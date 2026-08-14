@@ -155,6 +155,12 @@ class TurnTimings:
     t0: float
     persona: str | None = None
     lang: str | None = None
+    #: The band the turn was actually served as, which decides every word cap.
+    band: str | None = None
+    #: Post-hoc safety re-prompts by kind: length, vocab, chips, locale. Each one
+    #: is a whole extra model call spent rewriting an answer the reader already
+    #: has, so this is the number to watch when the prompt layer changes.
+    reprompts: dict[str, int] = field(default_factory=dict)
     input_token_count: int | None = None
     output_token_count: int | None = None
     retrieved_chunk_count: int | None = None
@@ -214,6 +220,9 @@ class TurnTimings:
             "endpoint": self.endpoint,
             "persona": self.persona,
             "lang": self.lang,
+            "band": self.band,
+            "reprompts": dict(self.reprompts),
+            "reprompt_count": sum(self.reprompts.values()),
             "input_token_count": self.input_token_count,
             "output_token_count": self.output_token_count,
             "retrieved_chunk_count": self.retrieved_chunk_count,
@@ -319,6 +328,18 @@ def mark_stage(name: str) -> None:
     timings = _CURRENT.get()
     if timings is not None:
         timings.mark(name)
+
+
+def note_reprompt(kind: str) -> None:
+    """
+    Record that a safety gate is about to rewrite the answer. No-op outside a turn.
+
+    Counted rather than set, because more than one gate can fire on the same
+    turn -- worst case all four, on top of the original call.
+    """
+    timings = _CURRENT.get()
+    if timings is not None:
+        timings.reprompts[kind] = timings.reprompts.get(kind, 0) + 1
 
 
 def annotate(**facts: Any) -> None:
