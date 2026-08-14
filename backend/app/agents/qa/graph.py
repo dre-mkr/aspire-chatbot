@@ -126,12 +126,46 @@ async def _search(query: str, k: int):
     ]
 
 
+#: The permitted corpus per audience, and the fingerprint it was read at.
+#:
+#: This was an unbounded `SELECT` of every document row on EVERY question, on
+#: the critical path, followed by a Python-side permission filter. Measured on
+#: this machine: 610-720 ms warm, 4.9 s on the first read of a cold process, for
+#: a table that changes only when `ingest` runs.
+_CORPUS: dict[str, list[tuple[str, str]]] = {}
+_CORPUS_AT: str | None = None
+
+
+def forget_corpus() -> None:
+    """Drop the cached corpus. Called by `ingest` after it rewrites the table."""
+    _CORPUS.clear()
+    global _CORPUS_AT
+    _CORPUS_AT = None
+
+
 async def _corpus(audience: str) -> list[tuple[str, str]]:
     """Every corpus row this audience may see, as `(kb_id, text)`, for BM25."""
     from sqlalchemy import select
 
+    from app.cache import corpus_fingerprint
     from app.db import session
     from app.db.models import Document
+
+    # Keyed on the corpus fingerprint as well as cleared by `ingest`: the
+    # fingerprint is a sha of the CSV, so editing the knowledge base and
+    # restarting is enough to invalidate this without anyone remembering to.
+    global _CORPUS_AT
+    try:
+        fingerprint = corpus_fingerprint()
+    except Exception:  # pragma: no cover - no CSV on this box
+        fingerprint = ""
+    if fingerprint != _CORPUS_AT:
+        _CORPUS.clear()
+        _CORPUS_AT = fingerprint
+
+    cached = _CORPUS.get(audience)
+    if cached is not None:
+        return cached
 
     async with session() as db:
         if db is None:
@@ -152,6 +186,8 @@ async def _corpus(audience: str) -> list[tuple[str, str]]:
         chunk = KBChunk(kb_id=str(kb_id), content=content, metadata=dict(metadata or {}))
         if _permitted(chunk, audience):
             permitted.append((str(kb_id), content))
+
+    _CORPUS[audience] = permitted
     return permitted
 
 

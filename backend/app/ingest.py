@@ -224,6 +224,16 @@ async def ingest(settings: Settings | None = None) -> int:
         len(rows),
     )
 
+    # The retrieval side holds the corpus and its BM25 index in process, so a
+    # rewritten table has to say so. The fingerprint invalidates them too, but
+    # only once it changes -- re-ingesting the same CSV would otherwise keep
+    # serving rows this transaction just deleted.
+    from app.agents.qa.graph import forget_corpus
+    from app.agents.qa.nodes import forget_indexes
+
+    forget_corpus()
+    forget_indexes()
+
     # A reloaded knowledge base must never be served from cache.
     try:
         from app.cache import flush_answers

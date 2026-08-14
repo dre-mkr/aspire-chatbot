@@ -87,16 +87,59 @@ def rrf_fuse(
     return scores
 
 
-def bm25_rank(query: str, corpus: list[tuple[str, str]], top: int) -> list[str]:
-    """BM25 over `(id, text)` pairs."""
-    if not corpus:
-        return []
+#: Built indexes, by whatever key the caller says identifies this corpus.
+#:
+#: Tokenising ~706 rows and constructing `BM25Okapi` ran on every question, on
+#: the critical path. Measured on this machine: 114-200 ms warm, half a second
+#: cold, for a corpus that changes only when `ingest` runs.
+_INDEXES: dict[str, tuple[int, Any]] = {}
+
+
+def _index_for(corpus: list[tuple[str, str]], cache_key: str | None):
+    """The BM25 index for this corpus, built once when the caller names it."""
     from rank_bm25 import BM25Okapi
+
+    if cache_key is not None:
+        # The row count guards against a key that outlives its corpus -- a
+        # cheap check, and the failure it prevents is silent wrong answers.
+        cached = _INDEXES.get(cache_key)
+        if cached is not None and cached[0] == len(corpus):
+            return cached[1]
 
     tokenised = [_tokens(f"{identifier} {text}") for identifier, text in corpus]
     if not any(tokenised):
-        return []
+        return None
+
     index = BM25Okapi(tokenised)
+    if cache_key is not None:
+        _INDEXES[cache_key] = (len(corpus), index)
+    return index
+
+
+def forget_indexes() -> None:
+    """Drop every built index. Called by `ingest` after it rewrites the table."""
+    _INDEXES.clear()
+
+
+def bm25_rank(
+    query: str,
+    corpus: list[tuple[str, str]],
+    top: int,
+    *,
+    cache_key: str | None = None,
+) -> list[str]:
+    """BM25 over `(id, text)` pairs.
+
+    Without a `cache_key` the index is built fresh, which is what the offline
+    eval harness wants: it drives this directly over a CSV sample and has no
+    corpus identity to speak of.
+    """
+    if not corpus:
+        return []
+
+    index = _index_for(corpus, cache_key)
+    if index is None:
+        return []
     scores = index.get_scores(_tokens(query))
     ordered = sorted(
         range(len(corpus)), key=lambda position: scores[position], reverse=True
@@ -141,7 +184,15 @@ def make_hybrid_retrieve(search=None, corpus=None):
         by_id: dict[str, KBChunk] = {chunk.kb_id: chunk for chunk in dense}
 
         # BM25 searches the whole audience-permitted corpus, not a subset of the dense hits.
-        lexical = bm25_rank(query, rows, settings.qa_retrieve_k)
+        # Keyed by audience and corpus fingerprint, so the index is built once
+        # per corpus rather than once per question.
+        from app.cache import corpus_fingerprint
+
+        try:
+            key: str | None = f"{audience}:{corpus_fingerprint()}"
+        except Exception:  # pragma: no cover - no CSV on this box
+            key = None
+        lexical = bm25_rank(query, rows, settings.qa_retrieve_k, cache_key=key)
         text_by_id = dict(rows)
         for identifier in lexical:
             if identifier not in by_id:
