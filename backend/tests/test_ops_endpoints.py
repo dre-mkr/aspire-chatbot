@@ -37,6 +37,32 @@ def test_health_is_cheap_and_always_answers(client):
     assert response.json()["status"] == "ok"
 
 
+@pytest.mark.parametrize("path", ["/api/health", "/api/ready"])
+def test_the_probes_are_reachable_through_the_api_prefix(client, path):
+    """
+    The bare paths are unreachable in production.
+
+    nginx proxies only `/api/` and `/v2/` to this service, so `/health` and
+    `/ready` fall through to the SPA and answer 404 with HTML -- the deployment
+    had no health check anything outside the box could call. These aliases are
+    what a monitor, a deploy gate and the keep-warm ping actually hit, so they
+    have to keep answering.
+    """
+    response = client.get(path)
+    assert response.status_code in (200, 503)
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_the_aliases_answer_exactly_as_the_originals_do(client):
+    """Two doors, one room. A drifting alias is worse than no alias."""
+    assert client.get("/api/health").json() == client.get("/health").json()
+
+    prefixed = client.get("/api/ready")
+    bare = client.get("/ready")
+    assert prefixed.status_code == bare.status_code
+    assert prefixed.json() == bare.json()
+
+
 def test_disabled_debug_route_is_indistinguishable_from_an_absent_one(client):
     """The 404-not-403 choice is a security property, and it has to hold."""
     if os.environ.get("TIMINGS_ENDPOINT_ENABLED", "").strip().lower() in {

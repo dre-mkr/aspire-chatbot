@@ -199,6 +199,24 @@ async def health() -> HealthResponse:
     )
 
 
+# nginx proxies only `/api/` and `/v2/` to this service (deploy/nginx-aspire.conf),
+# so every bare path here is unreachable in production: `/health` and `/ready`
+# both fall through to the SPA and answer 404 with HTML. There was no health
+# check a monitor, a deploy or a keep-warm ping could actually call.
+#
+# Same handlers, a second door, rather than widening the nginx config -- an app
+# change ships through the pipeline that already gates on tests, and a server
+# reload during judging week does not.
+@app.get("/api/health", response_model=HealthResponse)
+async def health_via_api() -> HealthResponse:
+    return await health()
+
+
+@app.get("/api/ready")
+async def ready_via_api() -> Response:
+    return await ready()
+
+
 @app.get("/debug/timings")
 async def debug_timings(last: int | None = None) -> JSONResponse:
     """p50/p95/p99 per stage over the last N turns this process served."""
