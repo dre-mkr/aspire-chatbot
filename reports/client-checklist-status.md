@@ -9,6 +9,26 @@ the real site, signed out.
 
 The judging suite is **13 of 13**, from 8 of 12 when this work started.
 
+## The freeze gate
+
+Run in full on 14 Aug, on this branch:
+
+| gate | result |
+|---|---|
+| `pytest -m "not slow"` | **3401 passed**, 1 skipped, 1 xfailed |
+| `pytest -m slow` | **68 passed**, 3 skipped |
+| `make eval` | **PASSED** — `ungrounded_answers_served` 0, `pii_leaks_into_summary` 0, `band_violations` 0, `formula_domain_failures` 0, safety 100% |
+| judging suite, cold anonymous browser | **13 / 13** |
+| persona probe (stella, orion, aurora) | **9 / 9** |
+| `t_total` p50 | 10.4s — **target not met**, see below |
+
+No accepted reds. The one failure the full run did find was mine and is fixed:
+`test_the_stream_starts_the_conversation_write_before_the_graph` inspects source
+text, and the body it inspects moved when `app.timing` was bound to the chat
+path. It had been red since that commit, because the phase gates ran the suites
+that had been touched rather than all of them -- which is the argument for
+running everything before a freeze.
+
 ---
 
 ## The five things the client said they would personally test
