@@ -12,7 +12,13 @@ _DIR: Final[Path] = Path(__file__).resolve().parent
 KNOWN: Final[frozenset[str]] = frozenset({"stella", "orion", "aurora", "nova"})
 
 #: The card used when the persona is missing or unrecognised.
-FALLBACK: Final[str] = "aurora"
+#:
+#: The most restrictive one. It was `aurora`, so an unknown persona -- a typo in
+#: a URL, a value from an older client, a token minted before a rename -- lost
+#: every piece of child-safety wording at once and was answered as a guardian.
+#: The whole point of a fallback is that it is reached when something has
+#: already gone wrong, which is the worst moment to widen what may be said.
+FALLBACK: Final[str] = "stella"
 
 
 @lru_cache(maxsize=8)

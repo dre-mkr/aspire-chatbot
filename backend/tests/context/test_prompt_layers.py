@@ -49,10 +49,22 @@ class TestPersonaCards:
         cards = {persona: persona_card(persona) for persona in KNOWN}
         assert len(set(cards.values())) == len(KNOWN)
 
-    def test_an_unknown_persona_falls_back_to_the_adult_card(self):
-        """The direction matters."""
-        assert persona_card("nonsense") == persona_card(FALLBACK)
-        assert persona_card(None) == persona_card(FALLBACK)
+    def test_an_unknown_persona_falls_back_to_the_most_restrictive_card(self):
+        """
+        The direction matters, and this test did not pin it.
+
+        Comparing an unknown persona against `FALLBACK` passes whichever way
+        `FALLBACK` points, so it went on passing when the fallback was `aurora`
+        -- and an unknown persona, a URL typo, a value from an older client, a
+        token minted before a rename, lost every piece of child-safety wording
+        at once and was answered as a guardian. A fallback is reached when
+        something has already gone wrong, which is the worst moment to widen
+        what may be said. Named now, not just referenced.
+        """
+        assert FALLBACK == "stella"
+        assert persona_card("nonsense") == persona_card("stella")
+        assert persona_card(None) == persona_card("stella")
+        assert persona_card("nonsense") != persona_card("aurora")
 
     def test_the_card_reaches_the_prompt(self):
         stella = build_messages(context=_context(), agent_role=ROLE, user_text="hi")

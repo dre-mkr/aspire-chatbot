@@ -13,14 +13,45 @@ export interface GraphSession {
 	personaRefused: boolean;
 }
 
-/** In-memory, per tab, per thread. Cleared by a reload, which is correct. */
+/**
+ * In-memory, per tab, per thread AND per identity asked for. Cleared by a
+ * reload, which is correct.
+ *
+ * Keyed on the thread alone, this cache silently outranked the picker. The
+ * token carries the persona and the locale, and the graph reads both off it --
+ * but `graphSession` returned the held session whatever was asked for, and
+ * `forget` was called from exactly one place, on an `unauthenticated` error. So
+ * switching persona mid-conversation changed the URL and the UI and nothing
+ * else, and switching language did the same: the turns kept running as whoever
+ * the first mint had been, in whatever language it had been minted in. That is
+ * the "URL flips back" report, and no backend change could have fixed it.
+ *
+ * Keying on the request rather than clearing on change also settles the refusal
+ * case without a loop: asking for a persona the account cannot have returns a
+ * session marked `personaRefused`, and because the same request maps to the
+ * same key, the next turn reuses it instead of asking again forever.
+ */
 const held = new Map<string, GraphSession>();
 /** In-flight mints, so twelve chips tapped quickly mint one token, not twelve. */
 const minting = new Map<string, Promise<GraphSession>>();
 
+/** One cache entry per (thread, persona asked for, language asked for). */
+function keyFor(
+	threadId: string,
+	options: { locale?: string; persona?: string | null },
+): string {
+	return `${threadId}|${options.persona ?? ""}|${options.locale ?? ""}`;
+}
+
 export function forget(threadId: string): void {
-	held.delete(threadId);
-	minting.delete(threadId);
+	// Every identity minted for this thread, not just the last one.
+	const prefix = `${threadId}|`;
+	for (const key of [...held.keys()]) {
+		if (key.startsWith(prefix)) held.delete(key);
+	}
+	for (const key of [...minting.keys()]) {
+		if (key.startsWith(prefix)) minting.delete(key);
+	}
 }
 
 export interface PersonaRefusal {
@@ -47,22 +78,24 @@ export async function graphSession(
 	threadId: string,
 	options: { locale?: string; persona?: string | null; deviceId?: string } = {},
 ): Promise<GraphSession> {
-	const existing = held.get(threadId);
+	const key = keyFor(threadId, options);
+
+	const existing = held.get(key);
 	if (existing) return existing;
 
-	const pending = minting.get(threadId);
+	const pending = minting.get(key);
 	if (pending) return pending;
 
 	const request = mint(threadId, options)
 		.then((session) => {
-			held.set(threadId, session);
+			held.set(key, session);
 			return session;
 		})
 		.finally(() => {
-			minting.delete(threadId);
+			minting.delete(key);
 		});
 
-	minting.set(threadId, request);
+	minting.set(key, request);
 	return request;
 }
 
