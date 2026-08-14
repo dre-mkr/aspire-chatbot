@@ -53,11 +53,19 @@ def test_open_conversation_records_the_question(monkeypatch):
 
 
 def test_the_stream_starts_the_conversation_write_before_the_graph(monkeypatch):
-    """And it starts it before the graph, not after."""
+    """And it starts it before the graph, not after.
+
+    Read from `_turn_frames`, which is where the turn lives. `_events` is a
+    thin wrapper that owns the measured turn and delegates -- the body moved
+    there when `app.timing` was finally bound to the chat path, and this test
+    went on inspecting the wrapper, where it found neither line. A
+    source-matching test names the function it matches, and this is the second
+    half of that bargain.
+    """
     from app.api import stream
 
     # Matched on the source text, because the ordering is what this regression is about.
-    source = inspect.getsource(stream._events)
+    source = inspect.getsource(stream._turn_frames)
     started = source.index("asyncio.create_task(turn_service.open_conversation")
     graph_runs = source.index("async for chunk in graph.astream")
     assert started < graph_runs, (
