@@ -143,12 +143,26 @@ def test_quit_game_tells_the_agent_to_accept_any_exit_signal():
     assert "never require a particular word" in description
 
 
-def test_the_games_prompt_section_forbids_inventing_content():
-    from app.prompts import GAMES_INSTRUCTIONS
+def test_no_model_is_asked_not_to_invent_game_content_because_none_can():
+    """
+    This asserted that `prompts.GAMES_INSTRUCTIONS` forbids inventing a word.
 
-    text = GAMES_INSTRUCTIONS.lower()
-    assert "never invent a word" in text
-    assert "you do not know the answers" in text
-    assert "start a game only when someone asks" in text
-    # Mid-game questions must still be answered.
-    assert "a question mid-game is still a question" in text
+    That constant is in no live prompt -- it belonged to the v1 tool-calling
+    design, which the v2 graph replaced -- so the test was certifying a rule
+    that is told to nothing. Worse, it read as coverage for the property it
+    names while the property was being held up by something else entirely.
+
+    The something else is better than a prompt rule: game content is not
+    generated at all. Words come from seed files on disk, so a model cannot
+    invent one whatever it is or is not told.
+    """
+    from app.games.config import get_game_settings
+
+    seed_dir = get_game_settings().seed_dir
+    assert seed_dir.is_dir(), f"no seed directory at {seed_dir}"
+
+    seeded = list(seed_dir.rglob("*.json")) + list(seed_dir.rglob("*.yaml"))
+    assert seeded, (
+        "no seed files: if game content ever starts coming from a model, the "
+        "protection this test replaced would need to come back as a prompt rule"
+    )

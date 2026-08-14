@@ -112,37 +112,58 @@ def test_retrieved_text_never_becomes_a_system_instruction(poisoned_csv):
 
 
 def test_the_retrieved_knowledge_block_is_not_a_system_message(poisoned_csv):
-    """The same defence, on the path that actually introduced it."""
+    """
+    The same defence, on the path that actually carries a turn now.
+
+    This used to run through `memory.build_prompt` and `rag.context_from`,
+    neither of which anything has called since the v2 graph replaced the v1
+    pipeline -- so the structural guarantee it checks was being checked
+    somewhere no reader's question goes. `prompting.builder.build_messages` is
+    where a real turn is assembled, and this is that same property, asserted
+    against it.
+    """
     import csv as _csv
     from types import SimpleNamespace
 
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from app.db.repository import ConversationContext
-    from app.memory import build_prompt
-    from app.rag import context_from
+    from app.context.session_context import SessionContext
+    from app.prompting.builder import build_messages
 
     with poisoned_csv.open(newline="", encoding="utf-8-sig") as handle:
         rows = list(_csv.DictReader(handle))
 
     poisoned = [
-        SimpleNamespace(page_content=row["answer"], metadata=dict(row)) for row in rows
+        SimpleNamespace(
+            kb_id=row.get("id", "ASP-000"),
+            content=row["answer"],
+            metadata=dict(row),
+        )
+        for row in rows
     ]
-    prepared = build_prompt(
-        "How do I contact them?",
-        ConversationContext(),
-        knowledge=context_from(poisoned),
+
+    messages = build_messages(
+        context=SessionContext(
+            persona="stella",
+            age_band="9-12",
+            locale="en",
+            account_status="beneficiary",
+        ),
+        agent_role="Answer from the reference material.",
+        user_text="How do I contact them?",
+        retrieved=poisoned,
     )
 
     system_text = "\n".join(
-        str(m.content) for m in prepared.messages if isinstance(m, SystemMessage)
+        str(m.content) for m in messages if isinstance(m, SystemMessage)
     )
     assert "IGNORE ALL PREVIOUS INSTRUCTIONS" not in system_text
     assert "SYSTEM OVERRIDE" not in system_text
 
-    # Present, and carried by a human message so it has no more authority than the question.
+    # Present, and carried by a human message so it has no more authority than
+    # the question it was retrieved for.
     human_text = "\n".join(
-        str(m.content) for m in prepared.messages if isinstance(m, HumanMessage)
+        str(m.content) for m in messages if isinstance(m, HumanMessage)
     )
     assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in human_text, (
         "the poisoned row must still reach the model as data"

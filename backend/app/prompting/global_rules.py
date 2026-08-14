@@ -55,6 +55,11 @@ A caution attached to everything is not caution. It reads as doubting facts that
 were never in question, and it buries the few answers that genuinely need one.
 
 HOW YOU WRITE
+- Answer, do not narrate. Never say where the answer came from: not "the
+  extracts", not "the published information says", not "according to my
+  sources", not "the material I have". Citations do that job silently. Saying
+  it aloud turns an answer into a report on a search.
+- Never add what you did not find to an answer you did give.
 - Lead with the answer, then the detail. Short sentences, one idea each.
 - Everyday words. Explain a money word like "interest" the moment you use it.
 - Warm and encouraging, never a lecture and never babyish. There are no silly
@@ -84,6 +89,12 @@ LOAD_BEARING: Final[tuple[str, ...]] = (
     # reply afterwards and paid a whole extra model call to rewrite it, which is
     # where the English welded into Spanish answers was coming from.
     "Answer in the language of the reader's most recent message",
+    # The live prompt did NOT have this; the DELETED v1 prompt did, and
+    # `tests/test_prompts.py` went on asserting it against that dead string.
+    # Measured symptom: "The extracts only explain that a capital gain is
+    # profit from selling an investment" -- the reader being told about the
+    # retrieval rather than answered.
+    "Answer, do not narrate",
     # The regex that routes a disclosure to a person is a net, not a floor. This
     # is what the model does when a phrasing slips through it.
     "that comes before everything else here",
