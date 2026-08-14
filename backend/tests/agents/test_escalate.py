@@ -223,3 +223,63 @@ class TestWhatTheUserIsTold:
         graph = esc.build_escalate_graph()
         result = await graph.ainvoke(state_for())
         assert 1 <= len(result["quick_replies"]) <= 4
+
+
+class TestAnUnknownAgeIsNotAssumedToBeANineYearOld:
+    """
+    A signed-out visitor bands as the youngest, because an unknown age has to
+    read as the youngest. The band then chose the WORDING too, so a frustrated
+    parent complaining anonymously -- QA scenario 5, and what the client tests
+    -- was told "You have not done anything wrong."
+
+    Reading level and routing part company. What must NOT move is the
+    safeguarding behaviour, so that is asserted here as well.
+    """
+
+    def test_an_unproven_reader_gets_the_reference(self):
+        state = state_for(
+            age_band="9-12",
+            identity_proven=False,
+            escalation_reason="complaint",
+        )
+        decision = esc.triage(state)
+
+        message = esc.user_message(state, "ASP-TESTTEST", decision)
+
+        assert "ASP-TESTTEST" in message
+        assert message != esc._CHILD_MESSAGE["en"]
+
+    def test_a_reader_we_actually_know_is_a_child_still_gets_child_copy(self):
+        state = state_for(
+            age_band="9-12",
+            identity_proven=True,
+            escalation_reason="complaint",
+        )
+        decision = esc.triage(state)
+
+        assert esc.user_message(state, "ASP-TESTTEST", decision) == esc._CHILD_MESSAGE["en"]
+
+    def test_distress_is_still_answered_as_a_child_either_way(self):
+        """
+        The exemption, and the reason it exists.
+
+        Withholding the case number and the SLA from someone in distress is
+        finding 3 of the 12 Aug run, and it does not get to depend on whether
+        they happened to sign in.
+        """
+        state = state_for(age_band="9-12", identity_proven=False)
+        state["safety_flags"] = {"distress": True}
+        decision = esc.triage(state)
+
+        message = esc.user_message(state, "ASP-TESTTEST", decision)
+
+        assert message == esc._CHILD_MESSAGE["en"]
+        assert "ASP-TESTTEST" not in message
+
+    def test_a_guardian_is_still_told_whatever_we_can_prove(self):
+        """`notify_guardian` reads the band alone, and must keep doing so."""
+        for proven in (True, False):
+            state = state_for(age_band="9-12", identity_proven=proven)
+            state["safety_flags"] = {"safeguarding": True}
+
+            assert esc.triage(state).notify_guardian is True, proven

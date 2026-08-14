@@ -175,8 +175,19 @@ def initial_state(
     age_band: AgeBand,
     account_status: AccountStatus,
     locale: Locale = "en",
+    identity_proven: bool = True,
 ) -> AspireState:
-    """A fully-populated state for a fresh turn."""
+    """A fully-populated state for a fresh turn.
+
+    `identity_proven` was declared on `AspireState` and never set here, so a
+    state built through this helper read it as absent -- and absent is falsy.
+    Nothing in `app/` calls this (production builds state in `hydrate`, which
+    reads the flag off the token), so it only ever bit fixtures: the moment
+    anything keyed on the flag, every fixture silently became a signed-out
+    visitor. Defaulted to True to match `decode_session_token`, and because a
+    fixture naming a `user_id` and an `account_status` means an established
+    session. A test that wants a visitor now has to say so.
+    """
     return AspireState(
         session_id=session_id,
         user_id=user_id,
@@ -185,6 +196,7 @@ def initial_state(
         age_band=age_band,
         account_status=account_status,
         locale=locale,
+        identity_proven=identity_proven,
         messages=[],
         summary="",
         context=None,

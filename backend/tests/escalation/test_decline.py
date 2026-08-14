@@ -249,3 +249,34 @@ class TestTheContactDetails:
 
         assert "[a phone number]" in pii.redact(theirs)
         assert "[an email address]" in pii.redact(theirs)
+
+
+class TestAnUnknownAgeGetsAChannel:
+    """
+    A signed-out visitor bands as the youngest, so the decline told the most
+    likely reader of one -- a parent looking the programme up before signing
+    anyone up -- to go and ask a grown-up.
+
+    Only the routing moves. Caps, vocabulary and link stripping still treat an
+    unproven reader as the youngest.
+    """
+
+    async def test_an_unproven_reader_is_given_the_channels(self):
+        from app.config import get_settings
+
+        state = _state(UNANSWERABLE, band="5-8", persona="stella")
+        state["identity_proven"] = False
+
+        text = decline_text(state, [CHUNK])
+
+        assert get_settings().aspire_contact_email in text
+        assert "grown-up" not in text
+
+    async def test_a_child_we_can_prove_is_still_sent_to_a_grown_up(self):
+        state = _state(UNANSWERABLE, band="5-8", persona="stella")
+        state["identity_proven"] = True
+
+        text = decline_text(state, [CHUNK])
+
+        assert "grown-up" in text
+        assert "aspire.gov.kn" not in text

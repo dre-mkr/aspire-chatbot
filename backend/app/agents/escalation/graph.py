@@ -57,7 +57,34 @@ _TRIAGE: dict[str, tuple[Priority, str]] = {
 
 
 def _is_child(state: AspireState) -> bool:
+    """Band alone. This decides who else is TOLD, and never softens."""
     return str(state.get("age_band")) in MINOR_BANDS
+
+
+def _child_copy(state: AspireState, decision: Triage) -> bool:
+    """Whether to write to this reader as a child.
+
+    A signed-out visitor bands as the youngest, because an unknown age has to
+    read as the youngest. But the band then chose the WORDING too, and a
+    frustrated parent complaining anonymously was told "You have not done
+    anything wrong" -- correct for a nine-year-old, wrong for the person who
+    was almost certainly there.
+
+    So the reading level and the routing part company. Caps, vocabulary, link
+    stripping and games stay at the youngest band for everyone unproven;
+    "here is who can help you" assumes an adult may be present when no age was
+    ever established.
+
+    Except on safeguarding and wellbeing, where the unknown reader is treated
+    as a child regardless. That is what withholds the case number and the SLA
+    from someone in distress, and it does not get to depend on whether they
+    happened to sign in.
+    """
+    if not _is_child(state):
+        return False
+    if decision.category in ("safeguarding", "wellbeing"):
+        return True
+    return bool(state.get("identity_proven"))
 
 
 def triage(state: AspireState) -> Triage:
@@ -130,7 +157,7 @@ _ETA_LOCALISED: dict[str, dict[str, str]] = {
 def user_message(state: AspireState, ticket_id: str, decision: Triage) -> str:
     """What to say. Never a phone number or an address for a child."""
     locale = str(state.get("locale") or "en")
-    if _is_child(state):
+    if _child_copy(state, decision):
         return _CHILD_MESSAGE.get(locale, _CHILD_MESSAGE["en"])
     eta = _ETA_LOCALISED.get(locale, _ETA)[decision.priority]
     return _ADULT_MESSAGE.get(locale, _ADULT_MESSAGE["en"]).format(
@@ -221,7 +248,7 @@ def tell_the_user(state: AspireState) -> dict[str, Any]:
     # `user_message` withholds the reference and the wait from a child on purpose.
     # The directive renders both right under that copy, so it has to withhold them
     # too -- a distressed child was being handed a case number and an SLA.
-    if _is_child(state):
+    if _child_copy(state, decision):
         directive = EscalatedDirective(ticket_id="", eta="")
     else:
         directive = EscalatedDirective(
@@ -234,15 +261,15 @@ def tell_the_user(state: AspireState) -> dict[str, Any]:
     return {
         "messages": [AIMessage(content=user_message(state, ticket_id, decision))],
         "ui_directives": [directive],
-        "quick_replies": _chips(state),
+        "quick_replies": _chips(state, decision),
         "active_agent": "escalate_agent",
     }
 
 
-def _chips(state: AspireState) -> list[str]:
+def _chips(state: AspireState, decision: Triage) -> list[str]:
     """Somewhere to go next, so the escalation is not a dead end."""
     locale = str(state.get("locale") or "en")
-    if _is_child(state):
+    if _child_copy(state, decision):
         return {
             "en": ["Okay", "Back to my lesson"],
             "es": ["Vale", "Volver a mi lección"],

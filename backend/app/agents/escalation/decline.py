@@ -90,6 +90,23 @@ def _locale(state: AspireState) -> str:
     return locale if locale in _OPENING else "en"
 
 
+def _writes_as_child(state: AspireState) -> bool:
+    """Whether to point this reader at a grown-up rather than at a channel.
+
+    A child band we ESTABLISHED, not one we defaulted to. A signed-out visitor
+    bands as the youngest because an unknown age has to read as the youngest --
+    but the band then also decided the routing, so the most likely reader of a
+    decline, a parent looking the programme up before signing anyone up, was
+    told to go and ask a grown-up.
+
+    The reading level is unaffected: caps, vocabulary and link stripping still
+    treat an unproven reader as the youngest. Only "who does know" changes.
+    """
+    if _band(state) not in _CHILD_BANDS:
+        return False
+    return bool(state.get("identity_proven"))
+
+
 def nearest_topic(chunks: list[KBChunk]) -> str | None:
     """A topic the corpus can actually answer, from the best chunk's own title."""
     for chunk in chunks:
@@ -102,7 +119,7 @@ def nearest_topic(chunks: list[KBChunk]) -> str | None:
 def decline_text(state: AspireState, chunks: list[KBChunk]) -> str:
     """The three-part decline, assembled for this reader."""
     locale, band = _locale(state), _band(state)
-    audience = "child" if band in _CHILD_BANDS else "adult"
+    audience = "child" if _writes_as_child(state) else "adult"
 
     parts = [
         _OPENING[locale].get(band, _OPENING[locale]["adult"]),
