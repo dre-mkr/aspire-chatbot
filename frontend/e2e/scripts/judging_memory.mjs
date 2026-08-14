@@ -56,16 +56,27 @@ export async function steps() {
 	// Exchanges 9-13: filler, to carry plant #2 past the verbatim window.
 	for (const say of FILLER.slice(5)) steps.push({ say, expect: { nonEmpty: true } });
 
+	// ORDER MATTERS, and it is the whole test.
+	//
+	// Count in messages, two per exchange. Asking at turn 14 there are 26 before
+	// it (indices 0-25): the summary covers [:-12] = 0-13, the verbatim window is
+	// the last 6 = 20-25, and 14-19 is the hole. Plant #2 is exchange 8, so it
+	// sits at indices 14-15 -- inside the hole, at turn 14 and only at turn 14.
+	//
+	// By turn 15 there are 28 messages, [:-12] reaches index 15, and the fact has
+	// slid into the summary where it can be recalled again. Asking the two
+	// questions the other way round passes for that reason and proves nothing;
+	// it did, the first time this ran.
 	steps.push(
 		{
-			say: "What is my daughter's name and how old is she?",
-			label: "recall #1",
-			expect: { mustMatch: /Marisol/i },
+			say: "And what did I say we were saving for?",
+			label: "recall #2 first -- this is the turn where it sits in the blind spot",
+			expect: { mustMatch: /uniform/i },
 		},
 		{
-			say: "And what did I say we were saving for?",
-			label: "recall #2 (the one in the summariser's blind spot)",
-			expect: { mustMatch: /uniform/i },
+			say: "What is my daughter's name and how old is she?",
+			label: "recall #1 (deep in the summary by now)",
+			expect: { mustMatch: /Marisol/i },
 		},
 	);
 

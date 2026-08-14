@@ -17,8 +17,17 @@ export const IDENTITIES = {
 		key: "A",
 		label: "anonymous",
 		anonymous: true,
-		expect: { persona: "aurora", age_band: "adult" },
-		routable: ["qa_agent_public", "learning_sample", "register_agent_step1"],
+		// Was aurora/adult. A signed-out visitor is the one reader whose age is
+		// genuinely unknown, and an unknown age now reads as the youngest band
+		// rather than as an adult -- see `_ANONYMOUS_DEFAULT` in graph/account.py.
+		// The picker still works, so a suite that wants adult wording asks for it.
+		expect: { persona: "stella", age_band: "5-8" },
+		routable: [
+			"qa_agent_public",
+			"learning_sample",
+			"register_agent_step1",
+			"escalate_agent",
+		],
 	},
 	B: {
 		key: "B",
