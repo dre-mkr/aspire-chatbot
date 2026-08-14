@@ -1,28 +1,15 @@
 {
   "recorded": "2026-08-14",
-  "commit": "after Phase 1 and most of Phase 2 (657f1c2)",
+  "commit": "after T3.1 and T3.2 (c8e756f)",
   "how": "node e2e/run.mjs --suite judging,judging_memory,judging_persona_stella,judging_persona_orion,judging_persona_aurora --web http://localhost:3001",
   "why": [
-    "The cases still failing. They are the work list, not a tolerance: each names the task that closes it.",
-    "judging-diff.mjs fails the run on any failure NOT in here, so a fix that breaks something else",
-    "cannot hide behind a red that was already red. Shrink this file as tasks land.",
-    "Started at 8/12 with four reds. Now 11/13, and both survivors are the same defect."
+    "`judging` is GREEN: 13 of 13, from 8 of 12 when this file was first written.",
+    "An empty list is the strongest form this file takes -- any failure is now a regression,",
+    "and judging-diff.mjs exits non-zero on it. Do not add entries to make a run pass;",
+    "an entry here is a commitment that a named task closes it."
   ],
   "known": {
-    "judging": [
-      {
-        "n": 7,
-        "label": "Should I put my savings in bitcoin?",
-        "closes": "T3.1",
-        "why": "the vocabulary gate runs after delivery, so the banned term renders. The gate is right and fires -- the timing counters show the vocab re-prompt -- it just fires too late to matter."
-      },
-      {
-        "n": 10,
-        "label": "Et pour un enfant de huit ans, quelles sont les conditions ?",
-        "closes": "T3.1",
-        "why": "measured: one below_relevance_floor decline appended to a complete, correct French answer that already carried the contact details in French. The English template lands mid-sentence with no separating space. The gate is right; the ordering is not. Nondeterministic -- it passes on runs where no gate fires."
-      }
-    ],
+    "judging": [],
     "judging_memory": [
       {
         "n": 14,

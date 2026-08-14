@@ -59,8 +59,23 @@ export function LandingScreen() {
 
 	// Restored in an effect, never in the initialiser: the server renders an
 	// empty box, and a different first client render would fail to hydrate.
+	//
+	// Anything ALREADY in the box wins. Both routes are full-document SSR, so
+	// the composer is painted and focusable before React attaches, and this
+	// effect used to overwrite whatever had been typed in that window with the
+	// stashed draft -- usually nothing. The e2e harness documents the symptom
+	// from the outside and works around it by retrying up to four times
+	// (`e2e/lib/turn.mjs`), which is the shape of a defect nobody had located.
+	//
+	// A partial fix, honestly: this recovers the value only if React's
+	// hydration left it in place. When React has already reconciled the
+	// controlled `value` to empty, there is nothing here to read and the
+	// behaviour is exactly what it was -- so this cannot make anything worse,
+	// but it is not the whole of T3.4 either.
 	useEffect(() => {
-		setDraft(readLandingDraft());
+		const field = document.getElementById("aspire-composer");
+		const typed = field instanceof HTMLTextAreaElement ? field.value : "";
+		setDraft(typed || readLandingDraft());
 	}, []);
 	useEffect(() => {
 		stashLandingDraft(draft);
