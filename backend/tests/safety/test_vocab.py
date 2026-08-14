@@ -4,7 +4,38 @@ from __future__ import annotations
 
 import pytest
 
+from app.learning.concepts import ConceptStore, TeachingConcept, set_store
 from app.safety import vocab
+
+
+@pytest.fixture
+def store_holding():
+    """Load the process-wide concept store, and put it back afterwards."""
+
+    def _load(*concepts: TeachingConcept) -> ConceptStore:
+        store = ConceptStore()
+        store.load(concepts)
+        set_store(store)
+        return store
+
+    yield _load
+    set_store(None)
+
+
+def _seeded_concept(**overrides) -> TeachingConcept:
+    """A concept spelt the way the seeder writes one: `CON-0064`, teachable at 13-15."""
+    fields = {
+        "id": "CON-0064",
+        "slug": "compound_interest",
+        "locale": "en",
+        "title": "Compound interest",
+        "domain": "saving",
+        "band_min": "13-15",
+        "band_max": "adult",
+        "bodies": {"13-15": "Interest that earns interest."},
+    }
+    fields.update(overrides)
+    return TeachingConcept(**fields)
 
 
 class TestTheLadder:
@@ -33,6 +64,36 @@ class TestTheLadder:
     )
     def test_concept_ids_normalise(self, concept, band, expected):
         assert vocab.is_allowed_concept(concept, band) is expected
+
+
+class TestTheStoreLookup:
+    """Concepts the ladder has never heard of, matched against the store instead."""
+
+    @pytest.mark.parametrize(
+        "written",
+        ["con_0064", "CON-0064", "con-0064", "CON_0064", "  Con_0064  "],
+        ids=["underscore", "as_seeded", "lowered", "upper_underscore", "padded"],
+    )
+    def test_a_seeded_id_matches_whichever_separator_was_written(
+        self, store_holding, written
+    ):
+        """The composer emitted `con_0064` for `CON-0064`; a case fold alone left them
+        unequal and gate 3 dropped a fully composed widget as off-ladder."""
+        store_holding(_seeded_concept())
+        assert vocab.is_allowed_concept(written, "13-15") is True
+
+    def test_a_slug_matches_the_same_way(self, store_holding):
+        store_holding(_seeded_concept(slug="credit_score_basics"))
+        assert vocab.is_allowed_concept("credit-score-basics", "13-15") is True
+
+    def test_flattening_does_not_admit_an_unteachable_band(self, store_holding):
+        """Matching is spelling-blind; the gate is still `teachable_at`."""
+        store_holding(_seeded_concept())
+        assert vocab.is_allowed_concept("con_0064", "9-12") is False
+
+    def test_an_unknown_id_is_still_refused(self, store_holding):
+        store_holding(_seeded_concept())
+        assert vocab.is_allowed_concept("con_9999", "13-15") is False
 
 
 class TestBannedTerms:

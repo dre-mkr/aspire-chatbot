@@ -125,10 +125,20 @@ def concepts_for(band: str) -> frozenset[str]:
     return frozenset(ladder)
 
 
+def _flatten_id(value: str) -> str:
+    """A concept id, slug or ladder entry with case and separator spelling removed.
+
+    The store seeds ids as `CON-0064` and slugs as `compound_interest`, while a
+    composer writes back whichever separator it feels like. Neither spelling is
+    canonical, so every comparison in this module flattens both sides instead.
+    """
+    return value.replace("_", " ").replace("-", " ").strip().lower()
+
+
 def is_allowed_concept(concept: str, band: str) -> bool:
     """Whether `concept` is on this band's ladder."""
-    normalised = concept.replace("_", " ").replace("-", " ").strip().lower()
-    if normalised in concepts_for(band):
+    wanted = _flatten_id(concept)
+    if wanted in concepts_for(band):
         return True
 
     try:
@@ -138,10 +148,10 @@ def is_allowed_concept(concept: str, band: str) -> bool:
     except Exception:  # pragma: no cover - import cycles during partial startup
         return False
 
-    # Matched case-insensitively on both sides; the gate itself still requires `teachable_at(band)`.
-    wanted = concept.strip().lower()
+    # Flattened on both sides: a case fold alone left `con_0064` unequal to `CON-0064`
+    # and dropped a composed widget. The gate itself still requires `teachable_at(band)`.
     for candidate in store.all():
-        if candidate.slug.lower() == wanted or candidate.id.lower() == wanted:
+        if _flatten_id(candidate.slug) == wanted or _flatten_id(candidate.id) == wanted:
             return candidate.teachable_at(band)
     return False
 
