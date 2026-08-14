@@ -194,3 +194,58 @@ class TestAGroundedAnswerIsUnaffected:
         assert [citation.kb_id for citation in update["citations"]] == ["ASP-070"]
         assert update["groundedness"] > 0
         assert update["decline_streak"] == {}
+
+
+class TestTheContactDetails:
+    """
+    The prompt has always said to offer ASPIRE's contact details and never to
+    invent one, and never supplied any -- so a decline ended with a domain name
+    and nothing else. `aspire.gov.kn, or any branch` was the whole answer to
+    "who does know?".
+    """
+
+    async def test_an_adult_decline_names_a_channel_a_person_can_use(self):
+        from app.config import get_settings
+
+        settings = get_settings()
+        text = decline_text(_state(UNANSWERABLE), [CHUNK])
+
+        assert settings.aspire_contact_email in text
+        assert settings.aspire_contact_phone in text
+        assert settings.aspire_contact_website in text
+
+    @pytest.mark.parametrize("locale", ["en", "es", "fr"])
+    async def test_the_details_survive_every_locale(self, locale):
+        from app.config import get_settings
+
+        state = _state(UNANSWERABLE)
+        state["locale"] = locale
+        text = decline_text(state, [CHUNK])
+
+        assert get_settings().aspire_contact_email in text, locale
+
+    async def test_the_outbound_gate_does_not_redact_our_own_number(self):
+        """
+        The interaction that would have made this fix look like it worked.
+
+        `pii._PHONE` matches `+1 (869) 667-5566` exactly and `_EMAIL` matches
+        `aspire@gov.kn`, and `safety_out` redacts every prose answer -- so
+        without an allowlist the decline would render "[a phone number]" and
+        turn "here is who can help" into a dead end. Silently, and only once
+        the gates actually affect delivered text.
+        """
+        from app.safety import pii
+
+        text = decline_text(_state(UNANSWERABLE), [CHUNK])
+
+        assert pii.redact(text) == text
+        assert pii.kinds_in(text) == []
+
+    async def test_a_reader_s_own_details_are_still_redacted(self):
+        """The allowlist is ours only; it must not open the gate generally."""
+        from app.safety import pii
+
+        theirs = "Call me on +1 (869) 555-0123 or write to bea@example.com."
+
+        assert "[a phone number]" in pii.redact(theirs)
+        assert "[an email address]" in pii.redact(theirs)

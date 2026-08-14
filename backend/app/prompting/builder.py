@@ -18,11 +18,39 @@ _HISTORY_HEADING = "The conversation so far:"
 _SUMMARY_HEADING = "Earlier in this conversation:"
 
 
+def _contact_block() -> str:
+    """ASPIRE's own details, so "offer them" is an instruction that can be followed.
+
+    `GLOBAL` tells the model to offer ASPIRE's contact details for the final
+    word and, two lines earlier, never to invent a contact detail. Both are
+    load-bearing and neither was satisfiable: nothing anywhere in the composed
+    prompt said what the details ARE. A per-deployment fact rather than a rule,
+    so it sits beside the rules instead of inside them.
+    """
+    from app.agents.escalation.decline import contacts
+
+    details = contacts()
+    return (
+        "ASPIRE'S OWN CONTACT DETAILS\n"
+        "These, exactly as written, are the only ones. Never offer any other, "
+        "and never adapt these.\n"
+        f"- Email: {details['email']}\n"
+        f"- Phone: {details['phone']}\n"
+        f"- Website: {details['website']}\n"
+        f"- In person: {details['office']}"
+    )
+
+
 def stable_prefix(context: SessionContext, agent_role: str) -> str:
     """The three layers that must not change within a session."""
     return "\n\n".join(
         part.strip()
-        for part in (GLOBAL, persona_card(context.persona), agent_role)
+        for part in (
+            GLOBAL,
+            _contact_block(),
+            persona_card(context.persona),
+            agent_role,
+        )
         if part and part.strip()
     )
 

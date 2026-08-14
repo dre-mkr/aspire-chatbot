@@ -120,10 +120,46 @@ _NEUTRAL: Final[dict[str, str]] = {
 }
 
 
+def _digits_and_letters(value: str) -> str:
+    """A shape two spellings of the same number or address can be compared on."""
+    return "".join(character for character in value.lower() if character.isalnum())
+
+
+def _aspire_own() -> frozenset[str]:
+    """ASPIRE's own published contact details, normalised.
+
+    These are not somebody's personal data, and treating them as such is not a
+    harmless over-reach: `_PHONE` matches `+1 (869) 667-5566` exactly and
+    `_EMAIL` matches `aspire@gov.kn`, so the moment a decline offers the
+    programme's own number the outbound gate rewrites it to
+    `[a phone number]` -- turning "here is who can help" into a dead end, and
+    doing it silently.
+
+    Exempted in `detect` rather than in `redact`, so `kinds_in` and
+    `redact_for_summary` inherit it too. A ticket summary recording that a
+    reader was given the office number should say so.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    return frozenset(
+        _digits_and_letters(value)
+        for value in (
+            settings.aspire_contact_email,
+            settings.aspire_contact_phone,
+            settings.aspire_contact_website,
+            settings.aspire_contact_office,
+        )
+        if value
+    )
+
+
 def detect(text: str) -> list[PIISpan]:
     """Every piece of personal data in `text`, in the order it appears."""
     if not text:
         return []
+
+    ours = _aspire_own()
 
     found: list[tuple[int, int, int, str, str]] = []
     for priority, (kind, pattern, group) in enumerate(_PATTERNS):
@@ -131,7 +167,10 @@ def detect(text: str) -> list[PIISpan]:
             start, end = match.span(group)
             if start < 0 or end <= start:
                 continue
-            found.append((start, end, priority, kind, match.group(group)))
+            value = match.group(group)
+            if _digits_and_letters(value) in ours:
+                continue
+            found.append((start, end, priority, kind, value))
 
     # Earliest position wins; on a tie, the earlier pattern; on a tie, the longer span.
     found.sort(key=lambda item: (item[0], item[2], -(item[1] - item[0])))

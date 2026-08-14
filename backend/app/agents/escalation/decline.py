@@ -31,21 +31,45 @@ _OPENING: dict[str, dict[str, str]] = {
     },
 }
 
-#: Part 2 -- who holds the rest.
+#: Part 2 -- who holds the rest, and how to reach them.
+#
+#: The global prompt has always told the model to offer ASPIRE's contact details
+#: and never to invent one, and never supplied any -- so this was the whole of
+#: the answer to "who does know?": a domain name. `{email}`, `{phone}` and
+#: `{website}` come from config, defaulted to what the corpus already publishes.
+#:
+#: A child's line is UNCHANGED and carries no channel at all. That is a
+#: deliberate decision with a test naming it -- `a_child_is_pointed_at_a_grown_
+#: _up_not_a_website` -- and a first draft of this change broke it. The reasoning
+#: holds: handing a nine-year-old a phone number routes them around the adult
+#: who is supposed to be between them and the programme.
 _WHO_HOLDS_IT: dict[str, dict[str, str]] = {
     "en": {
         "child": "Ask a grown-up to check with the ASPIRE team.",
-        "adult": "The ASPIRE team can answer it — aspire.gov.kn, or any branch.",
+        "adult": "The ASPIRE team can answer it — {email}, {phone}, or {website}.",
     },
     "es": {
         "child": "Pide a una persona mayor que consulte al equipo de ASPIRE.",
-        "adult": "El equipo de ASPIRE puede responder — aspire.gov.kn, o una sucursal.",
+        "adult": "El equipo de ASPIRE puede responder — {email}, {phone}, o {website}.",
     },
     "fr": {
         "child": "Demande à un adulte de contacter l'équipe ASPIRE.",
-        "adult": "L'équipe ASPIRE peut répondre — aspire.gov.kn, ou une agence.",
+        "adult": "L'équipe ASPIRE peut répondre — {email}, {phone}, ou {website}.",
     },
 }
+
+
+def contacts() -> dict[str, str]:
+    """ASPIRE's own details, for a template to fill in."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    return {
+        "email": settings.aspire_contact_email,
+        "phone": settings.aspire_contact_phone,
+        "website": settings.aspire_contact_website,
+        "office": settings.aspire_contact_office,
+    }
 
 #: Part 3 -- the offer.
 _OFFER: dict[str, str] = {
@@ -82,7 +106,7 @@ def decline_text(state: AspireState, chunks: list[KBChunk]) -> str:
 
     parts = [
         _OPENING[locale].get(band, _OPENING[locale]["adult"]),
-        _WHO_HOLDS_IT[locale][audience],
+        _WHO_HOLDS_IT[locale][audience].format(**contacts()),
     ]
 
     topic = nearest_topic(chunks)

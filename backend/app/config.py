@@ -201,6 +201,20 @@ class Settings(BaseSettings):
 
     # --- Rate limits on the endpoints that spend model calls ---
     # Counted per proven identity where there is one, and per address otherwise.
+    # --- ASPIRE's own contact details ---
+    #
+    # The prompt has always told the model to offer these and never to invent
+    # one, and never supplied any -- so a decline ended with no way to reach a
+    # person. The defaults below are the values the corpus already publishes
+    # (ASP-208, ASP-209, ASP-211, ASP-299/300) and which
+    # `eligibility/content.py` already hardcodes; they are sourced, not
+    # invented. CONFIRM THEM WITH THE CLIENT before the 20th: a stale number on
+    # a government service is a visible error.
+    aspire_contact_email: str = "aspire@gov.kn"
+    aspire_contact_phone: str = "+1 (869) 667-5566"
+    aspire_contact_website: str = "aspire.gov.kn"
+    aspire_contact_office: str = "The Cable Office, Cayon Street, Basseterre (Mon-Fri, 9:00 AM - 3:00 PM)"
+
     chat_rate_window_seconds: int = Field(default=600, ge=10, le=3600)
     chat_messages_per_window: int = Field(default=30, ge=1, le=1000)
     #: How many graph sessions one address may mint per window. `/v2/session`
