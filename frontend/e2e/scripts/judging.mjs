@@ -128,14 +128,24 @@ export async function steps() {
 			},
 		},
 
-		// 12. Games, signed out. `_open_game` gates on `available_for(band)`, and
-		// an unknown DOB resolves to `adult` today -- so this is where T1.1
-		// becomes visible. Naming the game matters: an unnamed one returns chips
-		// asking which, and never emits a directive at all.
+		// 12. Games, signed out, in two halves -- this is where T1.1 shows.
+		//
+		// `_open_game` gates on `available_for(band)`, and a signed-out visitor
+		// now bands as the youngest rather than as an adult. That band is offered
+		// true/false and NOT scramble, so the pair proves both directions: the
+		// age-appropriate game is reachable, and the one above the band is not.
+		//
+		// Naming the game matters. An unnamed request returns chips asking which,
+		// and never emits a directive at all.
+		{
+			say: "Can we play true or false?",
+			note: "the game this band is offered must actually open",
+			expect: { directive: "game" },
+		},
 		{
 			say: "Can we play word scramble?",
-			note: "a signed-out visitor should reach the primary-band game, not be told there is none",
-			expect: { directive: "game" },
+			note: "above the band: offered alternatives, never launched",
+			expect: { noDirective: "game", chips: 1 },
 		},
 	];
 }

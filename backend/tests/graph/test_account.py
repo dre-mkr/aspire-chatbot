@@ -113,8 +113,74 @@ def test_a_minor_with_no_date_of_birth_gets_the_youngest_band():
     assert account.band_for(None, is_minor=True) == account.YOUNGEST_BAND
 
 
-def test_an_adult_with_no_date_of_birth_stays_an_adult():
-    assert account.band_for(None, is_minor=False) == "adult"
+def test_no_date_of_birth_is_the_youngest_band_whatever_is_minor_says():
+    """
+    "We were not told" must not resolve to "adult" on a service for five-year-olds.
+
+    This asserted the opposite, and `is_minor` decided it. But `is_minor` is a
+    flag on the row, not a fact about the reader: measured on the shared
+    database, 30,327 anonymous rows and 148 REGISTERED participants carry no
+    date of birth with `is_minor` false, and every one was banded adult -- no
+    word caps, no vocabulary rules, links left in. A participant is eighteen or
+    under by definition, so adult was not just the unsafe reading there, it was
+    the wrong one.
+
+    Nothing adult-facing regresses: no guardian or educator row has a null date
+    of birth, and `_role_problem` takes a required `date`, so signup cannot make
+    one.
+    """
+    assert account.band_for(None, is_minor=False) == account.YOUNGEST_BAND
+    assert account.band_for(None, is_minor=True) == account.YOUNGEST_BAND
+
+
+# ── the signed-out visitor ───────────────────────────────────────────────────
+#
+# `anonymous_claims` decides what every signed-out visitor is served and had no
+# test of any kind. It is the widest audience the service has.
+
+
+def test_a_visitor_who_picks_nothing_gets_the_most_restrictive_band():
+    """
+    The default was `aurora`, so an anonymous session ran as an adult.
+
+    No word caps, no vocabulary rules, links left in, and the adult game set --
+    for the one reader whose age is genuinely unknown. `/api/auth/anonymous`
+    already forced `stella` for the same visitor, and the two endpoints
+    disagreed; the frontend reads `session.persona` only for a registered
+    account, so the restrictive one was the one being ignored.
+    """
+    claims = account.anonymous_claims()
+
+    assert claims.persona == "stella"
+    assert claims.age_band == account.YOUNGEST_BAND
+    assert claims.account_status == "prospect"
+
+
+def test_an_unknown_persona_falls_back_restrictively_too():
+    """A junk `?persona=` must not be a way to widen the band."""
+    for junk in ("", "   ", "wizard", "ADULT", None):
+        claims = account.anonymous_claims(junk)
+        assert claims.persona == "stella", junk
+        assert claims.age_band == account.YOUNGEST_BAND, junk
+
+
+@pytest.mark.parametrize(
+    ("picked", "band"),
+    [("stella", "5-8"), ("orion", "13-15"), ("aurora", "adult"), ("nova", "adult")],
+)
+def test_the_picker_still_works_for_a_visitor(picked, band):
+    """
+    The safety is in the default, not in a lock.
+
+    A parent reading about the programme before signing up picks Aurora and gets
+    adult wording, which is the point of the picker. Deliberate: locking a
+    signed-out visitor to the youngest band would read as broken to exactly the
+    person the programme is trying to recruit.
+    """
+    claims = account.anonymous_claims(picked)
+
+    assert claims.persona == picked
+    assert claims.age_band == band
 
 
 # ── the persona request ──────────────────────────────────────────────────────

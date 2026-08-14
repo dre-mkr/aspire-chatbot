@@ -70,7 +70,10 @@ class SessionResponse(BaseModel):
 def to_session(user: User, token: str) -> SessionResponse:
     from app.graph.account import YOUNGEST_BAND, band_for, persona_for
 
-    # An anonymous row has no date of birth, which `band_for` would read as `adult`.
+    # `band_for` now reads a missing date of birth as the youngest band, so this
+    # branch no longer has to correct it -- it is kept for the role, which an
+    # anonymous row must not carry over from anywhere else. The two endpoints
+    # that describe a signed-out visitor used to disagree here; they no longer do.
     if user.account_type == ACCOUNT_ANONYMOUS:
         band, role = YOUNGEST_BAND, "participant"
     else:

@@ -24,9 +24,24 @@ class DerivedClaims:
 
 
 def band_for(born: date | None, *, is_minor: bool, today: date | None = None) -> str:
-    """Which band a date of birth falls in."""
+    """Which band a date of birth falls in.
+
+    An unknown date of birth reads as the YOUNGEST band, not as an adult. It
+    used to depend on `is_minor`, which meant "we were not told" resolved to
+    "adult" -- the least protective reading of the one fact we do not have, on a
+    service whose readers start at five.
+
+    Measured on the shared database: 30,327 anonymous rows and 148 REGISTERED
+    participants carry no date of birth, and every one of them was banded adult.
+    A participant is by definition eighteen or under, so adult was not merely
+    unsafe there, it was wrong. No guardian or educator row has a null date of
+    birth, so no adult role is affected by the flip.
+
+    `is_minor` stays in the signature because callers read it off the row and it
+    still distinguishes nothing else; it simply no longer decides this.
+    """
     if born is None:
-        return YOUNGEST_BAND if is_minor else "adult"
+        return YOUNGEST_BAND
 
     today = today or date.today()
     years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
@@ -143,7 +158,19 @@ _ANONYMOUS_BANDS: dict[str, str] = {
 }
 
 #: What an anonymous visitor gets with no persona picked.
-_ANONYMOUS_DEFAULT = "aurora"
+#
+#: The most restrictive one, because a signed-out visitor is exactly the reader
+#: whose age is unknown. It was `aurora`, so every anonymous session ran as an
+#: adult: no word caps, no vocabulary rules, links left in, and the adult game
+#: set. `/api/auth/anonymous` already forced `stella` for the same visitor
+#: (sessions.py) and the two endpoints simply disagreed -- the frontend reads
+#: `session.persona` only for a registered account, so the restrictive one was
+#: the one being ignored.
+#
+#: The picker stays open on purpose: a visitor may still choose aurora or nova,
+#: which is how a parent reads about the programme before signing up. The safety
+#: is in the default, not in a lock.
+_ANONYMOUS_DEFAULT = "stella"
 
 
 def anonymous_claims(requested_persona: str | None = None) -> DerivedClaims:
