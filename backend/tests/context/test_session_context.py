@@ -195,14 +195,35 @@ class TestMasteryIsAFraction:
 
 class TestItRunsBeforeRouting:
     async def test_the_node_is_wired_between_safety_in_and_cards(self):
-        """Router and agents read one object, so it must resolve before routing."""
-        import inspect
+        """Router and agents read one object, so it must resolve before routing.
 
-        from app.graph import main_graph
+        Asserted against the compiled topology rather than the source text of
+        `build_main_graph`. The invariant is that no route from `safety_in`
+        reaches `cards` without passing through `resolve_context` -- not that
+        the two are adjacent. Reading it off the source made inserting
+        `detect_language` between them look like a regression when it is not.
+        """
+        from app.graph.main_graph import build_main_graph
 
-        source = " ".join(inspect.getsource(main_graph.build_main_graph).split())
-        assert '"safety_in", _after_safety_in, ["resolve_context"' in source
-        assert 'add_edge("resolve_context", "cards")' in source
+        graph = build_main_graph(token=None).get_graph()
+        edges: dict[str, set[str]] = {}
+        for edge in graph.edges:
+            edges.setdefault(edge.source, set()).add(edge.target)
+
+        assert "detect_language" in edges.get("safety_in", set())
+        assert "resolve_context" in edges.get("detect_language", set())
+        assert "cards" in edges.get("resolve_context", set())
+
+        # Every walk forward from `safety_in` meets `resolve_context` first.
+        seen: set[str] = set()
+        frontier = [node for node in edges.get("safety_in", set())]
+        while frontier:
+            node = frontier.pop()
+            if node in seen or node == "resolve_context":
+                continue
+            seen.add(node)
+            assert node != "cards", "a route reaches `cards` before `resolve_context`"
+            frontier.extend(edges.get(node, set()))
 
     async def test_a_compiled_graph_has_the_node(self):
         from app.graph.main_graph import build_main_graph

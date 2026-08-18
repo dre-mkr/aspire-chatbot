@@ -32,6 +32,30 @@ REWRITE_SYSTEM = (
 REWRITE_WINDOW = 4
 
 
+def _rewrite_system(locale: str) -> str:
+    """The rewriter instruction, plus translation when the corpus cannot follow.
+
+    `knowledge_base.csv` is English. A Spanish question embedded against English
+    rows scores lower than the same question in English, and below
+    `qa_relevance_floor` `ground_check` returns `no_context` -- so the bot says
+    it has nothing, politely, in Spanish, with no error in the logs. It looks
+    like an empty knowledge base and it is not.
+
+    The standard answer for a corpus written in one language is to search in the
+    corpus's language and answer in the reader's. Nothing about retrieval,
+    embeddings or the floor changes; only the search string does.
+    """
+    if locale == "en":
+        return REWRITE_SYSTEM
+    return (
+        REWRITE_SYSTEM
+        + "\n\nThe material you are searching is written in English, so write "
+        "the query in English however the message was written. This overrides "
+        "keeping the reader's own words. It is a search string and nobody will "
+        "see it -- the answer itself is written in the reader's language."
+    )
+
+
 def make_rewrite_query(invoke=None):
     """Resolve pronouns and ellipsis before embedding."""
 
@@ -41,8 +65,12 @@ def make_rewrite_query(invoke=None):
         if not original:
             return {}
 
-        if invoke is None or len(messages) <= 1:
-            # An opening question has no context to resolve against, so skip the rewrite call.
+        # An opening question has no context to resolve against, so the rewrite
+        # call is skipped -- unless it also has to be translated. The FIRST
+        # Spanish question is exactly how the demo starts, and skipping it there
+        # searched the English corpus in Spanish and found nothing.
+        needs_translation = str(state.get("locale") or "en") != "en"
+        if invoke is None or (len(messages) <= 1 and not needs_translation):
             return {"qa_query": original}
 
         context = "\n".join(
@@ -50,7 +78,12 @@ def make_rewrite_query(invoke=None):
             for message in messages[-(REWRITE_WINDOW + 1) : -1]
         )
         try:
-            rewritten = (await invoke(REWRITE_SYSTEM, f"{context}\n\nuser: {original}")).strip()
+            rewritten = (
+                await invoke(
+                    _rewrite_system(str(state.get("locale") or "en")),
+                    f"{context}\n\nuser: {original}",
+                )
+            ).strip()
         except Exception:
             logger.warning("Query rewrite failed; searching the original.", exc_info=True)
             rewritten = original

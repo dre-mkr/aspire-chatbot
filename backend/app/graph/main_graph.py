@@ -12,6 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from app.context.resolver import make_resolve_context
 from app.graph.nodes.cards import make_intent_gate
 from app.graph.nodes.classify import make_classify
+from app.graph.nodes.detect_language import detect_language
 from app.graph.nodes.guard import guard
 from app.graph.nodes.hydrate import make_hydrate
 from app.graph.nodes.safety_in import safety_in
@@ -285,7 +286,7 @@ def _after_safety_in(state: AspireState) -> str:
     """Where a checked message goes: a person, a refusal, or the ordinary path."""
     if safety_signal(state) is not None:
         return "escalate_agent"
-    return "safety_out" if state.get("halt_reason") else "resolve_context"
+    return "safety_out" if state.get("halt_reason") else "detect_language"
 
 
 def _after_cards(state: AspireState) -> str:
@@ -337,6 +338,12 @@ def build_main_graph(
     graph.add_node("hydrate", make_hydrate(token, body))
     graph.add_node("guard", guard)
     graph.add_node("safety_in", safety_in)
+    # After the inbound safety pass and before `resolve_context` builds the
+    # SessionContext, because everything downstream -- the cards, the chips, the
+    # refusal text, the eligibility engine, the answer language -- reads `locale`
+    # from this point on. Sited here, they all see a switch on the same turn the
+    # reader made it.
+    graph.add_node("detect_language", detect_language)
     # Before routing, so `classify` and every agent share one resolved context.
     graph.add_node("resolve_context", make_resolve_context())
     graph.add_node("cards", make_intent_gate())
@@ -361,8 +368,9 @@ def build_main_graph(
     graph.add_conditional_edges(
         "safety_in",
         _after_safety_in,
-        ["resolve_context", "safety_out", "escalate_agent"],
+        ["detect_language", "safety_out", "escalate_agent"],
     )
+    graph.add_edge("detect_language", "resolve_context")
     graph.add_edge("resolve_context", "cards")
     graph.add_conditional_edges(
         "cards", _after_cards, ["classify", "safety_out", "escalate_agent"]
