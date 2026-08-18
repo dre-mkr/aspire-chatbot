@@ -132,7 +132,7 @@ export function PersonaPicker({
 			>
 				<PersonIcon />
 				<span className="persona__name">
-					{current ? current.name : "Everyone"}
+					{current ? current.name : "General"}
 				</span>
 				<ChevronDownIcon size={14} />
 				<span className="sr-only">
@@ -190,9 +190,9 @@ export function PersonaPicker({
 									{persona === null ? <CheckIcon /> : null}
 								</span>
 								<span className="persona__text">
-									<span className="persona__label">Everyone</span>
+									<span className="persona__label">General</span>
 									<span className="persona__blurb">
-										No particular audience. The default.
+										Balanced answers for everyone. The default.
 									</span>
 								</span>
 							</button>

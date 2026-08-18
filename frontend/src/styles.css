@@ -5908,3 +5908,251 @@ body {
 		animation-duration: 1ms !important;
 	}
 }
+
+/* ── the guide chooser ───────────────────────────────────────────────────────
+   Asked once, before the first question. The band decides the voice, the
+   vocabulary ladder, the examples and the check questions, and the only way to
+   set it used to be a composer control a first-time reader never opens. */
+
+.guide-scrim {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	display: grid;
+	place-items: center;
+	padding: 24px 16px;
+	overflow-y: auto;
+	background: rgb(30 10 55 / 0.42);
+	backdrop-filter: blur(3px);
+	animation: fade-in 200ms var(--ease) both;
+}
+
+.guide {
+	width: 100%;
+	max-width: 520px;
+	padding: 28px 28px 20px;
+	border-radius: 16px;
+	background: #fff;
+	box-shadow:
+		0 28px 60px -20px rgb(53 29 90 / 0.42),
+		0 3px 10px rgb(53 29 90 / 0.08);
+	animation: rise 220ms var(--ease) both;
+}
+
+.guide__head {
+	margin-bottom: 20px;
+}
+
+.guide__title {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.2;
+	letter-spacing: -0.022em;
+	color: var(--ink);
+	text-wrap: balance;
+}
+
+.guide__lede {
+	margin: 8px 0 0;
+	font-size: 0.9375rem;
+	font-weight: 650;
+	color: var(--plum-light);
+}
+
+.guide__note {
+	/* More space above than below: this closes the header rather than opening
+	   the list, which starts its own group. */
+	margin: 10px 0 0;
+	font-size: 0.875rem;
+	line-height: 1.5;
+	color: var(--slate);
+	text-wrap: pretty;
+}
+
+.guide__list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/* Elevation is declared once, on the border. The panel owns the shadow. */
+.guide-card {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	padding: 14px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: #fff;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color var(--swift),
+		background-color var(--swift),
+		transform var(--swift);
+}
+
+.guide-card:hover {
+	border-color: var(--wash-30);
+	background: var(--wash-3);
+}
+
+.guide-card:active {
+	transform: translateY(1px);
+}
+
+.guide-card:focus-visible {
+	outline: 2px solid var(--plum-light);
+	outline-offset: 2px;
+}
+
+.guide-card__mark {
+	flex-shrink: 0;
+	width: 52px;
+	height: 52px;
+}
+
+.guide-card__text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+
+.guide-card__who {
+	font-size: 0.75rem;
+	font-weight: 650;
+	letter-spacing: 0.005em;
+	/* Tinted from each guide's own hue, and every one measured past 4.5:1 on
+	   white -- the lighter mascot colours are for the mark, never for text. */
+	color: var(--plum-light);
+}
+
+.guide-card__who--stella {
+	color: #1a63b8;
+}
+
+.guide-card__who--orion {
+	color: #6b42a1;
+}
+
+.guide-card__who--aurora {
+	color: #b02a7d;
+}
+
+.guide-card__who--nova {
+	color: #414aa8;
+}
+
+.guide-card__name {
+	font-size: 1.0625rem;
+	font-weight: 500;
+	line-height: 1.25;
+	color: var(--ink);
+}
+
+.guide-card__name b {
+	font-weight: 750;
+}
+
+.guide-card__blurb {
+	margin-top: 2px;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: var(--slate);
+	text-wrap: pretty;
+}
+
+.guide-card > svg:last-child {
+	flex-shrink: 0;
+	color: var(--plum-light);
+}
+
+/* The general option reads as the fallback it is: tinted, and with no band
+   label above its name, so it cannot be mistaken for a fifth guide. */
+.guide-card--general {
+	margin-top: 0;
+	border-color: transparent;
+	background: var(--wash-6);
+}
+
+.guide-card--general:hover {
+	border-color: var(--wash-18);
+	background: var(--wash-9);
+}
+
+.guide__divider {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 18px 0 12px;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--plum-light);
+}
+
+.guide__divider::before,
+.guide__divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--hairline);
+}
+
+.guide__skip {
+	display: block;
+	margin: 6px auto 0;
+	padding: 10px 12px;
+	border: none;
+	border-radius: 10px;
+	background: none;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: var(--quiet);
+	cursor: pointer;
+	transition: color var(--swift);
+}
+
+.guide__skip:hover {
+	color: var(--plum);
+}
+
+.guide__skip:focus-visible {
+	outline: 2px solid var(--plum-light);
+	outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+	.guide-scrim {
+		place-items: start center;
+		padding: 12px;
+	}
+
+	.guide {
+		padding: 22px 18px 16px;
+	}
+
+	.guide__title {
+		font-size: 1.3125rem;
+	}
+
+	.guide-card {
+		gap: 12px;
+		padding: 12px;
+	}
+
+	.guide-card__mark {
+		width: 44px;
+		height: 44px;
+	}
+}
+
+.guide:focus-visible {
+	outline: none;
+}
