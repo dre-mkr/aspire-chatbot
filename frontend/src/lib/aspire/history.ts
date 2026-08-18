@@ -67,6 +67,29 @@ export function loadConversations(): Array<StoredConversation> {
 	}
 }
 
+/**
+ * Drops this browser's entire copy of history.
+ *
+ * `STORAGE_KEY` is one key for the whole browser, and what it holds is not a
+ * list of ids -- it is `messages`, the transcripts themselves. Nothing scoped
+ * it to whoever was signed in, and signing out cleared the token and the query
+ * caches but never this. So the next person to use the browser opened the rail
+ * and read the previous person's conversations, in full, without a single
+ * request reaching the service that would have refused them.
+ *
+ * Called when a signed-in identity ends or is replaced. NOT when an anonymous
+ * visitor signs up: those conversations are theirs, and `claimConversations`
+ * exists to carry them onto the new account.
+ */
+export function clearLocalConversations() {
+	if (!canStore()) return;
+	try {
+		window.localStorage.removeItem(STORAGE_KEY);
+	} catch {
+		// Storage is a convenience: a quota or a private window must not break this.
+	}
+}
+
 /** Drops one conversation from this browser's copy of history. */
 export function forgetLocalConversation(threadId: string) {
 	if (!canStore()) return;
