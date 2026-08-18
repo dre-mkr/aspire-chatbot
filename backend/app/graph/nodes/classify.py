@@ -14,30 +14,61 @@ from app.graph.state import AspireState
 logger = logging.getLogger(__name__)
 
 #: One line each.
+#:
+#: These are not documentation. They are the only thing the router reads before
+#: deciding who answers, so they ARE the routing logic, written in English, and
+#: five rules make them work: each one is self-contained, states a boundary
+#: rather than a summary, names the agent it is most easily confused with, uses
+#: the phrasings readers actually type, and leads with what makes it different
+#: rather than what it shares.
+#:
+#: Two things were wrong. `qa_agent` ended with "how the programme works", which
+#: advertised the tutor's job on the fact-lookup agent, so every "how does..."
+#: question was pulled towards the summariser -- three true facts, correctly
+#: cited, never joined into a cause. And the two band-filtered variants opened
+#: with "The same factual questions", which refers to a line the router may never
+#: be shown: it sees only the agents this reader is ALLOWED, so a child sees
+#: `qa_agent_limited` with no `qa_agent` above it for "the same" to point at.
+#: That happened for exactly the two audiences that matter most here, children
+#: and signed-out visitors.
 AGENT_DESCRIPTIONS: dict[str, str] = {
     "learn_agent": (
-        "Teaching a money lesson step by step: explaining, asking a check "
-        "question, playing a learning game, or continuing a lesson already "
-        "under way."
+        "Explaining how or why something about money works, and teaching a "
+        "lesson step by step: \"how does the money grow?\", \"why does starting "
+        "early matter?\", \"what is compound interest?\". Also asking a check "
+        "question, playing a learning game, or continuing a lesson already under "
+        "way. Choose this whenever the reader wants to understand a mechanism "
+        "rather than be told a rule -- including when that mechanism is part of "
+        "ASPIRE itself."
     ),
     "learning_preview": (
         "A guardian looking at what their child is being taught, rather than "
-        "being taught themselves."
+        "being taught themselves: what is in the lessons, what has been covered "
+        "so far, and how a topic is explained to their child."
     ),
     "learning_sample": (
-        "A signed-out visitor trying a short taste of a lesson."
+        "A signed-out visitor who wants to understand how something works, or to "
+        "try a short taste of a lesson: \"how does saving grow?\", \"show me what "
+        "you teach\". Explaining a mechanism, not quoting a rule."
     ),
     "qa_agent": (
-        "Answering a factual question about ASPIRE from the knowledge base: "
-        "eligibility, documents, deadlines, branches, how the programme works."
+        "Looking up a stated fact about ASPIRE: who is eligible, which documents "
+        "are needed, amounts, dates, deadlines, branches and opening "
+        "arrangements. The answer is a rule or a figure that is written down "
+        "somewhere. Not for \"how does it work?\" or \"why?\" -- those belong to "
+        "learn_agent."
     ),
     "qa_agent_limited": (
-        "The same factual questions, for a younger reader, over the part of the "
-        "knowledge base that is written for them."
+        "Stated facts for a younger reader -- who is eligible, which documents "
+        "are needed, amounts, dates, deadlines -- over the part of the knowledge "
+        "base written for them. Rules and figures, not explanations of how "
+        "something works."
     ),
     "qa_agent_public": (
-        "The same factual questions, for a signed-out visitor, over public "
-        "information only."
+        "Stated facts for a signed-out visitor -- who is eligible, which "
+        "documents are needed, amounts, dates, deadlines -- over public "
+        "information only. Rules and figures, not explanations of how something "
+        "works."
     ),
     "register_agent": (
         "Filling in an ASPIRE application: collecting a guardian's and a "

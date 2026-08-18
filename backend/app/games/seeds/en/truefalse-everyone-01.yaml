@@ -1,0 +1,247 @@
+# ASPIRE true or false — general set (the `everyone` persona)
+#
+# The reader has not said who they are, so these sit deliberately in the middle:
+# nothing a twelve-year-old could not follow, nothing an adult would find
+# childish. Percentages appear only where the arithmetic is shown, and no item
+# assumes the reader holds an account or earns a wage.
+#
+# A separate file rather than `everyone` added to the Stella or Orion entries,
+# because `persona_bands` is what the engine selects on and widening a child's
+# item would serve that item's register to a mixed audience.
+
+id: truefalse-everyone-01
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE design project — True or False (general)
+
+closing:
+  lead: Decide first, keep some back, give it time.
+  text: >-
+    These all point the same way. Money behaves predictably; it is the deciding
+    that people find hard. Put something aside before you spend, keep it
+    somewhere it is safe, and let time do the part effort cannot.
+
+entries:
+  - id: tfe-01-pay-yourself
+    statement: >-
+      The best time to put money aside is whatever is left at the end of the month.
+    answer: false
+    topic: Saving first
+    topic_line: " — save at the start, spend what remains."
+    takeaway: Save first and spend the rest, not the other way round.
+    explanation: >-
+      Almost nothing is left at the end of the month, for almost everybody. What
+      is left over is not a plan — it is a leftover, and it disappears. People who
+      save reliably move the money at the start, before spending begins, and then
+      live on the rest. The amount matters far less than the order. Even a small
+      amount taken off the top every month beats a larger amount you intend to
+      save later and never do.
+    paragraphs:
+      - >-
+        Almost nothing is left at the end of the month, for almost everybody.
+        What is left over is not a plan.
+      - >-
+        People who save reliably move the money at the start, before spending
+        begins, and live on the rest.
+      - >-
+        The amount matters far less than the order. A small amount off the top
+        beats a larger amount you never get to.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-interest
+    statement: A bank pays you interest for keeping your savings with it.
+    answer: true
+    topic: Interest
+    topic_line: " — the bank pays for the use of your money."
+    takeaway: Interest is what the bank pays you for leaving money with it.
+    explanation: >-
+      While your money sits in an account, the bank is able to lend it out. In
+      return it pays you a small amount for the use of it, and that payment is
+      interest. It is usually modest, and it is the reason money in an account
+      does something rather than nothing. Different accounts pay different
+      amounts, which is worth checking when you open one.
+    paragraphs:
+      - >-
+        While your money sits in an account, the bank is able to lend it out, and
+        it pays you a small amount for the use of it.
+      - >-
+        That payment is interest. It is usually modest, and it is the reason
+        money in an account does something rather than nothing.
+      - >-
+        Different accounts pay different amounts, which is worth checking when
+        you open one.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-small-amounts
+    statement: Saving small amounts is not worth doing.
+    answer: false
+    topic: Starting small
+    topic_line: " — the habit is worth more than the first amount."
+    takeaway: Small and regular beats large and occasional.
+    explanation: >-
+      Two things make small amounts worth it. The first is arithmetic: EC$20 a
+      month is EC$240 a year, which is not nothing. The second is that saving is
+      a habit, and habits are built at whatever size you can actually sustain.
+      People who wait until they can save a serious amount usually start much
+      later and often not at all. The first amount is not the point. Continuing is.
+    paragraphs:
+      - >-
+        The arithmetic alone is worth it: EC$20 a month is EC$240 a year, which
+        is not nothing.
+      - >-
+        Saving is also a habit, and habits are built at whatever size you can
+        sustain.
+      - >-
+        People who wait until they can save a serious amount usually start much
+        later, and often not at all.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-risk
+    statement: Every way of growing money carries some risk.
+    answer: true
+    topic: Risk
+    topic_line: " — faster growth and larger falls travel together."
+    takeaway: Risk is not avoidable; how much of it you take is a choice.
+    explanation: >-
+      Even the safest account carries the risk that prices rise faster than your
+      money grows. Beyond that, the pattern is consistent: the things that can
+      grow faster can also fall further. A savings account moves slowly in both
+      directions. A share in a company can climb and can drop. Neither is the
+      right answer for everybody. What decides it is what the money is for and
+      how soon you need it.
+    paragraphs:
+      - >-
+        Even the safest account carries the risk that prices rise faster than
+        your money grows.
+      - >-
+        Beyond that the pattern is consistent: what can grow faster can also fall
+        further.
+      - >-
+        What decides the right choice is what the money is for and how soon you
+        need it.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-goal
+    statement: Saving works better when the money has a purpose attached to it.
+    answer: true
+    topic: Goals
+    topic_line: " — a named goal is harder to spend."
+    takeaway: Money with a job attached is much harder to spend on something else.
+    explanation: >-
+      Money labelled "savings" is easy to borrow from. Money labelled for a
+      specific thing — school fees, a repair, a trip — is noticeably harder,
+      because spending it means giving up something you already decided you
+      wanted. The goal does not change the arithmetic at all. It changes how
+      likely you are to leave the money alone, which in practice is most of
+      whether saving works.
+    paragraphs:
+      - >-
+        Money labelled "savings" is easy to borrow from. Money labelled for a
+        specific thing is noticeably harder.
+      - >-
+        Spending it means giving up something you already decided you wanted.
+      - >-
+        The goal does not change the arithmetic. It changes how likely you are to
+        leave the money alone.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-time
+    statement: >-
+      Starting to save ten years earlier mostly means saving ten years longer.
+    answer: false
+    topic: Why starting early matters
+    topic_line: " — the early years do more work than the later ones."
+    takeaway: Early money has longer to grow, so it counts for more than late money.
+    explanation: >-
+      Starting earlier is not only more deposits. It is that the earliest money
+      spends the longest time growing, and growth builds on itself. A sum put
+      away in the first year has every following year to grow; a sum put away in
+      the last year has none. That is why two people who save the same total can
+      end up in very different places. The one who started earlier did not save
+      harder. They gave the same money more time.
+    paragraphs:
+      - >-
+        Starting earlier is not only more deposits. The earliest money spends the
+        longest time growing, and growth builds on itself.
+      - >-
+        A sum put away in the first year has every following year to grow; a sum
+        put away in the last year has none.
+      - >-
+        Two people who save the same total can end up in very different places.
+        The earlier one gave the same money more time.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-needs-wants
+    statement: Telling needs from wants is the first step in any budget.
+    answer: true
+    topic: Needs and wants
+    topic_line: " — needs are paid first, wants from what is left."
+    takeaway: Needs come first; wants come from what remains.
+    explanation: >-
+      A budget is mostly an ordering exercise. Housing, food and transport have
+      to be paid; the rest is choice. Separating the two tells you what is
+      genuinely fixed and how much is actually yours to decide about — which is
+      usually more than people expect. It is not about removing the wants. It is
+      about knowing which pile you are spending from.
+    paragraphs:
+      - >-
+        A budget is mostly an ordering exercise. Some things have to be paid; the
+        rest is choice.
+      - >-
+        Separating the two tells you what is genuinely fixed and how much is
+        actually yours to decide about.
+      - >-
+        It is not about removing the wants. It is about knowing which pile you
+        are spending from.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfe-01-advice
+    statement: >-
+      A chatbot is the right place to get advice on what to do with your money.
+    answer: false
+    topic: Where advice comes from
+    topic_line: " — explanations here, decisions with a qualified person."
+    takeaway: ASPIRE explains how money works; it does not advise you what to do.
+    explanation: >-
+      ASPIRE can explain how saving, interest and the programme work, and it can
+      show you the mechanism behind a decision. What it will not do is tell you
+      what to do with your own money, because that depends on circumstances it
+      cannot see and it is not licensed to give. For a decision about your own
+      situation, the ASPIRE team or a qualified adviser is the right place. The
+      explanation is genuinely useful on its own — it is what lets you decide.
+    paragraphs:
+      - >-
+        ASPIRE can explain how saving, interest and the programme work, and show
+        you the mechanism behind a decision.
+      - >-
+        It will not tell you what to do with your own money: that depends on
+        circumstances it cannot see.
+      - >-
+        For a decision about your own situation, the ASPIRE team or a qualified
+        adviser is the right place.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE design project — True or False

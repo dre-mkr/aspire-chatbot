@@ -1,0 +1,88 @@
+# ASPIRE word scramble — Orion bank (ages 13–18)
+#
+# Plays after the ECCB warm-up, which Orion also gets. Written for Orion's card:
+# real financial vocabulary, defined once, no cheerleading. These are the terms
+# a teenager will meet on a bank statement, a payslip or an ASPIRE form, so the
+# definition is the teachable part and the puzzle is the way in.
+#
+# Same editing rules as warmup-01: `scramble` must be an anagram of `word`, the
+# hint is a category nudge rather than a definition, and neither the hint nor the
+# definition may contain the word. CI asserts all three.
+
+id: wordbank-orion-01
+game_type: word_scramble
+language: en
+title: More words to unscramble
+source: ASPIRE design project — Orion word bank
+
+closing:
+  lead: The words behind the numbers.
+  text: >-
+    Each of these turns up on a statement or a form at some point. Knowing what
+    they mean is most of the work — the arithmetic underneath is usually simpler
+    than the vocabulary makes it look.
+
+entries:
+  - id: wordbank-orion-01-budget
+    language: en
+    word: BUDGET
+    scramble: TEGDUB
+    hint: a plan, written down before the money moves
+    definition: a plan for what your money will do before you spend it
+    difficulty_band: core
+    persona_bands: [orion]
+
+  - id: wordbank-orion-01-deposit
+    language: en
+    word: DEPOSIT
+    scramble: TISOPED
+    hint: something you make at a bank, not something you take
+    definition: money you put into an account
+    difficulty_band: core
+    persona_bands: [orion]
+
+  - id: wordbank-orion-01-balance
+    language: en
+    word: BALANCE
+    scramble: ECNALAB
+    hint: a number, and it changes every time you move money
+    definition: how much is in an account right now
+    difficulty_band: core
+    persona_bands: [orion]
+
+  - id: wordbank-orion-01-compound
+    language: en
+    word: COMPOUND
+    scramble: DNUOPMOC
+    hint: it describes a kind of interest, and it is why time matters
+    definition: >-
+      when the interest you already earned starts earning interest of its own
+    difficulty_band: advanced
+    persona_bands: [orion]
+
+  - id: wordbank-orion-01-withdraw
+    language: en
+    word: WITHDRAW
+    scramble: WARDHTIW
+    hint: an action word — the opposite of putting money in
+    definition: to take money out of an account
+    difficulty_band: core
+    persona_bands: [orion]
+
+  - id: wordbank-orion-01-income
+    language: en
+    word: INCOME
+    scramble: EMOCNI
+    hint: a total, measured over a period of time
+    definition: all the money that comes to you, from work or anywhere else
+    difficulty_band: core
+    persona_bands: [orion]
+
+  - id: wordbank-orion-01-asset
+    language: en
+    word: ASSET
+    scramble: TESSA
+    hint: a thing rather than an action — something you own
+    definition: something you own that has value and could be sold
+    difficulty_band: advanced
+    persona_bands: [orion]

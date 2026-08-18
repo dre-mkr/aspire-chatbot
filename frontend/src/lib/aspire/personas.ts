@@ -1,6 +1,11 @@
-/** The four ASPIRE personas, as the client needs to know them. */
+/** The five ASPIRE personas, as the client needs to know them. */
 
-export type PersonaId = "stella" | "orion" | "aurora" | "nova";
+export type PersonaId =
+	| "stella"
+	| "orion"
+	| "aurora"
+	| "nova"
+	| "everyone";
 
 export interface Persona {
 	id: PersonaId;
@@ -12,7 +17,7 @@ export interface Persona {
 	blurb: string;
 }
 
-/** Ordered youngest to oldest, then the two adult roles. */
+/** Ordered youngest to oldest, then the two adult roles, then the default. */
 export const PERSONAS: ReadonlyArray<Persona> = [
 	{
 		id: "stella",
@@ -37,6 +42,12 @@ export const PERSONAS: ReadonlyArray<Persona> = [
 		name: "Nova",
 		audience: "Teachers & educators",
 		blurb: "Clear, factual explanations you can teach from.",
+	},
+	{
+		id: "everyone",
+		name: "Everyone",
+		audience: "General",
+		blurb: "Balanced answers for a mixed audience. The default.",
 	},
 ] as const;
 

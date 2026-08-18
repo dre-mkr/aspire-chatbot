@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import re
 
-from app.agents.qa.nodes import QA_AGENT_ROLE
+import pytest
+
+from app.agents.qa.nodes import QA_AGENT_ROLE, qa_agent_role
 from app.prompting.global_rules import GLOBAL
 
 #: The prompt is hard-wrapped, so flatten whitespace before matching phrases
@@ -89,3 +91,50 @@ def test_the_grounding_rules_reach_a_qa_turn():
     """
     assert "answer only from the extracts" in FLAT
     assert "an answer with no citation will not be served" in FLAT
+
+
+class TestEveryPersonaGetsTheGroundingRules:
+    """The role card varies by persona now, so one variant is no longer the subject.
+
+    `QA_AGENT_ROLE` used to be a single string and these tests certified it. It
+    was also the strongest length instruction in the prompt -- "be thorough",
+    "use every extract", "structure a longer answer" -- and it was persona-blind,
+    so it argued with Stella's card and won. Splitting the depth half per persona
+    is the fix; keeping the grounding half identical is the thing that must not
+    quietly stop being true while the depth half moves.
+    """
+
+    PERSONAS = ["stella", "orion", "aurora", "nova", "everyone"]
+
+    @pytest.mark.parametrize("persona", PERSONAS)
+    def test_the_grounding_rules_survive_every_variant(self, persona):
+        flat = " ".join(qa_agent_role(persona).split()).lower()
+        assert "answer only from the extracts" in flat
+        assert "an answer with no citation will not be served" in flat
+        assert "do not round, convert, average or infer one" in flat
+
+    @pytest.mark.parametrize("persona", PERSONAS)
+    def test_every_variant_still_says_what_depth_to_write_at(self, persona):
+        assert "DEPTH AND COMPLETENESS" in qa_agent_role(persona)
+
+    def test_an_unknown_persona_gets_the_fullest_card(self):
+        """The safe direction for depth is more of it, not less."""
+        assert qa_agent_role("not-a-persona") == qa_agent_role("nova")
+        assert qa_agent_role(None) == qa_agent_role("nova")
+
+    def test_the_depth_blocks_are_actually_different(self):
+        """If these collapse, the persona work has silently been undone."""
+        cards = {p: qa_agent_role(p) for p in self.PERSONAS}
+        assert len(set(cards.values())) == len(self.PERSONAS)
+
+    def test_the_child_card_does_not_ask_for_exceptions_and_conditions(self):
+        """The specific instruction that was overriding Stella's eight-word card."""
+        flat = " ".join(qa_agent_role("stella").split()).lower()
+        assert "be thorough" not in flat
+        assert "structure a longer answer" not in flat
+        assert "not the conditions, not the exceptions" in flat
+
+    def test_the_teacher_card_still_asks_for_the_exception(self):
+        flat = " ".join(qa_agent_role("nova").split()).lower()
+        assert "be thorough" in flat
+        assert "state the exception" in flat

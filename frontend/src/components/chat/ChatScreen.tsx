@@ -41,6 +41,7 @@ import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { ChatTitleBar } from "./ChatTitleBar";
 import { Composer } from "./Composer";
+import { FirstRun } from "./FirstRun";
 import { Rail } from "./Rail";
 import { Transcript } from "./Transcript";
 import { VoiceConsent, VoiceNote } from "./Voice";
@@ -134,7 +135,12 @@ export function ChatScreen() {
 			const engineName =
 				{ scramble: "word_scramble", true_false: "true_false" }[gameType] ??
 				gameType;
-			void startGame(id, { game_type: engineName })
+			// The persona is what selects the age-appropriate item set. Omitting it
+			// meant the engine's own filter never ran, so a five-year-old on Stella
+			// was served the Orion set -- compound interest, 5% returns, "no more
+			// than 25% in any one sector" -- while the set written for her was
+			// unreachable. The filter was always correct; nothing was calling it.
+			void startGame(id, { game_type: engineName, persona })
 				.then((state) => {
 					if (state) setGame(state);
 				})
@@ -404,10 +410,13 @@ export function ChatScreen() {
 	);
 
 	// Carries the retried answer's id, so it replaces that one and not whatever is last.
+	//
+	// `simple` is the per-answer "Simpler" button forcing the plain-words pass on
+	// for this one re-ask; without it the composer toggle decides, as before.
 	const handleRegenerate = useCallback(
-		(messageId: number) => {
+		(messageId: number, simple?: boolean) => {
 			stopPlayback();
-			regenerate(messageId, simpleMode);
+			regenerate(messageId, simple ?? simpleMode);
 		},
 		[regenerate, simpleMode, stopPlayback],
 	);
@@ -629,6 +638,10 @@ export function ChatScreen() {
 				<span />
 				<span />
 			</div>
+
+			{/* First visit only: a short opening, then the persona question.
+			    Renders nothing at all for a returning reader. */}
+			<FirstRun onChoosePersona={setPersona} />
 
 			<div className="frame">
 				<Rail

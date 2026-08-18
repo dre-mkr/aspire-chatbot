@@ -1,4 +1,9 @@
-"""The registry must resolve all twelve combinations, and fail at startup if not."""
+"""The registry must resolve every persona x language, and fail at startup if not.
+
+The count is derived rather than written down: `everyone` was added as a fifth
+persona after these tests were written, and a hard-coded 12 turned a deliberate
+product change into three red tests that said nothing about voice.
+"""
 
 import pytest
 
@@ -29,12 +34,24 @@ def _settings(**overrides) -> VoiceSettings:
     return VoiceSettings(_env_file=None, **{**base, **overrides})
 
 
-def test_all_twelve_combinations_resolve():
+def test_every_persona_and_language_resolves():
     registry = build_registry(_settings())
-    assert len(registry) == 12
+    assert len(registry) == len(Persona) * len(Language)
     for persona in Persona:
         for language in Language:
             assert (persona, language) in registry
+
+
+def test_everyone_borrows_orions_voice_when_it_has_none_of_its_own():
+    """A deployment provisioned before `everyone` existed must still boot."""
+    registry = build_registry(_settings())
+    for language in Language:
+        assert registry[(Persona.EVERYONE, language)].voice_id == "voice-orion"
+
+
+def test_an_explicit_everyone_voice_beats_the_understudy():
+    registry = build_registry(_settings(voice_everyone="voice-everyone"))
+    assert registry[(Persona.EVERYONE, Language.EN)].voice_id == "voice-everyone"
 
 
 def test_validate_passes_when_complete():
@@ -47,7 +64,18 @@ def test_missing_persona_raises_and_names_the_variable():
         validate_registry(settings)
     message = str(exc.value)
     assert "VOICE_AURORA" in message
-    assert "3 of 12" in message
+    assert f"3 of {len(Persona) * len(Language)}" in message
+
+
+def test_losing_orion_also_loses_the_persona_that_borrows_it():
+    """The understudy is a fallback, not a second source of ids."""
+    settings = _settings(voice_orion=None)
+    with pytest.raises(VoiceRegistryError) as exc:
+        validate_registry(settings)
+    message = str(exc.value)
+    assert "VOICE_ORION" in message
+    assert "VOICE_EVERYONE" in message
+    assert f"6 of {len(Persona) * len(Language)}" in message
 
 
 def test_per_language_override_beats_the_base_voice():

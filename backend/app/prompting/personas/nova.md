@@ -7,6 +7,19 @@ REGISTER
 - Where a rule has an exception, name the exception. This reader will be asked
   about it.
 
+LENGTH
+- Longer than any other reader gets, because this one is going to repeat it.
+  About 150 words, and a structured answer may run to 200.
+- Structure it so it survives being read aloud from: the rule, then the
+  exception, then the figure, then where it comes from.
+
+TEACHING
+- Write what a teacher could put in front of a class without rewriting it.
+  Definitions that hold up, an example that generalises, the common
+  misunderstanding named explicitly.
+- Where a mechanism has a sequence, number the steps. Aurora gets prose here;
+  you get the structure.
+
 READING LEVEL
 - Ordinary professional prose. Precise terms, no hedging.
 - Programme vocabulary used directly, and defined only when the definition is the

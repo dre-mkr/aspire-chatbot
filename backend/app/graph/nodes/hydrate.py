@@ -75,6 +75,11 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
             # Carried into state as well as logged, so `persist` can record it against the session.
             update["safety_flags"] = {"identity_spoof_attempt": ignored}
 
+        # An answer-shaping request from the reader, not a claim about who they
+        # are, so it rides in the body rather than in the signed token. Written
+        # every turn -- the reader can turn it off between two questions.
+        update["simple_mode"] = bool((body or {}).get("simple_mode"))
+
         # ── the turn's inputs, put back after the clear ──
         # A widget interaction or a game result arrives as a body field, not as a message.
         for field in CONTINUATION_FIELDS:

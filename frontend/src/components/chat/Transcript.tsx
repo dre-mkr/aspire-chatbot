@@ -87,7 +87,8 @@ interface TranscriptProps {
 	isThinking: boolean;
 	followUps: Array<string>;
 	/** Takes the id of the message being retried, so it replaces that one. */
-	onRegenerate: (messageId: number) => void;
+	/** `simple` forces the plain-words answer regardless of the composer toggle. */
+	onRegenerate: (messageId: number, simple?: boolean) => void;
 	onAsk: (question: string) => void;
 	playback: Playback;
 	game: ActiveGame | null;
@@ -384,7 +385,8 @@ function Answer({
 }: {
 	message: Extract<ChatMessage, { role: "assistant" }>;
 	directiveContext: DirectiveContext;
-	onRegenerate: (messageId: number) => void;
+	/** `simple` forces the plain-words answer regardless of the composer toggle. */
+	onRegenerate: (messageId: number, simple?: boolean) => void;
 	playback: Playback;
 	discards: number;
 	arriving: boolean;
@@ -606,14 +608,17 @@ function AnswerActions({
 	discards,
 }: {
 	text: string;
-	onRegenerate: (messageId: number) => void;
+	/** `simple` forces the plain-words answer regardless of the composer toggle. */
+	onRegenerate: (messageId: number, simple?: boolean) => void;
 	playback: Playback;
 	messageId: number;
 	discards: number;
 }) {
 	const [copied, setCopied] = useState(false);
-	// Two-step only when something would actually be lost.
-	const [confirming, setConfirming] = useState(false);
+	// Two-step only when something would actually be lost. Holds WHICH action is
+	// armed, because both buttons discard the same messages and a shared boolean
+	// would let one button confirm the other.
+	const [confirming, setConfirming] = useState<"again" | "simpler" | null>(null);
 	const playing = playback.playingId === messageId;
 	const paused = playback.pausedId === messageId;
 
@@ -626,17 +631,17 @@ function AnswerActions({
 	// A confirm left armed is a trap for the next person to press the button.
 	useEffect(() => {
 		if (!confirming) return;
-		const timer = setTimeout(() => setConfirming(false), 5000);
+		const timer = setTimeout(() => setConfirming(null), 5000);
 		return () => clearTimeout(timer);
 	}, [confirming]);
 
-	function askAgain() {
-		if (discards > 0 && !confirming) {
-			setConfirming(true);
+	function rerun(which: "again" | "simpler") {
+		if (discards > 0 && confirming !== which) {
+			setConfirming(which);
 			return;
 		}
-		setConfirming(false);
-		onRegenerate(messageId);
+		setConfirming(null);
+		onRegenerate(messageId, which === "simpler" ? true : undefined);
 	}
 
 	async function copy() {
@@ -671,15 +676,34 @@ function AnswerActions({
 				{copied ? "Copied" : "Copy"}
 			</button>
 
+			{/* The per-answer half of "Explain it simply".
+			    The composer toggle shapes the NEXT answer; this one is about the
+			    answer already on screen, which is what the label leads a reader
+			    to expect. It re-asks the same question with the plain-words
+			    instruction on, so the facts and the sources are the ones that
+			    were already checked -- it is not a fresh question. */}
+			<button
+				type="button"
+				className="text-btn"
+				data-confirming={confirming === "simpler" || undefined}
+				onClick={() => rerun("simpler")}
+				title="Say this again in simpler words"
+			>
+				<SparkIcon />
+				{confirming === "simpler"
+					? `Simplify and drop the ${discards} ${discards === 1 ? "message" : "messages"} after it?`
+					: "Simpler"}
+			</button>
+
 			{/* "Ask again", not "Try again": under a good answer the latter reads as "you got it wrong". */}
 			<button
 				type="button"
 				className="text-btn"
-				data-confirming={confirming || undefined}
-				onClick={askAgain}
+				data-confirming={confirming === "again" || undefined}
+				onClick={() => rerun("again")}
 			>
 				<RetryIcon />
-				{confirming
+				{confirming === "again"
 					? `Ask again and drop the ${discards} ${discards === 1 ? "message" : "messages"} after it?`
 					: "Ask again"}
 			</button>

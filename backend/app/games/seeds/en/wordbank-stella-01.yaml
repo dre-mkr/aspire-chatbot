@@ -1,0 +1,84 @@
+# ASPIRE word scramble — Stella bank (ages 5–12)
+#
+# Plays AFTER the ECCB warm-up, not instead of it: `warmup-01` sorts first and
+# the engine keeps set order, so a child still gets the four printed words in
+# the printed sequence and then carries on into these.
+#
+# Written for Stella's card: words a seven-year-old already uses, or a money
+# word explained in the same breath. Nothing here needs a percentage, a rate or
+# compounding — those belong to the Orion bank.
+#
+# Editing this file (same rules as warmup-01):
+#   word        the answer, uppercase. Never leaves the server until revealed.
+#   scramble    must be an anagram of `word` — CI asserts this on every entry.
+#   hint        a CATEGORY nudge, not a definition. Becomes hint level 2.
+#   definition  plain, roughly grade-2 reading level. Hint level 3, and what the
+#               assistant teaches from after a correct answer. Must not contain
+#               the word itself — CI asserts that too.
+
+id: wordbank-stella-01
+game_type: word_scramble
+language: en
+title: More words to unscramble
+source: ASPIRE design project — Stella word bank
+
+closing:
+  lead: Keep some. Spend some. Watch it grow.
+  text: >-
+    Every word here is about looking after money. Keep a little back before you
+    spend. Put it somewhere safe. Then leave it alone and let it get bigger.
+
+entries:
+  - id: wordbank-stella-01-coin
+    language: en
+    word: COIN
+    scramble: NIOC
+    hint: something small you can hold in your hand
+    definition: a round piece of metal money
+    difficulty_band: warmup
+    persona_bands: [stella]
+
+  - id: wordbank-stella-01-bank
+    language: en
+    word: BANK
+    scramble: KNAB
+    hint: a place people go, not a thing they do
+    definition: a safe place that looks after your money for you
+    difficulty_band: warmup
+    persona_bands: [stella]
+
+  - id: wordbank-stella-01-spend
+    language: en
+    word: SPEND
+    scramble: DNEPS
+    hint: an action word — the opposite of keeping
+    definition: to use your money to buy something
+    difficulty_band: warmup
+    persona_bands: [stella]
+
+  - id: wordbank-stella-01-goal
+    language: en
+    word: GOAL
+    scramble: LAOG
+    hint: something you are working towards
+    definition: the thing you are saving up for
+    difficulty_band: warmup
+    persona_bands: [stella]
+
+  - id: wordbank-stella-01-earn
+    language: en
+    word: EARN
+    scramble: RNAE
+    hint: an action word — how money comes to you
+    definition: to get money by doing work
+    difficulty_band: core
+    persona_bands: [stella]
+
+  - id: wordbank-stella-01-share
+    language: en
+    word: SHARE
+    scramble: HERAS
+    hint: an action word — it involves somebody else
+    definition: to give some of what you have to another person
+    difficulty_band: core
+    persona_bands: [stella]

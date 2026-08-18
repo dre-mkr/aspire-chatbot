@@ -58,6 +58,10 @@ class VoiceSettings(BaseSettings):
     voice_orion: str | None = None
     voice_aurora: str | None = None
     voice_nova: str | None = None
+    # `everyone` is the general-purpose voice. Left unset it borrows Orion's id
+    # rather than failing startup -- see `_VOICE_UNDERSTUDY` in `registry`. Set
+    # VOICE_EVERYONE to give it one of its own.
+    voice_everyone: str | None = None
 
     voice_stella_en: str | None = None
     voice_stella_es: str | None = None
@@ -71,6 +75,9 @@ class VoiceSettings(BaseSettings):
     voice_nova_en: str | None = None
     voice_nova_es: str | None = None
     voice_nova_fr: str | None = None
+    voice_everyone_en: str | None = None
+    voice_everyone_es: str | None = None
+    voice_everyone_fr: str | None = None
 
     # --- Upload limits ----------------------------------------------------
     # Two gates, both pre-flight and free.

@@ -155,6 +155,12 @@ _ANONYMOUS_BANDS: dict[str, str] = {
     "orion": "13-15",
     "aurora": "adult",
     "nova": "adult",
+    # `everyone` is the mixed-audience voice, so the reader behind it may be a
+    # child. `13-15` is the balance the picker promises: real words and ordinary
+    # sentences rather than a five-year-old's register, but still inside the
+    # caps, the vocabulary ladder and the link strip that a minor band carries.
+    # `adult` here would hand an unknown reader the ungated row.
+    "everyone": "13-15",
 }
 
 #: What an anonymous visitor gets with no persona picked.

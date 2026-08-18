@@ -9,7 +9,9 @@ from typing import Final
 _DIR: Final[Path] = Path(__file__).resolve().parent
 
 #: Which card a persona gets.
-KNOWN: Final[frozenset[str]] = frozenset({"stella", "orion", "aurora", "nova"})
+KNOWN: Final[frozenset[str]] = frozenset(
+    {"stella", "orion", "aurora", "nova", "everyone"}
+)
 
 #: The card used when the persona is missing or unrecognised.
 #:

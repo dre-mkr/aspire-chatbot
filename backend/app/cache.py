@@ -62,21 +62,28 @@ def cache_key(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> str:
     """The key for one answer."""
-    material = json.dumps(
-        {
-            "q": normalise(query),
-            "lang": (language or "en").lower(),
-            "persona": persona or "",
-            "status": account_status or "",
-            "band": age_band or "",
-            # An edited knowledge base must not keep serving answers built from the old one.
-            "kb": corpus_fingerprint(),
-        },
-        sort_keys=True,
-        ensure_ascii=False,
-    )
+    material_parts: dict[str, Any] = {
+        "q": normalise(query),
+        "lang": (language or "en").lower(),
+        "persona": persona or "",
+        "status": account_status or "",
+        "band": age_band or "",
+        # An edited knowledge base must not keep serving answers built from the old one.
+        "kb": corpus_fingerprint(),
+    }
+    # Present only when set, so ordinary answers keep the keys they already have.
+    #
+    # A simplified answer and a full one are different text for the same
+    # question, and the cache is consulted before anything is generated -- so
+    # without this, turning the control on serves back the answer it was turned
+    # on to avoid. Adding the field unconditionally would have been tidier and
+    # would have invalidated every entry on the shelf to record a `false`.
+    if simple_mode:
+        material_parts["simple"] = True
+    material = json.dumps(material_parts, sort_keys=True, ensure_ascii=False)
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
     # Namespaced: `namespace()` exists so every key this module invents is scoped to it.
     return f"{namespace()}answer:v2:{digest}"
@@ -120,6 +127,7 @@ async def get_answer(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> dict[str, Any] | None:
     """A previously cached answer, or None."""
     if not cache_enabled():
@@ -131,6 +139,7 @@ async def get_answer(
         persona=persona,
         account_status=account_status,
         age_band=age_band,
+        simple_mode=simple_mode,
     )
     try:
         raw = await get_client().get(key)
@@ -155,6 +164,7 @@ async def put_answer(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> None:
     """Cache one answer. Never raises, for the same reason as `get_answer`."""
     if not cache_enabled():
@@ -166,6 +176,7 @@ async def put_answer(
         persona=persona,
         account_status=account_status,
         age_band=age_band,
+        simple_mode=simple_mode,
     )
     try:
         await get_client().set(
@@ -312,17 +323,20 @@ def semantic_shelf_key(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> str:
-    material = json.dumps(
-        {
-            "lang": (language or "en").lower(),
-            "persona": persona or "",
-            "status": account_status or "",
-            "band": age_band or "",
-            "kb": corpus_fingerprint(),
-        },
-        sort_keys=True,
-    )
+    parts: dict[str, Any] = {
+        "lang": (language or "en").lower(),
+        "persona": persona or "",
+        "status": account_status or "",
+        "band": age_band or "",
+        "kb": corpus_fingerprint(),
+    }
+    # A simplified answer sits on its own shelf, for the same reason it gets its
+    # own key: a near-paraphrase must not fetch the version the reader turned off.
+    if simple_mode:
+        parts["simple"] = True
+    material = json.dumps(parts, sort_keys=True)
     digest = hashlib.sha256(material.encode()).hexdigest()[:32]
     # v2 with the band, mirroring the `answer:` bump.
     return f"{namespace()}semindex:v2:{digest}"
@@ -339,6 +353,7 @@ async def semantic_lookup(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> dict[str, Any] | None:
     """The cached answer of the nearest same-audience question, if close enough."""
     if not semantic_enabled():
@@ -350,6 +365,7 @@ async def semantic_lookup(
         persona=persona,
         account_status=account_status,
         age_band=age_band,
+        simple_mode=simple_mode,
     )
     try:
         entries = await get_client().lrange(shelf, 0, -1)
@@ -403,6 +419,7 @@ async def semantic_register(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> None:
     """Add this turn's query to the shelf its future paraphrases will search."""
     if not semantic_enabled():
@@ -417,6 +434,7 @@ async def semantic_register(
                 persona=persona,
                 account_status=account_status,
                 age_band=age_band,
+                simple_mode=simple_mode,
             ),
         }
     )
@@ -425,6 +443,7 @@ async def semantic_register(
         persona=persona,
         account_status=account_status,
         age_band=age_band,
+        simple_mode=simple_mode,
     )
     try:
         pipe = get_client().pipeline()

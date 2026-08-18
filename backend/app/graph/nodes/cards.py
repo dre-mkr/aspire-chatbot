@@ -373,9 +373,17 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
     from app.agents.learn.tools.games import available_for, launch_game
 
     band = str(state.get("age_band") or "adult")
-    playable = available_for(band)
+    persona = state.get("persona")
+    playable = available_for(band, persona)
     if not playable:
-        logger.info("No games are offered to the %s band; answering normally.", band)
+        # Both halves matter. The band bars a game that is too old for a reader;
+        # the persona bars the whole activity for a guardian or a teacher, who
+        # came for the programme rather than for a quiz.
+        logger.info(
+            "No games are offered to band=%s persona=%s; answering normally.",
+            band,
+            persona,
+        )
         return None
 
     chosen = named_game(message)
@@ -388,7 +396,7 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
 
     learning = state.get("learning") or {}
     concept = str(learning.get("concept_id") or "saving_basics")
-    directive = launch_game(chosen, concept, 1, age_band=band)  # type: ignore[arg-type]
+    directive = launch_game(chosen, concept, 1, age_band=band, persona=persona)  # type: ignore[arg-type]
     if directive is None:
         # The band bars the one they named.
         return {

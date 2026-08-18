@@ -7,7 +7,9 @@ from typing import Final
 # ── the closed sets ──
 # Runtime frozensets, deliberately duplicated from the Literal types in `state`.
 
-PERSONAS: Final[frozenset[str]] = frozenset({"stella", "orion", "aurora", "nova"})
+PERSONAS: Final[frozenset[str]] = frozenset(
+    {"stella", "orion", "aurora", "nova", "everyone"}
+)
 AGE_BANDS: Final[frozenset[str]] = frozenset({"5-8", "9-12", "13-15", "16-18", "adult"})
 ACCOUNT_STATUSES: Final[frozenset[str]] = frozenset(
     {"prospect", "applicant", "beneficiary", "guardian"}
@@ -111,7 +113,31 @@ def allowed_agents(
     if persona == "aurora":
         return list(_AURORA)
 
-    # `nova`, by elimination: the persona set has four members and the three above are handled.
+    if persona == "everyone":
+        # The general-purpose voice, and deliberately NOT a row of its own.
+        #
+        # `everyone` says "I have not told you who I am", which is a statement
+        # about register, not about entitlement. Giving it a literal row would
+        # mean inventing a set that is either wider than the reader's own --- a
+        # privilege escalation available to anyone who edits a URL --- or
+        # narrower, which would silently take registration away from a guardian
+        # who picked it to read something in plainer words.
+        #
+        # So it resolves to the safe default for the band the token already
+        # carries. Every result below is a set some other persona already grants
+        # at that band, which is what makes `_narrowing` admit this persona from
+        # any account: it never returns anything the caller did not already have.
+        if age_band in _STELLA_BANDS:
+            return list(_STELLA)
+        if age_band == "13-15":
+            return list(_ORION_13_15)
+        if age_band == "16-18":
+            return list(_ORION_16_18)
+        # `adult`: factual answers and a way to reach a person. Registration is
+        # Aurora's alone and stays there.
+        return list(_NOVA)
+
+    # `nova`, by elimination: the persona set's other four members are handled above.
     return list(_NOVA)
 
 

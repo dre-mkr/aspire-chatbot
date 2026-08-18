@@ -52,10 +52,48 @@ def test_client_handout_is_seeded_verbatim(game):
 
 
 def test_warmup_set_is_four_words_in_handout_order(game):
+    """The handout is a printed sequence, and it still leads.
+
+    This used to assert there was exactly ONE English scramble set, which made
+    the handout contract and the size of the word bank the same statement -- so
+    adding any word to the game failed a test about the ECCB sheet. The contract
+    worth keeping is narrower: the four printed words, in the printed order, in
+    their own set, served before anything authored later.
+    """
     sets = game.sets_for(Language.EN)
-    assert len(sets) == 1
-    words = [e.word for e in sets[0].entries]
+    handout = next(s for s in sets if s.id == "warmup-01")
+    words = [e.word for e in handout.entries]
     assert words == ["MONEY", "INTEREST", "INVEST", "SAVE"]
+    # The engine walks sets in load order and the handout must come first, or a
+    # child meets a later bank before the sheet they were given in class.
+    assert sets[0].id == "warmup-01"
+
+
+def test_the_word_bank_is_tiered_by_persona(game):
+    """Every set beyond the handout targets one audience, not all of them."""
+    for game_set in game.sets_for(Language.EN):
+        if game_set.id == "warmup-01":
+            continue
+        for entry in game_set.entries:
+            assert len(entry.persona_bands) == 1, (
+                f"{game_set.id}/{entry.id} targets {entry.persona_bands}; a bank "
+                "authored for one reading level should not be served to another"
+            )
+
+
+@pytest.mark.parametrize(
+    ("persona", "least"),
+    [(Persona.STELLA, 8), (Persona.ORION, 8), (Persona.EVERYONE, 6)],
+)
+def test_each_playing_persona_has_a_bank_worth_playing(game, persona, least):
+    """The pool a reader actually draws from, not the total on disk."""
+    available = [
+        entry
+        for game_set in game.sets_for(Language.EN)
+        for entry in game_set.entries
+        if persona in entry.persona_bands
+    ]
+    assert len(available) >= least
 
 
 def test_every_entry_has_teaching_content(game):
