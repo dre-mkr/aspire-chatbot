@@ -327,12 +327,17 @@ a message naming the exact variables to set.
 > ```
 
 The current mapping picks premade voices against each persona's brief: Jessica
-(playful, bright) for Stella, Liam (energetic) for Orion, Sarah (mature,
-reassuring) for Aurora, and Alice (clear educator) for Nova.
+(playful, bright) for `stella`, Liam (energetic) for `orion`, Sarah (mature,
+reassuring) for `aurora`, and Alice (clear educator) for `nova`.
 
-Delivery per persona lives in `app/voice/registry.py` — Stella runs at `speed`
-0.9 because five-year-olds need it slower, Aurora at 1.0 with the highest
-stability because she is the voice a parent has to trust.
+Personas are named by KEY here, not by label. The label a reader sees lives in
+`app/prompting/personas/names.py` and is a client's choice — today Sky, Prosper,
+Destiny and Star — while the key is the identifier the access matrix, the
+session token and these voice settings are all wired to.
+
+Delivery per persona lives in `app/voice/registry.py` — `stella` runs at `speed`
+0.9 because five-year-olds need it slower, `aurora` at 1.0 with the highest
+stability because it is the voice a parent has to trust.
 
 ### Endpoints
 

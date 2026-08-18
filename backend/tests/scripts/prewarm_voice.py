@@ -19,21 +19,21 @@ from app.voice.speakable import speakable  # noqa: E402
 STATIC_LINES: dict[Persona, dict[Language, list[str]]] = {
     Persona.STELLA: {
         Language.EN: [
-            "Hi! I'm Stella. Do you want to learn about saving money?",
+            "Hi! I'm Sky. Do you want to learn about saving money?",
             "That's right! Well done!",
             "Good try! Let's look at it together.",
             "Tap the big button and tell me your question.",
             "Oops, I didn't hear that. Can you say it again?",
         ],
         Language.ES: [
-            "¡Hola! Soy Stella. ¿Quieres aprender a ahorrar dinero?",
+            "¡Hola! Soy Sky. ¿Quieres aprender a ahorrar dinero?",
             "¡Correcto! ¡Muy bien!",
             "¡Buen intento! Vamos a verlo juntos.",
             "Toca el botón grande y dime tu pregunta.",
             "Ups, no te escuché. ¿Puedes repetirlo?",
         ],
         Language.FR: [
-            "Salut ! Je suis Stella. Tu veux apprendre à économiser ?",
+            "Salut ! Je suis Sky. Tu veux apprendre à économiser ?",
             "C'est exact ! Bravo !",
             "Bon essai ! Regardons ensemble.",
             "Appuie sur le grand bouton et pose ta question.",
