@@ -9,6 +9,7 @@ from app.graph.state import KBChunk
 from app.prompting import GLOBAL, build_messages, persona_card
 from app.prompting.global_rules import LOAD_BEARING
 from app.prompting.personas import FALLBACK, KNOWN
+from app.prompting.personas.names import NAMES
 
 ROLE = "Answer the question from the reference material."
 
@@ -73,8 +74,11 @@ class TestPersonaCards:
             agent_role=ROLE,
             user_text="hi",
         )
-        assert "You are Stella" in stella[0].content
-        assert "You are Aurora" in aurora[0].content
+        # Read from `NAMES`, never spelled out. The label is a client's choice
+        # and changes in one line; pinning it here is what turns that one line
+        # back into a hunt through the test suite.
+        assert f"You are {NAMES['stella']}" in stella[0].content
+        assert f"You are {NAMES['aurora']}" in aurora[0].content
         assert stella[0].content != aurora[0].content
 
 
@@ -200,7 +204,7 @@ class TestTheLearnAgentUsesIt:
 
         prefix, per_turn = seen[-1][0].content, seen[-1][1].content
         assert "Never invent a figure" in prefix
-        assert "You are Stella" in prefix
+        assert f"You are {NAMES['stella']}" in prefix
         assert "THE IDEA" in prefix
         assert "what is saving" in per_turn
         assert "learning about saving" in per_turn
