@@ -1,0 +1,174 @@
+# ASPIRE true or false — Stella set 2 (ages 5–12)
+#
+# A second Stella set, so the five-question round is drawn from eleven items
+# rather than always the same five. The engine gathers every set a persona can
+# be served and samples the round from all of them.
+#
+# Written natively for Stella's card, not simplified from an Orion item at
+# runtime: a reworded statement is a different statement, and the verdict has to
+# be checked against the new wording. No percentages, no rates, no compounding —
+# those belong to the Orion sets.
+
+id: truefalse-stella-02
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE design project — True or False (Stella, set 2)
+
+closing:
+  lead: Wait a little, and your money can do more.
+  text: >-
+    Saving is not about never spending. It is about choosing what to spend on,
+    and keeping a bit back so you still have some later.
+
+entries:
+  - id: tfs-02-needs-wants
+    statement: A new toy and food for dinner are both things you need.
+    answer: false
+    topic: Needs and wants
+    topic_line: " — food you need, a toy you want."
+    takeaway: A need is something you must have. A want is something you would like.
+    explanation: >-
+      Food is a need. You have to eat. A toy is a want. It is lovely to have and
+      you would still be fine without it. Both are okay to spend money on. But
+      when there is not enough for everything, needs go first. That is the whole
+      trick. Look at what you must have, pay for that, then see what is left for
+      the things you would like.
+    paragraphs:
+      - Food is a need. You have to eat.
+      - >-
+        A toy is a want. It is lovely to have and you would still be fine
+        without it.
+      - >-
+        Both are okay to spend money on. But when there is not enough for
+        everything, needs go first.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-02-saving-slow
+    statement: Saving up for something big takes time.
+    answer: true
+    topic: Patience
+    topic_line: " — a little each week adds up."
+    takeaway: Big things are bought with many small savings.
+    explanation: >-
+      Yes. If you put a little away each week, it grows slowly. One week it looks
+      like almost nothing. After many weeks it is enough for the thing you
+      wanted. That waiting part is the hard bit, and it is also the part that
+      works. People who save a small amount every week end up with more than
+      people who wait to save a big amount one day.
+    paragraphs:
+      - >-
+        Yes. If you put a little away each week, it grows slowly. One week it
+        looks like almost nothing.
+      - After many weeks it is enough for the thing you wanted.
+      - >-
+        People who save a small amount every week end up with more than people
+        who wait to save a big amount one day.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-02-bank-safe
+    statement: Money kept in a bank is safer than money kept in your pocket.
+    answer: true
+    topic: Where money lives
+    topic_line: " — a bank keeps it safe, and adds a little."
+    takeaway: A bank looks after your money so it cannot be lost.
+    explanation: >-
+      Money in your pocket can fall out, or get wet, or be spent because it is
+      right there. A bank keeps it somewhere safe and writes down exactly how
+      much is yours. It is also harder to spend, which helps. And while it sits
+      there the bank pays you a tiny bit extra for letting them look after it.
+    paragraphs:
+      - >-
+        Money in your pocket can fall out, or get wet, or be spent because it is
+        right there.
+      - >-
+        A bank keeps it somewhere safe and writes down exactly how much is
+        yours. It is also harder to spend, which helps.
+      - >-
+        And while it sits there the bank pays you a tiny bit extra for letting
+        them look after it.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-02-borrow
+    statement: If a friend lends you money, you do not have to give it back.
+    answer: false
+    topic: Borrowing
+    topic_line: " — borrowed money always goes back."
+    takeaway: Money you borrow belongs to the person who lent it.
+    explanation: >-
+      Borrowing means you will give it back. That is what makes it borrowing and
+      not a gift. If you keep it, your friend has lost their money, and next time
+      they will not want to help. Paying it back is how people stay able to help
+      each other. It is the same with a bank. When a bank lends money, it expects
+      the money back too.
+    paragraphs:
+      - >-
+        Borrowing means you will give it back. That is what makes it borrowing
+        and not a gift.
+      - >-
+        If you keep it, your friend has lost their money, and next time they will
+        not want to help.
+      - >-
+        It is the same with a bank. When a bank lends money, it expects the money
+        back too.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-02-price-compare
+    statement: The same thing can cost different amounts in different shops.
+    answer: true
+    topic: Comparing prices
+    topic_line: " — it is worth looking in more than one place."
+    takeaway: Checking two shops can leave more money in your pocket.
+    explanation: >-
+      Shops choose their own prices, so the very same thing can cost more in one
+      place than another. If you look in two shops before you buy, you sometimes
+      find the same item for less. The money you did not spend is money you still
+      have. That is not being mean. That is just paying attention.
+    paragraphs:
+      - >-
+        Shops choose their own prices, so the very same thing can cost more in
+        one place than another.
+      - >-
+        If you look in two shops before you buy, you sometimes find the same item
+        for less.
+      - That money you did not spend is money you still have.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfs-02-plan
+    statement: It helps to decide what your money is for before you spend it.
+    answer: true
+    topic: Making a plan
+    topic_line: " — deciding first makes choosing easier."
+    takeaway: Deciding first is what stops the money disappearing.
+    explanation: >-
+      When you decide first, you already know what the money is for. Then when
+      you are standing in a shop you are not choosing all over again. People who
+      never decide often find the money is gone and they cannot remember where it
+      went. Even a very small plan helps. Some for now, some for later.
+    paragraphs:
+      - >-
+        When you decide first, you already know what the money is for. Then when
+        you are standing in a shop you are not choosing all over again.
+      - >-
+        People who never decide often find the money is gone and they cannot
+        remember where it went.
+      - Even a very small plan helps. Some for now, some for later.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE design project — True or False

@@ -42,11 +42,16 @@ def test_the_expected_tools_are_exposed():
 def test_list_games_describes_what_actually_exists(engine):
     payload = tools_module.list_games.invoke({}, config=cfg())
     # The fixture engine carries word scramble only, so no true/false set is listed here.
+    #
+    # `items` is the whole authored catalogue, counted with no persona, and it
+    # grew from 4 to 25 when the word bank was tiered by persona. It is NOT the
+    # length of a round: a reader is served only the entries their own persona
+    # bands admit -- see `test_each_playing_persona_has_a_bank_worth_playing`.
     assert payload["games"] == [
         {
             "id": "word_scramble",
             "name": "Unscramble These Words",
-            "items": 4,
+            "items": 25,
             "supports_hints": True,
             "languages": ["en"],
         }

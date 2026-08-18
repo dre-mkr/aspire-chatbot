@@ -1,0 +1,191 @@
+# ASPIRE true or false — Orion set 2 (ages 13–18)
+#
+# A second Orion set, so a five-question round is drawn from eleven items. Same
+# register as set 1: the real mechanism, one worked number where it earns its
+# place, no cheerleading. Percentages and compounding are allowed here and are
+# not allowed in the Stella sets.
+
+id: truefalse-orion-02
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE design project — True or False (Orion, set 2)
+
+closing:
+  lead: Time is the part you cannot buy later.
+  text: >-
+    Most of these come down to the same thing: the earlier money starts working,
+    the less of the result depends on how much you put in. Starting small and
+    early beats starting large and late more often than people expect.
+
+entries:
+  - id: tfo-02-compound
+    statement: >-
+      Interest earned in one year can itself earn interest the following year.
+    answer: true
+    topic: Compound interest
+    topic_line: " — interest joins the balance, and the balance earns."
+    takeaway: Compounding is interest earning interest, and it needs time to show.
+    explanation: >-
+      That is exactly what compounding is. Interest is paid on your balance, and
+      then it becomes part of the balance, so next year's interest is calculated
+      on a bigger number. Take EC$1,000 at 5%. Year one pays EC$50, so you hold
+      EC$1,050. Year two pays 5% of EC$1,050, which is EC$52.50 — not EC$50. The
+      gap looks trivial after two years and does not stay trivial. The engine
+      here is time, not the rate, which is why starting early matters more than
+      finding a slightly better account.
+    paragraphs:
+      - >-
+        Interest is paid on your balance, and then it becomes part of the
+        balance, so next year's interest is calculated on a bigger number.
+      - >-
+        Take EC$1,000 at 5%. Year one pays EC$50, so you hold EC$1,050. Year two
+        pays 5% of EC$1,050, which is EC$52.50 — not EC$50.
+      - >-
+        The engine here is time, not the rate, which is why starting early
+        matters more than finding a slightly better account.
+    difficulty_band: advanced
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-02-budget-income
+    statement: A budget is only useful once you are earning a full salary.
+    answer: false
+    topic: Budgeting
+    topic_line: " — a budget is a plan, not a size of income."
+    takeaway: A budget scales down; it does not switch on at some income.
+    explanation: >-
+      A budget is a decision about where money goes before it goes there. That
+      decision is the same whether the amount is EC$150 a month from a weekend
+      job or a full salary. Small amounts are actually where it shows fastest —
+      when there is not much, the difference between deciding and not deciding is
+      the whole balance at the end of the month. Waiting for a salary to start
+      budgeting means arriving at the salary with no practice.
+    paragraphs:
+      - >-
+        A budget is a decision about where money goes before it goes there, and
+        that decision is the same at EC$150 a month as at a full salary.
+      - >-
+        Small amounts are where it shows fastest: when there is not much, the
+        difference between deciding and not deciding is the whole balance.
+      - >-
+        Waiting for a salary to start budgeting means arriving at the salary with
+        no practice.
+    difficulty_band: core
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-02-diversify
+    statement: >-
+      Putting all your savings into one company is safer than spreading it out.
+    answer: false
+    topic: Spreading risk
+    topic_line: " — one company failing should not take everything."
+    takeaway: Spreading money out means no single failure costs you all of it.
+    explanation: >-
+      It is the reverse. If everything sits in one company and that company runs
+      into trouble, all of your money is exposed to one event. Spread across
+      several different things, one of them falling costs you a share of the
+      total rather than the total. This does not remove risk and nothing does.
+      What it removes is the case where a single piece of bad luck wipes out
+      everything at once.
+    paragraphs:
+      - >-
+        If everything sits in one company and that company runs into trouble, all
+        of your money is exposed to one event.
+      - >-
+        Spread across several different things, one of them falling costs you a
+        share of the total rather than the total.
+      - >-
+        This does not remove risk, and nothing does. It removes the case where
+        one piece of bad luck takes everything at once.
+    difficulty_band: advanced
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-02-emergency
+    statement: >-
+      Money set aside for emergencies should be easy to reach quickly.
+    answer: true
+    topic: Emergency savings
+    topic_line: " — an emergency fund you cannot reach is not one."
+    takeaway: Emergency money trades growth for being available immediately.
+    explanation: >-
+      An emergency is by definition something you did not plan for, so the money
+      has to be reachable on the day. That is the one place where a low-growth
+      account is the correct choice: you are buying access, not return. Money
+      locked away for five years may grow more and it cannot help you when the
+      fridge fails. Long-term savings and emergency savings are two different
+      jobs, and one account rarely does both well.
+    paragraphs:
+      - >-
+        An emergency is something you did not plan for, so the money has to be
+        reachable on the day.
+      - >-
+        That is the one place a low-growth account is the right choice: you are
+        buying access, not return.
+      - >-
+        Long-term savings and emergency savings are two different jobs, and one
+        account rarely does both well.
+    difficulty_band: core
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-02-credit
+    statement: >-
+      Paying only the minimum on a credit card clears the debt just as fast.
+    answer: false
+    topic: Credit and debt
+    topic_line: " — the minimum is designed to keep the balance alive."
+    takeaway: Minimum payments mostly cover interest, so the balance barely moves.
+    explanation: >-
+      The minimum payment is calculated to cover the interest and only a small
+      part of what you actually owe. So the balance falls very slowly, and
+      interest keeps being charged on what is left. The same compounding that
+      helps a saver works against a borrower here. Paying more than the minimum,
+      even a little more, goes almost entirely against the balance and shortens
+      the whole thing dramatically.
+    paragraphs:
+      - >-
+        The minimum payment is built to cover the interest and only a small part
+        of what you owe, so the balance falls very slowly.
+      - >-
+        The same compounding that helps a saver works against a borrower: the
+        interest keeps being charged on what is left.
+      - >-
+        Paying even a little more than the minimum goes almost entirely against
+        the balance.
+    difficulty_band: advanced
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False
+
+  - id: tfo-02-inflation
+    statement: >-
+      Money left in a drawer for ten years buys the same amount at the end.
+    answer: false
+    topic: Inflation
+    topic_line: " — prices rise, so still money quietly loses ground."
+    takeaway: Cash that is not growing is losing value as prices rise.
+    explanation: >-
+      The number on the note does not change. What it buys does. Prices generally
+      rise over time, so the same EC$100 buys less in ten years than it buys
+      today. That is why money sitting completely still is not actually neutral —
+      it is slowly losing ground. Growth is not only about getting richer. Part of
+      it is just keeping up with what things cost.
+    paragraphs:
+      - The number on the note does not change. What it buys does.
+      - >-
+        Prices generally rise over time, so the same EC$100 buys less in ten
+        years than it buys today.
+      - >-
+        Growth is not only about getting richer. Part of it is keeping up with
+        what things cost.
+    difficulty_band: advanced
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE design project — True or False

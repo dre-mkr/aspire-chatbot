@@ -10,8 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 def fold(text: str) -> str:
-    """Lowercase, strip accents, normalise apostrophes, collapse whitespace."""
-    lowered = unicodedata.normalize("NFKD", text.lower())
+    """Lowercase, strip accents, normalise apostrophes, collapse whitespace.
+
+    Runs of three or more identical letters collapse too, so "siiign me up"
+    matches the same pattern "sign me up" does. No English, Spanish or French
+    word carries a triple letter, so nothing real is damaged by it.
+    """
+    from app.casual import squeeze_runs
+
+    lowered = unicodedata.normalize("NFKD", squeeze_runs(text).lower())
     stripped = "".join(ch for ch in lowered if not unicodedata.combining(ch))
     stripped = stripped.replace("’", "'").replace("‘", "'")
     return re.sub(r"\s+", " ", stripped).strip()
@@ -125,6 +132,34 @@ _NAMED_GAME: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+#: The longest a message can be and still be a command rather than a question.
+#:
+#: A card answers before the model reads the message, which is right for "sign
+#: me up" and wrong for anything with a sentence's worth of context in it. The
+#: measured failure was "Can my daughter play a game about who is eligible?" --
+#: ten words, captured by the eligibility card because it contains "eligible",
+#: and so answered with a form instead of an answer.
+#:
+#: Eight rather than six: "i want to play the word scramble game" is eight words
+#: and is unambiguously a command. The one-word cases the tests pin -- "scramble",
+#: "jugar", "jouer" -- are unaffected; this is a ceiling, not a floor.
+_COMMAND_MAX_WORDS = 8
+
+
+def _is_a_command(folded: str) -> bool:
+    """Short enough to be a command rather than a question with context in it.
+
+    Length only. A question-word test belongs to the individual matcher and not
+    here: `_ASKING_ABOUT` lists "do i qualify", which is the eligibility card's
+    whole purpose, and it matches "what games are there", which is how a reader
+    asks to see the games. Both are cards, correctly, and a shared question-word
+    guard would suppress the two things these cards exist for.
+    """
+    if not folded:
+        return False
+    return len(folded.split()) <= _COMMAND_MAX_WORDS
+
+
 def wants_eligibility(message: str) -> bool:
     """Whether this message is somebody working out if they can join."""
     folded = fold(message)
@@ -134,6 +169,8 @@ def wants_eligibility(message: str) -> bool:
         return False
     # A question about the rules or the process is answered, not formed at.
     if any(pattern.search(folded) for pattern in _ELIGIBILITY_LOOKUP):
+        return False
+    if not _is_a_command(folded):
         return False
     return any(pattern.search(folded) for pattern in _ELIGIBILITY)
 
@@ -279,9 +316,11 @@ def wants_lesson(message: str) -> bool:
 
 
 def wants_game(message: str) -> bool:
-    """Whether this message is asking to play."""
+    """Whether this message is asking to play, rather than asking about playing."""
     folded = fold(message)
-    return bool(folded) and any(pattern.search(folded) for pattern in _PLAY)
+    if not _is_a_command(folded):
+        return False
+    return any(pattern.search(folded) for pattern in _PLAY)
 
 
 def named_game(message: str) -> str | None:

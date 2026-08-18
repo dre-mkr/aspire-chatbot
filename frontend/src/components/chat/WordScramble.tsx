@@ -21,8 +21,9 @@ import {
 /* Counts come from the set, never from the copy. */
 const COPY = {
 	title: "Word scramble",
-	sub: (total: number) =>
-		`Warm-up set · ${total} ${total === 1 ? "word" : "words"}`,
+	// "Warm-up set" named the one set that used to exist. The bank is tiered by
+	// persona now, so the count is the only honest half of that subtitle.
+	sub: (total: number) => `${total} ${total === 1 ? "word" : "words"} to unscramble`,
 	leave: "Leave game",
 	close: "Close",
 	lead: "Unscramble these letters.",
@@ -566,18 +567,34 @@ function CompletePanel({
 				))}
 			</div>
 
-			<div className="game__meaning">
-				<span className="game__meaning-label">
-					<SparkIcon size={13} />
-					{copy.together}
-				</span>
-				<p className="game__meaning-text">
-					You <strong>SAVE</strong> money, you <strong>INVEST</strong> what you
-					saved, and it earns <strong>INTEREST</strong> while it sits. That is
-					how <strong>MONEY</strong> grows while you wait — and why the order
-					matters.
-				</p>
-			</div>
+			{/* The set's own last word, when it has one.
+
+			    This paragraph used to be hardcoded to SAVE / INVEST / INTEREST /
+			    MONEY — the four words of the ECCB warm-up — which stopped being
+			    true the moment the bank was tiered by persona and a reader could
+			    finish on a different set. `GameSet.closing` already travels the
+			    whole way here and is what the true/false card reads; the fallback
+			    below is only for a set that has not authored one. */}
+			{summary?.closing ? (
+				<div className="game__meaning">
+					<span className="game__meaning-label">
+						<SparkIcon size={13} />
+						{summary.closing.lead}
+					</span>
+					<p className="game__meaning-text">{summary.closing.text}</p>
+				</div>
+			) : learned.length ? (
+				<div className="game__meaning">
+					<span className="game__meaning-label">
+						<SparkIcon size={13} />
+						{copy.together}
+					</span>
+					<p className="game__meaning-text">
+						Every word here is part of the same idea: money you keep back has
+						somewhere to go, and time is what turns it into more.
+					</p>
+				</div>
+			) : null}
 
 			<div className="game__actions">
 				<button

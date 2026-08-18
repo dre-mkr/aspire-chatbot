@@ -3,6 +3,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccountControl } from "#/components/auth/AccountControl";
 import { Composer } from "#/components/chat/Composer";
+import { FirstRun } from "#/components/chat/FirstRun";
 import { Rail } from "#/components/chat/Rail";
 import { VoiceConsent, VoiceNote } from "#/components/chat/Voice";
 import { CloseIcon, MenuIcon } from "#/components/icons";
@@ -49,8 +50,7 @@ export function LandingScreen() {
 	} = useAnswerSettings();
 
 	/** The rail's list and its row actions. No conversation is open here. */
-	const { hasHistory, renameChat, regenerateTitle, deleteChat } =
-		useConversationList();
+	const { renameChat, regenerateTitle, deleteChat } = useConversationList();
 
 	const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -273,6 +273,10 @@ export function LandingScreen() {
 				<span />
 			</div>
 
+			{/* First visit only: a short opening, then the persona question.
+			    Renders nothing at all for a returning reader. */}
+			<FirstRun onChoosePersona={setPersona} />
+
 			<div className="frame">
 				{/* A drawer at every width here, never a column: there is nothing to sit beside. */}
 				<Rail
@@ -308,19 +312,25 @@ export function LandingScreen() {
 						Skip to the message box
 					</a>
 
-					{/* There is no bar up here to hold it, so it stands on its own. */}
-					{hasHistory ? (
-						<button
-							type="button"
-							className="rail-open"
-							onClick={openDrawer}
-							aria-controls="aspire-rail"
-							aria-expanded={drawerOpen}
-						>
-							<MenuIcon />
-							<span className="sr-only">Open conversations</span>
-						</button>
-					) : null}
+					{/* There is no bar up here to hold it, so it stands on its own.
+
+					    Not gated on having a history any more. The rail carries
+					    "How to use ASPIRE AI", and gating this button meant the one
+					    reader most likely to want it -- somebody here for the first
+					    time, with nothing in their history -- was the only reader
+					    who could not reach it. The empty history has had its own
+					    written state all along, so opening onto it was always an
+					    intended destination. */}
+					<button
+						type="button"
+						className="rail-open"
+						onClick={openDrawer}
+						aria-controls="aspire-rail"
+						aria-expanded={drawerOpen}
+					>
+						<MenuIcon />
+						<span className="sr-only">Open menu and conversations</span>
+					</button>
 
 					{/* The way into an account, whenever the sidebar is not there to carry it. */}
 					{/* `inert` as well as the CSS, because they cover different people. */}

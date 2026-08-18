@@ -30,8 +30,34 @@ ENGINE_NAME: dict[str, str] = {
 }
 
 
-def available_for(age_band: str) -> list[str]:
-    """Which games this band may be offered, youngest-appropriate first."""
+def persona_plays(persona: str | None) -> bool:
+    """Whether this persona is offered games at all.
+
+    The band gate and the engine's persona gate used to disagree, and the reader
+    paid for it: `available_for` admits every band, so a card was opened for a
+    guardian or a teacher, and then `GameEngine.start` refused the same request
+    with `not_available_for_persona` and the card sat dead on the page.
+
+    Aurora and Nova are written around programme information and teaching
+    material rather than child activities, so the honest answer is that the card
+    should never have been offered. An unknown persona is treated as playing, so
+    a missing value degrades to the previous behaviour rather than to silence.
+    """
+    from app.games.models import PLAYING_PERSONAS, Persona
+
+    name = (persona or "").strip().lower()
+    if not name:
+        return True
+    try:
+        return Persona(name) in PLAYING_PERSONAS
+    except ValueError:
+        return True
+
+
+def available_for(age_band: str, persona: str | None = None) -> list[str]:
+    """Which games this reader may be offered, youngest-appropriate first."""
+    if not persona_plays(persona):
+        return []
     index = band_index(age_band)
     if index < 0:
         return []
@@ -42,8 +68,8 @@ def available_for(age_band: str) -> list[str]:
     ]
 
 
-def permitted(game: str, age_band: str) -> bool:
-    return game in available_for(age_band)
+def permitted(game: str, age_band: str, persona: str | None = None) -> bool:
+    return game in available_for(age_band, persona)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,14 +114,16 @@ def launch_game(
     difficulty: Literal[1, 2, 3] = 1,
     *,
     age_band: str,
+    persona: str | None = None,
 ) -> dict[str, Any] | None:
-    """The `game` directive for the client to render, or None if the band bars it."""
-    if not permitted(game, age_band):
+    """The `game` directive to render, or None if the band or persona bars it."""
+    if not permitted(game, age_band, persona):
         logger.info(
-            "Declining %s for the %s band; offering %s instead.",
+            "Declining %s for the %s band / %s persona; offering %s instead.",
             game,
             age_band,
-            available_for(age_band),
+            persona or "unknown",
+            available_for(age_band, persona),
         )
         return None
 

@@ -163,7 +163,7 @@ async def test_a_check_already_open_is_left_alone() -> None:
 async def test_a_named_game_becomes_a_directive() -> None:
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
 
-    update = await gate(_state("can we play true or false", age_band="5-8"))
+    update = await gate(_state("can we play true or false", age_band="5-8", persona="stella"))
 
     directive = update["ui_directives"][0]
     assert directive["t"] == "game"
@@ -177,7 +177,7 @@ async def test_asking_to_play_without_choosing_asks_which() -> None:
     """It asks. It does not pick one on the child's behalf."""
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
 
-    update = await gate(_state("can we play a game", age_band="9-12"))
+    update = await gate(_state("can we play a game", age_band="9-12", persona="stella"))
 
     assert isinstance(update["messages"][0], AIMessage)
     assert set(update["quick_replies"]) == {"True or false", "Word scramble"}
@@ -188,7 +188,7 @@ async def test_a_band_that_may_not_play_a_named_game_is_offered_what_it_can() ->
     """A five-year-old asking for the spelling game is not told no and dropped."""
     gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
 
-    update = await gate(_state("word scramble please", age_band="5-8"))
+    update = await gate(_state("word scramble please", age_band="5-8", persona="stella"))
 
     assert update["quick_replies"] == ["True or false"]
     assert "ui_directives" not in update
@@ -407,3 +407,62 @@ async def test_the_signup_card_ends_the_turn_at_the_outbound_gate() -> None:
     state["safety_flags"] = update["safety_flags"]
 
     assert _after_cards(state) == "safety_out"
+
+
+# ── the game card is gated on persona, not only on band ──────────────────────
+
+
+class TestWhoIsOfferedAGame:
+    """Aurora and Nova are adult bands, and adult bands cleared the band gate.
+
+    So the card opened for a guardian or a teacher and `POST /api/games/start`
+    then refused the same request with `not_available_for_persona` -- the card
+    rendered and sat dead on the page. The two gates disagreed; this is the band
+    gate learning what the engine already knew.
+    """
+
+    async def test_a_guardian_is_not_offered_a_game(self) -> None:
+        gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
+        update = await gate(
+            _state("can we play a game", persona="aurora", age_band="adult")
+        )
+        assert update == {}
+
+    async def test_a_teacher_is_not_offered_a_game(self) -> None:
+        gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
+        update = await gate(
+            _state("can we play a game", persona="nova", age_band="adult")
+        )
+        assert update == {}
+
+    @pytest.mark.parametrize(
+        ("persona", "band"),
+        [("stella", "9-12"), ("orion", "13-15"), ("everyone", "13-15")],
+    )
+    async def test_a_playing_persona_still_gets_the_card(self, persona, band) -> None:
+        gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
+        update = await gate(_state("can we play a game", persona=persona, age_band=band))
+        assert update.get("quick_replies")
+
+
+class TestALongQuestionIsNotACard:
+    """The measured failure the word-count guard exists for."""
+
+    async def test_a_question_containing_eligible_is_answered_not_formed_at(self) -> None:
+        gate = make_intent_gate(eligibility_on=lambda: True, games_on=lambda: True)
+        update = await gate(
+            _state("Can my daughter play a game about who is eligible?", persona="aurora")
+        )
+        assert update == {}
+
+    async def test_a_question_about_how_signing_up_works_reaches_the_model(self) -> None:
+        gate = make_intent_gate(eligibility_on=lambda: True, games_on=lambda: True)
+        update = await gate(
+            _state("How does signing up work for a nine-year-old?", persona="aurora")
+        )
+        assert update == {}
+
+    async def test_the_short_command_still_answers_instantly(self) -> None:
+        gate = make_intent_gate(eligibility_on=lambda: True, games_on=lambda: False)
+        update = await gate(_state("Am I eligible?", persona="aurora"))
+        assert update != {}

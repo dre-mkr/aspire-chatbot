@@ -11,7 +11,13 @@ from enum import Enum
 from app.domain import Language, Persona
 
 # Games are a learning activity for account holders.
-PLAYING_PERSONAS = frozenset({Persona.STELLA, Persona.ORION})
+#
+# `EVERYONE` plays from the general-purpose pool: the reader has not said who
+# they are, and refusing them a game would make "Everyone" the one persona that
+# quietly does less. Aurora and Nova stay out on purpose -- both are written
+# around programme information and teaching material, and a guardian mid-form
+# does not want a quiz.
+PLAYING_PERSONAS = frozenset({Persona.STELLA, Persona.ORION, Persona.EVERYONE})
 
 
 class Volatility(str, Enum):

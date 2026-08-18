@@ -235,14 +235,31 @@ class GameEngine:
                 f"No {game_type} set has been authored in {language.value} yet."
             )
 
-        # The first set with anything servable for this player.
+        # Every set with something servable for this player, in filename order.
+        #
+        # This used to stop at the first set, which made the pool exactly as big
+        # as one file and made filename order decide the whole game. Content was
+        # then unreachable by construction: a second set for the same persona
+        # could never be played, so "add more questions" had nowhere to put them.
+        #
+        # `Game.entry()` resolves an id against every set it loaded, not against
+        # one set, so an order that spans files is already a supported shape.
+        # The first contributing set names the round -- it is what `_closing`
+        # looks up -- which keeps the ECCB warm-up leading for the child bands.
+        # A caller who named no persona is the exception, and gets the first set
+        # alone as before. `_servable(entries, None)` matches every entry, so
+        # merging there would hand an unidentified player every persona's bank at
+        # once -- a five-year-old's words and a teenager's in one round.
         game_set = None
         servable: list[Entry] = []
         for candidate in sets:
             items = self._servable(candidate.entries, persona)
-            if items:
+            if not items:
+                continue
+            if game_set is None:
                 game_set = candidate
-                servable = items
+            servable.extend(items)
+            if persona is None:
                 break
 
         if game_set is None:

@@ -322,7 +322,13 @@ def test_config_reports_personas_languages_and_limits(client, settings):
     body = client.get("/api/voice/config").json()
 
     assert body["enabled"] is True
-    assert {p["persona"] for p in body["personas"]} == {"stella", "orion", "aurora", "nova"}
+    assert {p["persona"] for p in body["personas"]} == {
+        "stella",
+        "orion",
+        "aurora",
+        "nova",
+        "everyone",
+    }
     assert body["languages"] == ["en", "es", "fr"]
     assert body["limits"]["max_duration_seconds"] == settings.max_duration_seconds
     assert body["limits"]["max_file_size_bytes"] == settings.max_upload_bytes

@@ -13,7 +13,7 @@ from app.schemas.directives import UIDirective
 # ── the four closed vocabularies identity is drawn from ──
 # Literal rather than str, so an out-of-set value is a type error and not a runtime surprise.
 
-Persona = Literal["stella", "orion", "aurora", "nova"]
+Persona = Literal["stella", "orion", "aurora", "nova", "everyone"]
 AgeBand = Literal["5-8", "9-12", "13-15", "16-18", "adult"]
 AccountStatus = Literal["prospect", "applicant", "beneficiary", "guardian"]
 Locale = Literal["en", "es", "fr"]
@@ -159,6 +159,12 @@ class AspireState(TypedDict, total=False):
     quick_replies: list[str]
     #: Whether the client should speak this turn.
     speak: bool
+    #: The reader has the "Explain it simply" control on for this turn.
+    #:
+    #: Per-turn, not per-session: it is rewritten by `hydrate` from the request
+    #: body every turn, so switching it off takes effect on the next answer
+    #: rather than persisting in the checkpoint.
+    simple_mode: bool
 
     # ── safety bookkeeping: flags raised by `safety_in` and read by the nodes after it ──
     safety_flags: dict[str, Any]

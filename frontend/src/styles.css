@@ -5908,3 +5908,392 @@ body {
 		animation-duration: 1ms !important;
 	}
 }
+
+/* ── How to use ASPIRE AI ─────────────────────────────────────────────────── */
+/* Sits between the history and the account block, outside `rail__body`, so a
+   long conversation list cannot scroll it out of reach. Shaped like `btn-new`
+   without its fill: the primary action in the rail stays the primary one. */
+
+.rail__help {
+	flex-shrink: 0;
+	padding: 0 18px 10px;
+}
+
+.btn-help {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: var(--rail-open);
+	max-width: 236px;
+	min-height: 44px;
+	padding: 0 12px;
+	overflow: hidden;
+	border: 1px solid var(--control-line);
+	border-radius: 16px;
+	background: transparent;
+	color: var(--slate);
+	font: inherit;
+	font-size: 0.875rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		color var(--swift),
+		max-width 480ms var(--ease);
+}
+
+.app[data-rail="collapsed"] .btn-help {
+	max-width: 44px;
+}
+
+.btn-help:hover {
+	background: var(--wash-6);
+	border-color: var(--plum-light);
+	color: var(--plum);
+}
+
+.btn-help__glyph {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	flex-shrink: 0;
+}
+
+.help {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+}
+
+.help__scrim {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	border: none;
+	background: rgb(30 10 55 / 0.38);
+	backdrop-filter: blur(2px);
+	animation: fade-in 200ms var(--ease) both;
+	cursor: pointer;
+}
+
+.help__panel {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: min(680px, 100%);
+	max-height: min(760px, calc(100dvh - 48px));
+	border: 1px solid var(--wash-12);
+	border-radius: 22px;
+	background: #fff;
+	box-shadow:
+		0 24px 60px -12px rgb(30 10 55 / 0.45),
+		0 2px 6px rgb(53 29 90 / 0.06);
+	animation: rise 240ms var(--ease) both;
+}
+
+.help__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-shrink: 0;
+	padding: 20px 22px 14px;
+	border-bottom: 1px solid var(--hairline);
+}
+
+.help__title {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--ink);
+}
+
+.help__body {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 18px 22px 24px;
+	color: var(--prose);
+	font-size: 0.9375rem;
+	line-height: 1.62;
+}
+
+.help__lede {
+	margin: 0 0 4px;
+	color: var(--ink);
+	font-size: 1rem;
+}
+
+.help__section {
+	margin-top: 22px;
+}
+
+.help__heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 6px;
+	font-size: 0.9375rem;
+	font-weight: 700;
+	color: var(--plum);
+}
+
+.help__heading-glyph {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--wash-8);
+	color: var(--plum);
+}
+
+.help__section p {
+	margin: 0 0 8px;
+}
+
+.help__list {
+	margin: 0 0 8px;
+	padding-left: 20px;
+}
+
+.help__list li {
+	margin-bottom: 6px;
+}
+
+.help__muted {
+	color: var(--quiet);
+}
+
+.help__note {
+	margin-top: 8px;
+	padding: 10px 12px;
+	border-left: 3px solid var(--wash-30);
+	border-radius: 0 10px 10px 0;
+	background: var(--wash-3);
+	color: var(--slate);
+	font-size: 0.875rem;
+}
+
+.help__can,
+.help__cannot {
+	margin-top: 10px !important;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+/* Full-height sheet on a phone, matching the rail drawer's breakpoint. */
+@media (max-width: 860px) {
+	.help {
+		padding: 0;
+		align-items: flex-end;
+	}
+
+	.help__panel {
+		width: 100%;
+		max-height: 92dvh;
+		border-radius: 22px 22px 0 0;
+		animation: sheet-up 260ms var(--ease) both;
+	}
+
+	.help__body {
+		padding-bottom: max(24px, env(safe-area-inset-bottom));
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.help__panel,
+	.help__scrim {
+		animation-duration: 1ms;
+	}
+}
+
+/* ── First visit: the opening, then "who is here?" ────────────────────────── */
+/* Both phases sit above everything and neither blocks the app underneath from
+   having already rendered — the assistant is usable the moment this clears. */
+
+.intro {
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
+	padding: 24px;
+	background: linear-gradient(160deg, var(--plum-deep), var(--plum));
+	animation: fade-in 240ms var(--ease) both;
+}
+
+.intro__mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 96px;
+	height: 96px;
+	border-radius: 999px;
+	background: rgb(255 255 255 / 0.1);
+	animation: intro-mark 620ms var(--ease) both;
+}
+
+.intro__mark img {
+	width: 72px;
+	height: 72px;
+	object-fit: contain;
+}
+
+.intro__word {
+	margin: 0;
+	color: #fff;
+	font-family: var(--font-display);
+	font-size: clamp(1.5rem, 4vw, 2.25rem);
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	animation: intro-word 560ms var(--ease) 220ms both;
+}
+
+@keyframes intro-mark {
+	from {
+		opacity: 0;
+		transform: scale(0.86);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes intro-word {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* The question. A scrim rather than the full brand wash: the app behind it is
+   the thing being introduced, and hiding it entirely makes this feel like a gate. */
+.intro--ask {
+	background: rgb(30 10 55 / 0.5);
+	backdrop-filter: blur(3px);
+	justify-content: center;
+}
+
+.intro__panel {
+	width: min(560px, 100%);
+	max-height: calc(100dvh - 48px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 26px 24px 20px;
+	border: 1px solid var(--wash-12);
+	border-radius: 22px;
+	background: #fff;
+	box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
+	animation: rise 260ms var(--ease) both;
+}
+
+.intro__title {
+	margin: 0 0 6px;
+	font-size: 1.25rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--ink);
+}
+
+.intro__sub {
+	margin: 0 0 18px;
+	color: var(--slate);
+	font-size: 0.9375rem;
+	line-height: 1.55;
+}
+
+.intro__options {
+	display: grid;
+	gap: 8px;
+}
+
+/* 64px minimum: the youngest readers this is written for are five. */
+.intro__option {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 2px 12px;
+	min-height: 64px;
+	padding: 12px 14px;
+	border: 1px solid var(--control-line);
+	border-radius: 14px;
+	background: #fff;
+	text-align: left;
+	font: inherit;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		transform var(--swift);
+}
+
+.intro__option:hover {
+	background: var(--wash-3);
+	border-color: var(--plum-light);
+	transform: translateY(-1px);
+}
+
+.intro__option-name {
+	font-size: 1rem;
+	font-weight: 700;
+	color: var(--ink);
+}
+
+.intro__option-audience {
+	grid-column: 2;
+	grid-row: 1;
+	align-self: center;
+	color: var(--quiet);
+	font-size: 0.8125rem;
+}
+
+.intro__option-blurb {
+	grid-column: 1 / -1;
+	color: var(--slate);
+	font-size: 0.875rem;
+	line-height: 1.45;
+}
+
+.intro__skip {
+	display: block;
+	width: 100%;
+	margin-top: 14px;
+	padding: 10px;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--quiet);
+	font: inherit;
+	font-size: 0.875rem;
+	cursor: pointer;
+}
+
+.intro__skip:hover {
+	background: var(--wash-3);
+	color: var(--slate);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.intro,
+	.intro__mark,
+	.intro__word,
+	.intro__panel {
+		animation-duration: 1ms !important;
+	}
+}

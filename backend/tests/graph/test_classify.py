@@ -329,3 +329,62 @@ async def test_routing_accuracy_against_the_labelled_set(capsys):
             print(f"  miss  {line}")
 
     assert accuracy > ACCURACY_TARGET, f"{accuracy:.1%} is below {ACCURACY_TARGET:.0%}"
+
+
+class TestTheDescriptionsAreTheRoutingLogic:
+    """The router sees only these lines, so their wording is behaviour.
+
+    Two defects lived here. `qa_agent` advertised "how the programme works",
+    which is the tutor's job, so explanatory questions were pulled to the
+    fact-lookup agent. And two descriptions opened with "The same factual
+    questions" while the router is shown only the agents THIS reader may reach --
+    so for a child and for a signed-out visitor, "the same" referred to a line
+    that was not on the menu.
+    """
+
+    BAND_FILTERED = ("qa_agent_limited", "qa_agent_public")
+
+    def test_no_description_refers_to_a_line_that_may_not_be_shown(self):
+        for name, text in AGENT_DESCRIPTIONS.items():
+            lowered = text.lower()
+            assert not lowered.startswith("the same"), (
+                f"{name} opens with a back-reference; the menu is filtered per "
+                "reader, so the line it points at may not be present"
+            )
+            assert "as above" not in lowered, f"{name} refers to its neighbours"
+
+    @pytest.mark.parametrize("name", BAND_FILTERED)
+    def test_a_band_filtered_variant_lists_the_facts_itself(self, name):
+        """It has to stand alone: a child never sees `qa_agent` above it."""
+        text = AGENT_DESCRIPTIONS[name].lower()
+        assert "eligible" in text
+        assert "documents" in text
+
+    def test_the_fact_agents_hand_explanations_to_the_tutor(self):
+        for name in ("qa_agent", *self.BAND_FILTERED):
+            text = AGENT_DESCRIPTIONS[name].lower()
+            assert "how the programme works" not in text, (
+                f"{name} still advertises the tutor's job"
+            )
+            assert "explanations of how" in text or "belong to learn_agent" in text, (
+                f"{name} does not say where a 'how does it work' question goes"
+            )
+
+    def test_the_tutor_claims_how_and_why_explicitly(self):
+        text = AGENT_DESCRIPTIONS["learn_agent"].lower()
+        assert "how or why" in text
+        # Quoted phrasings are what the router matches a real message against.
+        assert "how does the money grow" in text
+        assert "compound interest" in text
+
+    def test_the_task_agents_were_left_alone(self):
+        """The sheet named six lines. These three were not among them."""
+        assert AGENT_DESCRIPTIONS["register_agent"].startswith(
+            "Filling in an ASPIRE application"
+        )
+        assert AGENT_DESCRIPTIONS["register_agent_step1"].startswith(
+            "Starting an application before signing in"
+        )
+        assert AGENT_DESCRIPTIONS["servicing_agent"].startswith(
+            "Something about an account that already exists"
+        )

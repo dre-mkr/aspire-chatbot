@@ -4,7 +4,14 @@ import { API_URL } from "../config";
 /** Every action is a tap away from the next; a slow one reads as broken. */
 const TIMEOUT_MS = 10_000;
 
-export type GamePersona = "stella" | "orion" | "aurora" | "nova";
+// Mirrors `PersonaId`. The engine refuses aurora and nova, which is why the
+// caller must send the real value rather than null: the refusal is the point.
+export type GamePersona =
+	| "stella"
+	| "orion"
+	| "aurora"
+	| "nova"
+	| "everyone";
 
 /** How an item is put to the player. */
 export type PromptKind = "scramble" | "statement";

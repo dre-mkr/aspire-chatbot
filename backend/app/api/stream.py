@@ -124,6 +124,9 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
     game_score = body.get("__game_result")
     resume = body.get("__upload_result")
     message = str(body.get("message") or "").strip()
+    # The reader's "Explain it simply" control. An answer-shaping request, so it
+    # travels in the body; `hydrate` puts the same value into graph state.
+    simple_mode = bool(body.get("simple_mode"))
     # A widget interaction, a game result and an upload resume are real turns with no prose.
     if not message and not interaction and not game_score and not resume:
         yield interceptor.error("empty_message", "There was nothing to answer.").encode()
@@ -161,6 +164,7 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
         persona=claims.persona,
         account_status=claims.account_status,
         age_band=claims.age_band,
+        simple_mode=simple_mode,
         owner_id=owner_id,
     )
 
@@ -173,6 +177,7 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
             persona=claims.persona,
             account_status=claims.account_status,
             age_band=claims.age_band,
+            simple_mode=simple_mode,
         )
         if cached is not None:
             logger.info("cache hit session=%s", thread_id)

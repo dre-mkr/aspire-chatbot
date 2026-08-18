@@ -337,7 +337,11 @@ def make_tutor(
 
         # A game IS the interactive thing this turn offers, so a widget beside
         # it would be two at once -- §4's "avoid overwhelming the learner".
-        game = _game_directive(move, concept, band) if move is Move.GAME else None
+        game = (
+            _game_directive(move, concept, band, context.persona)
+            if move is Move.GAME
+            else None
+        )
 
         # Created BEFORE the prose is awaited, which is the whole contract.
         widget_task = asyncio.create_task(
@@ -599,7 +603,7 @@ def _check_for_move(
 
 
 def _game_directive(
-    move: Move, concept: TeachingConcept | None, band: str
+    move: Move, concept: TeachingConcept | None, band: str, persona: str | None = None
 ) -> dict[str, Any] | None:
     """The game this turn offers, through the existing launcher, or None.
 
@@ -613,10 +617,10 @@ def _game_directive(
     try:
         from app.agents.learn.tools.games import available_for, launch_game
 
-        options = available_for(band)
+        options = available_for(band, persona)
         if not options:
             return None
-        return launch_game(options[-1], concept.id, age_band=band)
+        return launch_game(options[-1], concept.id, age_band=band, persona=persona)
     except Exception:
         logger.warning("Could not launch a game; serving the prose alone.", exc_info=True)
         return None

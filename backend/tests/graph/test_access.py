@@ -266,3 +266,77 @@ class TestAnUnprovenIdentityIsAVisitor:
 
     def test_the_visitor_row_does_not_depend_on_the_persona_the_row_derived(self):
         assert self._agents(persona="stella", age_band="5-8") == self._agents()
+
+
+class TestEveryoneNeverWidens:
+    """`everyone` is a voice, and a voice must not be a way to reach more.
+
+    It is the persona a reader gets by picking "Everyone" in the composer, which
+    is also the option a stranger reaches by editing a URL. So the property that
+    matters is not which agents it grants but that it grants nothing new: every
+    result is a set the caller's own band already had.
+    """
+
+    #: What the band's own default persona is granted, for comparison.
+    DEFAULT_FOR_BAND = {
+        "5-8": "stella",
+        "9-12": "stella",
+        "13-15": "orion",
+        "16-18": "orion",
+        "adult": "nova",
+    }
+
+    @pytest.mark.parametrize("band", ALL_BANDS)
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_it_matches_the_bands_own_default_persona(self, band, status):
+        assert allowed_agents("everyone", band, status, user_id=USER) == allowed_agents(
+            self.DEFAULT_FOR_BAND[band], band, status, user_id=USER
+        )
+
+    @pytest.mark.parametrize("band", ALL_BANDS)
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_it_is_never_denied_outright(self, band, status):
+        """Unlike stella and orion, it has no band of its own to fall outside of."""
+        assert not is_denied(allowed_agents("everyone", band, status, user_id=USER))
+
+    @pytest.mark.parametrize("band", ALL_BANDS)
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_it_never_reaches_registration(self, band, status):
+        """Opening an application on a child's behalf stays Aurora's alone."""
+        assert "register_agent" not in allowed_agents(
+            "everyone", band, status, user_id=USER
+        )
+
+    @pytest.mark.parametrize("band", ALL_BANDS)
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_a_child_band_keeps_the_band_filtered_corpus(self, band, status):
+        """Picking a general voice must not hand a nine-year-old the adult agent."""
+        agents = allowed_agents("everyone", band, status, user_id=USER)
+        if band in {"5-8", "9-12", "13-15"}:
+            assert "qa_agent" not in agents
+            assert "qa_agent_limited" in agents
+
+    #: The persona/band pairs an account can actually derive, from
+    #: `account.DEFAULT_PERSONA` and `account.ROLE_PERSONA`.
+    REAL_PAIRS = [
+        ("stella", "5-8"),
+        ("stella", "9-12"),
+        ("orion", "13-15"),
+        ("orion", "16-18"),
+        ("aurora", "adult"),
+        ("nova", "adult"),
+    ]
+
+    @pytest.mark.parametrize(("persona", "band"), REAL_PAIRS)
+    @pytest.mark.parametrize("status", ALL_STATUSES)
+    def test_it_is_grantable_from_every_account_that_can_exist(self, persona, band, status):
+        """`_narrowing` admits a requested persona only if it is a subset.
+
+        This is what makes "Everyone" selectable from any account rather than
+        silently refused for some of them. Only pairs an account can really
+        derive are checked: `aurora` at `5-8` is not a reachable state, and
+        asserting over the full cross product tests arithmetic, not the product.
+        """
+        theirs = set(allowed_agents("everyone", band, status, user_id=USER))
+        row = set(allowed_agents(persona, band, status, user_id=USER))
+        assert theirs <= row, f"everyone/{band} is not a subset of {persona}/{band}"

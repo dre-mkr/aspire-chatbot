@@ -414,13 +414,24 @@ def test_the_eccb_set_holds_sixteen_of_the_eighteen(settings: GameSettings):
     assert len(eccb.entries) == 16, "expected 18 less the two malformed items"
 
 
-def test_the_playable_sets_are_not_drafts(settings: GameSettings):
-    """The design-project content is real and servable; the ECCB bank is not."""
+def test_the_eccb_bank_stays_a_draft(settings: GameSettings):
+    """The one that matters: `truefalse-01` still carries TODO explanations.
+
+    This used to be written as an exact inventory of playable set ids, which
+    made adding any authored set fail a test whose real subject is the ECCB
+    bank. Flipping that file to `draft: false` must stay a deliberate act; a new
+    sibling set must not.
+    """
+    eccb = next(s for s in shipped_sets(settings) if s.id == "truefalse-01")
+    assert eccb.draft is True
+
+
+def test_every_playable_set_is_authored_content(settings: GameSettings):
     playable = [s for s in shipped_sets(settings) if not s.draft]
-    assert {s.id for s in playable} == {
-        "truefalse-orion-01",
-        "truefalse-stella-01",
-    }
+    assert playable, "nothing is servable at all"
+    assert "truefalse-01" not in {s.id for s in playable}
+    for game_set in playable:
+        assert game_set.source, f"{game_set.id}: no provenance"
 
 
 def test_every_shipped_item_has_a_verdict_and_an_explanation(settings: GameSettings):

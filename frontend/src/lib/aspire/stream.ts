@@ -52,6 +52,7 @@ export async function streamAspire(
 		threadId,
 		persona,
 		language = "en",
+		simpleMode,
 		interaction,
 		uploadResult,
 		gameResult,
@@ -108,9 +109,20 @@ export async function streamAspire(
 			? {
 					body: {
 						message,
+						...(simpleMode ? { simple_mode: true } : {}),
 						__upload_result: uploadResult as unknown as Record<string, unknown>,
 					},
 				}
+			: {}),
+		// "Explain it simply" shapes an ANSWER, so it rides the chat path only.
+		//
+		// This was the one place the flag was lost: every layer above carried it
+		// correctly and the destructure above dropped it, so the toggle showed a
+		// pressed state and changed nothing on the wire. The widget-interaction
+		// and game-result branches post typed bodies to their own endpoints and
+		// must not gain a key those schemas do not declare.
+		...(simpleMode && !interaction && !gameResult && !uploadResult
+			? { body: { message, simple_mode: true } }
 			: {}),
 		onToken: (text) => onDelta?.(text),
 		onDirective: (directive) => {

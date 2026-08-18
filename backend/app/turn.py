@@ -30,6 +30,8 @@ class TurnRecord:
     account_status: str | None = None
     #: Part of the response-cache key.
     age_band: str | None = None
+    #: Also part of the cache key: a simplified answer is different text.
+    simple_mode: bool = False
     owner_id: uuid_module.UUID | None = None
     #: `"game"`, `"eligibility"`, or None. Decides the history line.
     card: str | None = None
@@ -248,6 +250,7 @@ async def cached_answer(
     persona: str | None,
     account_status: str | None,
     age_band: str | None = None,
+    simple_mode: bool = False,
 ) -> CachedTurn | None:
     """Layer 1: this exact question, from this exact audience, asked before."""
     from app import cache as response_cache
@@ -261,6 +264,7 @@ async def cached_answer(
             persona=persona,
             account_status=account_status,
             age_band=age_band,
+            simple_mode=simple_mode,
         )
     except Exception:
         logger.warning("The response cache could not be read.", exc_info=True)
@@ -295,6 +299,7 @@ async def cache_answer(record: TurnRecord) -> None:
             persona=record.persona,
             account_status=record.account_status,
             age_band=record.age_band,
+            simple_mode=record.simple_mode,
         )
     except Exception:
         logger.warning("The response cache could not be written.", exc_info=True)

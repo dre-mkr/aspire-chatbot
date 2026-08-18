@@ -304,8 +304,8 @@ def make_rerank(score=None):
 
 # ── generate ─────────────────────────────────────────────────────────────────
 
-#: The QA agent's role card.
-QA_AGENT_ROLE = """YOUR JOB THIS TURN
+#: The half of the role card that never varies. Grounding is not a style choice.
+_QA_ROLE_HEAD = """YOUR JOB THIS TURN
 Answer a factual question about the ASPIRE programme from the knowledge-base
 extracts supplied with the question.
 
@@ -317,7 +317,40 @@ GROUNDING (non-negotiable)
 - Cite the extracts you used by their [ASP-xxx] id, inline, right after the
   fact each one supports. An answer with no citation will not be served.
 
-DEPTH AND COMPLETENESS
+"""
+
+#: How much of what was retrieved actually belongs in the answer, per persona.
+#:
+#: This block used to be one persona-blind instruction telling every reader's
+#: answer to be thorough, use every bearing extract and structure a longer
+#: answer. It is the strongest length instruction in the QA prompt, so it was
+#: arguing with Stella's "about eight words" from a stronger position and
+#: winning: the persona cards differed and the answers did not. The grounding
+#: rules above are identical for everyone; only the shape below moves.
+_QA_DEPTH: dict[str, str] = {
+    "stella": """DEPTH AND COMPLETENESS
+- Answer the one thing she asked. Not the conditions, not the exceptions, not
+  what happens if. Those are true and they are not for her.
+- Two or three short sentences. No bullets and no headings -- a list is a form,
+  and she is having a conversation.
+- If a money word is unavoidable, say what it means in the same breath.
+- If the honest answer needs a grown-up, say so kindly and stop.""",
+    "orion": """DEPTH AND COMPLETENESS
+- Give the direct answer first, then only the conditions that would actually
+  change what he does. Leave the rest out.
+- If the question is how or why something works, join the extracts into one
+  chain of cause and effect and show the arithmetic once. Three cited facts
+  sitting next to each other is not an answer to a "how" question.
+- One worked example in EC$ where the extracts support it.
+- Four or five sentences. Bullets only for a genuine list of steps.""",
+    "aurora": """DEPTH AND COMPLETENESS
+- Lead with the answer she can act on. Then the documents, amounts, deadlines
+  and next step the extracts support -- and stop.
+- Where the answer IS a list of documents or steps, use `-` bullets and let the
+  list be the whole answer.
+- Do not explain a money concept unless she asked how something works.
+- Name the exception only when it could apply to her.""",
+    "nova": """DEPTH AND COMPLETENESS
 - Be thorough. Use every extract that bears on the question: give the direct
   answer first, then the conditions, exceptions, amounts, deadlines and next
   steps the extracts support.
@@ -326,8 +359,47 @@ DEPTH AND COMPLETENESS
 - Explain any programme or money term the moment you use it.
 - Structure a longer answer: a direct opening sentence, short paragraphs, and
   `-` bullets for lists of documents, steps or rules.
+- Where a rule has an exception, state the exception -- this reader will be
+  asked about it.
 - Close with the one thing the reader should do next, when the extracts name
-  one. Never pad; every sentence must carry information from an extract."""
+  one. Never pad; every sentence must carry information from an extract.""",
+    "everyone": """DEPTH AND COMPLETENESS
+- Give the direct answer in the first sentence, then the one or two details that
+  change what the reader does next.
+- When several extracts bear on the question, join them into one answer rather
+  than listing them separately.
+- Explain any programme or money term in half a clause the first time you use it.
+- Two to four sentences. `-` bullets only for a real list of documents or steps.
+- Close with the next step when the extracts name one.""",
+}
+
+#: Which block an unrecognised persona gets: the fullest one, which is what this
+#: card said for every reader before it was split. Keeps the constant below
+#: byte-identical to what shipped.
+_QA_DEPTH_DEFAULT = "nova"
+
+
+def qa_agent_role(persona: str | None) -> str:
+    """The QA role card for this reader: fixed grounding, persona-shaped depth."""
+    key = (persona or "").strip().lower()
+    return _QA_ROLE_HEAD + _QA_DEPTH.get(key, _QA_DEPTH[_QA_DEPTH_DEFAULT])
+
+
+#: The QA agent's role card, for callers that do not know the persona.
+QA_AGENT_ROLE = qa_agent_role(None)
+
+#: What "Explain it simply" adds to a FACTUAL turn, on top of the shared text.
+#:
+#: The shared instruction protects the substance; this protects the two things
+#: that are specific to a grounded answer and that a simplifying pass is most
+#: likely to throw away. `ground_check` declines an answer with no citation, so
+#: dropping the markers does not produce a simpler answer -- it produces no
+#: answer at all.
+_SIMPLE_MODE_QA_EXTRA = (
+    " Keep every [ASP-xxx] citation marker exactly where it belongs, and keep "
+    "every figure, date and amount as written. Simplifying means shorter "
+    "sentences and plainer words, not fewer facts and not rounder numbers."
+)
 
 #: Legacy single-string prompt, kept for callers that build their own messages.
 GENERATE_SYSTEM = """You answer questions about the ASPIRE savings programme.
@@ -374,6 +446,15 @@ def make_generate(invoke=None):
     return generate
 
 
+def _simple_mode_instruction(state: AspireState) -> str | None:
+    """The extra system line for a turn the reader asked to have simplified."""
+    if not state.get("simple_mode"):
+        return None
+    from app.prompts import SIMPLE_MODE_INSTRUCTIONS
+
+    return f"{SIMPLE_MODE_INSTRUCTIONS.strip()}{_SIMPLE_MODE_QA_EXTRA}"
+
+
 def _generation_messages(
     state: AspireState, question: str, chunks: list[KBChunk]
 ) -> list[Any]:
@@ -391,9 +472,10 @@ def _generation_messages(
                 turns = turns[:-1]
             return build_messages(
                 context=context.model_copy(update={"recent_turns": turns}),
-                agent_role=QA_AGENT_ROLE,
+                agent_role=qa_agent_role(context.persona),
                 user_text=question,
                 retrieved=chunks,
+                extra_instruction=_simple_mode_instruction(state),
             )
     except Exception:
         # A broken context must not cost the answer; fall through to the plain prompt.
@@ -405,6 +487,11 @@ def _generation_messages(
         f"Reader: age band {state.get('age_band')}, persona "
         f"{state.get('persona')}, language {state.get('locale')}."
     )
+    # The fallback is reached when the layered prompt could not be built, which
+    # is no reason for the reader's own request to be the thing that gets lost.
+    simple = _simple_mode_instruction(state)
+    if simple:
+        audience = f"{audience}\n{simple}"
     return [
         SystemMessage(content=f"{system}\n{audience}"),
         HumanMessage(content=question),
@@ -846,10 +933,18 @@ _SMALL_TALK_RE: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
 
 def _small_talk_reply(state: AspireState) -> Command | None:
     """A conversational reply for a conversational turn, or None."""
-    text = (_latest_user_text(state) or "").strip()
+    raw = (_latest_user_text(state) or "").strip()
     # A length guard on top of the anchoring: no phrase in the closed list comes near 64.
-    if not text or len(text) > 64:
+    if not raw or len(raw) > 64:
         return None
+
+    # Matched against the tidied form, so "helo", "hiiiiii", "yo" and "thanks!!
+    # lol" reach the same reply "hello" does. The list is anchored, so a real
+    # question that merely opens with a greeting -- "yo what is aspire" -- still
+    # misses it and goes to the router, which is the intended behaviour.
+    from app.casual import casual_fold
+
+    text = casual_fold(raw) or raw
 
     for kind, pattern in _SMALL_TALK_RE:
         if pattern.match(text):

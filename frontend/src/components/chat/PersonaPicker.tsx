@@ -178,24 +178,6 @@ export function PersonaPicker({
 								</button>
 							))}
 
-							{/* "Not chosen" is a real state and stays reachable. */}
-							<button
-								type="button"
-								role="menuitemradio"
-								aria-checked={persona === null}
-								className="persona__option persona__option--none"
-								onClick={() => choose(null)}
-							>
-								<span className="persona__tick" aria-hidden="true">
-									{persona === null ? <CheckIcon /> : null}
-								</span>
-								<span className="persona__text">
-									<span className="persona__label">Everyone</span>
-									<span className="persona__blurb">
-										No particular audience. The default.
-									</span>
-								</span>
-							</button>
 						</div>,
 						document.body,
 					)
