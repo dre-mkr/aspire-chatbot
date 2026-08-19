@@ -3,10 +3,10 @@ import { createPortal } from "react-dom";
 import { ChevronRightIcon } from "#/components/icons";
 import type { PersonaId } from "#/lib/aspire/personas";
 import {
-	DestinyMark,
+	CloudMark,
 	GeneralMark,
-	ProsperMark,
-	SkyMark,
+	RocketMark,
+	ScholarMark,
 	StarMark,
 } from "./GuideMascots";
 
@@ -21,30 +21,30 @@ const GUIDES: ReadonlyArray<{
 	{
 		id: "stella",
 		who: "Ages 5–12",
-		name: "Sky",
+		name: "Skai",
 		blurb: "Simple words, shorter answers and easy explanations.",
-		Mark: SkyMark,
+		Mark: CloudMark,
 	},
 	{
 		id: "orion",
 		who: "Ages 13–18",
-		name: "Prosper",
+		name: "Dion",
 		blurb: "Fuller explanations, games, challenges and activities.",
-		Mark: ProsperMark,
+		Mark: RocketMark,
 	},
 	{
 		id: "aurora",
 		who: "Parent or guardian",
-		name: "Destiny",
+		name: "Imani",
 		blurb: "Practical answers about the programme and your child's learning.",
-		Mark: DestinyMark,
+		Mark: StarMark,
 	},
 	{
 		id: "nova",
 		who: "Teacher or educator",
-		name: "Star",
+		name: "Azuri",
 		blurb: "Clear explanations and teaching support you can use with learners.",
-		Mark: StarMark,
+		Mark: ScholarMark,
 	},
 ];
 
@@ -73,9 +73,9 @@ export function GuideChooser({
 	const panelRef = useRef<HTMLDivElement>(null);
 
 	// Focus the panel, NOT the first guide. Focusing a button paints its ring on
-	// arrival, and a ring around Sky reads as "Sky is the recommended one" --
-	// which is exactly the thing a chooser with no default must not say. From
-	// here Tab still reaches the guides in order.
+	// arrival, and a ring around the first card reads as "this one is the
+	// recommended one" -- exactly the thing a chooser with no default must not
+	// say. From here Tab still reaches the guides in order.
 	useEffect(() => {
 		panelRef.current?.focus();
 	}, []);

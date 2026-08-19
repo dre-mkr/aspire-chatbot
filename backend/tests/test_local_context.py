@@ -54,7 +54,10 @@ CURRICULUM: list[Path] = sorted(Path("app/curriculum/content").rglob("*.y*ml"))
 #: A rename that leaves a card saying the old name is silent: the loader
 #: substitutes `{name}` wherever it appears and simply does not notice the
 #: literal beside it. Add to this list whenever `NAMES` changes.
-RETIRED_NAMES: tuple[str, ...] = ("Stella", "Orion", "Aurora", "Nova")
+RETIRED_NAMES: tuple[str, ...] = (
+    "Stella", "Orion", "Aurora", "Nova",
+    "Sky", "Prosper", "Destiny", "Star",
+)
 
 #: Where a card stops describing itself and starts naming what it refuses.
 #:
@@ -239,8 +242,10 @@ class TestTheNameIsOneLine:
         """
         text = _read(path)
         assert PLACEHOLDER in text
+        # Whole words. `Star` is a substring of `Starting`, and a retired label
+        # that fails the build on ordinary prose is a gate people delete.
         for label in (*NAMES.values(), *RETIRED_NAMES):
-            assert label not in text
+            assert not re.search(rf"\b{re.escape(label)}\b", text)
 
     def test_the_label_is_filled_in_when_the_card_is_read(self):
         assert NAMES["stella"] in persona_card("stella", "5-8")

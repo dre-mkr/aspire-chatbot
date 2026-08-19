@@ -51,8 +51,8 @@ interface MarkProps {
 	className?: string;
 }
 
-/** Sky -- ages 5 to 12. A cloud, because the youngest band reads pictures first. */
-export function SkyMark({ className }: MarkProps) {
+/** Ages 5 to 12. A cloud, because the youngest band reads pictures first. */
+export function CloudMark({ className }: MarkProps) {
 	return (
 		<svg
 			viewBox="0 0 56 56"
@@ -80,8 +80,8 @@ export function SkyMark({ className }: MarkProps) {
 	);
 }
 
-/** Prosper -- ages 13 to 18. A rocket: the band that is going somewhere. */
-export function ProsperMark({ className }: MarkProps) {
+/** Ages 13 to 18. A rocket: the band that is going somewhere. */
+export function RocketMark({ className }: MarkProps) {
 	return (
 		<svg
 			viewBox="0 0 56 56"
@@ -121,8 +121,8 @@ export function ProsperMark({ className }: MarkProps) {
 	);
 }
 
-/** Destiny -- a parent or guardian. A star, warm and steady. */
-export function DestinyMark({ className }: MarkProps) {
+/** A parent or guardian. A star, warm and steady. */
+export function StarMark({ className }: MarkProps) {
 	return (
 		<svg
 			viewBox="0 0 56 56"
@@ -150,8 +150,8 @@ export function DestinyMark({ className }: MarkProps) {
 	);
 }
 
-/** Star -- a teacher or educator. The same star, with the glasses. */
-export function StarMark({ className }: MarkProps) {
+/** A teacher or educator. The same star, with the glasses. */
+export function ScholarMark({ className }: MarkProps) {
 	return (
 		<svg
 			viewBox="0 0 56 56"

@@ -18,10 +18,10 @@ from __future__ import annotations
 from typing import Final
 
 NAMES: Final[dict[str, str]] = {
-    "stella": "Sky",  # <- change this line, and only this line
-    "orion": "Prosper",
-    "aurora": "Destiny",
-    "nova": "Star",
+    "stella": "Skai",  # <- change this line, and only this line
+    "orion": "Dion",
+    "aurora": "Imani",
+    "nova": "Azuri",
 }
 
 #: What a card's `{name}` placeholder is written as.
