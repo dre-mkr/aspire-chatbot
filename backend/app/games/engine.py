@@ -33,7 +33,9 @@ from app.games.models import (
     SubmitResult,
     Summary,
 )
-from app.games.protocol import Game
+from app.games.hangman import get_hangman
+from app.games.millionaire import get_millionaire
+from app.games.protocol import Game, GameWithMoves
 from app.games.scramble import get_word_scramble
 from app.games.store import SessionStore, get_store
 from app.games.truefalse import get_true_false
@@ -107,7 +109,15 @@ class GameEngine:
         self._settings = settings or get_game_settings()
         self._games = {
             g.game_type: g
-            for g in (games or [get_word_scramble(), get_true_false()])
+            for g in (
+                games
+                or [
+                    get_word_scramble(),
+                    get_true_false(),
+                    get_millionaire(),
+                    get_hangman(),
+                ]
+            )
         }
         self._store = store or get_store()
         self._sink = sink or get_sink()
@@ -148,13 +158,27 @@ class GameEngine:
             raise GameNotRunning("This game has already finished.")
         return game.entry(entry_id)
 
+    def _visible_prompt(
+        self, game: Game, entry: Entry, session: GameSession
+    ) -> Prompt:
+        """The item as it stands NOW, with any moves already made shown.
+
+        `Game.prompt` draws the item fresh, which for a game with moves is only
+        the opening position -- a hangman board halfway through a word is not
+        the board it started as. Redrawn from the session's own progress, and
+        still built forward from what has been earned, so it cannot contain a
+        letter the player has not found.
+        """
+        prompt = game.prompt(entry, session.index + 1, len(session.order))
+        if isinstance(game, GameWithMoves):
+            return replace(prompt, text=game.board(entry, session.progress))
+        return prompt
+
     def _prompt_for_current(self, session: GameSession) -> Prompt | None:
         if session.finished:
             return None
         game = self._game(session.game_type)
-        return game.prompt(
-            self._current(session), session.index + 1, len(session.order)
-        )
+        return self._visible_prompt(game, self._current(session), session)
 
     def _closing(self, session: GameSession) -> Closing | None:
         """The set's own last word, looked up when the round ends."""
@@ -316,6 +340,15 @@ class GameEngine:
         attempts_taken = session.attempts
         hints_taken = session.hints_used.get(entry.id, 0)
 
+        # A game whose submissions are MOVES gets to say when the item is
+        # actually finished. Without this a right letter ends the word, because
+        # the rule below is "a correct answer resolves the item" -- true of a
+        # scramble and a true/false, and not true of hangman.
+        if isinstance(game, GameWithMoves):
+            if not game.record(entry, answer, session.progress):
+                self._store.put(session)
+                return SubmitResult(correct=bool(verdict), attempts=attempts_taken)
+
         if not verdict and not game.advance_on_wrong:
             self._store.put(session)
             # No echo of the answer and no "close!" — a near-miss signal narrows the item.
@@ -448,7 +481,7 @@ class GameEngine:
 
         game = self._game(session.game_type)
         entry = self._current(session)
-        prompt = game.prompt(entry, session.index + 1, len(session.order))
+        prompt = self._visible_prompt(game, entry, session)
         hints = (
             tuple(
                 game.hint(entry, level)

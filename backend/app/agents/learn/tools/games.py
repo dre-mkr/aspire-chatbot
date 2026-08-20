@@ -14,12 +14,22 @@ from app.agents.learn.state import band_of
 
 logger = logging.getLogger(__name__)
 
-GameName = Literal["scramble", "true_false", "millionaire"]
+GameName = Literal["scramble", "true_false", "millionaire", "hangman"]
 
 #: The youngest band each game is offered to.
+#:
+#: A game absent from this table is never offered by `available_for`, which is
+#: how `millionaire` came to be a name in four type unions that nothing could
+#: reach. Adding a game means adding a row here.
 BAND_MIN: dict[str, str] = {
     "true_false": "5-8",
     "scramble": "9-12",
+    # Reading a four-line question and holding four options in mind at once is
+    # the barrier here, not the money in them.
+    "millionaire": "9-12",
+    # Spelling is the whole game, so the youngest band plays it -- with its own
+    # word bank of four-letter words rather than a shortened version of Zion's.
+    "hangman": "5-8",
 }
 
 #: The game module's own identifiers, which differ from the directive's names.
@@ -27,6 +37,7 @@ ENGINE_NAME: dict[str, str] = {
     "scramble": "word_scramble",
     "true_false": "true_false",
     "millionaire": "millionaire",
+    "hangman": "hangman",
 }
 
 

@@ -10,6 +10,7 @@ from typing import Any
 from langchain_core.messages import AIMessage
 
 from app import timing
+from app.graph.nodes.safety_in import latest_user_text
 from app.graph.state import AspireState, band_index
 from app.safety import pii, vocab
 from app.widgets import sentinel
@@ -55,9 +56,32 @@ QA_WORD_CAPS: dict[str, int | None] = {
 }
 
 
-def cap_for(band: str, agent: str | None) -> int | None:
-    """The word ceiling for this turn: the lesson cap, the QA cap, or the plain chat cap."""
-    if agent in LEARNING_AGENTS:
+#: The ceiling for a turn that is TELLING A STORY.
+#:
+#: A story needs its own table because none of the others fit: a five-year-old's
+#: plain-chat cap is 35 words, which truncates a story mid-sentence, and
+#: `truncate_at_sentence` does it silently -- the build passes, the tests pass,
+#: and the reader gets half a story. That is the likeliest way this feature
+#: could have shipped broken.
+#:
+#: Still capped, and not generously. A story a child has to scroll is not a
+#: story they will finish, and the per-persona shapes in `qa/nodes.py` already
+#: ask for five or six sentences at the youngest band; this is the backstop for
+#: when the model ignores them.
+STORY_WORD_CAPS: dict[str, int | None] = {
+    "5-8": 160,
+    "9-12": 240,
+    "13-15": 340,
+    "16-18": 420,
+    "adult": 450,
+}
+
+
+def cap_for(band: str, agent: str | None, *, story: bool = False) -> int | None:
+    """The word ceiling for this turn: story, lesson, QA, or plain chat."""
+    if story:
+        table = STORY_WORD_CAPS
+    elif agent in LEARNING_AGENTS:
         table = LESSON_WORD_CAPS
     elif agent in QA_AGENTS:
         table = QA_WORD_CAPS
@@ -93,9 +117,11 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-def over_cap(text: str, band: str, agent: str | None = None) -> bool:
+def over_cap(
+    text: str, band: str, agent: str | None = None, *, story: bool = False
+) -> bool:
     """Whether this reply exceeds the ceiling for its band and its kind of turn."""
-    cap = cap_for(band, agent)
+    cap = cap_for(band, agent, story=story)
     return cap is not None and word_count(text) > cap
 
 
@@ -118,9 +144,11 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
     return budget.rstrip(",;:") + "…"
 
 
-def shorten_instruction(band: str, current: int, agent: str | None = None) -> str:
+def shorten_instruction(
+    band: str, current: int, agent: str | None = None, *, story: bool = False
+) -> str:
     """The re-prompt for gate (a)."""
-    cap = cap_for(band, agent)
+    cap = cap_for(band, agent, story=story)
     return (
         f"That reply is {current} words. A learner in the {band} band can take "
         f"at most {cap}. Say the same thing in {cap} words or fewer. Keep the "
@@ -283,13 +311,19 @@ def make_safety_out(reprompt: Reprompt | None = None):
             report["widgets_carried"] = len(widgets)
 
         # ── (a) length ──────────────────────────────────────────────────────
-        if over_cap(text, band, agent):
+        # A story is a different KIND of turn, so it is measured against a
+        # different table. Without this the youngest band's 35-word chat cap
+        # cuts every story mid-sentence, silently.
+        story = bool(state.get("story_topic"))
+        if over_cap(text, band, agent, story=story):
             report["length_violation"] = word_count(text)
             if reprompt is not None:
                 timing.note_reprompt("length")
-                text = await reprompt(shorten_instruction(band, word_count(text), agent), text)
-            if over_cap(text, band, agent):
-                cap = cap_for(band, agent)
+                text = await reprompt(
+                    shorten_instruction(band, word_count(text), agent, story=story), text
+                )
+            if over_cap(text, band, agent, story=story):
+                cap = cap_for(band, agent, story=story)
                 assert cap is not None  # `over_cap` is False when the cap is None
                 logger.info(
                     "Truncating a %s-band reply at the last complete sentence "
@@ -403,6 +437,35 @@ def make_safety_out(reprompt: Reprompt | None = None):
             text = original if text == prose_in else sentinel.reattach(text, widgets)
 
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
+
+        # The video offer, last, and here rather than in any one agent: this is
+        # where every turn converges, and the client's own example ("what does
+        # scarcity mean?") is answered by the tutor rather than by QA. Anything
+        # hung off a single agent works for some questions and silently does not
+        # for others.
+        #
+        # It cannot change what was said -- the prose is already capped and
+        # stripped above -- and it takes a chip slot rather than adding a fifth,
+        # because four is the wire cap and an offer appended fifth is an offer
+        # silently dropped.
+        from app.videos.offer import offer_for
+
+        offer = offer_for(state, latest_user_text(state))
+        if offer is not None:
+            video_id, chip = offer
+            update["offered_video"] = video_id
+            # Remembered for the rest of the conversation, so the same film is
+            # never offered twice.
+            update["videos_offered"] = [
+                *(state.get("videos_offered") or []),
+                video_id,
+            ]
+            update["quick_replies"] = [chip, *replies][:3]
+        elif state.get("offered_video") and not flags.get("card"):
+            # An offer the reader answered with something else has expired. A
+            # "yes" two turns later belongs to whatever was asked in between.
+            update["offered_video"] = None
+
         if text != original:
             # Same message id, so `add_messages` replaces the message instead of appending one.
             update["messages"] = [AIMessage(content=text, id=getattr(last, "id", None))]

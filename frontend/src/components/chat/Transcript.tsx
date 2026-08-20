@@ -48,6 +48,12 @@ const TrueFalse = lazy(() =>
 const WordScramble = lazy(() =>
 	import("./WordScramble").then((m) => ({ default: m.WordScramble })),
 );
+const Millionaire = lazy(() =>
+	import("./Millionaire").then((m) => ({ default: m.Millionaire })),
+);
+const Hangman = lazy(() =>
+	import("./Hangman").then((m) => ({ default: m.Hangman })),
+);
 
 /** Held space, not a spinner. */
 function CardLoading() {
@@ -92,6 +98,8 @@ interface TranscriptProps {
 	onAsk: (question: string) => void;
 	playback: Playback;
 	game: ActiveGame | null;
+	/** The reader's sound preference, from the voice and sound menu. */
+	gameSound?: boolean;
 	eligibility: ActiveEligibility | null;
 	/** What a directive needs in order to be interactive. */
 	directiveContext: DirectiveContext;
@@ -116,6 +124,7 @@ export function Transcript({
 	onAsk,
 	playback,
 	game,
+	gameSound = true,
 	eligibility,
 	directiveContext,
 	animateAfterId,
@@ -234,21 +243,32 @@ export function Transcript({
 					<div className="answer">
 						<h2 className="sr-only">ASPIRE AI</h2>
 						<Suspense fallback={<CardLoading />}>
-							{game.state.prompt.kind === "statement" ? (
-								<TrueFalse
-									threadId={game.threadId}
-									state={game.state}
-									onChanged={game.onChanged}
-									onSummary={game.onSummary}
-								/>
-							) : (
-								<WordScramble
-									threadId={game.threadId}
-									state={game.state}
-									onChanged={game.onChanged}
-									onSummary={game.onSummary}
-								/>
-							)}
+							{/*
+							  Switched on the prompt kind rather than chained ternaries.
+							  The two-way version fell through to the word scramble for
+							  anything it did not recognise, which is how `millionaire` --
+							  named in the directive union with nothing behind it --
+							  rendered as a scramble and then failed against an engine that
+							  had never heard of it.
+							*/}
+							{(() => {
+								const shared = {
+									threadId: game.threadId,
+									state: game.state,
+									onChanged: game.onChanged,
+									onSummary: game.onSummary,
+								};
+								switch (game.state.prompt.kind) {
+									case "statement":
+										return <TrueFalse {...shared} />;
+									case "quiz":
+										return <Millionaire {...shared} soundOn={gameSound} />;
+									case "hangman":
+										return <Hangman {...shared} soundOn={gameSound} />;
+									default:
+										return <WordScramble {...shared} />;
+								}
+							})()}
 						</Suspense>
 					</div>
 				</div>
@@ -509,7 +529,23 @@ function Inline({ nodes }: { nodes: Array<InlineNode> }) {
 	);
 }
 
-/** The knowledge-base extracts behind an answer. */
+/**
+ * The knowledge-base rows an answer was built from.
+ *
+ * Closed by default and one tap to open, because most readers do not want it and
+ * the ones who do want it badly. What changed here is how easy it is to find:
+ * it was a grey pill reading "3 sources" that looked like metadata, and it now
+ * says what it is, in the brand's own colour, with the count as a badge.
+ *
+ * The panel is deliberately plain. Everything in it is corpus text — the row's
+ * own question and its own words — so there is nothing to summarise, and a
+ * child reading it should meet the same sentence the assistant read.
+ *
+ * There is no "no sources" state, and that is a property rather than an
+ * omission: the server builds this panel from the intersection of what was
+ * cited and what was retrieved, so an answer with nothing behind it is declined
+ * before it reaches here. Nothing on this path can invent a row.
+ */
 function Sources({ sources }: { sources: Array<Source> }) {
 	if (sources.length === 0) return null;
 
@@ -526,13 +562,12 @@ function Sources({ sources }: { sources: Array<Source> }) {
 		>
 			<summary className="sources__toggle">
 				<SourcesIcon />
-				<span>
-					{sources.length} {sources.length === 1 ? "source" : "sources"}
-				</span>
+				<span className="sources__label">Where this came from</span>
+				<span className="sources__count">{sources.length}</span>
 				<ChevronDownIcon size={14} className="sources__chevron" />
 			</summary>
 
-			<ul className="sources__list">
+			<ol className="sources__list">
 				{sources.map((source, index) => {
 					const label = source.metadata?.question ?? source.metadata?.category;
 					const reference = source.metadata?.kb_id;
@@ -544,19 +579,25 @@ function Sources({ sources }: { sources: Array<Source> }) {
 					return (
 						// biome-ignore lint/suspicious/noArrayIndexKey: snippets can repeat text; position is their identity
 						<li key={index} className="source">
-							<p className="source__head">
-								{reference ? (
-									<span className="source__ref">{String(reference)}</span>
-								) : null}
-								{label ? (
-									<span className="source__label">{String(label)}</span>
-								) : null}
-							</p>
-							{snippet ? <p className="source__text">{snippet}</p> : null}
+							{/* Numbered, so "the second one" is a thing a reader can say. */}
+							<span className="source__n" aria-hidden="true">
+								{index + 1}
+							</span>
+							<div className="source__body">
+								<p className="source__head">
+									{label ? (
+										<span className="source__label">{String(label)}</span>
+									) : null}
+									{reference ? (
+										<span className="source__ref">{String(reference)}</span>
+									) : null}
+								</p>
+								{snippet ? <p className="source__text">{snippet}</p> : null}
+							</div>
 						</li>
 					);
 				})}
-			</ul>
+			</ol>
 		</details>
 	);
 }
@@ -618,7 +659,9 @@ function AnswerActions({
 	// Two-step only when something would actually be lost. Holds WHICH action is
 	// armed, because both buttons discard the same messages and a shared boolean
 	// would let one button confirm the other.
-	const [confirming, setConfirming] = useState<"again" | "simpler" | null>(null);
+	const [confirming, setConfirming] = useState<"again" | "simpler" | null>(
+		null,
+	);
 	const playing = playback.playingId === messageId;
 	const paused = playback.pausedId === messageId;
 

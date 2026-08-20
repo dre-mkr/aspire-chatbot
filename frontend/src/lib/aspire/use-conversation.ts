@@ -7,6 +7,7 @@ import type {
 	WidgetInteraction,
 } from "../stream/types";
 import { type AskResult, AspireError, type Source } from "./api";
+import { gameTitleFor } from "./game-kinds";
 import {
 	type StoredConversation,
 	type StoredMessage,
@@ -140,24 +141,9 @@ function prefersReducedMotion() {
 	);
 }
 
-/** What to call a conversation that opened with a game. */
-const GAME_TITLES: Record<string, Record<string, string>> = {
-	word_scramble: {
-		en: "Word scramble practice",
-		es: "Práctica de palabras revueltas",
-		fr: "Entraînement de mots mêlés",
-	},
-	true_false: {
-		en: "True or false round",
-		es: "Ronda de verdadero o falso",
-		fr: "Tour de vrai ou faux",
-	},
-};
-
+/** What to call a conversation that opened with a game. See `game-kinds`. */
 function gameTitle(gameType: string, language: string): string | null {
-	const byLanguage = GAME_TITLES[gameType];
-	if (!byLanguage) return null;
-	return byLanguage[language] ?? byLanguage.en;
+	return gameTitleFor(gameType, language);
 }
 
 /** What to call a conversation that opened with the eligibility check. */
@@ -212,6 +198,8 @@ function toStored(messages: Array<ChatMessage>): Array<StoredMessage> {
 export interface UseConversationOptions {
 	/** Which language to name the conversation in. */
 	getLanguage?: () => string;
+	/** False when the reader has pinned a language. Read at call time, like `getLanguage`. */
+	getAutoLanguage?: () => boolean;
 	/** Fired the moment a reply lands, with the whole text, before the reveal starts. */
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
@@ -226,6 +214,7 @@ export function useConversation({
 	onAnswer,
 	persona = null,
 	getLanguage = () => "en",
+	getAutoLanguage = () => true,
 	onGameStart,
 	onEligibilityStart,
 }: UseConversationOptions = {}) {
@@ -274,6 +263,11 @@ export function useConversation({
 	}, [onAnswer]);
 
 	// Same reason as onAnswer: the voice layer is created after this hook.
+	const getAutoLanguageRef = useRef(getAutoLanguage);
+	useEffect(() => {
+		getAutoLanguageRef.current = getAutoLanguage;
+	}, [getAutoLanguage]);
+
 	const getLanguageRef = useRef(getLanguage);
 	useEffect(() => {
 		getLanguageRef.current = getLanguage;
@@ -610,6 +604,7 @@ export function useConversation({
 					persona,
 					// Read at call time: the voice layer is built after this hook.
 					language: language ?? getLanguageRef.current(),
+					autoLanguage: getAutoLanguageRef.current(),
 				});
 
 				// Usually a no-op: `onTurn` already settled this when the turn was announced.
@@ -659,7 +654,15 @@ export function useConversation({
 				{ id: nextId.current++, role: "user", text },
 			]);
 
-			void ask(text, simpleMode, token, undefined, undefined, undefined, language);
+			void ask(
+				text,
+				simpleMode,
+				token,
+				undefined,
+				undefined,
+				undefined,
+				language,
+			);
 		},
 		[ask, dropStream],
 	);

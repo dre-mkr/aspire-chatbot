@@ -14,7 +14,7 @@ export type GamePersona =
 	| "everyone";
 
 /** How an item is put to the player. */
-export type PromptKind = "scramble" | "statement";
+export type PromptKind = "scramble" | "statement" | "quiz" | "hangman";
 
 /** An item as the player sees it. */
 export interface GamePrompt {

@@ -18,8 +18,8 @@ from __future__ import annotations
 from typing import Final
 
 NAMES: Final[dict[str, str]] = {
-    "stella": "Skai",  # <- change this line, and only this line
-    "orion": "Dion",
+    "stella": "Sky",  # <- change this line, and only this line
+    "orion": "Zion",
     "aurora": "Imani",
     "nova": "Azuri",
 }

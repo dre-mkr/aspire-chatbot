@@ -59,9 +59,12 @@ CURRICULUM: list[Path] = sorted(Path("app/curriculum/content").rglob("*.y*ml"))
 #: A rename that leaves a card saying the old name is silent: the loader
 #: substitutes `{name}` wherever it appears and simply does not notice the
 #: literal beside it. Add to this list whenever `NAMES` changes.
+#:
+#: `Sky` is deliberately absent: it was retired once and is now the label
+#: `stella` carries, so banning it would fail the build on the current name.
 RETIRED_NAMES: tuple[str, ...] = (
     "Stella", "Orion", "Aurora", "Nova",
-    "Sky", "Prosper", "Destiny", "Star",
+    "Skai", "Dion", "Prosper", "Destiny", "Star",
 )
 
 #: Where a card stops describing itself and starts naming what it refuses.
@@ -257,6 +260,24 @@ class TestTheNameIsOneLine:
         # that fails the build on ordinary prose is a gate people delete.
         for label in (*NAMES.values(), *RETIRED_NAMES):
             assert not re.search(rf"\b{re.escape(label)}\b", text)
+
+    @pytest.mark.parametrize("path", CURRICULUM, ids=lambda path: path.name)
+    def test_no_curriculum_file_spells_a_retired_name(self, path):
+        """The curriculum names the guide directly, so a rename strands it.
+
+        A card writes `{name}` and is rewritten on every read. A check question
+        cannot: "Can you tell Sky what saving means" is addressed to a child and
+        there is no substitution step on that path, so the label is typed out.
+        That is fine until the label changes -- and then it is silent, which is
+        how `Skai` outlived the rename that retired it. The current name is
+        allowed here precisely because it has to be.
+        """
+        text = _read(path)
+        for label in RETIRED_NAMES:
+            assert not re.search(rf"{re.escape(label)}", text), (
+                f"{path.name} still says {label!r}; the personas are now "
+                f"{', '.join(sorted(NAMES.values()))}"
+            )
 
     def test_the_label_is_filled_in_when_the_card_is_read(self):
         assert NAMES["stella"] in persona_card("stella", "5-8")

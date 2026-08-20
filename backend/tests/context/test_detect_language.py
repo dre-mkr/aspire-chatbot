@@ -191,3 +191,52 @@ class TestTheOverrideSurvivesHydrate:
 
     def test_the_field_starts_empty(self):
         assert _state("hi")["locale_override"] is None
+
+
+class TestTheManualSelectorWins:
+    """Automatic is a mode the reader can leave, and leaving it has to mean something.
+
+    Detection re-applies `locale_override` on EVERY later turn, which is what
+    makes a mid-conversation switch survive `hydrate` rewriting `locale` from
+    the token. The same property is what made a manual pick useless before
+    this: choosing English from the menu set the token's locale and the next
+    turn put the detected Spanish straight back.
+    """
+
+    def test_automatic_is_the_default_when_the_client_says_nothing(self):
+        state = {"messages": [HumanMessage("Hola, quiero saber como abrir una cuenta")]}
+        assert detect_language(state).get("locale") == "es"
+
+    def test_a_pinned_reader_is_not_switched_by_what_they_write(self):
+        state = {
+            "messages": [HumanMessage("Hola, quiero saber como abrir una cuenta")],
+            "locale": "en",
+            "auto_language": False,
+        }
+        assert detect_language(state) == {}
+
+    def test_pinning_clears_an_override_the_reader_had_drifted_into(self):
+        state = {
+            "messages": [HumanMessage("What is ASPIRE and how does it work")],
+            "locale": "en",
+            "locale_override": "es",
+            "auto_language": False,
+        }
+        assert detect_language(state) == {"locale_override": None}
+
+    def test_a_pinned_reader_asking_for_a_language_by_name_is_still_not_switched(self):
+        """The menu is the louder instruction; it was used more recently."""
+        state = {
+            "messages": [HumanMessage("please answer in french")],
+            "locale": "en",
+            "auto_language": False,
+        }
+        assert detect_language(state) == {}
+
+    def test_automatic_still_switches_once_the_reader_goes_back_to_it(self):
+        state = {
+            "messages": [HumanMessage("Hola, quiero saber como abrir una cuenta")],
+            "locale": "en",
+            "auto_language": True,
+        }
+        assert detect_language(state).get("locale") == "es"

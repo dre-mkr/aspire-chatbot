@@ -129,6 +129,47 @@ class AspireState(TypedDict, total=False):
     #: next message, which is the bug, not the fix.
     locale_override: Locale | None
 
+    #: Whether the reader has left the language on Automatic.
+    #:
+    #: An answer-shaping preference, not a claim about who they are, so it rides
+    #: in the body beside `simple_mode` rather than in the signed token -- and
+    #: like `simple_mode` it is written every turn, because it can be changed
+    #: between two questions.
+    #:
+    #: False is a PIN, not an absence. A reader who picked Espanol has said
+    #: something, and detection must stop overruling them the moment they write
+    #: one English sentence to a Spanish assistant.
+    auto_language: bool
+
+    #: Set when the reader asked for a story and was asked what about.
+    #:
+    #: The whole storytelling feature is two turns, and this is the latch
+    #: between them. It is also the ONLY way a story can begin: nothing in the
+    #: planner, the tutor or the router can set it, so the assistant cannot
+    #: start telling stories at a reader who did not ask.
+    awaiting_story_topic: bool
+
+    #: What the story should be about, for the one turn that tells it.
+    story_topic: str | None
+
+    #: Every video already offered in this conversation, whether or not it was
+    #: watched.
+    #:
+    #: Offering the same film again because a second question also mentioned
+    #: saving is the exact "intrusive" the brief asks this feature not to be. An
+    #: offer declined is an answer; asking again is not listening. Grows to the
+    #: size of the catalog and stops.
+    videos_offered: list[str]
+
+    #: The video offered at the end of the last answer, if one was.
+    #:
+    #: Held rather than re-derived, because the acceptance is not the question.
+    #: "Watch the video" carries no topic, so matching it against the catalog
+    #: again finds nothing; what it refers to is the offer, and the offer is
+    #: what has to be remembered. Cleared as soon as it is taken or the reader
+    #: asks something else, so a yes three turns later opens nothing.
+    offered_video: str | None
+
     # ── conversation ────────────────────────────────────────────────────────
     messages: Annotated[list[BaseMessage], add_messages]
     #: Everything older than the message window, compressed.
@@ -216,6 +257,11 @@ def initial_state(
         # never written by this helper reads as absent, and absent is falsy in
         # exactly the places a fixture stops resembling a real session.
         locale_override=None,
+        auto_language=True,
+        awaiting_story_topic=False,
+        story_topic=None,
+        offered_video=None,
+        videos_offered=[],
         identity_proven=identity_proven,
         messages=[],
         summary="",
