@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 
 from app.agents.escalation.contract import EscalationReason
 from app.graph.nodes.intents import (
+    asks_for_a_video,
     is_complaint,
     named_game,
     wants_account,
@@ -27,6 +28,7 @@ from app.schemas.directives import (
     directive_payload,
 )
 from app.videos import by_id
+from app.videos.catalog import all_videos, requested
 
 logger = logging.getLogger(__name__)
 
@@ -286,31 +288,16 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     }
 
 
-def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
-    """Play the video offered last turn, if the reader just said yes to it.
+#: What to say when somebody asks for a video and names no subject.
+_VIDEO_MENU: dict[str, str] = {
+    "en": "Here are the ASPIRE videos. Which one would you like?",
+    "es": "Estos son los videos de ASPIRE. ¿Cuál te gustaría ver?",
+    "fr": "Voici les vidéos ASPIRE. Laquelle veux-tu regarder ?",
+}
 
-    Three things have to be true, and the last is the one that matters: an
-    offer was actually made, this message accepts it, and the id still names
-    something in the catalog. That last check is why the catalog is server-owned
-    -- an id reaching here from a stale checkpoint, or from a client that made
-    one up, resolves to nothing and the turn carries on as an ordinary question.
 
-    The offer is cleared either way. A reader who says yes gets the video once;
-    a reader who asks something else has moved on, and a "yes" three turns later
-    should not reach back and open a player.
-    """
-    offered = state.get("offered_video")
-    if not offered:
-        return None
-    if not wants_video(message):
-        # They asked something else. The offer has expired.
-        return {"offered_video": None}
-
-    video = by_id(str(offered))
-    if video is None:
-        logger.info("offered video %r is no longer in the catalog", offered)
-        return {"offered_video": None}
-
+def _play(state: AspireState, video: Any) -> dict[str, Any]:
+    """The turn that opens the player. One place, three callers."""
     return {
         "offered_video": None,
         "active_agent": _holding_agent(state),
@@ -326,6 +313,86 @@ def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
         "messages": [AIMessage(content=f"Here it is — {video.title}.")],
         "safety_flags": {"card": "video"},
     }
+
+
+def _video_choice(state: AspireState, videos: tuple[Any, ...]) -> dict[str, Any]:
+    """Ask which one, with a chip per video.
+
+    The chips are the same sentence `offer_for` builds, and that is not a
+    coincidence -- a chip is also what gets SENT when it is tapped, so it has to
+    come back through `asks_for_a_video` and resolve to exactly one video. Naming
+    the topic does both: it is under the command-length ceiling and it carries
+    the keyword that settles the next turn.
+    """
+    locale = str(state.get("locale") or "en")
+    if locale not in _VIDEO_MENU:
+        locale = "en"
+    return {
+        "offered_video": None,
+        "active_agent": _holding_agent(state),
+        "messages": [AIMessage(content=_VIDEO_MENU[locale])],
+        "quick_replies": [
+            f"Watch the ASPIRE video about {video.topic.lower()}" for video in videos
+        ],
+        "safety_flags": {"card": "video_menu"},
+    }
+
+
+def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Play a video: the one offered last turn, or the one they just asked for.
+
+    Both halves are here because they are one decision, and splitting them is
+    how the second half came to be missing.
+
+    **Accepting an offer.** Three things have to be true: an offer was made, this
+    message accepts it, and the id still names something in the catalog. That
+    last check is why the catalog is server-owned -- an id reaching here from a
+    stale checkpoint, or from a client that made one up, resolves to nothing and
+    the turn carries on as an ordinary question.
+
+    **Asking outright**, which until now had no path at all. `_open_video` could
+    only ever say yes to a question the assistant had asked first, so a reader
+    typing "Do you have videos?" fell through this node, through the router, and
+    into whichever agent held the session -- which, mid-lesson, is the tutor,
+    which graded it as a wrong answer to the question on screen and spent a hint
+    on it. That is a real transcript: six requests, one video, and the one that
+    worked contained the word "scarcity", so it was matched on the TOPIC by the
+    volunteering path in `safety_out` rather than on the request by anything.
+
+    Being a card is the fix, not a detail of it. `_after_cards` routes a card
+    straight to `safety_out`, so a turn answered here never reaches `classify`
+    and never meets `apply_stickiness` -- and the tutor is never asked to grade
+    a request for a video as an answer about coins.
+    """
+    offered = state.get("offered_video")
+
+    if offered and wants_video(message):
+        video = by_id(str(offered))
+        if video is not None:
+            # Unless they have named a DIFFERENT one. "Show me the saving video"
+            # accepts an offer by the letter of `wants_video`, and playing the
+            # scarcity film because that is what was on the table is the same
+            # not-listening this whole node exists to stop.
+            asked = requested(message)
+            if len(asked) == 1 and asked[0].id != video.id:
+                return _play(state, asked[0])
+            return _play(state, video)
+        logger.info("offered video %r is no longer in the catalog", offered)
+        # Fall through: the offer is dead, but they may still be asking.
+
+    if not asks_for_a_video(message):
+        # They asked something else. Any offer has expired -- a "yes" three
+        # turns later must not reach back and open a player.
+        return {"offered_video": None} if offered else None
+
+    matches = requested(message)
+    if len(matches) == 1:
+        return _play(state, matches[0])
+    # None named, or a tie. Both are the same answer: show what there is rather
+    # than the silence a tie used to produce. `relevant_to` returns None in both
+    # cases, correctly, because it is deciding whether to interrupt -- and that
+    # is exactly why this path does not use it.
+    return _video_choice(state, matches or all_videos())
 
 
 def _asked_for_a_person(message: str) -> dict[str, Any] | None:

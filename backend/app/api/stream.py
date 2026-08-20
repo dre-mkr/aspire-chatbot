@@ -407,6 +407,7 @@ def _wants_card(message: str) -> bool:
     Every intent the card node claims belongs here.
     """
     from app.graph.nodes.intents import (
+        asks_for_a_video,
         wants_eligibility,
         wants_game,
         wants_story,
@@ -417,6 +418,10 @@ def _wants_card(message: str) -> bool:
         wants_eligibility(message)
         or wants_game(message)
         or wants_story(message)
+        # Asking for a video outright is a card now, so it is a cache bypass
+        # too. Without this line the fix works exactly once per phrasing and
+        # then goes quiet, which is the harder version of the same bug.
+        or asks_for_a_video(message)
         or wants_video(message)
     )
 

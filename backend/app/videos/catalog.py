@@ -277,3 +277,74 @@ def relevant_to(
     if len(ranked) > 1 and score(winner) == score(ranked[1]):
         return None
     return _BY_ID[winner]
+
+
+#: The words a person uses to ASK, stripped before the topic is read.
+#:
+#: Found by a test, and it is the trap this whole function walks into otherwise:
+#: "I want to watch a video" contains `want`, which is a supporting term for the
+#: scarcity film, so a reader who named no subject at all was handed a story
+#: about needs and wants -- matched on the grammar of their request rather than
+#: on anything they said. Every phrase here is scaffolding, never subject.
+#:
+#: `want` is removed only in `want to`, because "the needs and wants video" is a
+#: reader naming the topic and the same four letters have to survive that.
+_REQUEST_NOISE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:"
+    r"i|we|you|me|us|the|a|an|some|please|do|does|got|have|has|any|"
+    r"is|are|there|can|could|may|would|"
+    r"wants? to|d? ?like to|"
+    r"watch|watching|play|playing|show|see|view|open|start|"
+    r"videos?|films?|cartoons?|"
+    r"ver|mira|muestra|pon|quiero|voir|montre|regarder|veux"
+    r")\b"
+)
+
+
+def requested(
+    text: str,
+    *,
+    language: Language = Language.EN,
+) -> tuple[Video, ...]:
+    """The videos an EXPLICIT request is asking for. Possibly none, possibly all.
+
+    A different question from `relevant_to`, with a deliberately different bar,
+    and the distinction is the whole of this fix.
+
+    `relevant_to` decides whether to VOLUNTEER a video after answering something
+    else. Its bar is high in both directions because the cost of being wrong is
+    an assistant that interrupts: two keyword hits, and a clear winner, or
+    nothing.
+
+    This function runs only once the reader has said, in words, that they want a
+    video. The cost of being wrong has inverted. Refusing to name one because
+    they typed a single keyword is the failure now, and a tie is not a reason to
+    give them nothing -- it is a reason to show them both and let them pick.
+
+    So: one hit is enough, ties are kept rather than discarded, and the caller
+    decides what to do with a list of zero, one or many.
+
+    **Not filtered by persona.** `for_persona` gates what a reader may be
+    OFFERED, on the correct reasoning that a guardian asking about eligibility
+    is not the audience for an animated story. Somebody who has typed "show me
+    a video" is not being offered anything -- they are browsing, and browsing
+    has never been filtered. The teacher asking for the Captain Careful film is
+    the client's own best demo of this product, and the offer filter would have
+    refused it.
+    """
+    if language is not Language.EN:
+        return ()
+
+    index = _term_index()
+    subject = _REQUEST_NOISE.sub(" ", _fold(text or ""))
+    hits: dict[str, int] = {}
+    for word in _WORD.findall(subject):
+        for video_id, is_strong in index.get(word, ()):
+            hits[video_id] = hits.get(video_id, 0) + (2 if is_strong else 1)
+
+    if not hits:
+        return ()
+    best = max(hits.values())
+    # Everything at the top score. One winner plays; a tie is offered as a
+    # choice, which is a better answer than the silence a tie produces above.
+    return tuple(video for video in _VIDEOS if hits.get(video.id, 0) == best)
