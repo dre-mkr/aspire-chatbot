@@ -331,7 +331,7 @@ The current mapping picks premade voices against each persona's brief: Jessica
 reassuring) for `aurora`, and Alice (clear educator) for `nova`.
 
 Personas are named by KEY here, not by label. The label a reader sees lives in
-`app/prompting/personas/names.py` and is a client's choice — today Skai, Dion,
+`app/prompting/personas/names.py` and is a client's choice — today Sky, Zion,
 Imani and Azuri — while the key is the identifier the access matrix, the
 session token and these voice settings are all wired to.
 
