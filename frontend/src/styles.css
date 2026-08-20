@@ -6746,3 +6746,132 @@ body {
 	color: var(--quiet);
 	font-size: 0.875rem;
 }
+
+/* ── The brandmark, and its orbit ──────────────────────────────────────────
+   Sits above the hero question on the landing page. The arrow travels around
+   the mark until the reader starts using the assistant, and then stops: an
+   animation running behind a conversation is an animation competing with it. */
+
+.brandmark {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 14px;
+	margin-bottom: 26px;
+}
+
+.brandmark__orbit {
+	width: clamp(92px, 13vw, 124px);
+	aspect-ratio: 1;
+}
+
+.brandmark__svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+}
+
+/* The mark is a raster; keep its edges crisp as it scales up. */
+.brandmark__mark {
+	image-rendering: auto;
+}
+
+.brandmark__arrow {
+	stroke: var(--magenta);
+	stroke-width: 5;
+}
+
+.brandmark__head {
+	fill: var(--magenta);
+}
+
+/* One transform on one group. `transform-box: fill-box` would re-origin to the
+   arrow's own bounds; the origin has to be the MARK's centre, so it is given in
+   the viewBox's coordinates instead. */
+.brandmark__arrow-spin {
+	transform-origin: 60px 60px;
+	animation: brand-orbit 18s linear infinite;
+}
+
+@keyframes brand-orbit {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Interaction stops it. Paused rather than removed, so it holds wherever it
+   reached instead of snapping back to the top of the circle. */
+.brandmark[data-still] .brandmark__arrow-spin {
+	animation-play-state: paused;
+}
+
+.brandmark__wordmark {
+	width: clamp(150px, 19vw, 190px);
+	height: auto;
+	/* The wordmark is purple on white; this page is purple. */
+	filter: brightness(0) invert(1);
+	opacity: 0.97;
+}
+
+.brandmark__expansion {
+	max-width: 34ch;
+	margin: 0;
+	color: rgb(255 255 255 / 0.82);
+	font-size: clamp(0.75rem, 1.5vw, 0.8125rem);
+	font-weight: 500;
+	line-height: 1.5;
+	letter-spacing: 0.01em;
+	text-align: center;
+	text-wrap: balance;
+}
+
+/* A slow shift under the whole page. On its own layer, never on `.app`: `.app`
+   is what the phase morph and the root view transition both animate, and a
+   second animation on the same element fights both. */
+.app::before {
+	content: "";
+	position: absolute;
+	inset: -20%;
+	z-index: 0;
+	background:
+		radial-gradient(48% 42% at 22% 18%, rgb(194 47 153 / 0.34), transparent 62%),
+		radial-gradient(46% 46% at 78% 34%, rgb(107 66 161 / 0.36), transparent 64%);
+	will-change: transform;
+	animation: brand-wash 46s ease-in-out infinite;
+	pointer-events: none;
+}
+
+/* The chat phase is a conversation, not a hero. */
+.app[data-phase="chat"]::before {
+	animation-play-state: paused;
+	opacity: 0.5;
+}
+
+@keyframes brand-wash {
+	0%,
+	100% {
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+	50% {
+		transform: translate3d(2.5%, -2%, 0) scale(1.08);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* Both are ornamental and report nothing, so they stop outright. */
+	.brandmark__arrow-spin,
+	.app::before {
+		animation: none !important;
+	}
+}
+
+@media (max-width: 640px) {
+	.brandmark {
+		gap: 11px;
+		margin-bottom: 20px;
+	}
+}
