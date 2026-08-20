@@ -66,12 +66,26 @@ interface VoicePrefs {
 	autoSpeak: boolean;
 	speed: string;
 	language: VoiceLanguage;
+	/**
+	 * Whether the language follows what the reader writes.
+	 *
+	 * Stored beside `language` rather than replacing it: the assistant always
+	 * has exactly one language it is answering and speaking in, and the voice
+	 * layer needs a real one to pick a voice with. This says where that value
+	 * came from — detected, or chosen — not what it is.
+	 *
+	 * On by default. Detection already ran on every turn before there was a
+	 * control for it, so defaulting to off would take a working behaviour away
+	 * from everyone who never opens this menu.
+	 */
+	autoLanguage: boolean;
 }
 
 const DEFAULT_PREFS: VoicePrefs = {
 	autoSpeak: false,
 	speed: "1",
 	language: "en",
+	autoLanguage: true,
 };
 
 function readPrefs(): VoicePrefs {
@@ -89,6 +103,8 @@ function readPrefs(): VoicePrefs {
 			)
 				? (parsed.language as VoiceLanguage)
 				: "en",
+			autoLanguage:
+				typeof parsed.autoLanguage === "boolean" ? parsed.autoLanguage : true,
 		};
 	} catch {
 		return DEFAULT_PREFS;
@@ -130,14 +146,31 @@ export function useVoice({
 	/** The language in force: the URL if it says, else this device's preference. */
 	const language = languageFromUrl ?? storedLanguage;
 
-	/** Both places, deliberately. */
+	const [autoLanguage, setAutoLanguage] = useState(DEFAULT_PREFS.autoLanguage);
+
+	/**
+	 * Both places, deliberately.
+	 *
+	 * Choosing a language also leaves Automatic. Picking Espanol and then being
+	 * answered in English because the last message happened to be English is
+	 * the control not working, whatever the menu says is selected.
+	 */
 	const setLanguage = useCallback(
 		(next: VoiceLanguage) => {
 			setStoredLanguage(next);
+			setAutoLanguage(false);
 			onLanguageChange?.(next);
 		},
 		[onLanguageChange],
 	);
+
+	/**
+	 * Back to following the reader.
+	 *
+	 * The language in force is left exactly as it is. Automatic means the next
+	 * message decides, not that everything reverts to English.
+	 */
+	const enableAutoLanguage = useCallback(() => setAutoLanguage(true), []);
 
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
@@ -162,6 +195,7 @@ export function useVoice({
 		setStoredLanguage(prefs.language);
 		setAutoSpeak(prefs.autoSpeak);
 		setSpeed(prefs.speed);
+		setAutoLanguage(prefs.autoLanguage);
 		setPrefsLoaded(true);
 	}, []);
 
@@ -171,12 +205,12 @@ export function useVoice({
 		try {
 			window.localStorage.setItem(
 				PREFS_KEY,
-				JSON.stringify({ autoSpeak, speed, language }),
+				JSON.stringify({ autoSpeak, speed, language, autoLanguage }),
 			);
 		} catch {
 			// Private browsing throws. Preferences are a convenience, not a feature.
 		}
-	}, [autoSpeak, language, prefsLoaded, speed]);
+	}, [autoSpeak, autoLanguage, language, prefsLoaded, speed]);
 
 	// A 404 or a disabled module both mean "no voice": unavailable, not an error.
 	useEffect(() => {
@@ -377,7 +411,13 @@ export function useVoice({
 			let url: string;
 			try {
 				// Playback starts on the vendor's first chunk, not after the whole file.
-				url = await speakStream(text, language, threadId, persona, controller.signal);
+				url = await speakStream(
+					text,
+					language,
+					threadId,
+					persona,
+					controller.signal,
+				);
 			} catch (error) {
 				// An abort is always this component's own doing, so it earns no note.
 				if (error instanceof VoiceError) {
@@ -468,6 +508,8 @@ export function useVoice({
 		dismissNote: () => setNote(null),
 		runNoteAction,
 		setLanguage,
+		autoLanguage,
+		enableAutoLanguage,
 		setSpeed,
 		toggleAutoSpeak: () => setAutoSpeak((on) => !on),
 		play,

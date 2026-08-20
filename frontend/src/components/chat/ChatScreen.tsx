@@ -120,6 +120,7 @@ export function ChatScreen() {
 		persona,
 		// Titles follow the interface language, read at call time since voice is built below.
 		getLanguage: () => voice.language,
+		getAutoLanguage: () => voice.autoLanguage,
 		onGameStart: (id, gameType, concept) => {
 			setGame(null);
 			liveGame.current = {

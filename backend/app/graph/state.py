@@ -129,6 +129,18 @@ class AspireState(TypedDict, total=False):
     #: next message, which is the bug, not the fix.
     locale_override: Locale | None
 
+    #: Whether the reader has left the language on Automatic.
+    #:
+    #: An answer-shaping preference, not a claim about who they are, so it rides
+    #: in the body beside `simple_mode` rather than in the signed token -- and
+    #: like `simple_mode` it is written every turn, because it can be changed
+    #: between two questions.
+    #:
+    #: False is a PIN, not an absence. A reader who picked Espanol has said
+    #: something, and detection must stop overruling them the moment they write
+    #: one English sentence to a Spanish assistant.
+    auto_language: bool
+
     #: Every video already offered in this conversation, whether or not it was
     #: watched.
     #:
@@ -234,6 +246,7 @@ def initial_state(
         # never written by this helper reads as absent, and absent is falsy in
         # exactly the places a fixture stops resembling a real session.
         locale_override=None,
+        auto_language=True,
         offered_video=None,
         videos_offered=[],
         identity_proven=identity_proven,

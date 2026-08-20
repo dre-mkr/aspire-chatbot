@@ -45,6 +45,14 @@ export async function streamAspire(
 		uploadResult?: UploadResult;
 		/** A finished game's score instead of a typed message. */
 		gameResult?: GameResultPayload;
+		/**
+		 * False when the reader has PINNED a language from the menu.
+		 *
+		 * Only the pin is sent. Absent means Automatic on the server too, so
+		 * every caller that never passes it — and every older client — keeps the
+		 * detection that has always run.
+		 */
+		autoLanguage?: boolean;
 	},
 ): Promise<AskResult> {
 	const {
@@ -56,6 +64,7 @@ export async function streamAspire(
 		interaction,
 		uploadResult,
 		gameResult,
+		autoLanguage = true,
 		onDelta,
 		onTextEnd,
 		onTurn,
@@ -110,6 +119,7 @@ export async function streamAspire(
 					body: {
 						message,
 						...(simpleMode ? { simple_mode: true } : {}),
+						...(autoLanguage ? {} : { auto_language: false }),
 						__upload_result: uploadResult as unknown as Record<string, unknown>,
 					},
 				}
@@ -121,8 +131,22 @@ export async function streamAspire(
 		// pressed state and changed nothing on the wire. The widget-interaction
 		// and game-result branches post typed bodies to their own endpoints and
 		// must not gain a key those schemas do not declare.
-		...(simpleMode && !interaction && !gameResult && !uploadResult
-			? { body: { message, simple_mode: true } }
+		//
+		// `auto_language: false` rides the same path for the same reason: it
+		// shapes the ANSWER. It is sent only when the reader has pinned a
+		// language, because absent means Automatic on the server, and the two
+		// typed endpoints above must not gain a key their schemas do not declare.
+		...((simpleMode || !autoLanguage) &&
+		!interaction &&
+		!gameResult &&
+		!uploadResult
+			? {
+					body: {
+						message,
+						...(simpleMode ? { simple_mode: true } : {}),
+						...(autoLanguage ? {} : { auto_language: false }),
+					},
+				}
 			: {}),
 		onToken: (text) => onDelta?.(text),
 		onDirective: (directive) => {

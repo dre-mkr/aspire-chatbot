@@ -80,6 +80,12 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         # every turn -- the reader can turn it off between two questions.
         update["simple_mode"] = bool((body or {}).get("simple_mode"))
 
+        # Same shape, same reason. Absent means Automatic: every client that
+        # predates the selector, and every deep link without the parameter,
+        # keeps the behaviour it already had.
+        raw_auto = (body or {}).get("auto_language")
+        update["auto_language"] = True if raw_auto is None else bool(raw_auto)
+
         # ── the turn's inputs, put back after the clear ──
         # A widget interaction or a game result arrives as a body field, not as a message.
         for field in CONTINUATION_FIELDS:

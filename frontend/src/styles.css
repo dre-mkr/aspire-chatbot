@@ -6875,3 +6875,18 @@ body {
 		margin-bottom: 20px;
 	}
 }
+
+/* The Automatic language option, and the line that says what it resolved to.
+   `AUTO` is four characters where the others are two, so the code column stops
+   being a fixed width and the row lays itself out instead. */
+.voice-choice--auto .voice-choice__code {
+	letter-spacing: 0.02em;
+	font-size: 0.6875rem;
+}
+
+.voice-menu__hint {
+	margin: 8px 0 0;
+	color: var(--quiet);
+	font-size: 0.75rem;
+	line-height: 1.45;
+}

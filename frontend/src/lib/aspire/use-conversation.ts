@@ -212,6 +212,8 @@ function toStored(messages: Array<ChatMessage>): Array<StoredMessage> {
 export interface UseConversationOptions {
 	/** Which language to name the conversation in. */
 	getLanguage?: () => string;
+	/** False when the reader has pinned a language. Read at call time, like `getLanguage`. */
+	getAutoLanguage?: () => boolean;
 	/** Fired the moment a reply lands, with the whole text, before the reveal starts. */
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
@@ -226,6 +228,7 @@ export function useConversation({
 	onAnswer,
 	persona = null,
 	getLanguage = () => "en",
+	getAutoLanguage = () => true,
 	onGameStart,
 	onEligibilityStart,
 }: UseConversationOptions = {}) {
@@ -274,6 +277,11 @@ export function useConversation({
 	}, [onAnswer]);
 
 	// Same reason as onAnswer: the voice layer is created after this hook.
+	const getAutoLanguageRef = useRef(getAutoLanguage);
+	useEffect(() => {
+		getAutoLanguageRef.current = getAutoLanguage;
+	}, [getAutoLanguage]);
+
 	const getLanguageRef = useRef(getLanguage);
 	useEffect(() => {
 		getLanguageRef.current = getLanguage;
@@ -610,6 +618,7 @@ export function useConversation({
 					persona,
 					// Read at call time: the voice layer is built after this hook.
 					language: language ?? getLanguageRef.current(),
+					autoLanguage: getAutoLanguageRef.current(),
 				});
 
 				// Usually a no-op: `onTurn` already settled this when the turn was announced.
@@ -659,7 +668,15 @@ export function useConversation({
 				{ id: nextId.current++, role: "user", text },
 			]);
 
-			void ask(text, simpleMode, token, undefined, undefined, undefined, language);
+			void ask(
+				text,
+				simpleMode,
+				token,
+				undefined,
+				undefined,
+				undefined,
+				language,
+			);
 		},
 		[ask, dropStream],
 	);
