@@ -180,14 +180,7 @@ async def test_asking_to_play_without_choosing_asks_which() -> None:
     update = await gate(_state("can we play a game", age_band="9-12", persona="stella"))
 
     assert isinstance(update["messages"][0], AIMessage)
-    # Every game the band may play, by the name a reader is shown. A game that
-    # reaches this list without a row in `_GAME_LABELS` shows as its wire id.
-    assert set(update["quick_replies"]) == {
-        "True or false",
-        "Word scramble",
-        "Millionaire",
-        "Hangman",
-    }
+    assert set(update["quick_replies"]) == {"True or false", "Word scramble"}
     assert "ui_directives" not in update
 
 
@@ -197,7 +190,7 @@ async def test_a_band_that_may_not_play_a_named_game_is_offered_what_it_can() ->
 
     update = await gate(_state("word scramble please", age_band="5-8", persona="stella"))
 
-    assert update["quick_replies"] == ["True or false", "Hangman"]
+    assert update["quick_replies"] == ["True or false"]
     assert "ui_directives" not in update
 
 
@@ -473,159 +466,3 @@ class TestALongQuestionIsNotACard:
         gate = make_intent_gate(eligibility_on=lambda: True, games_on=lambda: False)
         update = await gate(_state("Am I eligible?", persona="aurora"))
         assert update != {}
-
-
-class TestTheStoryFlowIsAlwaysAskedFor:
-    """The client's rule: the assistant must never start telling stories itself.
-
-    The guarantee is structural rather than a prompt line. `story_topic` is what
-    turns a turn into a story, `cards._story_turn` is the only thing that sets
-    it, and it only ever sets it after `wants_story` matched the reader's own
-    text. Nothing in the planner, the tutor or the router can reach it.
-    """
-
-    def test_asking_for_a_story_asks_what_about_rather_than_telling_one(self):
-        from langchain_core.messages import AIMessage, HumanMessage
-
-        from app.graph.nodes.cards import make_intent_gate
-        import asyncio
-
-        gate = make_intent_gate()
-        update = asyncio.run(
-            gate({"messages": [HumanMessage("tell me a story")], "locale": "en"})
-        )
-        assert update["awaiting_story_topic"] is True
-        # A card, so the turn ends here and nothing is generated yet.
-        assert update["safety_flags"]["card"] == "story_topic"
-        assert isinstance(update["messages"][0], AIMessage)
-        assert update["quick_replies"]
-        # Crucially, no topic yet — so no story can be written this turn.
-        assert "story_topic" not in update
-
-    def test_the_next_message_becomes_the_topic_and_is_not_a_card(self):
-        """Turn two must reach an agent: a story is prose, not a form."""
-        from langchain_core.messages import HumanMessage
-
-        from app.graph.nodes.cards import make_intent_gate
-        import asyncio
-
-        gate = make_intent_gate()
-        update = asyncio.run(
-            gate(
-                {
-                    "messages": [HumanMessage("saving money")],
-                    "locale": "en",
-                    "awaiting_story_topic": True,
-                }
-            )
-        )
-        assert update == {"awaiting_story_topic": False, "story_topic": "saving money"}
-
-    def test_an_ordinary_question_never_starts_a_story(self):
-        from langchain_core.messages import HumanMessage
-
-        from app.graph.nodes.cards import make_intent_gate
-        import asyncio
-
-        gate = make_intent_gate()
-        for question in (
-            "what is ASPIRE",
-            "how do I save money",
-            "what is the story with my application",
-        ):
-            update = asyncio.run(
-                gate({"messages": [HumanMessage(question)], "locale": "en"})
-            )
-            assert "story_topic" not in update, question
-            assert not update.get("awaiting_story_topic"), question
-
-    def test_a_story_is_measured_against_the_story_cap(self):
-        """The youngest band's chat cap is 35 words, which truncates a story."""
-        from app.graph.nodes.safety_out import cap_for
-
-        for band in ("5-8", "9-12", "13-15"):
-            plain = cap_for(band, None)
-            story = cap_for(band, None, story=True)
-            assert plain is not None and story is not None
-            assert story > plain, band
-
-
-def test_a_story_gets_more_room_than_the_same_turn_would_otherwise():
-    """The measurement, not just the table.
-
-    `cap_for` having a story column proves nothing on its own: the flag has to
-    reach `safety_out` and be passed to `over_cap` on the way. This runs the
-    real node twice over the same over-long story and asserts the only
-    difference -- `story_topic` -- changes where it is cut.
-    """
-    import asyncio
-
-    from langchain_core.messages import AIMessage, HumanMessage
-
-    from app.graph.nodes.safety_out import make_safety_out
-
-    # Comfortably over the 5-8 QA cap (120) and the story cap (160).
-    story = ("In Basseterre, Maya wanted a gift for her brother. " * 22).strip()
-    base = {
-        "age_band": "5-8",
-        "persona": "stella",
-        "locale": "en",
-        "active_agent": "qa_agent_public",
-        "messages": [HumanMessage("saving money"), AIMessage(story)],
-    }
-
-    async def run(state):
-        return await make_safety_out(None)(state)
-
-    plain = asyncio.run(run({**base}))
-    told = asyncio.run(run({**base, "story_topic": "saving money"}))
-
-    plain_words = len(plain["messages"][0].content.split())
-    told_words = len(told["messages"][0].content.split())
-    assert told_words > plain_words, (plain_words, told_words)
-
-
-class TestEveryCardIntentBypassesTheResponseCache:
-    """A card intent missing from `_wants_card` fails silently and completely.
-
-    The layer-1 cache answers before the graph runs, so a cached turn never
-    executes the card node -- and any state that node would have set is never
-    set. The reply looks right, the chips look right, and the feature does
-    nothing. This is how the story flow broke: the ask-turn was served from
-    cache, `awaiting_story_topic` was never written, and the reader's chosen
-    topic came back as an ordinary question.
-    """
-
-    def test_every_intent_the_card_node_claims_is_excluded_from_the_cache(self):
-        from app.api.stream import _wants_card
-
-        for message in (
-            "am I eligible for ASPIRE",
-            "lets play a game",
-            "lets play hangman",
-            "can we play millionaire",
-            "tell me a story",
-            "Watch the ASPIRE video about scarcity",
-        ):
-            assert _wants_card(message), message
-
-    def test_an_ordinary_question_is_still_cacheable(self):
-        """The guard must not disable the cache for everything."""
-        from app.api.stream import _wants_card
-
-        for message in (
-            "what is ASPIRE",
-            "how do I open an account",
-            "what does scarcity mean",
-        ):
-            assert not _wants_card(message), message
-
-    def test_a_story_turn_is_never_replayed_to_anybody_else(self):
-        from app.turn import TurnRecord, cacheable
-
-        told = TurnRecord(thread_id="t", question="q", reply="Once in Basseterre...")
-        told.story = True
-        assert not cacheable(told)
-
-        ordinary = TurnRecord(thread_id="t", question="q", reply="ASPIRE is a programme.")
-        assert cacheable(ordinary)

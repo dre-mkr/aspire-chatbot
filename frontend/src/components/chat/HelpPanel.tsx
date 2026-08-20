@@ -241,7 +241,7 @@ function HelpContent() {
 				<p className="help__note">
 					Questions are matched to who you are using ASPIRE AI as, so a younger
 					reader and a teenager get different sets. The games are a learning
-					activity for children and teenagers, so the Imani and Azuri personas
+					activity for children and teenagers, so the Aurora and Nova personas
 					are not offered them.
 				</p>
 			</Section>

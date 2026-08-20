@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
-from typing import Any
 
 # Re-exported so `app.games.models` stays the one import for this package's vocabulary.
 from app.domain import Language, Persona
@@ -33,8 +32,6 @@ class PromptKind(str, Enum):
 
     SCRAMBLE = "scramble"
     STATEMENT = "statement"
-    QUIZ = "quiz"
-    HANGMAN = "hangman"
 
 
 # --- Seed content ---------------------------------------------------------
@@ -67,36 +64,6 @@ class Entry:
 class ScrambleEntry(Entry):
     word: str
     scramble: str
-    hint: str
-    definition: str
-
-
-@dataclass(frozen=True, kw_only=True)
-class QuizEntry(Entry):
-    """One multiple-choice question.
-
-    `choices` is stored in the order it will be shown. The order is the
-    author's, not shuffled per player: these questions teach by contrast, and
-    "which of these is a need?" reads differently when the list is reordered
-    under someone who is being asked to compare them.
-    """
-
-    question: str
-    choices: tuple[str, ...]
-    #: Index into `choices`. Never leaves the server until the item resolves.
-    answer_index: int
-    explanation: str
-
-    @property
-    def answer(self) -> str:
-        return self.choices[self.answer_index]
-
-
-@dataclass(frozen=True, kw_only=True)
-class HangmanEntry(Entry):
-    """One word to guess a letter at a time."""
-
-    word: str
     hint: str
     definition: str
 
@@ -265,14 +232,6 @@ class GameSession:
     missed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     hints_used: dict[str, int] = field(default_factory=dict)
-    #: A scratchpad the current game type owns, cleared with every item.
-    #:
-    #: Exists because `submit` assumed one submission settles one item, which is
-    #: true of a scramble and of a true/false and is not true of hangman: a
-    #: letter is a move, not an answer. Rather than teach the engine about
-    #: letters, a game that has moves keeps them here and says when the item is
-    #: actually finished. Empty for every game that does not.
-    progress: dict[str, Any] = field(default_factory=dict)
     started_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -289,7 +248,6 @@ class GameSession:
         self.index += 1
         self.hint_level = 0
         self.attempts = 0
-        self.progress = {}
         self.updated_at = time.time()
 
     def total_hints(self) -> int:

@@ -66,37 +66,12 @@ interface VoicePrefs {
 	autoSpeak: boolean;
 	speed: string;
 	language: VoiceLanguage;
-	/**
-	 * Whether the language follows what the reader writes.
-	 *
-	 * Stored beside `language` rather than replacing it: the assistant always
-	 * has exactly one language it is answering and speaking in, and the voice
-	 * layer needs a real one to pick a voice with. This says where that value
-	 * came from — detected, or chosen — not what it is.
-	 *
-	 * On by default. Detection already ran on every turn before there was a
-	 * control for it, so defaulting to off would take a working behaviour away
-	 * from everyone who never opens this menu.
-	 */
-	autoLanguage: boolean;
-	/**
-	 * Whether the games may make a sound.
-	 *
-	 * On, unlike `autoSpeak`, and the difference is who asked. Reading every
-	 * answer aloud happens to a reader who only wanted to read; a coin landing
-	 * in a piggy bank happens inside a game they chose to start, in response to
-	 * a button they pressed. It is still one tap away in the same menu, because
-	 * the room a child is in is not always a room that wants noise.
-	 */
-	gameSound: boolean;
 }
 
 const DEFAULT_PREFS: VoicePrefs = {
 	autoSpeak: false,
 	speed: "1",
 	language: "en",
-	autoLanguage: true,
-	gameSound: true,
 };
 
 function readPrefs(): VoicePrefs {
@@ -114,10 +89,6 @@ function readPrefs(): VoicePrefs {
 			)
 				? (parsed.language as VoiceLanguage)
 				: "en",
-			autoLanguage:
-				typeof parsed.autoLanguage === "boolean" ? parsed.autoLanguage : true,
-			gameSound:
-				typeof parsed.gameSound === "boolean" ? parsed.gameSound : true,
 		};
 	} catch {
 		return DEFAULT_PREFS;
@@ -159,33 +130,14 @@ export function useVoice({
 	/** The language in force: the URL if it says, else this device's preference. */
 	const language = languageFromUrl ?? storedLanguage;
 
-	const [autoLanguage, setAutoLanguage] = useState(DEFAULT_PREFS.autoLanguage);
-
-	/**
-	 * Both places, deliberately.
-	 *
-	 * Choosing a language also leaves Automatic. Picking Espanol and then being
-	 * answered in English because the last message happened to be English is
-	 * the control not working, whatever the menu says is selected.
-	 */
+	/** Both places, deliberately. */
 	const setLanguage = useCallback(
 		(next: VoiceLanguage) => {
 			setStoredLanguage(next);
-			setAutoLanguage(false);
 			onLanguageChange?.(next);
 		},
 		[onLanguageChange],
 	);
-
-	/**
-	 * Back to following the reader.
-	 *
-	 * The language in force is left exactly as it is. Automatic means the next
-	 * message decides, not that everything reverts to English.
-	 */
-	const enableAutoLanguage = useCallback(() => setAutoLanguage(true), []);
-
-	const [gameSound, setGameSound] = useState(DEFAULT_PREFS.gameSound);
 
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
@@ -210,8 +162,6 @@ export function useVoice({
 		setStoredLanguage(prefs.language);
 		setAutoSpeak(prefs.autoSpeak);
 		setSpeed(prefs.speed);
-		setAutoLanguage(prefs.autoLanguage);
-		setGameSound(prefs.gameSound);
 		setPrefsLoaded(true);
 	}, []);
 
@@ -221,12 +171,12 @@ export function useVoice({
 		try {
 			window.localStorage.setItem(
 				PREFS_KEY,
-				JSON.stringify({ autoSpeak, speed, language, autoLanguage, gameSound }),
+				JSON.stringify({ autoSpeak, speed, language }),
 			);
 		} catch {
 			// Private browsing throws. Preferences are a convenience, not a feature.
 		}
-	}, [autoSpeak, autoLanguage, gameSound, language, prefsLoaded, speed]);
+	}, [autoSpeak, language, prefsLoaded, speed]);
 
 	// A 404 or a disabled module both mean "no voice": unavailable, not an error.
 	useEffect(() => {
@@ -427,13 +377,7 @@ export function useVoice({
 			let url: string;
 			try {
 				// Playback starts on the vendor's first chunk, not after the whole file.
-				url = await speakStream(
-					text,
-					language,
-					threadId,
-					persona,
-					controller.signal,
-				);
+				url = await speakStream(text, language, threadId, persona, controller.signal);
 			} catch (error) {
 				// An abort is always this component's own doing, so it earns no note.
 				if (error instanceof VoiceError) {
@@ -524,10 +468,6 @@ export function useVoice({
 		dismissNote: () => setNote(null),
 		runNoteAction,
 		setLanguage,
-		autoLanguage,
-		enableAutoLanguage,
-		gameSound,
-		toggleGameSound: () => setGameSound((on) => !on),
 		setSpeed,
 		toggleAutoSpeak: () => setAutoSpeak((on) => !on),
 		play,

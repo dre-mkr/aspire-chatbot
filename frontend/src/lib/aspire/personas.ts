@@ -21,13 +21,13 @@ export interface Persona {
 export const PERSONAS: ReadonlyArray<Persona> = [
 	{
 		id: "stella",
-		name: "Sky",
+		name: "Skai",
 		audience: "Ages 5–12",
 		blurb: "Short answers, simple words, and a slower reading voice.",
 	},
 	{
 		id: "orion",
-		name: "Zion",
+		name: "Dion",
 		audience: "Ages 13–18",
 		blurb: "Fuller explanations, and the games that go with them.",
 	},

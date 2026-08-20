@@ -14,10 +14,8 @@ from app.games.models import (
     Closing,
     Entry,
     GameSet,
-    HangmanEntry,
     Language,
     Persona,
-    QuizEntry,
     ScrambleEntry,
     StatementEntry,
     Volatility,
@@ -28,8 +26,6 @@ logger = logging.getLogger(__name__)
 
 WORD_SCRAMBLE = "word_scramble"
 TRUE_FALSE = "true_false"
-MILLIONAIRE = "millionaire"
-HANGMAN = "hangman"
 
 
 class SeedError(ValueError):
@@ -184,103 +180,9 @@ def _statement_entry(raw: dict, *, set_language: Language, where: str) -> Statem
     )
 
 
-def _quiz_entry(raw: dict, *, set_language: Language, where: str) -> QuizEntry:
-    common = _common(raw, set_language=set_language, where=where)
-    where = f"{where} entry {common['id']!r}"
-
-    choices_raw = raw.get("choices") or []
-    _require(
-        isinstance(choices_raw, list),
-        where,
-        "choices must be a list",
-    )
-    choices = tuple(str(c).strip() for c in choices_raw if str(c).strip())
-    _require(
-        len(choices) == 4,
-        where,
-        f"a question needs exactly four choices, got {len(choices)} — the card "
-        "lays them out two by two and a fifth has nowhere to go",
-    )
-    _require(
-        len(set(choices)) == len(choices),
-        where,
-        "two choices are identical, so one right answer has two buttons",
-    )
-
-    answer_index = raw.get("answer_index")
-    _require(
-        isinstance(answer_index, int) and not isinstance(answer_index, bool),
-        where,
-        f"answer_index must be a whole number, got {answer_index!r}",
-    )
-    _require(
-        0 <= int(answer_index) < len(choices),
-        where,
-        f"answer_index {answer_index} is outside the four choices — it is a "
-        "zero-based index, so the last one is 3",
-    )
-
-    question = _text(raw, "question", where)
-    _require(
-        question.rstrip().endswith("?"),
-        where,
-        "a quiz question has to ask something",
-    )
-
-    return QuizEntry(
-        **common,
-        question=question,
-        choices=choices,
-        answer_index=int(answer_index),
-        explanation=_text(raw, "explanation", where),
-    )
-
-
-def _hangman_entry(raw: dict, *, set_language: Language, where: str) -> HangmanEntry:
-    common = _common(raw, set_language=set_language, where=where)
-    where = f"{where} entry {common['id']!r}"
-
-    word = _text(raw, "word", where)
-    letters = letters_of(word)
-    _require(
-        bool(letters),
-        where,
-        f"{word!r} has no letters to guess",
-    )
-    # A single repeated letter is not a puzzle, it is a coin toss with a gallows.
-    _require(
-        len(set(letters)) >= 3,
-        where,
-        f"{word!r} has fewer than three distinct letters",
-    )
-    _require(
-        word == word.upper(),
-        where,
-        f"{word!r} must be uppercase — the board is drawn in capitals and a "
-        "lowercase seed would be guessed correctly and displayed wrong",
-    )
-
-    definition = _text(raw, "definition", where)
-    _require(
-        word.lower() not in definition.lower(),
-        where,
-        f"the definition contains {word!r}, which gives the answer away",
-    )
-    hint = _text(raw, "hint", where)
-    _require(
-        word.lower() not in hint.lower(),
-        where,
-        f"the hint contains {word!r}, which gives the answer away",
-    )
-
-    return HangmanEntry(**common, word=word, hint=hint, definition=definition)
-
-
 _ENTRY_PARSERS: dict[str, Callable[..., Entry]] = {
     WORD_SCRAMBLE: _scramble_entry,
     TRUE_FALSE: _statement_entry,
-    MILLIONAIRE: _quiz_entry,
-    HANGMAN: _hangman_entry,
 }
 
 

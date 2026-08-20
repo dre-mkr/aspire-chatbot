@@ -51,7 +51,7 @@ class GameDirective(_Directive):
     """Launch one of the real game components."""
 
     t: Literal["game"] = "game"
-    game: Literal["scramble", "true_false", "millionaire", "hangman"]
+    game: Literal["scramble", "true_false", "millionaire"]
     concept: str
     difficulty: Literal[1, 2, 3] = 1
 
@@ -179,26 +179,6 @@ class EscalatedDirective(_Directive):
     eta: str = Field(default="", max_length=120)
 
 
-# ── video ────────────────────────────────────────────────────────────────────
-
-
-class VideoDirective(_Directive):
-    """One ASPIRE story video, to play inside the conversation.
-
-    Carries an id, never a URL. `safety_out.strip_links` gates prose and never
-    reads `ui_directives`, so a URL here would be the one path to a reader that
-    the link stripping the youngest personas depend on does not cover. The
-    client resolves the id against `/api/videos`, which is the same catalog the
-    server matched against, so there is exactly one place a path is written.
-    """
-
-    t: Literal["video"] = "video"
-    video_id: str = Field(min_length=1, max_length=64)
-    #: Copied from the catalog so the card can render before the list arrives.
-    title: str = Field(min_length=1, max_length=200)
-    topic: str = Field(default="", max_length=80)
-
-
 # ── widget ───────────────────────────────────────────────────────────────────
 
 
@@ -223,7 +203,6 @@ UIDirective = Annotated[
         CitationsDirective,
         EscalatedDirective,
         WidgetDirective,
-        VideoDirective,
     ],
     Field(discriminator="t"),
 ]

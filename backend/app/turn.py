@@ -40,8 +40,6 @@ class TurnRecord:
     citations: list[dict[str, Any]] = field(default_factory=list)
     quick_replies: list[str] = field(default_factory=list)
     agent: str | None = None
-    #: Whether this turn told a story, which is personal and never replayed.
-    story: bool = False
     #: Whether the conversation row is already somebody else's guarantee.
     opened: bool = False
 
@@ -238,12 +236,6 @@ def cacheable(record: TurnRecord) -> bool:
     if record.card or not record.reply.strip():
         return False
     if record.agent in LESSON_AGENTS:
-        return False
-    # A story was written for the reader who asked for it, about the topic they
-    # chose. Replaying it to the next person who happens to type the same topic
-    # is the same mistake as replaying a lesson, and it would also serve a
-    # story to somebody who never asked for one.
-    if record.story:
         return False
     return all(
         directive.get("t") in ("citations", "quick_replies")

@@ -1,23 +1,21 @@
 /** Directive type to component, with a fallback that renders nothing. */
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useState } from "react";
-import { type AspireVideo, fetchVideos } from "#/lib/aspire/videos";
+import type { ReactNode } from "react";
 import type {
 	ChartDirective,
+	CitationsDirective,
 	Directive,
 	EscalatedDirective,
 	ProgressDirective,
 	ReviewCardDirective,
 	SignupDirective,
 	UploadDirective,
-	VideoDirective,
 	WidgetDirective,
 	WidgetInteraction,
 } from "../../lib/stream/types";
 import { WidgetRenderer } from "../widgets/WidgetRenderer";
 import { ReviewCard } from "./ReviewCard";
 import { UploadCard } from "./UploadCard";
-import { VideoCard } from "./VideoPanel";
 
 export interface DirectiveContext {
 	/** The conversation this directive belongs to. */
@@ -57,9 +55,9 @@ const KNOWN = new Set([
 	"review_card",
 	"chart",
 	"progress",
+	"citations",
 	"escalated",
 	"widget",
-	"video",
 ]);
 
 /** Logged once per unknown type per session, not once per render. */
@@ -93,8 +91,8 @@ export function DirectiveView({
 				/>
 			);
 
-		case "video":
-			return <OfferedVideo directive={directive as VideoDirective} />;
+		case "citations":
+			return <Citations directive={directive as CitationsDirective} />;
 
 		case "progress":
 			return <Progress directive={directive as ProgressDirective} />;
@@ -135,53 +133,6 @@ export function DirectiveView({
 }
 
 /* ── the small ones, inline ─────────────────────────────────────────────── */
-
-/**
- * A video the reader said yes to.
- *
- * The directive carries an id and a title, not a source. Resolving the id
- * against `/api/videos` is what keeps the only written path on the server, and
- * it costs one small request the first time a video is accepted in a session.
- *
- * The title arrives on the directive so the card is not blank while that
- * request is in flight — the reader has just asked for this, and a gap where
- * they expected a film reads as a failure.
- */
-function OfferedVideo({ directive }: { directive: VideoDirective }) {
-	const [video, setVideo] = useState<AspireVideo | null>(null);
-	const [failed, setFailed] = useState(false);
-
-	useEffect(() => {
-		let live = true;
-		fetchVideos()
-			.then((list) => {
-				if (!live) return;
-				const found = list.find((item) => item.id === directive.video_id);
-				if (found) setVideo(found);
-				else setFailed(true);
-			})
-			.catch(() => live && setFailed(true));
-		return () => {
-			live = false;
-		};
-	}, [directive.video_id]);
-
-	if (failed) {
-		return (
-			<p className="video-offer__failed">
-				That video could not be loaded. You can find it in the Videos panel.
-			</p>
-		);
-	}
-	if (!video) {
-		return <p className="video-offer__loading">Loading {directive.title}…</p>;
-	}
-	return (
-		<div className="video-offer">
-			<VideoCard video={video} compact />
-		</div>
-	);
-}
 
 /** The account sign-up card. */
 function SignupCard({ directive }: { directive: SignupDirective }) {
@@ -246,6 +197,30 @@ function SignupCard({ directive }: { directive: SignupDirective }) {
 				{label}
 			</Link>
 		</div>
+	);
+}
+
+function Citations({ directive }: { directive: CitationsDirective }) {
+	return (
+		<details
+			style={{
+				marginBlockStart: "0.5rem",
+				fontSize: "calc(var(--band-type, 16px) - 2px)",
+				color: "var(--quiet)",
+			}}
+		>
+			<summary style={{ cursor: "pointer", minHeight: "44px" }}>
+				Where this came from ({directive.refs.length})
+			</summary>
+			<ul style={{ margin: "0.5rem 0 0", paddingInlineStart: "1.25rem" }}>
+				{directive.refs.map((ref) => (
+					<li key={ref.kb_id}>
+						<span style={{ fontFamily: "var(--font-mono)" }}>{ref.kb_id}</span>
+						{ref.title ? ` — ${ref.title}` : null}
+					</li>
+				))}
+			</ul>
+		</details>
 	);
 }
 
@@ -387,3 +362,4 @@ function Chart({ directive }: { directive: ChartDirective }) {
 		</figure>
 	);
 }
+

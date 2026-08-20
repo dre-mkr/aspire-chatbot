@@ -7,12 +7,11 @@ import { FirstRun } from "#/components/chat/FirstRun";
 import { Rail } from "#/components/chat/Rail";
 import { VoiceConsent, VoiceNote } from "#/components/chat/Voice";
 import { CloseIcon, MenuIcon } from "#/components/icons";
-import { Brandmark } from "#/components/landing/Brandmark";
 import { GuideChooser } from "#/components/onboarding/GuideChooser";
+import { guideAsked, rememberGuideAsked } from "#/lib/aspire/guide-choice";
 import { newThreadId } from "#/lib/aspire/conversations";
 import { clearEligibilityResult } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
-import { guideAsked, rememberGuideAsked } from "#/lib/aspire/guide-choice";
 import {
 	readLandingDraft,
 	stageFirstTurn,
@@ -114,21 +113,6 @@ export function LandingScreen() {
 	/** Bumped whenever the composer should take the cursor. */
 	const [focusSignal, setFocusSignal] = useState(1);
 	const focusComposer = useCallback(() => setFocusSignal((n) => n + 1), []);
-
-	/**
-	 * Whether the reader has started using the assistant.
-	 *
-	 * The brief asks the logo to keep moving "until the user begins interacting",
-	 * which is earlier than navigating away: typing the first character is the
-	 * moment attention moves to the composer, and something orbiting above it
-	 * from then on is competing with the thing they came to do.
-	 *
-	 * One-way. It never goes back to false on this screen — clearing the box is
-	 * not un-starting, and restarting an animation under someone mid-sentence
-	 * would be worse than never having stopped.
-	 */
-	const [engaged, setEngaged] = useState(false);
-	const engage = useCallback(() => setEngaged(true), []);
 
 	// Nothing here writes a chat's name, so the tab goes back to the product's.
 	useEffect(() => {
@@ -396,7 +380,6 @@ export function LandingScreen() {
 							<div className="thread__inner">
 								<div className="hero">
 									<div className="orb orb--hero" aria-hidden="true" />
-									<Brandmark still={engaged} />
 									<h1 className="hero__title">
 										What do you want to learn about money today?
 									</h1>
@@ -450,12 +433,7 @@ export function LandingScreen() {
 							persona={persona}
 							onPersonaChange={setPersona}
 							draft={draft}
-							onDraftChange={(next) => {
-								// The first character typed is the moment attention moves
-								// to the composer, and is where the orbit stops.
-								if (next) engage();
-								setDraft(next);
-							}}
+							onDraftChange={setDraft}
 							focusSignal={focusSignal}
 							voice={voice}
 						/>
@@ -467,10 +445,7 @@ export function LandingScreen() {
 										key={prompt}
 										type="button"
 										className="starter"
-										onClick={() => {
-											engage();
-											startConversation(prompt);
-										}}
+										onClick={() => startConversation(prompt)}
 									>
 										{prompt}
 									</button>

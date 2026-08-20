@@ -16,17 +16,13 @@ from app.graph.nodes.intents import (
     wants_game,
     wants_human,
     wants_registration,
-    wants_story,
-    wants_video,
 )
 from app.graph.state import AspireState
 from app.schemas.directives import (
     EligibilityDirective,
     SignupDirective,
-    VideoDirective,
     directive_payload,
 )
-from app.videos import by_id
 
 logger = logging.getLogger(__name__)
 
@@ -190,19 +186,6 @@ def make_intent_gate(
             if card is not None:
                 return card
 
-        # After the game claim, before the router: taking up an offer made last
-        # turn is not a new question, and answering it as one loses the video.
-        card = _open_video(state, message)
-        if card is not None:
-            return card
-
-        # The story flow, both halves. The second half does NOT return a card:
-        # it records the topic and lets an agent do the telling, because a story
-        # is prose a model writes and not a form this node can fill in.
-        card = _story_turn(state, message)
-        if card is not None:
-            return card
-
         # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
@@ -220,112 +203,6 @@ def make_intent_gate(
         return {}
 
     return intent_gate
-
-
-#: Suggested subjects, offered as chips when a reader asks for a story.
-#:
-#: Every one is something the corpus can actually ground a story in, so the
-#: topic a tapped chip produces is never one the assistant then has nothing to
-#: say about.
-_STORY_TOPICS: dict[str, list[str]] = {
-    "en": ["Saving up for something", "Needs and wants", "Earning your own money"],
-    "es": ["Ahorrar para algo", "Necesidades y deseos", "Ganar tu propio dinero"],
-    "fr": ["Économiser pour quelque chose", "Besoins et envies", "Gagner son argent"],
-}
-
-_STORY_ASK: dict[str, str] = {
-    "en": "I can do that. What would you like the story to be about?",
-    "es": "Claro. ¿Sobre qué te gustaría que fuera el cuento?",
-    "fr": "Bien sûr. De quoi aimerais-tu que parle l'histoire ?",
-}
-
-
-def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
-    """Ask what the story should be about, or record the answer.
-
-    Two turns, and the split is what makes the feature safe. Turn one is a card
-    -- a question and three chips -- so nothing is generated before the reader
-    has said what they want. Turn two is NOT a card: it records the topic and
-    returns None, so the router runs and an agent writes the story with the
-    story instruction and the story word cap applied.
-
-    A reader who asks for a story and then says something else has changed the
-    subject, and the latch is dropped rather than treating their next question
-    as a title.
-    """
-    locale = str(state.get("locale") or "en")
-    if locale not in _STORY_ASK:
-        locale = "en"
-
-    if state.get("awaiting_story_topic"):
-        topic = message.strip()
-        # Asking for a story again is not a topic; ask once more rather than
-        # writing a story called "tell me a story".
-        if not topic or wants_story(message):
-            # Still a card: without the flag this falls through to the router
-            # and an agent answers "tell me a story" as though it were a
-            # question, with the latch still set.
-            return {
-                "awaiting_story_topic": True,
-                "active_agent": _holding_agent(state),
-                "messages": [AIMessage(content=_STORY_ASK[locale])],
-                "quick_replies": _STORY_TOPICS[locale],
-                "safety_flags": {"card": "story_topic"},
-            }
-        return {"awaiting_story_topic": False, "story_topic": topic[:120]}
-
-    if not wants_story(message):
-        return None
-
-    return {
-        "awaiting_story_topic": True,
-        "active_agent": _holding_agent(state),
-        "messages": [AIMessage(content=_STORY_ASK[locale])],
-        "quick_replies": _STORY_TOPICS[locale],
-        "safety_flags": {"card": "story_topic"},
-    }
-
-
-def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
-    """Play the video offered last turn, if the reader just said yes to it.
-
-    Three things have to be true, and the last is the one that matters: an
-    offer was actually made, this message accepts it, and the id still names
-    something in the catalog. That last check is why the catalog is server-owned
-    -- an id reaching here from a stale checkpoint, or from a client that made
-    one up, resolves to nothing and the turn carries on as an ordinary question.
-
-    The offer is cleared either way. A reader who says yes gets the video once;
-    a reader who asks something else has moved on, and a "yes" three turns later
-    should not reach back and open a player.
-    """
-    offered = state.get("offered_video")
-    if not offered:
-        return None
-    if not wants_video(message):
-        # They asked something else. The offer has expired.
-        return {"offered_video": None}
-
-    video = by_id(str(offered))
-    if video is None:
-        logger.info("offered video %r is no longer in the catalog", offered)
-        return {"offered_video": None}
-
-    return {
-        "offered_video": None,
-        "active_agent": _holding_agent(state),
-        "ui_directives": [
-            directive_payload(
-                VideoDirective(
-                    video_id=video.id,
-                    title=video.title,
-                    topic=video.topic,
-                )
-            )
-        ],
-        "messages": [AIMessage(content=f"Here it is — {video.title}.")],
-        "safety_flags": {"card": "video"},
-    }
 
 
 def _asked_for_a_person(message: str) -> dict[str, Any] | None:
@@ -537,14 +414,9 @@ def _open_game(state: AspireState, message: str) -> dict[str, Any] | None:
 
 
 #: What each game is called to a reader.
-#:
-#: A game missing from here is offered by its wire id -- "hangman" beside
-#: "True or false" -- so this table has to gain a row whenever `BAND_MIN` does.
 _GAME_LABELS: dict[str, str] = {
     "true_false": "True or false",
     "scramble": "Word scramble",
-    "millionaire": "Millionaire",
-    "hangman": "Hangman",
 }
 
 

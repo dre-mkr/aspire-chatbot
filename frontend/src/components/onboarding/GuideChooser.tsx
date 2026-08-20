@@ -1,7 +1,7 @@
 import { type ReactElement, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRightIcon } from "#/components/icons";
-import { type PersonaId, personaById } from "#/lib/aspire/personas";
+import type { PersonaId } from "#/lib/aspire/personas";
 import {
 	CloudMark,
 	GeneralMark,
@@ -10,42 +10,39 @@ import {
 	StarMark,
 } from "./GuideMascots";
 
-/**
- * One guide, in the order a family meets them: youngest reader outwards.
- *
- * The name is not written here. It lives in `PERSONAS`, which mirrors the
- * backend's `names.py`, and is read below -- a guide's label changed twice in
- * two commits and this file was the copy that kept the old one. What is written
- * here is what this screen alone knows: the mascot, and blurbs pitched at a
- * family choosing rather than at the composer menu.
- */
+/** One guide, in the order a family meets them: youngest reader outwards. */
 const GUIDES: ReadonlyArray<{
 	id: PersonaId;
 	who: string;
+	name: string;
 	blurb: string;
 	Mark: (props: { className?: string }) => ReactElement;
 }> = [
 	{
 		id: "stella",
 		who: "Ages 5–12",
+		name: "Skai",
 		blurb: "Simple words, shorter answers and easy explanations.",
 		Mark: CloudMark,
 	},
 	{
 		id: "orion",
 		who: "Ages 13–18",
+		name: "Dion",
 		blurb: "Fuller explanations, games, challenges and activities.",
 		Mark: RocketMark,
 	},
 	{
 		id: "aurora",
 		who: "Parent or guardian",
+		name: "Imani",
 		blurb: "Practical answers about the programme and your child's learning.",
 		Mark: StarMark,
 	},
 	{
 		id: "nova",
 		who: "Teacher or educator",
+		name: "Azuri",
 		blurb: "Clear explanations and teaching support you can use with learners.",
 		Mark: ScholarMark,
 	},
@@ -158,7 +155,7 @@ export function GuideChooser({
 										{guide.who}
 									</span>
 									<span className="guide-card__name">
-										Meet <b>{personaById(guide.id)?.name ?? guide.who}</b>
+										Meet <b>{guide.name}</b>
 									</span>
 									<span className="guide-card__blurb">{guide.blurb}</span>
 								</span>

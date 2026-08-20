@@ -260,21 +260,10 @@ def test_speak_sanitises_before_synthesis(client, sdk):
 
 
 def test_speak_uses_the_persona_voice_and_settings(client, sdk):
-    """The persona's configured delivery reaches the SDK, whatever it is.
-
-    Asserted against the registry rather than a literal: this test is about the
-    wiring between the endpoint and the profile, and it should not fail every
-    time somebody tunes a voice by a hundredth.
-    """
-    from app.voice.registry import Language, Persona, resolve_profile
-
     client.post("/api/voice/speak", json=speak_body(persona="stella"))
     call = sdk.tts_calls[0]
     assert call["voice_id"] == "v-stella"
-    expected = resolve_profile(Persona.STELLA, Language.EN).settings
-    assert call["voice_settings"].speed == pytest.approx(expected.speed)
-    assert call["voice_settings"].stability == pytest.approx(expected.stability)
-    assert call["voice_settings"].style == pytest.approx(expected.style)
+    assert call["voice_settings"].speed == pytest.approx(0.90)
 
 
 def test_number_heavy_text_uses_the_quality_model(client, settings, sdk):

@@ -40,7 +40,6 @@ from app.schemas import (
     TitleResponse,
 )
 from app.voice import get_voice_settings, validate_registry, voice_router
-from app.videos import videos_router
 
 logger = logging.getLogger(__name__)
 
@@ -172,11 +171,6 @@ if games_enabled():
 # The eligibility card calls these directly too, and for the same reason.
 if eligibility_enabled():
     app.include_router(eligibility_router)
-
-# The video library. Unconditional and read-only: it is a static catalog of
-# published material, with no key, no external service and nothing to fail at
-# startup, so there is nothing for a switch to protect.
-app.include_router(videos_router)
 
 # The graph, at /v2.
 from app.api.stream import router as graph_router

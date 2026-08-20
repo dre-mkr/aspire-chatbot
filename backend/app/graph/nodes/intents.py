@@ -114,50 +114,10 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
         r"\bany games?\b",
         r"\b(?:word )?scramble\b",
         r"\btrue or false\b",
-        r"\bhangman\b",
-        r"\bmillionaire\b",
         r"\bjugar\b",
         r"\b(?:un|el) juego\b",
         r"\bjouer\b",
         r"\b(?:un|le) jeu\b",
-    )
-)
-
-#: "Tell me a story." Asked for outright, and only ever asked for.
-#:
-#: The client's rule is that the assistant must NEVER start telling stories on
-#: its own, so this is the whole trigger: there is no planner move, no
-#: turns-since counter and nothing in the tutor that can reach a story without
-#: a reader typing one of these. Narrow on purpose -- "what is the story with
-#: my application" is not a request for a bedtime story, which is why the verb
-#: has to govern the noun rather than merely appear near it.
-_STORY: tuple[re.Pattern[str], ...] = tuple(
-    re.compile(pattern)
-    for pattern in (
-        r"\b(?:tell|read|say|give)(?: me| us)?(?: a| another| one)? (?:short )?(?:story|tale)\b",
-        r"\bi want (?:a|another) story\b",
-        r"\b(?:can|could) (?:you|we) (?:tell|hear|have)(?: me| us)?(?: a)? story\b",
-        r"\bstory time\b",
-        r"\b(?:cuenta|cuentame|dime)(?: un)? cuento\b",
-        r"\b(?:raconte|raconte-moi)(?: une)? histoire\b",
-    )
-)
-
-#: "Yes, show me the video." Accepting an offer, or asking for one outright.
-#:
-#: Deliberately narrow. A bare "yes" is NOT here: it is the commonest word in
-#: the language and the offer is one line in an answer that may have said
-#: several things, so treating every "yes" as an acceptance would open a player
-#: on top of whatever the reader was actually agreeing to. The chip sends its
-#: own unambiguous text, and a reader typing it by hand says something like it.
-_WATCH: tuple[re.Pattern[str], ...] = tuple(
-    re.compile(pattern)
-    for pattern in (
-        r"\b(?:watch|play|show|see) (?:me |us )?(?:the |that |this |a |an )?(?:aspire )?(?:video|story|film|cartoon)\b",
-        r"\b(?:yes|yeah|sure|ok|okay)[, ]+(?:please )?(?:watch|show|play)\b",
-        r"\bvideo,? (?:please|yes)\b",
-        r"\b(?:ver|mira|muestra|pon) (?:el |un )?(?:video|cuento)\b",
-        r"\b(?:voir|montre|regarder) (?:la |une |le )?(?:video|histoire)\b",
     )
 )
 
@@ -169,12 +129,6 @@ _NAMED_GAME: tuple[tuple[re.Pattern[str], str], ...] = (
         "true_false",
     ),
     (re.compile(r"\bmillionaire\b|\bmillonario\b|\bmillionnaire\b"), "millionaire"),
-    (
-        re.compile(
-            r"\bhangman\b|\bahorcado\b|\ble pendu\b|\bpendu\b"
-        ),
-        "hangman",
-    ),
 )
 
 
@@ -367,22 +321,6 @@ def wants_game(message: str) -> bool:
     if not _is_a_command(folded):
         return False
     return any(pattern.search(folded) for pattern in _PLAY)
-
-
-def wants_story(message: str) -> bool:
-    """Whether this message ASKS for a story. Nothing else ever starts one."""
-    folded = fold(message)
-    if not _is_a_command(folded):
-        return False
-    return any(pattern.search(folded) for pattern in _STORY)
-
-
-def wants_video(message: str) -> bool:
-    """Whether this message is accepting a video, rather than mentioning one."""
-    folded = fold(message)
-    if not _is_a_command(folded):
-        return False
-    return any(pattern.search(folded) for pattern in _WATCH)
 
 
 def named_game(message: str) -> str | None:

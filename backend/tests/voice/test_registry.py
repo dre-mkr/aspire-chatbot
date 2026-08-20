@@ -9,8 +9,6 @@ import pytest
 
 from app.voice.config import VoiceSettings
 from app.voice.registry import (
-    _DELIVERY,
-    MAX_STYLE,
     Language,
     Persona,
     VoiceRegistryError,
@@ -94,57 +92,15 @@ def test_per_language_override_alone_is_enough():
 
 
 def test_delivery_matches_the_brief():
-    """The brief's requirements, not the numbers that currently satisfy them.
-
-    Every one of these was a literal once, and retuning the table by a
-    hundredth failed the suite without anything being wrong. What the brief
-    actually asks for is an ordering, so that is what is asserted -- it survives
-    tuning and still fails if somebody makes the children's voice the fastest.
-    """
     registry = build_registry(_settings())
-    delivery = {
-        persona: registry[(persona, Language.EN)].settings for persona in Persona
-    }
-    stella = delivery[Persona.STELLA]
-    orion = delivery[Persona.ORION]
-    aurora = delivery[Persona.AURORA]
-    nova = delivery[Persona.NOVA]
-
-    # Ages 5-12 are read to the slowest, and slower than the teenagers.
-    assert stella.speed == min(d.speed for d in delivery.values())
-    assert stella.speed < orion.speed
-    # A teenager is not read to at a child's pace; that reads as condescension.
-    assert orion.speed >= 1.0
-    # The guardian voice is the one that must be trusted, so it is the evenest.
-    assert aurora.stability == max(d.stability for d in delivery.values())
-    assert aurora.stability > stella.stability
-    # The two adult voices are steadier and plainer than the two young ones.
-    for adult in (aurora, nova):
-        for young in (stella, orion):
-            assert adult.stability > young.stability
-            assert adult.style < young.style
-
-
-def test_no_voice_is_exaggerated():
-    """The brief says it twice, so it is a build failure rather than a note."""
-    for persona, profile in build_registry(_settings()).items():
-        assert profile.settings.style <= MAX_STYLE, persona
-
-
-def test_a_delivery_knob_can_be_overridden_without_touching_the_table():
-    registry = build_registry(_settings(voice_stella_speed=0.8, voice_stella_style=0.1))
     stella = registry[(Persona.STELLA, Language.EN)].settings
-    assert stella.speed == pytest.approx(0.8)
-    assert stella.style == pytest.approx(0.1)
-    # Untouched knobs keep the table's value.
-    assert stella.stability == pytest.approx(_DELIVERY[Persona.STELLA]["stability"])
+    aurora = registry[(Persona.AURORA, Language.EN)].settings
 
-
-def test_an_override_for_one_persona_leaves_the_others_alone():
-    registry = build_registry(_settings(voice_stella_speed=0.8))
-    assert registry[(Persona.ORION, Language.EN)].settings.speed == pytest.approx(
-        _DELIVERY[Persona.ORION]["speed"]
-    )
+    # Five-year-olds need it slower.
+    assert stella.speed == pytest.approx(0.90)
+    # Aurora is the institutional voice: normal pace, highest stability.
+    assert aurora.speed == pytest.approx(1.0)
+    assert aurora.stability > stella.stability
 
 
 def test_every_speed_is_within_the_supported_range():

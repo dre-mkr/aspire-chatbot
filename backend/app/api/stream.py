@@ -351,9 +351,6 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
     record.quick_replies = list(turn.get("quick_replies") or [])
     record.agent = turn.get("active_agent")
     record.card = _card_kind(directives)
-    # Read off the finished turn: `cards` set it, and it is what makes this
-    # reply personal to the reader who asked.
-    record.story = bool(turn.get("story_topic"))
 
     await _settle(opening)
     await turn_service.persist_turn(record)
@@ -387,34 +384,10 @@ async def _pending_interrupts(graph: Any, config: dict[str, Any]) -> list[dict[s
 
 
 def _wants_card(message: str) -> bool:
-    """Whether the card node will claim this turn.
+    """Whether the card node will claim this turn."""
+    from app.graph.nodes.intents import wants_eligibility, wants_game
 
-    This is a cache guard, and getting it wrong is silent. The layer-1 cache
-    answers before the graph runs at all, so a turn missing from here is
-    replayed from somebody else's answer and the card node NEVER EXECUTES --
-    which means any state it would have set is never set either.
-
-    That is not theoretical. "Tell me a story" is a plain question to the cache
-    and a latch to the card node: served from cache, the reply was right, the
-    chips were right, and `awaiting_story_topic` was never written, so the
-    reader's chosen topic came back as an ordinary question and no story was
-    ever told. A video acceptance fails the same way.
-
-    Every intent the card node claims belongs here.
-    """
-    from app.graph.nodes.intents import (
-        wants_eligibility,
-        wants_game,
-        wants_story,
-        wants_video,
-    )
-
-    return (
-        wants_eligibility(message)
-        or wants_game(message)
-        or wants_story(message)
-        or wants_video(message)
-    )
+    return wants_eligibility(message) or wants_game(message)
 
 
 def _card_kind(directives: list[dict[str, Any]]) -> str | None:

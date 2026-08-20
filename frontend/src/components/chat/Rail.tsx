@@ -27,7 +27,6 @@ import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 import { HelpLauncher } from "./HelpPanel";
-import { VideoLauncher } from "./VideoPanel";
 
 interface RailProps {
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
@@ -193,7 +192,6 @@ export function Rail({
 
 			{/* Outside `rail__body`, so a long history cannot scroll it out of reach. */}
 			<div className="rail__help">
-				<VideoLauncher />
 				<HelpLauncher />
 			</div>
 

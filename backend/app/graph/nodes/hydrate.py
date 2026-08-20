@@ -65,9 +65,6 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         update["quick_replies"] = []
         update["safety_flags"] = {}
         update["halt_reason"] = None
-        # Lives for exactly the turn that tells the story. Left set, every
-        # later question would be answered as another story.
-        update["story_topic"] = None
         update["retrieved"] = []
         update["qa_related"] = []
         update["groundedness"] = 0.0
@@ -82,12 +79,6 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         # are, so it rides in the body rather than in the signed token. Written
         # every turn -- the reader can turn it off between two questions.
         update["simple_mode"] = bool((body or {}).get("simple_mode"))
-
-        # Same shape, same reason. Absent means Automatic: every client that
-        # predates the selector, and every deep link without the parameter,
-        # keeps the behaviour it already had.
-        raw_auto = (body or {}).get("auto_language")
-        update["auto_language"] = True if raw_auto is None else bool(raw_auto)
 
         # ── the turn's inputs, put back after the clear ──
         # A widget interaction or a game result arrives as a body field, not as a message.

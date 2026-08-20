@@ -130,20 +130,6 @@ export interface WidgetDirective {
 	payload: ConceptWidget;
 }
 
-/**
- * One ASPIRE story video, to play inside the conversation.
- *
- * An id, never a URL. The card resolves it against `/api/videos`, which is the
- * same catalog the server matched on, so a path is written in exactly one
- * place and a directive can never point a reader off-site.
- */
-export interface VideoDirective {
-	t: "video";
-	video_id: string;
-	title: string;
-	topic: string;
-}
-
 /** The open member. */
 export interface UnknownDirective {
 	t: string;
@@ -162,7 +148,6 @@ export type Directive =
 	| CitationsDirective
 	| EscalatedDirective
 	| WidgetDirective
-	| VideoDirective
 	| UnknownDirective;
 
 /* ── concept widgets ────────────────────────────────────────────────────── */

@@ -488,70 +488,6 @@ def _simple_mode_instruction(state: AspireState) -> str | None:
     return f"{SIMPLE_MODE_INSTRUCTIONS.strip()}{_SIMPLE_MODE_QA_EXTRA}"
 
 
-#: What a story has to be, per persona. The reader asked for this, so it is
-#: allowed to be a story -- but it is still ASPIRE, and it still cannot invent
-#: programme facts.
-_STORY_BY_PERSONA: dict[str, str] = {
-    "stella": (
-        "Tell a SHORT story, five or six sentences, for a child aged five to "
-        "twelve. One child, one problem about money, one thing they decide. "
-        "Simple words and short sentences. End with the one idea it teaches, in "
-        "a single line."
-    ),
-    "orion": (
-        "Tell a story for a teenager: eight to twelve sentences, a character "
-        "with a real decision to make and a consequence that follows from it. "
-        "Name the money idea it turns on and end by saying what it cost or "
-        "earned them."
-    ),
-    "aurora": (
-        "Tell a short, plain story a guardian could read aloud to their child, "
-        "and follow it with one line on what to talk about afterwards."
-    ),
-    "nova": (
-        "Write a short teaching story an educator could use with a class, then "
-        "add one line naming the concept and one discussion question."
-    ),
-    "everyone": (
-        "Tell a short story, six to ten sentences, with one clear money idea in "
-        "it. End by naming that idea in a line."
-    ),
-}
-
-
-def _story_instruction(state: AspireState) -> str | None:
-    """The extra system line for the one turn that tells a story.
-
-    Set only by `cards._story_turn`, which is reached only when the reader typed
-    a request for one. There is no path here from the planner or the tutor, so
-    the assistant cannot start a story at somebody who was asking a question.
-    """
-    topic = (state.get("story_topic") or "").strip()
-    if not topic:
-        return None
-    persona = str(state.get("persona") or "everyone")
-    shape = _STORY_BY_PERSONA.get(persona, _STORY_BY_PERSONA["everyone"])
-    return (
-        f"The reader has asked for a story about: {topic}\n"
-        f"{shape}\n"
-        "Set it in Saint Kitts and Nevis and use EC dollars. Invent the "
-        "characters freely; do NOT invent anything about the ASPIRE programme "
-        "itself -- no amounts, ages, dates or rules that are not in the "
-        "material you were given. Do not add a quiz, a game or a question at "
-        "the end unless the shape above asks for one."
-    )
-
-
-def _shaping_instructions(state: AspireState) -> str | None:
-    """Every extra system line this turn earns, joined. None when there are none."""
-    lines = [
-        line
-        for line in (_simple_mode_instruction(state), _story_instruction(state))
-        if line
-    ]
-    return "\n\n".join(lines) or None
-
-
 def _generation_messages(
     state: AspireState, question: str, chunks: list[KBChunk]
 ) -> list[Any]:
@@ -572,7 +508,7 @@ def _generation_messages(
                 agent_role=qa_agent_role(context.persona),
                 user_text=question,
                 retrieved=chunks,
-                extra_instruction=_shaping_instructions(state),
+                extra_instruction=_simple_mode_instruction(state),
             )
     except Exception:
         # A broken context must not cost the answer; fall through to the plain prompt.
@@ -586,9 +522,9 @@ def _generation_messages(
     )
     # The fallback is reached when the layered prompt could not be built, which
     # is no reason for the reader's own request to be the thing that gets lost.
-    shaping = _shaping_instructions(state)
-    if shaping:
-        audience = f"{audience}\n{shaping}"
+    simple = _simple_mode_instruction(state)
+    if simple:
+        audience = f"{audience}\n{simple}"
     return [
         SystemMessage(content=f"{system}\n{audience}"),
         HumanMessage(content=question),

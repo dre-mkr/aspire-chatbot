@@ -299,26 +299,6 @@ export function SourcesIcon(props: IconProps) {
 	);
 }
 
-/** Opens the ASPIRE video library. A film frame, not a play triangle. */
-export function VideoIcon(props: IconProps) {
-	return (
-		<Icon {...props}>
-			<rect x="2.5" y="5" width="19" height="14" rx="2.5" />
-			<path d="M2.5 9.5h19M7.5 5v4.5M16.5 5v4.5" />
-			<path d="m10.5 12.75 4 2-4 2z" />
-		</Icon>
-	);
-}
-
-/** Starts a video. The one place a play triangle is the right glyph. */
-export function PlayIcon(props: IconProps) {
-	return (
-		<Icon {...props}>
-			<path d="M8 5.5v13l11-6.5z" />
-		</Icon>
-	);
-}
-
 /** Fronts a failed turn. */
 export function AlertIcon(props: IconProps) {
 	return (
