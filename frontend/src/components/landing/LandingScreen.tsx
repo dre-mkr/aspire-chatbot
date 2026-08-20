@@ -7,6 +7,8 @@ import { FirstRun } from "#/components/chat/FirstRun";
 import { Rail } from "#/components/chat/Rail";
 import { VoiceConsent, VoiceNote } from "#/components/chat/Voice";
 import { CloseIcon, MenuIcon } from "#/components/icons";
+import { GuideChooser } from "#/components/onboarding/GuideChooser";
+import { guideAsked, rememberGuideAsked } from "#/lib/aspire/guide-choice";
 import { newThreadId } from "#/lib/aspire/conversations";
 import { clearEligibilityResult } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
@@ -48,6 +50,25 @@ export function LandingScreen() {
 		personaNotice,
 		dismissPersonaNotice,
 	} = useAnswerSettings();
+
+	/**
+	 * Who is reading, asked once per browser before the first question.
+	 *
+	 * Only when nothing has answered it already: a persona in the address or
+	 * derived from a signed-in account IS the answer, and asking again would be
+	 * asking someone to repeat themselves.
+	 */
+	const [askGuide, setAskGuide] = useState(false);
+	useEffect(() => {
+		// After mount, never during render: there is no `localStorage` in SSR,
+		// and reading it while rendering would mismatch the server's HTML.
+		if (persona === null && !guideAsked()) setAskGuide(true);
+	}, [persona]);
+
+	const closeGuide = useCallback(() => {
+		rememberGuideAsked();
+		setAskGuide(false);
+	}, []);
 
 	/** The rail's list and its row actions. No conversation is open here. */
 	const { renameChat, regenerateTitle, deleteChat } = useConversationList();
@@ -266,6 +287,18 @@ export function LandingScreen() {
 			data-phase="landing"
 			data-rail={drawerOpen ? "expanded" : "collapsed"}
 		>
+			{askGuide ? (
+				<GuideChooser
+					onChoose={(next) => {
+						// `null` is the general option, which is also what
+						// `setPersona` takes to mean "no band".
+						setPersona(next);
+						closeGuide();
+					}}
+					onSkip={closeGuide}
+				/>
+			) : null}
+
 			<div className="atmosphere" aria-hidden="true">
 				<span />
 				<span />

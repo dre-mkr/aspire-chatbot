@@ -132,7 +132,7 @@ export function PersonaPicker({
 			>
 				<PersonIcon />
 				<span className="persona__name">
-					{current ? current.name : "Everyone"}
+					{current ? current.name : "General"}
 				</span>
 				<ChevronDownIcon size={14} />
 				<span className="sr-only">

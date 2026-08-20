@@ -1,6 +1,7 @@
 /** Signing up, signing in, and getting back in. */
 
 import { API_URL } from "../config";
+import { clearLocalConversations } from "./history";
 import {
 	authHeaders,
 	clearSession,
@@ -100,6 +101,22 @@ interface WireSession {
 }
 
 function adopt(wire: WireSession): AuthResult {
+	// One signed-in account replacing another on the same browser, with no sign
+	// out in between. The outgoing person's transcripts are still in local
+	// storage, so drop them before the new session can render the rail.
+	//
+	// Deliberately NOT when the outgoing session is anonymous: those
+	// conversations belong to the person who just signed up, and
+	// `claimConversations` carries them onto the new account.
+	const outgoing = currentSession();
+	if (
+		outgoing &&
+		outgoing.accountType === "registered" &&
+		outgoing.userId !== wire.user_id
+	) {
+		clearLocalConversations();
+	}
+
 	const session: Session = {
 		token: wire.token,
 		userId: wire.user_id,
@@ -231,6 +248,9 @@ export async function signOut(afterCleared?: () => void): Promise<void> {
 	}
 
 	clearSession();
+	// The transcripts, not just the token. Without this the rail still renders
+	// the conversations of whoever just signed out.
+	clearLocalConversations();
 
 	// Dropped in the gap where this browser has no identity; the ordering is the point.
 	afterCleared?.();

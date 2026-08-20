@@ -1,0 +1,19 @@
+# One topic per line, in plain language.
+#
+# This is the only step that needs a person who understands the curriculum, so
+# it belongs with whoever owns the teaching -- not with a script.
+#
+# These map onto the Financial Education Planning Framework 3-11: needs versus
+# wants and where money comes from are 5-7 outcomes; priorities and borrowing
+# are 7-9; value comparison and interest are 9-11. Using a published framework
+# means you can say where the curriculum came from when a judge asks.
+#
+# Lines starting with # are ignored.
+
+Why saving a little regularly beats saving a lot once
+The difference between something you need and something you want
+Where money comes from: earning, gifts, finding, borrowing
+What happens to money you leave in a savings account
+Why waiting for something can make it worth more
+How a savings goal works and how to pick one
+What a budget is and why anyone would keep one

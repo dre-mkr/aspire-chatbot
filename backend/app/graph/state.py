@@ -119,6 +119,15 @@ class AspireState(TypedDict, total=False):
     age_band: AgeBand
     account_status: AccountStatus
     locale: Locale
+    #: The language the reader switched to mid-conversation, if they did.
+    #:
+    #: Survives in the checkpoint, and `identity_from` must never write it.
+    #: `hydrate` rewrites `locale` from the session token's claims on every turn,
+    #: so a switch made on turn three is gone by turn four unless something puts
+    #: it back -- this is what `detect_language` re-applies. Add it to
+    #: `identity_from` and a Spanish session flips back to English on the very
+    #: next message, which is the bug, not the fix.
+    locale_override: Locale | None
 
     # ── conversation ────────────────────────────────────────────────────────
     messages: Annotated[list[BaseMessage], add_messages]
@@ -202,6 +211,11 @@ def initial_state(
         age_band=age_band,
         account_status=account_status,
         locale=locale,
+        # No switch has happened yet. Set here rather than left absent, for the
+        # reason `identity_proven` above was: a field declared on the state and
+        # never written by this helper reads as absent, and absent is falsy in
+        # exactly the places a fixture stops resembling a real session.
+        locale_override=None,
         identity_proven=identity_proven,
         messages=[],
         summary="",

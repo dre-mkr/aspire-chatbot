@@ -506,6 +506,39 @@ _NAMES_NOTHING = re.compile(
 )
 
 
+#: Whether the empty-store warning has already been said this process.
+_SAID_NO_CONCEPTS = False
+
+
+def _warn_no_concepts() -> None:
+    """Say, once, that the tutor is switched off -- because nothing else does.
+
+    With an empty store `_entry` skips every claim the tutor makes on a turn, so
+    "what is compound interest?" stops being a topic to teach and becomes
+    whatever `resume_or_place` picks by mastery. The reader gets a check
+    question about a concept they did not ask about, identically, every time.
+
+    Nothing said so. `ConceptStore.reload` swallows its own failure and keeps
+    the count it had, `app/main.py` calls it once at startup, and a deploy that
+    came up against an unseeded database looked exactly like a deploy that came
+    up correctly. Hours were spent reading the router before anybody read the
+    store, so the store now says it out loud.
+
+    Once per process, not per turn: this is a condition an operator fixes, not
+    a line they need repeated on every message.
+    """
+    global _SAID_NO_CONCEPTS
+    if _SAID_NO_CONCEPTS:
+        return
+    _SAID_NO_CONCEPTS = True
+    logger.warning(
+        "The concept store is empty, so the tutor cannot claim a turn: every "
+        "lesson request will fall through to mastery-based placement and be "
+        "answered with a check question the reader did not ask for. Seed the "
+        "concepts and confirm `get_store().reload()` returns a non-zero count."
+    )
+
+
 def asks_about_a_topic(text: str) -> bool:
     """Whether this message names something specific the learner wants explained."""
     body = (text or "").strip()
@@ -530,6 +563,9 @@ def _entry(state: AspireState) -> str:
 
     # An empty concept store means nothing has been seeded, and the tutor would decline every turn.
     from app.learning.concepts import get_store
+
+    if not len(get_store()):
+        _warn_no_concepts()
 
     if len(get_store()):
         text = latest_user_text(state)

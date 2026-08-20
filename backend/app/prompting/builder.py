@@ -51,7 +51,7 @@ def stable_prefix(context: SessionContext, agent_role: str) -> str:
         for part in (
             GLOBAL,
             _contact_block(),
-            persona_card(context.persona),
+            persona_card(context.persona, context.age_band),
             agent_role,
         )
         if part and part.strip()
