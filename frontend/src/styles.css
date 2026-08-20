@@ -6733,3 +6733,16 @@ body {
 		transform: none;
 	}
 }
+
+/* A video accepted mid-conversation. Sits in the answer's tail, so it is
+   inset like the other cards rather than breaking the column. */
+.video-offer {
+	margin-block-start: 0.75rem;
+}
+
+.video-offer__loading,
+.video-offer__failed {
+	margin: 0.75rem 0 0;
+	color: var(--quiet);
+	font-size: 0.875rem;
+}

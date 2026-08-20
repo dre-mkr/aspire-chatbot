@@ -10,6 +10,7 @@ from typing import Any
 from langchain_core.messages import AIMessage
 
 from app import timing
+from app.graph.nodes.safety_in import latest_user_text
 from app.graph.state import AspireState, band_index
 from app.safety import pii, vocab
 from app.widgets import sentinel
@@ -403,6 +404,35 @@ def make_safety_out(reprompt: Reprompt | None = None):
             text = original if text == prose_in else sentinel.reattach(text, widgets)
 
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
+
+        # The video offer, last, and here rather than in any one agent: this is
+        # where every turn converges, and the client's own example ("what does
+        # scarcity mean?") is answered by the tutor rather than by QA. Anything
+        # hung off a single agent works for some questions and silently does not
+        # for others.
+        #
+        # It cannot change what was said -- the prose is already capped and
+        # stripped above -- and it takes a chip slot rather than adding a fifth,
+        # because four is the wire cap and an offer appended fifth is an offer
+        # silently dropped.
+        from app.videos.offer import offer_for
+
+        offer = offer_for(state, latest_user_text(state))
+        if offer is not None:
+            video_id, chip = offer
+            update["offered_video"] = video_id
+            # Remembered for the rest of the conversation, so the same film is
+            # never offered twice.
+            update["videos_offered"] = [
+                *(state.get("videos_offered") or []),
+                video_id,
+            ]
+            update["quick_replies"] = [chip, *replies][:3]
+        elif state.get("offered_video") and not flags.get("card"):
+            # An offer the reader answered with something else has expired. A
+            # "yes" two turns later belongs to whatever was asked in between.
+            update["offered_video"] = None
+
         if text != original:
             # Same message id, so `add_messages` replaces the message instead of appending one.
             update["messages"] = [AIMessage(content=text, id=getattr(last, "id", None))]

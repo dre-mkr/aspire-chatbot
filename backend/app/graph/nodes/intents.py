@@ -121,6 +121,24 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
+#: "Yes, show me the video." Accepting an offer, or asking for one outright.
+#:
+#: Deliberately narrow. A bare "yes" is NOT here: it is the commonest word in
+#: the language and the offer is one line in an answer that may have said
+#: several things, so treating every "yes" as an acceptance would open a player
+#: on top of whatever the reader was actually agreeing to. The chip sends its
+#: own unambiguous text, and a reader typing it by hand says something like it.
+_WATCH: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\b(?:watch|play|show|see) (?:me |us )?(?:the |that |this |a |an )?(?:aspire )?(?:video|story|film|cartoon)\b",
+        r"\b(?:yes|yeah|sure|ok|okay)[, ]+(?:please )?(?:watch|show|play)\b",
+        r"\bvideo,? (?:please|yes)\b",
+        r"\b(?:ver|mira|muestra|pon) (?:el |un )?(?:video|cuento)\b",
+        r"\b(?:voir|montre|regarder) (?:la |une |le )?(?:video|histoire)\b",
+    )
+)
+
 #: Which game a message names, if it names one.
 _NAMED_GAME: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(?:word )?scramble\b|\bunscramble\b|\bletras\b"), "scramble"),
@@ -321,6 +339,14 @@ def wants_game(message: str) -> bool:
     if not _is_a_command(folded):
         return False
     return any(pattern.search(folded) for pattern in _PLAY)
+
+
+def wants_video(message: str) -> bool:
+    """Whether this message is accepting a video, rather than mentioning one."""
+    folded = fold(message)
+    if not _is_a_command(folded):
+        return False
+    return any(pattern.search(folded) for pattern in _WATCH)
 
 
 def named_game(message: str) -> str | None:

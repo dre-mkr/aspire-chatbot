@@ -99,7 +99,11 @@ class TestTheHappyTurn:
         ]
         chips = [d for d in directives if d["t"] == "quick_replies"]
         assert len(chips) == 1
+        # "what is saving" is what Monique's story is about, so the turn ends by
+        # offering it -- after the answer, as a chip the reader can ignore. The
+        # follow-ups it was always going to carry are still there behind it.
         assert [option["label"] for option in chips[0]["options"]] == [
+            "Watch the ASPIRE video about saving and goals",
             "Tell me more",
             "Play a game",
         ]

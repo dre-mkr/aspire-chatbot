@@ -129,6 +129,24 @@ class AspireState(TypedDict, total=False):
     #: next message, which is the bug, not the fix.
     locale_override: Locale | None
 
+    #: Every video already offered in this conversation, whether or not it was
+    #: watched.
+    #:
+    #: Offering the same film again because a second question also mentioned
+    #: saving is the exact "intrusive" the brief asks this feature not to be. An
+    #: offer declined is an answer; asking again is not listening. Grows to the
+    #: size of the catalog and stops.
+    videos_offered: list[str]
+
+    #: The video offered at the end of the last answer, if one was.
+    #:
+    #: Held rather than re-derived, because the acceptance is not the question.
+    #: "Watch the video" carries no topic, so matching it against the catalog
+    #: again finds nothing; what it refers to is the offer, and the offer is
+    #: what has to be remembered. Cleared as soon as it is taken or the reader
+    #: asks something else, so a yes three turns later opens nothing.
+    offered_video: str | None
+
     # ── conversation ────────────────────────────────────────────────────────
     messages: Annotated[list[BaseMessage], add_messages]
     #: Everything older than the message window, compressed.
@@ -216,6 +234,8 @@ def initial_state(
         # never written by this helper reads as absent, and absent is falsy in
         # exactly the places a fixture stops resembling a real session.
         locale_override=None,
+        offered_video=None,
+        videos_offered=[],
         identity_proven=identity_proven,
         messages=[],
         summary="",

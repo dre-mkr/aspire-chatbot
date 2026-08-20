@@ -16,13 +16,16 @@ from app.graph.nodes.intents import (
     wants_game,
     wants_human,
     wants_registration,
+    wants_video,
 )
 from app.graph.state import AspireState
 from app.schemas.directives import (
     EligibilityDirective,
     SignupDirective,
+    VideoDirective,
     directive_payload,
 )
+from app.videos import by_id
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +189,12 @@ def make_intent_gate(
             if card is not None:
                 return card
 
+        # After the game claim, before the router: taking up an offer made last
+        # turn is not a new question, and answering it as one loses the video.
+        card = _open_video(state, message)
+        if card is not None:
+            return card
+
         # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
@@ -203,6 +212,48 @@ def make_intent_gate(
         return {}
 
     return intent_gate
+
+
+def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Play the video offered last turn, if the reader just said yes to it.
+
+    Three things have to be true, and the last is the one that matters: an
+    offer was actually made, this message accepts it, and the id still names
+    something in the catalog. That last check is why the catalog is server-owned
+    -- an id reaching here from a stale checkpoint, or from a client that made
+    one up, resolves to nothing and the turn carries on as an ordinary question.
+
+    The offer is cleared either way. A reader who says yes gets the video once;
+    a reader who asks something else has moved on, and a "yes" three turns later
+    should not reach back and open a player.
+    """
+    offered = state.get("offered_video")
+    if not offered:
+        return None
+    if not wants_video(message):
+        # They asked something else. The offer has expired.
+        return {"offered_video": None}
+
+    video = by_id(str(offered))
+    if video is None:
+        logger.info("offered video %r is no longer in the catalog", offered)
+        return {"offered_video": None}
+
+    return {
+        "offered_video": None,
+        "active_agent": _holding_agent(state),
+        "ui_directives": [
+            directive_payload(
+                VideoDirective(
+                    video_id=video.id,
+                    title=video.title,
+                    topic=video.topic,
+                )
+            )
+        ],
+        "messages": [AIMessage(content=f"Here it is — {video.title}.")],
+        "safety_flags": {"card": "video"},
+    }
 
 
 def _asked_for_a_person(message: str) -> dict[str, Any] | None:
