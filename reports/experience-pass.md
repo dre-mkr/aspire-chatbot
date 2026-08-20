@@ -18,8 +18,8 @@ rather than claiming credit for them.
 | 6 | Hangman | 0% | New game + an optional protocol for games whose submissions are moves. |
 | 7 | Millionaire | **~5%, and a live bug.** The name was in four type unions with nothing behind it. | Built it; closed the bug. |
 | 8 | Piggy bank | 0% | Progress indicator, coins, sound, reduced-motion behaviour. |
-| 9 | True/False persona-aware | **Already built.** `engine.py` filters on `persona_bands`; seeds already split. | Content expansion only. |
-| 10 | Scramble persona-aware | **Already built.** Same mechanism. | Content expansion only. |
+| 9 | True/False persona-aware | **Already built.** `engine.py` filters on `persona_bands`; seeds already split. | Content: 30 → 50 entries, and explanations that differ by band. |
+| 10 | Scramble persona-aware | **Already built.** Same mechanism. | Content: 25 → 46 entries, two sets per tier. |
 | 11 | Storytelling | 0% | Two-turn, user-initiated only. |
 | 12 | Sources UI | Existed, plus a second dead renderer. | Redesigned the live one; deleted the dead one. |
 | 13 | Persona everywhere | Largely true. | Sky/Zion rename; three duplicate name tables reduced to one. |
@@ -67,6 +67,26 @@ animated; right-then-right did not.
 
 **The new games reached the "which game?" chips as raw wire ids** — "hangman"
 beside "True or false". The existing tests caught this one.
+
+## A trap in the seed content, for whoever expands it next
+
+`tests/games/test_no_answer_leak.py` builds its forbidden list from **every**
+seeded scramble answer and checks the served payload against all of them. So
+seeding an ordinary word turns somebody else's clue into a leak, in a file you
+did not touch.
+
+`NEED` did exactly that: the ECCB warm-up handout has defined MONEY as *"what we
+use to buy the things we need"* since the first commit, and that file is the
+printed source, so `NEED` was the side that had to give. The note is now at the
+top of the bank that tried it.
+
+I also wrote the general version of that test — no answer in any other item's
+clue — ran it, and deleted it. It fails on the original handout in eleven
+places, because defining INTEREST requires saying "bank" and defining SAVE
+requires saying "money". The invariant the suite states is not one this
+vocabulary can satisfy; it holds today only because the leak tests exercise one
+entry of one set. A test that fails on the client's own authoritative content is
+one the next person deletes, so it was better not to add it.
 
 ## Content grounding
 
