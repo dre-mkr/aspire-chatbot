@@ -1,0 +1,210 @@
+# ASPIRE quiz ladder — Orion set (ages 13–18)
+#
+# Eight questions written natively for Orion's band. Where Stella's set stops at
+# the notes in a hand, this one goes where the older band can follow: interest
+# compounding on itself, the rule of 72, the budgeting formula ASPIRE actually
+# teaches, the ECCB's floor under savings rates, scarcity, and the two halves of
+# the government's contribution.
+#
+# Every factual claim traces to a row of the project's verified knowledge base
+# at backend/data/knowledge_base.csv, and each entry names its rows in
+# `source_document`. Where a question states an ASPIRE programme rule — the
+# EC$1,000 split, the reinvestment of dividends — the corpus states that rule in
+# those words. Nothing here is inferred, rounded or filled in.
+#
+# Rates and amounts carry dates on purpose. The minimum savings rate has moved
+# twice since 1985 — 4 percent to 3 percent in 2002, 3 percent to 2 percent in
+# 2015 — and a quiz card that quietly implies a number is permanent teaches the
+# wrong thing twice.
+
+id: millionaire-orion-01
+game_type: millionaire
+language: en
+title: Interest, risk and ownership
+source: ASPIRE knowledge base
+
+closing:
+  lead: Time does the work. Your job is to give it something to work with.
+  text: >-
+    Compound interest, the rule of 72 and reinvested dividends are one idea seen
+    three ways — money left alone for years starts growing on its own growth.
+    The budgeting bands and the scarcity question are about what you feed it,
+    because you cannot invest what you have already spent. The scam question is
+    the guard rail: anything promising to skip the waiting is selling you
+    something.
+
+entries:
+  - id: millionaire-orion-01-compound-vs-simple
+    language: en
+    question: What makes compound interest different from simple interest?
+    choices:
+      - It is calculated only on the amount you first deposited
+      - It is paid out in one lump sum when you close the account
+      - It is calculated on your original money and on the interest already earned
+      - It is a charge the bank takes for holding your savings
+    answer_index: 2
+    explanation: >-
+      Simple interest is worked out only on the original amount, so EC$1,000 at
+      5 percent earns EC$50 every year, forever, and the base never grows.
+      Compound interest is interest earned on your interest — the EC$1,000 earns
+      EC$50, so next year you earn on EC$1,050, then on EC$1,102.50. Each year
+      the base is bigger, so the growth accelerates. That acceleration is why
+      the years you save as a teenager do the heaviest lifting.
+    topic: Interest and growth
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-123, FIN-124, FIN-128)
+
+  - id: millionaire-orion-01-rule-of-72
+    language: en
+    question: Using the rule of 72, about how long does money take to double at 6 percent?
+    choices:
+      - About 6 years
+      - About 12 years
+      - About 24 years
+      - About 36 years
+    answer_index: 1
+    explanation: >-
+      Divide 72 by the interest rate and you get a rough number of years for the
+      money to double. Seventy-two divided by 6 is 12, so about 12 years. At 2
+      percent the same sum gives about 36 years, which is why the rate matters
+      so much over a working life. It is an estimate rather than an exact
+      formula, but it is a fast way to compare how hard your money is working.
+    topic: Interest and growth
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-127)
+
+  - id: millionaire-orion-01-formula-forty
+    language: en
+    question: In the 10-20-30-40 budgeting formula used in ASPIRE, what does the 40 set a ceiling on?
+    choices:
+      - Monthly living expenses
+      - The share of income you save each month
+      - The size of your emergency fund
+      - Monthly debt payments, including mortgage or rent
+    answer_index: 3
+    explanation: >-
+      The 40 is the maximum for monthly debt payments, with mortgage or rent
+      counted inside it, and tithes counted in that band too. Living expenses
+      are the 30, saving is the 10 and your emergency and investment funds are
+      the 20. All four bands are measured against net income — what actually
+      reaches you after deductions — because a budget built on gross pay is a
+      plan you cannot fund.
+    topic: Budgeting
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-346, FIN-350, FIN-351, FIN-353)
+
+  - id: millionaire-orion-01-minimum-savings-rate
+    language: en
+    question: What is the lowest interest rate a commercial bank in our currency union may pay on a savings account?
+    choices:
+      - 1.0 percent
+      - 2.0 percent
+      - 3.0 percent
+      - 4.0 percent
+    answer_index: 1
+    explanation: >-
+      The Eastern Caribbean Central Bank sets a minimum savings rate that
+      commercial banks may not go below. It has been 2.0 percent since May 2015
+      and was reaffirmed by the Monetary Council in July 2025. It has not always
+      been that figure — the statutory minimum was 4 percent from 1985 and 3
+      percent from September 2002. Do not confuse this legal floor with the
+      average deposit rate banks actually pay, which has at times been lower.
+    topic: The ECCB
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-037, FIN-038, FIN-332)
+
+  - id: millionaire-orion-01-grant-split
+    language: en
+    question: How is the EC$1,000 the government contributes for each eligible ASPIRE child divided?
+    choices:
+      - EC$500 into a savings account and EC$500 into shares of local government-owned entities
+      - EC$750 into shares and EC$250 into a savings account
+      - All of it goes into a savings account, with none of it invested in shares
+      - All of it buys shares in local government-owned entities
+    answer_index: 0
+    explanation: >-
+      The government contributes EC$1,000 per eligible child, split into two
+      equal halves. EC$500 is deposited into a savings account at the St.
+      Kitts-Nevis-Anguilla National Bank, and EC$500 is invested in shares of
+      local, government-owned entities. One half is safety and the other half is
+      ownership, which is the shape of the whole programme in a single figure.
+    topic: The ASPIRE grant
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-012, ASP-013)
+
+  - id: millionaire-orion-01-dividends-reinvested
+    language: en
+    question: What happens to the dividends from the shares ASPIRE holds for a participant?
+    choices:
+      - They are paid out in cash to the participant each year
+      - They are returned to the government that funded the shares
+      - They are automatically reinvested, so returns compound over the years
+      - They are used to pay the bank fees on the savings account
+    answer_index: 2
+    explanation: >-
+      A dividend is a share of a company's profits paid to its shareholders. In
+      ASPIRE the dividends are not paid out — they are automatically reinvested,
+      buying more of the holding, so returns compound over the years the
+      participant stays in the programme. Reinvesting is how compounding gets
+      switched on inside a portfolio, and over long periods the gap between
+      spending dividends and reinvesting them is enormous.
+    topic: Investing
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-091, ASP-099, FIN-213)
+
+  - id: millionaire-orion-01-risk-red-flag
+    language: en
+    question: An investment offer promises a high return with no risk at all. What should you conclude?
+    choices:
+      - That the return is secure, because the offer puts the guarantee in writing
+      - That it is safe as long as you put in only a small amount
+      - That it is safe because someone you know introduced you to it
+      - That it is a warning sign, because high return with no risk does not exist
+    answer_index: 3
+    explanation: >-
+      A promise of high returns with little or no risk is the single biggest
+      warning sign of a financial scam, because that combination does not exist
+      in legitimate finance. Risk and return travel together — the higher the
+      potential return, the higher the potential risk. Before any money moves,
+      check whether the person and the product are licensed by the Eastern
+      Caribbean Securities Regulatory Commission. Notice the pressure to decide
+      immediately too, because urgency is there to stop you checking.
+    topic: Risk and fraud
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-232, FIN-237, FIN-240, FIN-361)
+
+  - id: millionaire-orion-01-scarcity
+    language: en
+    question: What word do economists use for the fact that resources are limited while wants are unlimited?
+    choices:
+      - Scarcity
+      - Liquidity
+      - Inflation
+      - Depreciation
+    answer_index: 0
+    explanation: >-
+      Scarcity is the gap between limited resources and unlimited wants, and it
+      applies no matter how much money someone has. It is the reason every
+      choice needs a priority behind it. Its close partner is opportunity cost,
+      which is what you give up when you pick one thing over another — spend
+      EC$60 on a game and the opportunity cost is the savings deposit or the
+      data plan you did not buy.
+    topic: Scarcity and choice
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-021, FIN-022)

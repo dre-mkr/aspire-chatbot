@@ -22,9 +22,13 @@ export interface VoiceSettingsProps {
 		autoSpeak: boolean;
 		speed: string;
 		language: VoiceLanguage;
+		autoLanguage: boolean;
+		gameSound: boolean;
 		toggleAutoSpeak: () => void;
 		setSpeed: (value: string) => void;
 		setLanguage: (value: VoiceLanguage) => void;
+		enableAutoLanguage: () => void;
+		toggleGameSound: () => void;
 		reviewConsent: () => void;
 	};
 }
@@ -128,6 +132,28 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 				</button>
 			</div>
 
+			{/* Not gated on `voice.available`: the games make their own sound in
+			    the browser and do not go anywhere near the speech service, so a
+			    deployment with voice switched off still has this to turn down. */}
+			<div className="voice-menu__row">
+				<span className="voice-menu__copy">
+					<span className="voice-menu__title">Game sounds</span>
+					<span className="voice-menu__sub">
+						Coins and cheers while you play.
+					</span>
+				</span>
+				<button
+					type="button"
+					className="voice-switch"
+					role="switch"
+					aria-checked={voice.gameSound}
+					aria-label="Game sounds"
+					onClick={voice.toggleGameSound}
+				>
+					<span className="voice-switch__knob" />
+				</button>
+			</div>
+
 			<hr className="voice-menu__rule" />
 
 			<p className="voice-menu__label">Speed</p>
@@ -147,12 +173,31 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 
 			<p className="voice-menu__label">Language</p>
 			<div className="voice-menu__choices">
+				{/*
+				  Automatic first, and it is the default. Detection ran on every
+				  turn long before there was a control for it; this names the
+				  behaviour rather than adding one.
+
+				  It is pressed only when nothing else is. Choosing a language
+				  leaves Automatic, because picking Espanol and then being
+				  answered in English is the control not working, whatever the
+				  menu shows as selected.
+				*/}
+				<button
+					type="button"
+					className="voice-choice voice-choice--lang voice-choice--auto"
+					aria-pressed={voice.autoLanguage}
+					onClick={voice.enableAutoLanguage}
+				>
+					<span className="voice-choice__code">AUTO</span>
+					<span className="voice-choice__name">Automatic</span>
+				</button>
 				{LANGUAGES.map((option) => (
 					<button
 						key={option.code}
 						type="button"
 						className="voice-choice voice-choice--lang"
-						aria-pressed={voice.language === option.code}
+						aria-pressed={!voice.autoLanguage && voice.language === option.code}
 						onClick={() => voice.setLanguage(option.code)}
 					>
 						<span className="voice-choice__code">
@@ -162,6 +207,12 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 					</button>
 				))}
 			</div>
+			{voice.autoLanguage ? (
+				<p className="voice-menu__hint">
+					Answers follow the language you write in. Currently{" "}
+					{LANGUAGES.find((l) => l.code === voice.language)?.name ?? "English"}.
+				</p>
+			) : null}
 
 			<button
 				type="button"

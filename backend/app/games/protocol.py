@@ -57,3 +57,26 @@ class Game(Protocol):
     def hint(self, entry: Entry, level: int) -> str:
         """A nudge at 1..max_hint_level, progressively more revealing."""
         ...
+
+
+@runtime_checkable
+class GameWithMoves(Protocol):
+    """A game where one submission is a MOVE rather than an answer.
+
+    Optional, and checked with `isinstance` at the point of use so that a game
+    which does not implement it is unaffected. Hangman is the only one today:
+    a letter is progress towards the word, not a verdict on it, and the engine's
+    "a correct answer resolves the item" rule would end the word on the first
+    right letter.
+
+    A game implementing this keeps its per-item state in `GameSession.progress`,
+    which the engine clears on every item and never inspects.
+    """
+
+    def record(self, entry: Entry, answer: str, progress: dict) -> bool:
+        """Record a move. Returns whether the item is now finished."""
+        ...
+
+    def board(self, entry: Entry, progress: dict) -> str:
+        """What the player can see so far. Must never contain what they have not earned."""
+        ...

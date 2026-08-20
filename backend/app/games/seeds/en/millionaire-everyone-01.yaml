@@ -1,0 +1,170 @@
+# ASPIRE quiz ladder — everyone set (mixed audience)
+#
+# Six questions for a reader who has not said who they are: an older student,
+# a parent at a sign-up table, a teacher, someone who found the chat and
+# started typing. Plain adult prose, no talking down and no jargon left
+# unexplained.
+#
+# The set is deliberately mixed — two questions on what ASPIRE is, three on the
+# rules that already govern money here (the peg, the savings floor, who owns a
+# credit union), and one on the first move after a scam, which is the item most
+# likely to matter on the day someone plays it.
+#
+# Every ASPIRE-specific and Eastern Caribbean fact traces to a row of the
+# project's verified knowledge base at backend/data/knowledge_base.csv, and each
+# entry names its rows in `source_document`. All the rows drawn on carry
+# audience=general. Nothing about amounts, ages or eligibility appears here:
+# those change, and a quiz card is a bad place to be out of date.
+#
+# Distractors are length-balanced on purpose. In three of these six the right
+# answer used to be the longest string on the card, which hands a player who
+# knows nothing a way to win half the set; the wrong options now run at or past
+# the length of the right one.
+
+id: millionaire-everyone-01
+game_type: millionaire
+language: en
+title: What you already have a right to know
+source: ASPIRE knowledge base
+
+closing:
+  lead: Most of this is settled, written down and easy to look up.
+  text: >-
+    These six run from what ASPIRE is to what to do on the worst day. The rate
+    the EC dollar is pegged at, the floor under savings interest, and who owns a
+    credit union are all matters of record you can check rather than guess at —
+    and so is where a scam gets reported. Nobody is born knowing any of it,
+    which is the whole reason the education pillar exists.
+
+entries:
+  - id: millionaire-everyone-01-acronym
+    language: en
+    question: What does the name ASPIRE stand for?
+    choices:
+      - Advancing Savings, Property, Insurance and Retirement Earnings for Youth
+      - A Savings Programme for Investment, Retirement and Educational Expenses
+      - Achieving Success through Personal Investment, Resources, and Education
+      - Accounts, Shares and Public Investment for Regional Enterprise
+    answer_index: 2
+    explanation: >-
+      ASPIRE stands for Achieving Success through Personal Investment,
+      Resources, and Education. It is a national financial education, savings
+      and investment initiative of the Government of Saint Kitts and Nevis. The
+      name lists what it sets out to hand a young person: a personal stake, the
+      resources behind it, and the education to use both.
+    topic: What ASPIRE is
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-002, ASP-001)
+
+  - id: millionaire-everyone-01-pillars
+    language: en
+    question: ASPIRE is built on three pillars. Which three?
+    choices:
+      - Savings, investments and financial education
+      - Savings, insurance and a contributory pension
+      - Scholarships, free school meals and school uniforms
+      - Bank accounts, tax relief and small business grants
+    answer_index: 0
+    explanation: >-
+      The three pillars are savings, investments and financial education. Each
+      participant gets a seeded savings account, an investment stake in local
+      government-owned companies, and age-appropriate financial education
+      delivered through schools. Prime Minister Dr. Terrance Drew has said the
+      education pillar is the most important of the three, because a culture of
+      financial wisdom outlasts any one balance.
+    topic: The three pillars
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-004, ASP-238, ASP-018, ASP-154)
+
+  - id: millionaire-everyone-01-peg
+    language: en
+    question: One United States dollar is worth how many Eastern Caribbean dollars?
+    choices:
+      - EC$1.75
+      - EC$2.70
+      - EC$3.50
+      - A different amount each day, depending on the market
+    answer_index: 1
+    explanation: >-
+      One United States dollar is always worth EC$2.70. The rate is fixed — that
+      is what a peg means — and it has not moved since 7 July 1976. Because of
+      it, prices here do not swing about every time currency markets do, and you
+      can convert a quoted price in your head instead of looking up a rate.
+    topic: The EC dollar peg
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-005, FIN-035, FIN-006)
+
+  - id: millionaire-everyone-01-credit-union
+    language: en
+    question: What makes a credit union different from a commercial bank?
+    choices:
+      - It is owned and run by the Government, which appoints the board and sets the rates
+      - It can lend money but is not allowed to hold savings
+      - It operates with no regulator supervising it
+      - It is owned by its members, who elect the board and share in the surplus
+    answer_index: 3
+    explanation: >-
+      A credit union is a financial cooperative. There are no outside
+      shareholders: the members are the owners, they elect the board, and the
+      surplus is shared among them rather than paid away. Saint Kitts and Nevis
+      has several, supervised by the Financial Services Regulatory Commission,
+      while the Eastern Caribbean Central Bank supervises the commercial banks.
+      Compare rates, fees and access — plenty of people use both.
+    topic: Credit unions and banks
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-110, FIN-111, FIN-045)
+
+  - id: millionaire-everyone-01-minimum-savings-rate
+    language: en
+    question: What is the least a commercial bank here may pay you on a savings deposit?
+    choices:
+      - Nothing at all — every bank sets whatever rate it likes
+      - 2 percent a year
+      - 5 percent a year
+      - 10 percent a year
+    answer_index: 1
+    explanation: >-
+      The Eastern Caribbean Central Bank sets a minimum savings rate that
+      commercial banks in the currency union may not go below, and it has been
+      2.0 percent since May 2015, reaffirmed by the Monetary Council in July
+      2025. It was higher before: 4 percent from 1985, then 3 percent from
+      September 2002. If you see a lower figure quoted somewhere, check what it
+      is measuring — the average deposit rate across all deposit types is a
+      different number from the legal floor.
+    topic: The savings rate floor
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-037, FIN-038, FIN-332)
+
+  - id: millionaire-everyone-01-after-a-scam
+    language: en
+    question: You have just realised you sent money to a scammer. What comes first?
+    choices:
+      - Wait a few weeks and see whether the money finds its way back
+      - Delete the messages so that nobody finds out what happened
+      - Contact your bank at once and ask it to stop or reverse the transfer
+      - Send a smaller amount to test whether the person is genuine after all
+    answer_index: 2
+    explanation: >-
+      Speed decides whether a transfer can still be caught, so the bank comes
+      first — ahead of the embarrassment, which is the thing that usually costs
+      people the hours that mattered. Then change any password that was exposed
+      and keep every message and receipt, because that is your evidence. Report
+      it to the police and the Financial Intelligence Unit, and anything
+      investment-related to the Eastern Caribbean Securities Regulatory
+      Commission, even if you lost nothing — reports are how the next person
+      gets warned.
+    topic: After a scam
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-245, FIN-238)

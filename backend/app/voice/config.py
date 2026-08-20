@@ -79,6 +79,39 @@ class VoiceSettings(BaseSettings):
     voice_everyone_es: str | None = None
     voice_everyone_fr: str | None = None
 
+    # --- Delivery overrides ----------------------------------------------
+    # Optional, and unset by default: the table in `voice/registry.py` stands
+    # unless one of these is given. They exist because tuning a voice is done by
+    # ear -- someone listens, decides it is a shade fast, and changes it -- and
+    # that should not be a code edit, a test update and a deploy.
+    #
+    # stability 0-1 (LOW = expressive, HIGH = even) - similarity_boost 0-1
+    # style 0-1 (exaggeration; the registry caps it) - speed 0.7-1.2
+    voice_stella_stability: float | None = None
+    voice_stella_similarity_boost: float | None = None
+    voice_stella_style: float | None = None
+    voice_stella_speed: float | None = None
+
+    voice_orion_stability: float | None = None
+    voice_orion_similarity_boost: float | None = None
+    voice_orion_style: float | None = None
+    voice_orion_speed: float | None = None
+
+    voice_aurora_stability: float | None = None
+    voice_aurora_similarity_boost: float | None = None
+    voice_aurora_style: float | None = None
+    voice_aurora_speed: float | None = None
+
+    voice_nova_stability: float | None = None
+    voice_nova_similarity_boost: float | None = None
+    voice_nova_style: float | None = None
+    voice_nova_speed: float | None = None
+
+    voice_everyone_stability: float | None = None
+    voice_everyone_similarity_boost: float | None = None
+    voice_everyone_style: float | None = None
+    voice_everyone_speed: float | None = None
+
     # --- Upload limits ----------------------------------------------------
     # Two gates, both pre-flight and free.
     max_upload_bytes: int = 25 * 1024 * 1024

@@ -219,6 +219,22 @@ def detect_language(state: AspireState) -> dict[str, Any]:
     if not text.strip():
         return {}
 
+    # A reader who chose a language explicitly has said something, and this node
+    # must stop answering back. Clearing the override rather than merely
+    # declining to add one is the point: without that, a session that drifted
+    # into Spanish on turn three stays Spanish for ever, and picking English
+    # from the menu does nothing at all -- the switch is re-applied on every
+    # later turn by the very code below.
+    if not state.get("auto_language", True):
+        if state.get("locale_override") is not None:
+            logger.info(
+                "session %s pinned to %s; clearing the detected override",
+                state.get("session_id"),
+                state.get("locale"),
+            )
+            return {"locale_override": None}
+        return {}
+
     override = state.get("locale_override")
     detected = switched_to(text)
     target = detected or override

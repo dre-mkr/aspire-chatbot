@@ -1,0 +1,198 @@
+# ASPIRE true or false — Stella set 3 (ages 5–12)
+#
+# A third Stella set, so a round is drawn from a wider pool rather than circling
+# the same handful of items. The engine gathers every set a persona can be
+# served and samples the round from all of them, which is why nothing here
+# counts the questions or points at another one — the closing has to stand on
+# its own even when none of these items were drawn.
+#
+# Where the first two sets taught habits — save first, spread it out, decide
+# before you spend — this one teaches the money itself: what an EC note is made
+# of, what comes as a coin, what a jar is for, and the one number you never tell
+# anybody. Concrete things a child can check in their own hand.
+#
+# Every claim about EC dollars, jars and card safety is taken from the ASPIRE
+# knowledge base rows named on each item, and each of those rows is one written
+# for children. Written natively for Stella's card, not simplified from an Orion
+# item at runtime. Nothing here uses a rate, a share of a hundred, or the words
+# for money growing on its own — those belong to the Orion sets.
+#
+# `paragraphs` is what the card actually renders; `explanation` is only the
+# fallback when an item has none. They must carry the same sentences, or
+# teaching written into one is taught to nobody.
+
+id: truefalse-stella-03
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE knowledge base (child rows) — True or False (Stella, set 3)
+
+closing:
+  lead: Know your money. Then keep it safe.
+  text: >-
+    Money is easier to look after once you know it — what it is made of, what it
+    is worth, and what it is for. Decide what yours is for before it leaves your
+    hand, and never hand over the things that are meant to stay yours alone.
+
+entries:
+  - id: tfs-03-notes-plastic
+    statement: EC dollar notes are made of paper.
+    answer: false
+    topic: Our notes
+    topic_line: " — EC notes are thin plastic, not paper."
+    takeaway: EC dollar notes are plastic, which is why they last so long.
+    explanation: >-
+      They look a bit like paper, but they are not. EC dollar notes are made of
+      a thin bendy plastic called polymer. That is why they stay cleaner and
+      last far longer than paper ones. There are five of them: EC$5, EC$10,
+      EC$20, EC$50 and EC$100. Next time you hold one, give it a bend and feel
+      it spring back.
+    paragraphs:
+      - >-
+        They look a bit like paper, but they are not. EC dollar notes are made
+        of a thin bendy plastic called polymer.
+      - >-
+        That is why they stay cleaner and last far longer than paper ones. There
+        are five of them: EC$5, EC$10, EC$20, EC$50 and EC$100.
+      - Next time you hold one, give it a bend and feel it spring back.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-007, FIN-004)
+
+  - id: tfs-03-one-dollar-coin
+    statement: One EC dollar comes as a coin, not as a note.
+    answer: true
+    topic: Our coins
+    topic_line: " — one dollar is round and metal."
+    takeaway: The dollar is a coin here. The smallest note is EC$5.
+    explanation: >-
+      The coins you get in your change are 5 cents, 10 cents, 25 cents and the
+      EC$1 coin. The smallest note is EC$5. So if somebody hands you one dollar,
+      it will be round and metal, and it will land in your palm with a clink.
+      Count the coins in your pocket and see which ones you have.
+    paragraphs:
+      - >-
+        The coins you get in your change are 5 cents, 10 cents, 25 cents and the
+        EC$1 coin.
+      - >-
+        The smallest note is EC$5. So if somebody hands you one dollar, it will
+        be round and metal, and it will land in your palm with a clink.
+      - Count the coins in your pocket and see which ones you have.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-008, FIN-007)
+
+  - id: tfs-03-three-jars
+    statement: In the three jars way of saving, one jar is for sharing.
+    answer: true
+    topic: The three jars
+    topic_line: " — spend, save, share."
+    takeaway: Money has more than one job, so it gets more than one jar.
+    explanation: >-
+      Every time you get money, you split it between three jars. One jar is to
+      spend. One jar is to save. One jar is to share, for family or for someone
+      who needs a hand. Splitting it before you touch it is the clever bit,
+      because then the sharing part is already sitting there when the moment
+      comes.
+    paragraphs:
+      - Every time you get money, you split it between three jars.
+    bullets:
+      - marker: "1"
+        label: "Spend. "
+        text: The part you can use now.
+      - marker: "2"
+        label: "Save. "
+        text: The part you keep for later.
+      - marker: "3"
+        label: "Share. "
+        text: The part for family, or for someone who needs a hand.
+    after: >-
+      Splitting it before you touch it is the clever bit, because then the
+      sharing part is already sitting there when the moment comes.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-060)
+
+  - id: tfs-03-why-save
+    statement: The only reason to save money is to buy something big one day.
+    answer: false
+    topic: Why we save
+    topic_line: " — for big things, and for surprises too."
+    takeaway: Some of your saving is for things you did not see coming.
+    explanation: >-
+      Buying something big is one good reason. It is not the only one. Life
+      surprises you. A bag rips, a shoe gives out, somebody at home needs help
+      that week. Money you already put aside turns a big problem into a small
+      one. Saving is really about swapping money you have now for choices you
+      will have later.
+    paragraphs:
+      - Buying something big is one good reason. It is not the only one.
+      - >-
+        Life surprises you. A bag rips, a shoe gives out, somebody at home needs
+        help that week. Money you already put aside turns a big problem into a
+        small one.
+      - >-
+        Saving is really about swapping money you have now for choices you will
+        have later.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-050, FIN-027, FIN-049)
+
+  - id: tfs-03-secret-number
+    statement: It is fine to tell your best friend the secret number for your bank card.
+    answer: false
+    topic: Keeping money safe
+    topic_line: " — your secret number is yours alone."
+    takeaway: Nobody needs your secret number. Not one person.
+    explanation: >-
+      That secret number is called a PIN, and it is the one thing you never
+      share. Not with a friend, not with family, and not with somebody who says
+      they work at the bank. A real bank will never ask you for it, so anybody
+      who asks is trying to take your money. Do not write it down either. If you
+      think someone has seen it, tell a grown-up straight away so it can be
+      changed.
+    paragraphs:
+      - >-
+        That secret number is called a PIN, and it is the one thing you never
+        share.
+      - >-
+        Not with a friend, not with family, and not with somebody who says they
+        work at the bank. A real bank will never ask you for it, so anybody who
+        asks is trying to take your money.
+      - >-
+        Do not write it down either. If you think someone has seen it, tell a
+        grown-up straight away so it can be changed.
+    difficulty_band: core
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-115, FIN-241)
+
+  - id: tfs-03-everyone-chooses
+    statement: Even people with plenty of money have to choose what to spend it on.
+    answer: true
+    topic: Choosing
+    topic_line: " — there is always more to want than there is money."
+    takeaway: Everybody chooses. Choosing is not a sign you are short.
+    explanation: >-
+      There is always more you could want than there is money to pay for it, so
+      everybody has to choose. That is true for a child with a few dollars and
+      it is true for a grown-up with plenty. Choosing is not a sign that you are
+      short of money. It is simply what having money is like, for everyone.
+    paragraphs:
+      - >-
+        There is always more you could want than there is money to pay for it,
+        so everybody has to choose.
+      - >-
+        That is true for a child with a few dollars and it is true for a
+        grown-up with plenty.
+      - >-
+        Choosing is not a sign that you are short of money. It is simply what
+        having money is like, for everyone.
+    difficulty_band: warmup
+    persona_bands: [stella]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-022, FIN-370)
