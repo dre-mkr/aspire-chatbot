@@ -6544,3 +6544,192 @@ body {
 .guide:focus-visible {
 	outline: none;
 }
+
+/* ── Videos ────────────────────────────────────────────────────────────────
+   The library panel borrows `.help`'s shell — same scrim, same panel, same
+   modal recipe — so a second dialog did not become a second set of rules.
+   Everything below is what a video needs that a help page does not. */
+
+/* Two launchers now share the slot, so it stacks them rather than sitting on
+   one child. `btn-help` still carries the shape; only the gap is new. */
+.rail__help {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* The magenta of the logo's arrow, on the one control that plays something. */
+.btn-videos:hover {
+	background: var(--wash-m-10);
+	border-color: var(--magenta-light);
+	color: var(--magenta);
+}
+
+.video-lib__lead {
+	margin: 0 0 18px;
+	color: var(--slate);
+	font-size: 0.9375rem;
+}
+
+.video-lib__empty {
+	margin: 0;
+	padding: 28px 0;
+	color: var(--quiet);
+	text-align: center;
+	font-size: 0.9375rem;
+}
+
+.video-lib__list {
+	display: grid;
+	gap: 18px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.video-card {
+	display: grid;
+	/* One column until there is room for the still beside the words. The
+	   breakpoint is the card's own width, not the viewport's: this card is used
+	   in the panel AND inside a chat turn, which are different widths. */
+	gap: 14px;
+	container-type: inline-size;
+}
+
+@container (min-width: 460px) {
+	.video-card {
+		grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+		align-items: start;
+	}
+}
+
+.video-card__stage {
+	position: relative;
+	overflow: hidden;
+	border: 1px solid var(--hairline);
+	border-radius: 16px;
+	/* Behind the frame while it decodes, and behind the letterboxing after.
+	   The brand's two colours, in the order the logo uses them. */
+	background:
+		radial-gradient(120% 140% at 12% 0%, var(--wash-m-16), transparent 58%),
+		linear-gradient(150deg, var(--plum-deep), var(--plum));
+	aspect-ratio: 16 / 9;
+}
+
+.video-card__media {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+/* The whole still is the target: a play button a five-year-old has to aim for
+   is a play button they miss. */
+.video-card__play {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: none;
+	background: rgb(30 10 55 / 0.28);
+	cursor: pointer;
+	transition: background var(--swift);
+}
+
+.video-card__play:hover,
+.video-card__play:focus-visible {
+	background: rgb(30 10 55 / 0.14);
+}
+
+.video-card__play-glyph {
+	display: grid;
+	place-items: center;
+	width: 62px;
+	height: 62px;
+	border-radius: 50%;
+	background: rgb(255 255 255 / 0.94);
+	/* The triangle is optically left-heavy; nudge it back onto the centre. */
+	padding-left: 4px;
+	color: var(--plum);
+	box-shadow: 0 6px 22px rgb(30 10 55 / 0.3);
+	transition: transform var(--settle);
+}
+
+.video-card__play:hover .video-card__play-glyph,
+.video-card__play:focus-visible .video-card__play-glyph {
+	transform: scale(1.06);
+}
+
+.video-card__runtime {
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	padding: 2px 7px;
+	border-radius: 6px;
+	background: rgb(30 10 55 / 0.72);
+	color: #fff;
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
+}
+
+/* Once the reader is in control, the browser's own bar owns the bottom edge. */
+.video-card__media[controls] ~ .video-card__runtime {
+	display: none;
+}
+
+.video-card__meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 6px;
+}
+
+.video-card__topic {
+	padding: 2px 9px;
+	border-radius: 999px;
+	background: var(--wash-m-12);
+	color: var(--magenta);
+	font-size: 0.75rem;
+	font-weight: 650;
+}
+
+.video-card__setting {
+	color: var(--quiet);
+	font-size: 0.75rem;
+}
+
+.video-card__title {
+	margin: 0 0 6px;
+	color: var(--ink);
+	font-size: 1rem;
+	font-weight: 650;
+	line-height: 1.3;
+}
+
+.video-card__blurb {
+	margin: 0;
+	color: var(--slate);
+	font-size: 0.875rem;
+	line-height: 1.55;
+}
+
+/* Inside a chat turn the card is a reply, not a catalogue entry: the blurb has
+   already been said in prose above it. */
+.video-card[data-compact] .video-card__blurb {
+	display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.video-card__play,
+	.video-card__play-glyph {
+		transition: none !important;
+	}
+
+	.video-card__play:hover .video-card__play-glyph,
+	.video-card__play:focus-visible .video-card__play-glyph {
+		transform: none;
+	}
+}
