@@ -335,9 +335,28 @@ Personas are named by KEY here, not by label. The label a reader sees lives in
 Imani and Azuri — while the key is the identifier the access matrix, the
 session token and these voice settings are all wired to.
 
-Delivery per persona lives in `app/voice/registry.py` — `stella` runs at `speed`
-0.9 because five-year-olds need it slower, `aurora` at 1.0 with the highest
-stability because it is the voice a parent has to trust.
+Delivery per persona lives in `app/voice/registry.py`: `stella` is the slowest
+because five-year-olds are decoding the words as they arrive, `orion` is never
+slowed because a teenager hears a child's pace as condescension, and `aurora`
+carries the highest stability because it is the voice a parent has to trust.
+
+Every knob can be overridden per persona from the environment —
+`VOICE_STELLA_SPEED`, `VOICE_AURORA_STABILITY` and so on — so tuning a voice by
+ear is an env change rather than a code change, a test update and a deploy.
+Unset, the table stands. **Changing any of them invalidates the warm voice
+cache**, which is keyed on all four (`app/voice/cache.py`); re-run
+`tests/scripts/prewarm_voice.py` afterwards.
+
+`style` is capped at `MAX_STYLE`. ElevenLabs documents it as style
+*exaggeration*, and the brief asks twice for nothing exaggerated or performed;
+past the cap the model starts acting rather than reading, and loses stability
+doing it.
+
+**Accent is not a setting.** ElevenLabs has no accent parameter and the code
+never sends `language_code`, so the only thing that makes a voice sound
+Caribbean is which voice id is chosen. `.env.example` carries the character
+brief for each persona and the rule that matters: never trade intelligibility
+for an accent, and never pick a performed one.
 
 ### Endpoints
 

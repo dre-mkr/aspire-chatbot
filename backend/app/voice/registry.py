@@ -21,21 +21,68 @@ class VoiceProfile:
     settings: ElevenVoiceSettings
 
 
+#: The ceiling on `style`, which ElevenLabs documents as style EXAGGERATION.
+#:
+#: The brief asks for warmth and energy and then says, twice, that nothing may
+#: sound exaggerated or performed. Past this the model starts acting rather than
+#: reading, and it costs stability at the same time. Enforced by a test so a
+#: later "make Sky more excited" cannot quietly cross it.
+MAX_STYLE: Final[float] = 0.55
+
 # Per-persona delivery.
+#
+# Four knobs, and only two of them do what their names suggest:
+#   stability        LOW is expressive and variable, HIGH is even and flat.
+#   similarity_boost how hard to hold the original voice's timbre.
+#   style            exaggeration. See MAX_STYLE.
+#   speed            0.7 to 1.2. The one knob a reader actually notices.
+#
+# Accent is NOT here, because ElevenLabs has no accent parameter. A Caribbean
+# voice is chosen by picking a Caribbean voice id -- see `VOICE_*` in .env and
+# the note in README. Nothing in this table can add or remove an accent.
 _DELIVERY: dict[Persona, dict[str, float]] = {
-    Persona.STELLA: {"stability": 0.45, "similarity_boost": 0.75, "style": 0.45, "speed": 0.90},
-    Persona.ORION: {"stability": 0.55, "similarity_boost": 0.75, "style": 0.30, "speed": 1.0},
-    Persona.AURORA: {"stability": 0.75, "similarity_boost": 0.80, "style": 0.10, "speed": 1.0},
-    Persona.NOVA: {"stability": 0.60, "similarity_boost": 0.75, "style": 0.25, "speed": 0.95},
+    # Ages 5-12. Warm and encouraging, and the slowest of the five because a
+    # six-year-old is decoding the words as they arrive. Expressive (low
+    # stability) but under the exaggeration ceiling: playful, not cartoonish.
+    Persona.STELLA: {"stability": 0.50, "similarity_boost": 0.75, "style": 0.40, "speed": 0.88},
+    # Ages 13-18. Livelier than an adult read and deliberately not slowed --
+    # a teenager hearing a children's pace hears condescension.
+    Persona.ORION: {"stability": 0.50, "similarity_boost": 0.75, "style": 0.35, "speed": 1.0},
+    # Parents and guardians. The most even voice of the five: this is the one
+    # answering eligibility, registration and money questions, and it has to be
+    # trusted rather than liked. Fractionally under pace, which reads as calm.
+    Persona.AURORA: {"stability": 0.78, "similarity_boost": 0.80, "style": 0.08, "speed": 0.98},
+    # Teachers. Close to Aurora and a step more articulate: near-flat delivery
+    # so a definition lands cleanly, and slightly slower for the same reason.
+    Persona.NOVA: {"stability": 0.70, "similarity_boost": 0.78, "style": 0.15, "speed": 0.96},
     # Between Orion's evenness and Aurora's steadiness: the reader is unknown, so
     # the delivery commits to nothing.
     Persona.EVERYONE: {
         "stability": 0.65,
         "similarity_boost": 0.75,
-        "style": 0.20,
-        "speed": 0.97,
+        "style": 0.18,
+        "speed": 0.98,
     },
 }
+
+#: The knobs an env var may override, and the `VoiceSettings` field per persona.
+_TUNABLE: Final[tuple[str, ...]] = ("stability", "similarity_boost", "style", "speed")
+
+
+def _delivery_for(settings: VoiceSettings, persona: Persona) -> dict[str, float]:
+    """The table above, with any `VOICE_<PERSONA>_<KNOB>` override applied.
+
+    Tuning a voice is done by ear, by someone listening -- not by reading a
+    diff. Leaving the only way to do it as a code change meant every "a little
+    slower" was an edit, a test update and a deploy. These are optional: unset,
+    the table stands.
+    """
+    values = dict(_DELIVERY[persona])
+    for knob in _TUNABLE:
+        override = getattr(settings, f"voice_{persona.value}_{knob}", None)
+        if override is not None:
+            values[knob] = override
+    return values
 
 #: Personas that may borrow another's voice id rather than fail startup.
 #:
@@ -86,7 +133,7 @@ def build_registry(
                 language=language,
                 voice_id=voice_id,
                 model_id=chosen_model,
-                settings=ElevenVoiceSettings(**_DELIVERY[persona]),
+                settings=ElevenVoiceSettings(**_delivery_for(settings, persona)),
             )
     return registry
 
