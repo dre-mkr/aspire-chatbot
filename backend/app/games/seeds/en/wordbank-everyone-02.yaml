@@ -16,10 +16,9 @@
 # INVEST and ELIGIBLE all live there, and a second copy of a word only makes the
 # same puzzle twice as likely to come up.
 #
-# Every claim is checked against the knowledge base and the row is named in
-# `source_document`. The plain definitions of borrowing and rising prices are
-# general financial vocabulary and need no row; the EC dollar facts do have one,
-# and it is cited.
+# Every entry names its knowledge base rows in `source_document`, including the
+# ones whose plain meaning is general financial vocabulary — citing them costs
+# nothing and saves the next editor the lookup.
 #
 # Editing this file (same rules as warmup-01):
 #   word        the answer, uppercase. Never leaves the server until revealed.
@@ -39,9 +38,10 @@ source: ASPIRE design project — general word bank, set 2
 closing:
   lead: Money goes out as easily as it comes in.
   text: >-
-    Saving is only half of it. The other half is knowing what leaves, what you
-    owe, and what quietly changes the value of what you keep. Read the paper
-    that comes with your money and very little about it stays mysterious.
+    Putting money aside is one skill. Knowing what leaves your hands, what you
+    owe, and what quietly changes the value of what you keep is the other. Read
+    the paper that comes with your money and very little about it stays
+    mysterious.
 
 entries:
   - id: wordbank-everyone-02-expense
@@ -81,10 +81,11 @@ entries:
     language: en
     word: CURRENCY
     scramble: RUCYCNER
-    hint: a kind of thing — every country has one, and eight of us here share ours
+    hint: a kind of thing rather than an amount — eight of us in this region share the same one
     definition: >-
       the money a country uses for buying and selling; ours is the Eastern
-      Caribbean dollar, issued by the ECCB in Basseterre
+      Caribbean dollar, written EC$ and issued by the Eastern Caribbean Central
+      Bank in Basseterre
     difficulty_band: core
     persona_bands: [everyone]
     volatility: stable
@@ -97,7 +98,8 @@ entries:
     hint: a small piece of paper, and most people throw it away too soon
     definition: >-
       the printed slip proving what you paid and when — your evidence for a
-      return, a warranty, or a check against your bank statement
+      return, for a warranty, and for checking your bank statement against what
+      you actually bought
     difficulty_band: core
     persona_bands: [everyone]
     volatility: stable
@@ -107,7 +109,7 @@ entries:
     language: en
     word: INFLATION
     scramble: FLANITINO
-    hint: it names something that happens to prices over years, not days
+    hint: a word from the news, and it works over years rather than days
     definition: >-
       when prices climb over time, so the same EC$100 buys less than it did
       before, even though the number in your hand has not changed

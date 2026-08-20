@@ -3,7 +3,8 @@
 # A third Stella set, so a round is drawn from a wider pool rather than circling
 # the same handful of items. The engine gathers every set a persona can be
 # served and samples the round from all of them, which is why nothing here
-# counts the questions or points at another one.
+# counts the questions or points at another one — the closing has to stand on
+# its own even when none of these items were drawn.
 #
 # Where the first two sets taught habits — save first, spread it out, decide
 # before you spend — this one teaches the money itself: what an EC note is made
@@ -11,10 +12,14 @@
 # anybody. Concrete things a child can check in their own hand.
 #
 # Every claim about EC dollars, jars and card safety is taken from the ASPIRE
-# knowledge base rows named on each item, and each row is one written for
-# children. Written natively for Stella's card, not simplified from an Orion
+# knowledge base rows named on each item, and each of those rows is one written
+# for children. Written natively for Stella's card, not simplified from an Orion
 # item at runtime. Nothing here uses a rate, a share of a hundred, or the words
 # for money growing on its own — those belong to the Orion sets.
+#
+# `paragraphs` is what the card actually renders; `explanation` is only the
+# fallback when an item has none. They must carry the same sentences, or
+# teaching written into one is taught to nobody.
 
 id: truefalse-stella-03
 game_type: true_false
@@ -25,10 +30,9 @@ source: ASPIRE knowledge base (child rows) — True or False (Stella, set 3)
 closing:
   lead: Know your money. Then keep it safe.
   text: >-
-    EC dollars are worth learning by heart — which ones are notes, which ones
-    are coins, and what your money is for before it leaves your hand. Money you
-    can name and money you keep somewhere safe is money that is still there when
-    you need it.
+    Money is easier to look after once you know it — what it is made of, what it
+    is worth, and what it is for. Decide what yours is for before it leaves your
+    hand, and never hand over the things that are meant to stay yours alone.
 
 entries:
   - id: tfs-03-notes-plastic
@@ -39,8 +43,8 @@ entries:
     takeaway: EC dollar notes are plastic, which is why they last so long.
     explanation: >-
       They look a bit like paper, but they are not. EC dollar notes are made of
-      a thin bendy plastic called polymer. That is why they do not tear easily
-      and do not go soft if they get wet. There are five of them: EC$5, EC$10,
+      a thin bendy plastic called polymer. That is why they stay cleaner and
+      last far longer than paper ones. There are five of them: EC$5, EC$10,
       EC$20, EC$50 and EC$100. Next time you hold one, give it a bend and feel
       it spring back.
     paragraphs:
@@ -48,8 +52,8 @@ entries:
         They look a bit like paper, but they are not. EC dollar notes are made
         of a thin bendy plastic called polymer.
       - >-
-        That is why they do not tear easily and do not go soft if they get wet.
-        There are five of them: EC$5, EC$10, EC$20, EC$50 and EC$100.
+        That is why they stay cleaner and last far longer than paper ones. There
+        are five of them: EC$5, EC$10, EC$20, EC$50 and EC$100.
       - Next time you hold one, give it a bend and feel it spring back.
     difficulty_band: warmup
     persona_bands: [stella]
@@ -73,7 +77,7 @@ entries:
         EC$1 coin.
       - >-
         The smallest note is EC$5. So if somebody hands you one dollar, it will
-        be round and metal.
+        be round and metal, and it will land in your palm with a clink.
       - Count the coins in your pocket and see which ones you have.
     difficulty_band: warmup
     persona_bands: [stella]
@@ -160,8 +164,8 @@ entries:
         work at the bank. A real bank will never ask you for it, so anybody who
         asks is trying to take your money.
       - >-
-        If you think someone has seen it, tell a grown-up straight away so it
-        can be changed.
+        Do not write it down either. If you think someone has seen it, tell a
+        grown-up straight away so it can be changed.
     difficulty_band: core
     persona_bands: [stella]
     volatility: stable
@@ -176,18 +180,18 @@ entries:
     explanation: >-
       There is always more you could want than there is money to pay for it, so
       everybody has to choose. That is true for a child with a few dollars and
-      true for a grown-up with plenty. The way to do it is to pay for what you
-      must have first, then look at what is left for the rest.
+      it is true for a grown-up with plenty. Choosing is not a sign that you are
+      short of money. It is simply what having money is like, for everyone.
     paragraphs:
       - >-
         There is always more you could want than there is money to pay for it,
         so everybody has to choose.
       - >-
-        That is true for a child with a few dollars and true for a grown-up with
-        plenty.
+        That is true for a child with a few dollars and it is true for a
+        grown-up with plenty.
       - >-
-        The way to do it is to pay for what you must have first, then look at
-        what is left for the rest.
+        Choosing is not a sign that you are short of money. It is simply what
+        having money is like, for everyone.
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable

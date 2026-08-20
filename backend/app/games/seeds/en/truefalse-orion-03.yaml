@@ -1,19 +1,26 @@
 # ASPIRE true or false — Orion set 3 (ages 13–18)
 #
-# A third Orion set, so a round of five is drawn from a wider bank and a reader
-# who plays twice is unlikely to meet the same statement. Same register as sets
-# 1 and 2: the mechanism first, one worked number where it earns its place, no
+# A third Orion set, so a round is drawn from a wider bank and a reader who
+# plays twice is unlikely to meet the same statement. The engine samples the
+# round from every set a persona can be served, which is why nothing here
+# counts the items or points at another one — including the closing, which has
+# to land for a reader who saw any subset of these. Same register as sets 1 and
+# 2: the mechanism first, one worked number where it earns its place, no
 # cheerleading. Percentages, compounding and rates are allowed here and are not
-# allowed in the Stella sets.
+# allowed in the Stella sets; the Stella pair for this set is
+# `truefalse-stella-03.yaml`, written natively rather than simplified at
+# runtime.
 #
 # Where sets 1 and 2 were authored from the design project, this one is written
 # off the verified corpus: every programme, institutional or rate claim carries
 # the knowledge base row it came from in `source_document`. General financial
 # definitions carry no row because they need none.
 #
-# `explanation` is the flat authoritative text — the paragraphs joined. The
-# `paragraphs` under it are the same words laid out for a client that can break
-# them up. A client that ignores the layout still has the whole explanation.
+# `explanation` is the flat authoritative text — the paragraphs joined, word for
+# word. The `paragraphs` under it are the same sentences laid out for a client
+# that can break them up. Keep them identical when editing: a client that
+# renders paragraphs must not show the reader less teaching than a client that
+# renders the flat text.
 
 id: truefalse-orion-03
 game_type: true_false
@@ -22,13 +29,12 @@ title: True or false
 source: ASPIRE knowledge base — student rows, cited per item
 
 closing:
-  lead: The number on the poster is not the number that decides it.
+  lead: The headline number is rarely the number that decides it.
   text: >-
-    Most money decisions are settled by a second figure sitting underneath the
-    headline one: the total rather than the monthly amount, the rate after
-    inflation rather than the rate advertised, what is left after costs rather
-    than what came in. Working that second number out is nearly always simple
-    arithmetic. Doing it before you sign is the whole skill.
+    Nearly every money decision has a second figure sitting underneath the
+    advertised one, and it is the second figure that settles the matter. Working
+    it out is almost always simple arithmetic you can do before you sign
+    anything. The habit of asking for it is the whole skill.
 
 entries:
   - id: tfo-03-rule-of-72
@@ -43,12 +49,14 @@ entries:
       It is an estimate rather than a formula to build a plan on, and it is close
       enough to do in your head. At 2 percent, 72 divided by 2 is about 36 years
       to double. At 6 percent it is about 12. What that arithmetic exposes is how
-      much of the result belongs to the rate. Three or four extra points do not
-      shave a few years off the wait; they cut it by two thirds, because the
-      interest is being earned on a base that keeps growing. It works the other
-      way too. If a scheme promises to double your money in a single year, the
-      rule says it is quoting you something near 72 percent, and asking who is
-      paying that is usually the end of the conversation.
+      much of the result belongs to the rate. Those four extra points do not
+      shave a few years off the wait; they cut it from about thirty-six years to
+      about twelve, because the interest is being earned on a base that keeps
+      growing. The higher the rate you start from, the less each extra point buys
+      you. It works the other way too. If a scheme promises to double your money
+      in a single year, the rule says it is quoting you something near 72
+      percent, and a high return promised with little or no risk is the single
+      biggest warning sign in finance.
     paragraphs:
       - >-
         It is an estimate rather than a formula to build a plan on, and it is
@@ -56,18 +64,19 @@ entries:
         36 years to double. At 6 percent it is about 12.
       - >-
         What that arithmetic exposes is how much of the result belongs to the
-        rate. Three or four extra points do not shave a few years off the wait;
-        they cut it by two thirds, because the interest is being earned on a
-        base that keeps growing.
+        rate. Those four extra points do not shave a few years off the wait;
+        they cut it from about thirty-six years to about twelve, because the
+        interest is being earned on a base that keeps growing. The higher the
+        rate you start from, the less each extra point buys you.
       - >-
         It works the other way too. If a scheme promises to double your money in
         a single year, the rule says it is quoting you something near 72
-        percent, and asking who is paying that is usually the end of the
-        conversation.
+        percent, and a high return promised with little or no risk is the single
+        biggest warning sign in finance.
     difficulty_band: advanced
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-127, FIN-124, FIN-131)
+    source_document: ASPIRE knowledge base (FIN-127, FIN-124, FIN-232)
 
   - id: tfo-03-net-income
     statement: >-
@@ -80,28 +89,32 @@ entries:
     explanation: >-
       A budget built on gross pay is a plan you cannot fund. Social Security and
       the other deductions come out before the money ever reaches you, so every
-      band in the plan is quietly a little too big and the whole thing runs short
-      in the last week of the month. Work from net income instead: the figure at
-      the bottom of the payslip, the amount that lands in the account. If the
-      categories do not balance against that number, they do not balance. It is a
-      small correction, and it decides whether the plan survives contact with a
-      real month. The band that gives way first when the arithmetic is wrong is
-      almost always saving, because it is the one nobody chases you for.
+      category in the plan is quietly a little too big and the whole thing runs
+      short in the last week of the month. Work from net income instead: the
+      figure at the bottom of the payslip, the amount that lands in the account.
+      List your fixed costs, list your variable costs, subtract both from that
+      number, and what remains is what you can actually save or spend freely. If
+      it comes out negative, something has to change. It is a small correction,
+      and it decides whether the plan survives contact with a real month. When
+      the arithmetic is wrong, saving is the easiest thing to let go, because it
+      is the one nobody sends you a reminder about.
     paragraphs:
       - >-
         A budget built on gross pay is a plan you cannot fund. Social Security
         and the other deductions come out before the money ever reaches you, so
-        every band in the plan is quietly a little too big and the whole thing
-        runs short in the last week of the month.
+        every category in the plan is quietly a little too big and the whole
+        thing runs short in the last week of the month.
       - >-
         Work from net income instead: the figure at the bottom of the payslip,
-        the amount that lands in the account. If the categories do not balance
-        against that number, they do not balance.
+        the amount that lands in the account. List your fixed costs, list your
+        variable costs, subtract both from that number, and what remains is what
+        you can actually save or spend freely. If it comes out negative,
+        something has to change.
       - >-
         It is a small correction, and it decides whether the plan survives
-        contact with a real month. The band that gives way first when the
-        arithmetic is wrong is almost always saving, because it is the one
-        nobody chases you for.
+        contact with a real month. When the arithmetic is wrong, saving is the
+        easiest thing to let go, because it is the one nobody sends you a
+        reminder about.
     difficulty_band: core
     persona_bands: [orion]
     volatility: stable
@@ -122,10 +135,10 @@ entries:
       actually cost you. Stretching the term is where this bites. A longer term
       gives a smaller payment and a larger total, because interest is charged for
       more months, so the offer that feels most comfortable is often the most
-      expensive one on the table. Ask for the APR as well. The annual percentage
-      rate folds the fees in with the interest, which lets you compare two offers
-      as one number instead of three, and any lender who will not put the total
-      in writing has told you something.
+      expensive one you were shown. Ask for the APR as well. The annual
+      percentage rate folds the fees in with the interest, which lets you compare
+      two offers as one number instead of three, and any lender who will not put
+      the total cost in writing has told you something.
     paragraphs:
       - >-
         The instalment tells you whether you can carry the loan this month. It
@@ -136,11 +149,12 @@ entries:
         Stretching the term is where this bites. A longer term gives a smaller
         payment and a larger total, because interest is charged for more months,
         so the offer that feels most comfortable is often the most expensive one
-        on the table.
+        you were shown.
       - >-
-        Ask for the APR as well. It folds the fees in with the interest, which
-        lets you compare two offers as one number instead of three, and any
-        lender who will not put the total in writing has told you something.
+        Ask for the APR as well. The annual percentage rate folds the fees in
+        with the interest, which lets you compare two offers as one number
+        instead of three, and any lender who will not put the total cost in
+        writing has told you something.
     difficulty_band: advanced
     persona_bands: [orion]
     volatility: stable
@@ -157,19 +171,20 @@ entries:
     explanation: >-
       Investment values move up and down, and a short horizon takes away your
       ability to wait out the down part. If you need the money in March, you sell
-      at March's price, whatever March happens to be — and the loss becomes real
+      at March's price, whatever March happens to be, and the loss becomes real
       at that moment rather than staying on paper. Money you will not touch for
       twenty years is a different case entirely. It can absorb the swings in
-      exchange for higher expected growth, because it has the years to recover in.
-      Same investment, different job, different answer. Read it from the other
-      side as well: do not risk money you cannot afford to lose. School fees, rent
-      and the emergency fund are not investment money, however convincing the
-      opportunity sounds.
+      exchange for higher expected growth, because it has the years to recover
+      in. Same investment, different job, different answer. Read it from the
+      other side as well: do not risk money you cannot afford to lose. School
+      fees, rent and the emergency fund are not investment money, however
+      convincing the opportunity sounds.
     paragraphs:
       - >-
         Investment values move up and down, and a short horizon takes away your
         ability to wait out the down part. If you need the money in March, you
-        sell at March's price, whatever March happens to be.
+        sell at March's price, whatever March happens to be, and the loss
+        becomes real at that moment rather than staying on paper.
       - >-
         Money you will not touch for twenty years is a different case entirely.
         It can absorb the swings in exchange for higher expected growth, because
@@ -197,13 +212,14 @@ entries:
       once. Your real return is the interest rate minus inflation, so 2 percent
       earned against 3 percent inflation is a real return of minus 1 percent:
       richer on the statement, poorer at the counter. The Eastern Caribbean
-      Central Bank sets a floor under what commercial banks may pay on savings,
-      and it has been 2.0 percent since May 2015. A floor is worth having, because
-      it stops the rate being nothing at all. It is not a promise to outpace
-      prices, and it was never meant to be one. That gap is the honest argument
-      for investing rather than only saving. Over long periods shares and bonds
-      have historically grown faster than deposit rates, and the price of that is
-      accepting the ups and downs along the way.
+      Central Bank sets a floor under what commercial banks may pay on savings.
+      It has been 2.0 percent since May 2015, and the Monetary Council reaffirmed
+      it in July 2025. A floor is worth having, because it stops the rate being
+      nothing at all. It is not a promise to outpace prices, and it was never
+      meant to be one. That gap is the honest argument for investing rather than
+      only saving. Over long periods shares and bonds have historically grown
+      faster than deposit rates, and the price of that is accepting the ups and
+      downs along the way.
     paragraphs:
       - >-
         The balance goes up while the buying power goes down, and both are true
@@ -212,9 +228,10 @@ entries:
         percent: richer on the statement, poorer at the counter.
       - >-
         The Eastern Caribbean Central Bank sets a floor under what commercial
-        banks may pay on savings, and it has been 2.0 percent since May 2015. A
-        floor stops the rate being nothing at all. It is not a promise to
-        outpace prices.
+        banks may pay on savings. It has been 2.0 percent since May 2015, and
+        the Monetary Council reaffirmed it in July 2025. A floor is worth having,
+        because it stops the rate being nothing at all. It is not a promise to
+        outpace prices, and it was never meant to be one.
       - >-
         That gap is the honest argument for investing rather than only saving.
         Over long periods shares and bonds have historically grown faster than
@@ -238,24 +255,28 @@ entries:
       read it to decide whether to lend to you and at what rate. Several open
       balances do not read as strength on that record; they read as several
       obligations you are already carrying. What actually builds it is dull and
-      slow. Pay every instalment on time, keep balances well below your limits,
-      and avoid making a run of applications in a short period, because each one
-      leaves a mark. Doing that consistently for years is the whole method, and
-      repairing a damaged record uses exactly the same steps. A regional credit
-      bureau system is being rolled out across the currency union under the Credit
-      Reporting Act, which means the habits you build at 17 become the record
-      somebody reads when you ask for your first serious loan.
+      slow. Borrow only what you can comfortably repay, pay every instalment on
+      time, keep balances well below your limits, and avoid making many
+      applications in a short period. Doing that consistently over years is the
+      whole method, and repairing a damaged record uses exactly the same steps.
+      There is no shortcut, and anybody selling one should be treated with
+      suspicion. A regional credit bureau system is being rolled out across the
+      currency union under the Credit Reporting Act, which means the habits you
+      build at 17 become the record somebody reads when you ask for your first
+      serious loan.
     paragraphs:
       - >-
         A credit report is a record of how you have handled borrowing, and
         lenders read it to decide whether to lend to you and at what rate.
-        Several open balances do not read as strength; they read as several
-        obligations you are already carrying.
+        Several open balances do not read as strength on that record; they read
+        as several obligations you are already carrying.
       - >-
-        What actually builds it is dull and slow. Pay every instalment on time,
-        keep balances well below your limits, and avoid making a run of
-        applications in a short period. Doing that consistently for years is the
-        whole method, and repairing a damaged record uses the same steps.
+        What actually builds it is dull and slow. Borrow only what you can
+        comfortably repay, pay every instalment on time, keep balances well
+        below your limits, and avoid making many applications in a short period.
+        Doing that consistently over years is the whole method, and repairing a
+        damaged record uses exactly the same steps. There is no shortcut, and
+        anybody selling one should be treated with suspicion.
       - >-
         A regional credit bureau system is being rolled out across the currency
         union under the Credit Reporting Act, which means the habits you build
@@ -282,9 +303,9 @@ entries:
       is fully electronic, so there are no paper certificates to lose. Your
       holdings are recorded in the central depository, and a trade settles one
       business day after it is made, with the shares and the money changing hands
-      together. Small amounts are not shut out either. Government securities on
-      the regional market have generally started at EC$5,000, though a retail bond
-      platform has offered entry from as little as EC$500.
+      together. Small amounts are not shut out either. On the regional government
+      securities market the general minimum has been EC$5,000, though a retail
+      bond platform has offered entry from as little as EC$500.
     paragraphs:
       - >-
         The ECSE is our regional stock exchange, launched in October 2001 and
@@ -298,9 +319,9 @@ entries:
         business day after it is made, with the shares and the money changing
         hands together.
       - >-
-        Small amounts are not shut out either. Government securities on the
-        regional market have generally started at EC$5,000, though a retail bond
-        platform has offered entry from as little as EC$500.
+        Small amounts are not shut out either. On the regional government
+        securities market the general minimum has been EC$5,000, though a retail
+        bond platform has offered entry from as little as EC$500.
     difficulty_band: advanced
     persona_bands: [orion]
     volatility: stable
@@ -319,11 +340,12 @@ entries:
       oil, cooking gas and packaging cost EC$320, the profit is EC$180. That
       second figure is the one that tells you whether the business works. Costs
       arrive in two kinds and both have to be counted. Fixed costs stay the same
-      whatever you sell, like a licence. Variable costs rise with every unit, like
-      ingredients and packaging. Confusing the two is how a price gets set too
-      low. The number worth working out is where the two meet: with EC$300 of
-      fixed costs and EC$6 of profit per unit, you break even at 50 units, and
-      everything sold after that is yours.
+      whatever you sell, like rent and a licence. Variable costs rise with every
+      unit, like ingredients and packaging. The EC$320 above is all variable,
+      which is why the rent still has to come out of the EC$180, and confusing
+      the two is how a price gets set too low. Take a different stall to see
+      where the two meet: with EC$300 of fixed costs and EC$6 of profit on each
+      unit, you break even at 50 units, and everything sold after that is yours.
     paragraphs:
       - >-
         Revenue is the total coming in from sales before anything is taken out.
@@ -332,12 +354,13 @@ entries:
         That second figure is the one that tells you whether the business works.
       - >-
         Costs arrive in two kinds and both have to be counted. Fixed costs stay
-        the same whatever you sell, like a licence. Variable costs rise with
-        every unit, like ingredients and packaging. Confusing the two is how a
-        price gets set too low.
+        the same whatever you sell, like rent and a licence. Variable costs rise
+        with every unit, like ingredients and packaging. The EC$320 above is all
+        variable, which is why the rent still has to come out of the EC$180, and
+        confusing the two is how a price gets set too low.
       - >-
-        The number worth working out is where the two meet: with EC$300 of fixed
-        costs and EC$6 of profit per unit, you break even at 50 units, and
+        Take a different stall to see where the two meet: with EC$300 of fixed
+        costs and EC$6 of profit on each unit, you break even at 50 units, and
         everything sold after that is yours.
     difficulty_band: core
     persona_bands: [orion]

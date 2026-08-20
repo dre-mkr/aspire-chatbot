@@ -5,9 +5,9 @@
 # what stops the same child meeting the same word two afternoons running.
 #
 # Where set 1 was about looking after money once you have it, this one is about
-# the decision that comes first: whether to part with it at all. Needs and wants,
-# the price on the thing, the plan you make before the shop — then somewhere to
-# put what you kept, and a portion for somebody else.
+# the decision that comes first: whether to part with it at all. The thing you
+# would only like, the price on it, the plan you make before the shop — then
+# somewhere to put what you kept, and a portion for somebody else.
 #
 # Nothing here needs a percentage, a rate or compounding, and the word the 9–12
 # card is allowed to use for money growing in a bank is deliberately absent too:
@@ -47,16 +47,16 @@ closing:
 #
 # `NEED` was drafted here and removed for exactly that: the ECCB warm-up handout
 # has defined MONEY as "what we use to buy the things we need" since the first
-# commit, and that file is the printed source. WANT below carries the same
-# lesson and collides with nothing. `NEEDS` is seeded in the hangman bank, which
-# has its own word list.
+# commit, and that file is the printed source, played before this one in the
+# same session. WANT below carries the same lesson and collides with nothing.
+# `NEEDS` is seeded in the hangman bank, which has its own word list.
 
 entries:
   - id: wordbank-stella-02-want
     language: en
     word: WANT
     scramble: TWAN
-    hint: a feeling, not a thing you must have
+    hint: the opposite of something you must have
     definition: something you would enjoy having, but you could live without it
     difficulty_band: warmup
     persona_bands: [stella]
@@ -68,7 +68,7 @@ entries:
     word: COST
     scramble: OTCS
     hint: a number, and you look for it before you buy
-    definition: the amount of money you must pay to buy something
+    definition: the amount of money somebody asks you to pay for a thing
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable
@@ -101,19 +101,20 @@ entries:
     word: SAFE
     scramble: FEAS
     hint: it describes a place, not a thing you do
-    definition: kept where it cannot be lost, taken or spent by mistake
+    definition: kept where it is hard to lose and hard to spend by mistake
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-058, ASP-071)
+    source_document: ASPIRE knowledge base (FIN-058, FIN-059, ASP-071)
 
   - id: wordbank-stella-02-give
     language: en
     word: GIVE
     scramble: VEGI
     hint: an action word — and you do not ask for it back
-    definition: to hand some of your money to a person who has less than you
+    definition: to hand some of your money to somebody else, because helping is
+      one of the jobs money can do
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-060)
+    source_document: ASPIRE knowledge base (FIN-060, FIN-291)

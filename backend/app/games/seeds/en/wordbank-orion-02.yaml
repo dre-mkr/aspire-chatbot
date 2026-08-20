@@ -1,8 +1,11 @@
 # ASPIRE word scramble — Orion bank, set 2 (ages 13–18)
 #
 # A second bank for the same reader as `wordbank-orion-01`, not a replacement.
-# A round serves a handful of a set's entries at random, so the size of the pool
-# is what decides whether a sixteen-year-old meets the same word twice in a week.
+# Word scramble sets no round size, so an Orion round is not a random draw: the
+# engine serves every servable word it can find for the band, in filename order
+# — `warmup-01`, then set 1, then this file — and the round grows as the banks
+# grow. A word held in two Orion-facing sets would therefore come round twice in
+# the same sitting, not merely twice in a week.
 #
 # Set 1 is the vocabulary of a statement and a form: what went in, what came out,
 # what is left. This one is the vocabulary of growth — why money put to work does
@@ -11,22 +14,33 @@
 #
 # Four obvious candidates are deliberately absent. BUDGET and COMPOUND are
 # already in set 1. INTEREST and INVEST are in `warmup-01`, the ECCB handout
-# Orion also plays, and a second copy of either would only make the same puzzle
-# twice as likely.
+# Orion also plays, and a second copy of either would put the same puzzle in
+# front of the same player inside one round.
+#
+# Order is not decorative, because the file order is the playing order: RISK is
+# solved before RETURN leans on it, and SHARE before DIVIDEND does.
 #
 # Every claim below is the knowledge base's rather than the author's, and the row
-# ids sit on each entry. The definitions are general finance on purpose: where a
-# term also describes something ASPIRE does with a participant's money, that is
-# left to the programme content, which can cite the arrangement properly.
+# ids sit on each entry — only rows the entry actually rests on, so a later
+# editor can check one line against one row. The definitions are general finance
+# on purpose: where a term also describes something ASPIRE does with a
+# participant's money, that is left to the programme content, which can cite the
+# arrangement properly.
 #
 # Editing this file (same rules as warmup-01):
 #   word        the answer, uppercase. Never leaves the server until revealed.
 #   scramble    must be an anagram of `word` — CI asserts this on every entry.
-#   hint        a CATEGORY nudge, not a definition. Becomes hint level 2.
+#   hint        a CATEGORY nudge, not a definition. Becomes hint level 2. If it
+#               can be swapped for the definition without loss, it is too close.
 #   definition  plain adult English, defined once, no cheerleading. Hint level 3,
 #               and what the assistant teaches from after a correct answer. Must
 #               not contain the word itself — CI checks the letters alone, so
-#               watch for a word hiding across a space.
+#               watch for a word hiding across a space, or inside a longer one
+#               (`shareholders` hands over SHARE). The same goes for any answer
+#               still to come: `warmup-01` and set 1 are already solved by the
+#               time this file plays, so naming `interest` or `deposit` costs
+#               nothing, but naming a word from further DOWN this file hands a
+#               player a puzzle they have not been set yet.
 
 id: wordbank-orion-02
 game_type: word_scramble
@@ -37,10 +51,10 @@ source: ASPIRE design project — Orion word bank, set 2
 closing:
   lead: Growth costs certainty.
   text: >-
-    Money left alone does not stay still, because prices do not stay still under
-    it. Putting it to work is how people get ahead of that, and the price of
-    getting ahead is not knowing what any single year will do. Every term here is
-    part of describing that trade.
+    Savings left alone do not stay still, because prices do not stay still under
+    them. Putting them to work is how people get ahead of that, and the cost of
+    getting ahead is not knowing what any one year will do. That trade — a bigger
+    gain in exchange for less certainty — is one everyone eventually has to price.
 
 entries:
   - id: wordbank-orion-02-inflation
@@ -66,32 +80,32 @@ entries:
     difficulty_band: advanced
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-022, FIN-021)
+    source_document: ASPIRE knowledge base (FIN-022)
 
   - id: wordbank-orion-02-risk
     language: en
     word: RISK
     scramble: KSIR
-    hint: a word for a chance, not a certainty
+    hint: a word that turns up beside every promise of a big gain
     definition: >-
       the chance that something costs you money you had not planned to lose
     difficulty_band: core
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-248, FIN-357)
+    source_document: ASPIRE knowledge base (FIN-248, FIN-357, FIN-205)
 
   - id: wordbank-orion-02-return
     language: en
     word: RETURN
     scramble: NURTRE
-    hint: a number, usually quoted as a percentage a year
+    hint: a number, and it never comes with a guarantee
     definition: >-
-      what an investment gives you on top of the money you put in, and the higher
-      it is expected to be, the more you are being asked to accept
+      what an investment gives you on top of the money you put in, and the more
+      of it you expect, the greater the chance of losing money instead
     difficulty_band: advanced
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-205, FIN-132, FIN-361)
+    source_document: ASPIRE knowledge base (FIN-205, FIN-361)
 
   - id: wordbank-orion-02-share
     language: en
@@ -112,12 +126,12 @@ entries:
     scramble: NEVDIDID
     hint: a payment, and only somebody who owns part of a company receives one
     definition: >-
-      a portion of a company's profit paid out to its shareholders, usually once
-      or twice a year
+      a slice of what a company earns, paid out to the people who own part of it,
+      usually once or twice a year
     difficulty_band: advanced
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-196, ASP-099)
+    source_document: ASPIRE knowledge base (FIN-196, FIN-194)
 
   - id: wordbank-orion-02-profit
     language: en
@@ -125,12 +139,12 @@ entries:
     scramble: FIRTOP
     hint: a number you work out at the end, once every cost is paid
     definition: >-
-      what is left of the money a business takes in after the cost of everything
-      it sold is subtracted
+      what is left of the money a business takes in once all of its costs have
+      been subtracted
     difficulty_band: core
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-269)
+    source_document: ASPIRE knowledge base (FIN-269, FIN-268)
 
   - id: wordbank-orion-02-principal
     language: en
