@@ -1,0 +1,252 @@
+# ASPIRE true or false — general set 2 (the `everyone` persona)
+#
+# A second set for the reader who has not said who they are, so a round draws
+# from a wider bank and playing twice is unlikely to repeat a statement. Same
+# register as set 1: nothing a twelve-year-old could not follow, nothing an
+# adult would find childish, and no item assuming the reader holds an account
+# or earns a wage.
+#
+# Where set 1 was authored from the design project, this one is written off the
+# verified corpus. Every institutional, rate, tax or currency claim carries the
+# knowledge base row it came from in `source_document`; general financial
+# definitions carry no row because they need none. Nothing about the ASPIRE
+# programme itself — amounts, ages, eligibility, partners, account rules — is
+# claimed here.
+#
+# Where a number appears it is quoted with the date attached, because a figure
+# with no date is the thing that goes quietly wrong two years later. The item
+# itself asserts the durable part; the level lives in the explanation.
+#
+# `explanation` is the flat authoritative text — the paragraphs joined. The
+# `paragraphs` under it are the same words laid out for a client that can break
+# them up. A client that ignores the layout still has the whole explanation.
+
+id: truefalse-everyone-02
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE knowledge base — general rows, cited per item
+
+closing:
+  lead: Some of this is guaranteed by a rule. The rest only looks like it is.
+  text: >-
+    A good deal of what steadies money here is written down and supervised — a
+    fixed rate to the US dollar, a floor under what savings must earn, banks
+    that answer to a regulator. Other arrangements rest on trust alone, and
+    trust is not a guarantee, however well it has held so far. Knowing which
+    kind you are dealing with, before the money moves, is most of staying safe.
+
+entries:
+  - id: tfe-02-peg
+    statement: The EC dollar's value against the US dollar moves up and down from day to day.
+    answer: false
+    topic: The peg
+    topic_line: " — one fixed rate, held on purpose."
+    takeaway: The EC dollar is fixed to the US dollar, not floating against it.
+    explanation: >-
+      One US dollar is worth EC$2.70, and has been since 7 July 1976. A fixed
+      rate like that is called a peg, and it is the reason prices here do not
+      lurch every time the news reports a currency move. Holding it steady is
+      deliberate work: the Eastern Caribbean Central Bank keeps foreign currency
+      reserves that back the EC dollar and allow it to defend the rate. For a
+      household it means one less thing that shifts underneath you, and the
+      arithmetic never changes either — divide by 2.70 going out, multiply by
+      2.70 coming back.
+    paragraphs:
+      - >-
+        One US dollar is worth EC$2.70, and has been since 7 July 1976. A fixed
+        rate like that is called a peg.
+      - >-
+        It is the reason prices here do not lurch every time the news reports a
+        currency move. Holding it steady is deliberate work: the Eastern
+        Caribbean Central Bank keeps foreign currency reserves that back the EC
+        dollar and allow it to defend the rate.
+      - >-
+        For a household it means one less thing that shifts underneath you, and
+        the arithmetic never changes — divide by 2.70 going out, multiply by
+        2.70 coming back.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-005, FIN-035, FIN-036, FIN-040)
+
+  - id: tfe-02-savings-floor
+    statement: >-
+      Commercial banks in the Eastern Caribbean must pay at least a set minimum
+      on money held in a savings account.
+    answer: true
+    topic: The savings floor
+    topic_line: " — a legal minimum, not a promise of a good rate."
+    takeaway: There is a floor under savings rates here, and a floor is not a target.
+    explanation: >-
+      The Eastern Caribbean Central Bank sets a minimum savings rate that
+      commercial banks may not go below. It has been 2.0 percent since May 2015
+      and was reaffirmed by the Monetary Council in July 2025, which means an
+      ordinary savings account here cannot pay you nothing at all. Two things
+      are worth adding. It is a floor rather than a target, so what different
+      institutions actually offer is still worth comparing before you open
+      anything. And a lower figure quoted somewhere is usually the average
+      deposit rate across all deposit types, which measures something different
+      from the legal minimum on savings.
+    paragraphs:
+      - >-
+        The Eastern Caribbean Central Bank sets a minimum savings rate that
+        commercial banks may not go below. It has been 2.0 percent since May
+        2015 and was reaffirmed by the Monetary Council in July 2025.
+      - >-
+        So an ordinary savings account here cannot pay you nothing at all. But
+        it is a floor rather than a target, and what different institutions
+        actually offer is still worth comparing before you open anything.
+      - >-
+        A lower figure quoted somewhere is usually the average deposit rate
+        across all deposit types, which measures something different from the
+        legal minimum on savings.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-037, FIN-038, FIN-098, FIN-333)
+
+  - id: tfe-02-sou-sou
+    statement: >-
+      A sou-sou gives your money the same protection as an account at a licensed
+      bank.
+    answer: false
+    topic: Sou-sou and partner hand
+    topic_line: " — real discipline, no safety net underneath it."
+    takeaway: A sou-sou is a discipline tool, not a protected place to keep money.
+    explanation: >-
+      A sou-sou, or partner hand, is a rotating savings group: each member puts
+      in a fixed amount every week and members take turns receiving the pot. It
+      works, and what makes it work is the social commitment — letting down
+      people you see every day is harder than breaking a promise to yourself.
+      What it is not is protected. A sou-sou is not regulated, not insured and
+      not guaranteed, and it pays no interest. If a member stops paying or the
+      organiser disappears, there is no formal recourse. A licensed bank is
+      supervised by the central bank and has to pay at least the minimum savings
+      rate, so the sensible place for a sou-sou is alongside an account rather
+      than instead of one.
+    paragraphs:
+      - >-
+        A sou-sou, or partner hand, is a rotating savings group: each member
+        puts in a fixed amount every week and members take turns receiving the
+        pot. What makes it work is the social commitment.
+      - >-
+        What it is not is protected. A sou-sou is not regulated, not insured and
+        not guaranteed, it pays no interest, and if a member stops paying or the
+        organiser disappears there is no formal recourse.
+      - >-
+        A licensed bank is supervised by the central bank and has to pay at
+        least the minimum savings rate. The sensible place for a sou-sou is
+        alongside an account rather than instead of one.
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-067, FIN-068, FIN-118, FIN-037)
+
+  - id: tfe-02-income-tax
+    statement: Saint Kitts and Nevis does not charge personal income tax on individuals.
+    answer: true
+    topic: Income tax here
+    topic_line: " — no slice off earnings, and other taxes instead."
+    takeaway: There is no personal income tax here, which is not the same as no tax.
+    explanation: >-
+      There has been no personal income tax on individuals in Saint Kitts and
+      Nevis since 1980, which is unusual internationally. It does not mean
+      nothing comes off what you earn: employed people aged 16 to 62 contribute
+      to Social Security out of their earnings. And the government still has to
+      raise revenue, which it does mainly through taxes on what you buy and
+      bring in, such as VAT and import duties. The practical effect is that
+      earnings arrive without an income tax slice taken first, and interest on
+      personal savings is not taxed as income the way it is in many other
+      countries. Rules can differ by product and can change, so the Inland
+      Revenue Department is the place to confirm a specific situation.
+    paragraphs:
+      - >-
+        There has been no personal income tax on individuals in Saint Kitts and
+        Nevis since 1980, which is unusual internationally.
+      - >-
+        It does not mean nothing comes off what you earn — employed people aged
+        16 to 62 contribute to Social Security — and the government still raises
+        revenue, mainly through taxes on what you buy and bring in, such as VAT
+        and import duties.
+      - >-
+        The practical effect is that earnings arrive without an income tax slice
+        taken first, and interest on personal savings is not taxed as income the
+        way it is elsewhere. Rules can change, so the Inland Revenue Department
+        is the place to confirm a specific situation.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-221, FIN-225, FIN-228, FIN-143)
+
+  - id: tfe-02-voice-proof
+    statement: >-
+      A caller whose voice is unmistakably a relative's is proof the request is
+      genuine.
+    answer: false
+    topic: Scams that sound familiar
+    topic_line: " — hang up, then call back on a number you already have."
+    takeaway: A familiar voice is no longer evidence of who is speaking.
+    explanation: >-
+      A voice is no longer proof of anything. Fraudsters can clone the voice or
+      the image of someone you trust well enough to make an urgent request
+      believable, and the Eastern Caribbean Central Bank named fraud using
+      artificial intelligence when it warned citizens and residents about scams
+      on 21 May 2025. The defence is a habit rather than a judgement, because
+      judgement is exactly what the urgency is built to bypass: hang up, and
+      call that person back on a number you already have. Anyone genuine will
+      still be there in five minutes. If money has already gone, contact your
+      bank immediately to try to stop the transfer and report it to the police
+      — speed matters far more than embarrassment.
+    paragraphs:
+      - >-
+        A voice is no longer proof of anything. Fraudsters can clone the voice
+        or the image of someone you trust well enough to make an urgent request
+        believable.
+      - >-
+        The Eastern Caribbean Central Bank named fraud using artificial
+        intelligence when it warned citizens and residents about scams on 21 May
+        2025. The defence is a habit rather than a judgement, because judgement
+        is what the urgency is built to bypass: hang up, and call that person
+        back on a number you already have.
+      - >-
+        Anyone genuine will still be there in five minutes. If money has already
+        gone, contact your bank immediately to try to stop the transfer and
+        report it to the police — speed matters far more than embarrassment.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-236, FIN-231, FIN-240, FIN-245)
+
+  - id: tfe-02-dormant
+    statement: >-
+      An account nobody touches for long enough can attract fees or have access
+      restricted.
+    answer: true
+    topic: Dormant accounts
+    topic_line: " — one small transaction a year keeps it awake."
+    takeaway: An untouched account can go dormant, so use it once a year.
+    explanation: >-
+      An account with no activity for a long period can be classified as
+      dormant. What follows is not dramatic, but it is inconvenient: fees may
+      start, access may be restricted, and getting the account working again
+      usually means reactivating it at a branch. The fix costs nothing. One
+      small transaction a year — a few dollars in, or a small withdrawal — is
+      enough to keep an account counted as active. It is worth knowing for any
+      account that is opened and then left to sit, which is the ordinary shape
+      of a long-term savings account.
+    paragraphs:
+      - >-
+        An account with no activity for a long period can be classified as
+        dormant. Fees may start, access may be restricted, and getting it
+        working again usually means reactivating it at a branch.
+      - >-
+        The fix costs nothing. One small transaction a year — a few dollars in,
+        or a small withdrawal — is enough to keep an account counted as active.
+      - >-
+        It is worth knowing for any account that is opened and then left to sit,
+        which is the ordinary shape of a long-term savings account.
+    difficulty_band: warmup
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-120, FIN-098)

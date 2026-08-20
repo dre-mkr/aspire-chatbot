@@ -77,6 +77,8 @@ export function Millionaire({
 	const [busy, setBusy] = useState(false);
 	const [failure, setFailure] = useState<string | null>(null);
 	const [mood, setMood] = useState<PiggyMood>("idle");
+	// Bumped on every answer, so two of the same in a row still animate.
+	const [moodAt, setMoodAt] = useState(0);
 
 	const complete = summary !== null && settled === null;
 	const choices = state.prompt.choices;
@@ -129,6 +131,7 @@ export function Millionaire({
 				if (right) playCoin(soundOn);
 				else playMiss(soundOn);
 				setMood(right ? "fed" : "dropped");
+				setMoodAt((n) => n + 1);
 
 				const entry: Settled = {
 					question,
@@ -185,6 +188,7 @@ export function Millionaire({
 				total={total}
 				coins={coins}
 				mood={mood}
+				moodAt={moodAt}
 			/>
 
 			{complete ? (

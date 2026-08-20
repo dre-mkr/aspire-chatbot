@@ -27,6 +27,7 @@ export function PiggyProgress({
 	total,
 	coins,
 	mood,
+	moodAt,
 }: {
 	/** How many questions have been resolved. */
 	answered: number;
@@ -34,14 +35,27 @@ export function PiggyProgress({
 	/** How many were right. The coins actually in the bank. */
 	coins: number;
 	mood: PiggyMood;
+	/**
+	 * Bumped by the caller on every answer, right or wrong.
+	 *
+	 * The trigger, because `mood` is not one: two right answers running set
+	 * "fed" over "fed" and an effect watching the value would not fire.
+	 */
+	moodAt: number;
 }) {
 	const safeTotal = Math.max(1, total);
 	const pct = Math.min(100, (answered / safeTotal) * 100);
 
-	// The mood is a one-shot: it plays and then the bank goes back to idle, so
-	// the same answer twice in a row still animates the second time.
+	// The mood is a one-shot: it plays, then the bank goes back to idle.
+	//
+	// Keyed on `moodAt` rather than on `mood`, and that is the whole point. An
+	// effect on `mood` alone fires when the VALUE changes, so two right answers
+	// running set "fed" over "fed", nothing changes, and the second coin never
+	// flies. Right-then-wrong animated and right-then-right did not, which is
+	// the sort of bug that looks like a rendering glitch for weeks.
 	const [playing, setPlaying] = useState<PiggyMood>("idle");
 	const seq = useRef(0);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `moodAt` is the trigger; `mood` is read at that moment
 	useEffect(() => {
 		if (mood === "idle") return;
 		seq.current += 1;
@@ -51,7 +65,7 @@ export function PiggyProgress({
 			if (seq.current === mine) setPlaying("idle");
 		}, 900);
 		return () => clearTimeout(timer);
-	}, [mood]);
+	}, [moodAt]);
 
 	return (
 		<div className="piggy" data-mood={playing}>
