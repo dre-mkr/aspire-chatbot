@@ -1,0 +1,130 @@
+# ASPIRE word scramble — general bank, set 2 (the `everyone` persona)
+#
+# A second bank for the reader `wordbank-everyone-01` was written for: someone
+# who has not said how old they are, so the words stay in the middle — nothing
+# an adult would find childish, nothing a twelve-year-old would find opaque.
+# It is an addition, not a replacement. A round serves a handful of a set's
+# entries at random, and widening the pool is what stops the same reader meeting
+# the same puzzle twice in a week.
+#
+# Set 1 was the vocabulary of putting money away: the account, the deposit, the
+# goal, the thing time does to a balance. This set is the other direction —
+# money going out, money owed, the paper that proves it went, and the quiet
+# force that changes what any of it is worth.
+#
+# Nothing here restates set 1. SAVING, INTEREST, BUDGET, ACCOUNT, DEPOSIT, GOAL,
+# INVEST and ELIGIBLE all live there, and a second copy of a word only makes the
+# same puzzle twice as likely to come up.
+#
+# Every claim is checked against the knowledge base and the row is named in
+# `source_document`. The plain definitions of borrowing and rising prices are
+# general financial vocabulary and need no row; the EC dollar facts do have one,
+# and it is cited.
+#
+# Editing this file (same rules as warmup-01):
+#   word        the answer, uppercase. Never leaves the server until revealed.
+#   scramble    must be an anagram of `word` — CI asserts this on every entry.
+#   hint        a CATEGORY nudge, not a definition. Becomes hint level 2.
+#   definition  plain meaning. Hint level 3, and what the assistant teaches from
+#               after a correct answer. Must not contain the word itself — CI
+#               asserts that on the letters alone, so watch for a word hiding
+#               across a space.
+
+id: wordbank-everyone-02
+game_type: word_scramble
+language: en
+title: More money words to unscramble
+source: ASPIRE design project — general word bank, set 2
+
+closing:
+  lead: Money goes out as easily as it comes in.
+  text: >-
+    Saving is only half of it. The other half is knowing what leaves, what you
+    owe, and what quietly changes the value of what you keep. Read the paper
+    that comes with your money and very little about it stays mysterious.
+
+entries:
+  - id: wordbank-everyone-02-expense
+    language: en
+    word: EXPENSE
+    scramble: PESENEX
+    hint: a heading on a budget, and it points outward
+    definition: money going out — food, transport, rent, school supplies
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-015, FIN-314)
+
+  - id: wordbank-everyone-02-credit
+    language: en
+    word: CREDIT
+    scramble: RITCED
+    hint: a word a lender uses, and it is never free
+    definition: the ability to use money now and pay for it later, with interest on top
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-170, FIN-314)
+
+  - id: wordbank-everyone-02-debt
+    language: en
+    word: DEBT
+    scramble: TBED
+    hint: something you carry, not something you hold
+    definition: money you owe, with a date to repay it and a price for the time you take
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-171, FIN-314)
+
+  - id: wordbank-everyone-02-currency
+    language: en
+    word: CURRENCY
+    scramble: RUCYCNER
+    hint: a kind of thing — every country has one, and eight of us here share ours
+    definition: >-
+      the money a country uses for buying and selling; ours is the Eastern
+      Caribbean dollar, issued by the ECCB in Basseterre
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-004, FIN-031, FIN-033)
+
+  - id: wordbank-everyone-02-receipt
+    language: en
+    word: RECEIPT
+    scramble: PICEETR
+    hint: a small piece of paper, and most people throw it away too soon
+    definition: >-
+      the printed slip proving what you paid and when — your evidence for a
+      return, a warranty, or a check against your bank statement
+    difficulty_band: core
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-167)
+
+  - id: wordbank-everyone-02-inflation
+    language: en
+    word: INFLATION
+    scramble: FLANITINO
+    hint: it names something that happens to prices over years, not days
+    definition: >-
+      when prices climb over time, so the same EC$100 buys less than it did
+      before, even though the number in your hand has not changed
+    difficulty_band: advanced
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-018, FIN-020, FIN-314)
+
+  - id: wordbank-everyone-02-insurance
+    language: en
+    word: INSURANCE
+    scramble: RASINCUNE
+    hint: a thing you buy before you need it, and hope never to use
+    definition: >-
+      a regular payment made so somebody else carries the cost when something
+      goes wrong — the reason a family checks its cover before hurricane season
+    difficulty_band: advanced
+    persona_bands: [everyone]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-047, FIN-081)

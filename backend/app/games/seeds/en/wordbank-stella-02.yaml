@@ -38,18 +38,20 @@ closing:
     you would only like, and telling those two apart before you spend is most of
     the work. What is left over goes somewhere it cannot get lost.
 
-entries:
-  - id: wordbank-stella-02-need
-    language: en
-    word: NEED
-    scramble: DENE
-    hint: food, water and school shoes all belong in this group
-    definition: something you must have to live and go to school
-    difficulty_band: warmup
-    persona_bands: [stella]
-    volatility: stable
-    source_document: ASPIRE knowledge base (FIN-077)
+# A WORD ADDED HERE MUST NOT APPEAR IN ANY OTHER SET'S CLUES.
+#
+# `tests/games/test_no_answer_leak.py` builds its forbidden list from EVERY
+# seeded scramble answer and then checks the served payload against all of them.
+# So seeding a common word makes somebody else's clue a leak, in a file you did
+# not touch and whose text you may not be allowed to change.
+#
+# `NEED` was drafted here and removed for exactly that: the ECCB warm-up handout
+# has defined MONEY as "what we use to buy the things we need" since the first
+# commit, and that file is the printed source. WANT below carries the same
+# lesson and collides with nothing. `NEEDS` is seeded in the hangman bank, which
+# has its own word list.
 
+entries:
   - id: wordbank-stella-02-want
     language: en
     word: WANT
