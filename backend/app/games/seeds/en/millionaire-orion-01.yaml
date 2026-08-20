@@ -13,8 +13,9 @@
 # those words. Nothing here is inferred, rounded or filled in.
 #
 # Rates and amounts carry dates on purpose. The minimum savings rate has moved
-# three times since 1985, and a quiz card that quietly implies a number is
-# permanent teaches the wrong thing twice.
+# twice since 1985 — 4 percent to 3 percent in 2002, 3 percent to 2 percent in
+# 2015 — and a quiz card that quietly implies a number is permanent teaches the
+# wrong thing twice.
 
 id: millionaire-orion-01
 game_type: millionaire
@@ -126,7 +127,7 @@ entries:
     choices:
       - EC$500 into a savings account and EC$500 into shares of local government-owned entities
       - EC$750 into shares and EC$250 into a savings account
-      - All of it sits in a savings account until the participant completes
+      - All of it goes into a savings account, with none of it invested in shares
       - All of it buys shares in local government-owned entities
     answer_index: 0
     explanation: >-

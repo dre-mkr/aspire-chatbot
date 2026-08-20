@@ -1,11 +1,13 @@
 # ASPIRE hangman — Stella bank (ages 5–12)
 #
 # Eight money words a child of five to twelve already half knows, guessed one
-# letter at a time. Every definition here is drawn from a row of the project
-# knowledge base — the row id sits in each entry's `source_document` so a later
-# editor can check the claim instead of trusting it. Nothing in this file states
-# an ASPIRE programme rule: amounts, ages and eligibility belong to the bands
-# that can read them, and none of them are guessable in four letters.
+# letter at a time. A round serves four of the eight, chosen at random, so no
+# hint and no closing line may count the words or point at another entry — the
+# player will not have seen it. Every definition here is drawn from a row of the
+# project knowledge base — the row id sits in each entry's `source_document` so
+# a later editor can check the claim instead of trusting it. Nothing in this
+# file states an ASPIRE programme rule: amounts, ages and eligibility belong to
+# the bands that can read them, and none of them are guessable in four letters.
 #
 # Written for Stella's card: short sentences, words a seven-year-old uses, and
 # no percentage, rate or compounding anywhere. Those belong to the Orion bank.
@@ -14,8 +16,8 @@
 #   word        the answer, uppercase, at least three DIFFERENT letters. Never
 #               leaves the server until it is revealed.
 #   hint        a CATEGORY nudge, not a definition. Becomes hint level 1.
-#   definition  plain, roughly grade-two reading level. Hint level 3, and what
-#               the assistant teaches from after a correct answer.
+#   definition  plain, at the reading level of a seven-year-old. Hint level 3,
+#               and what the assistant teaches from after a correct answer.
 # The loader rejects the file if either `hint` or `definition` contains the word
 # itself, so check that before you commit a reword.
 
@@ -23,12 +25,12 @@ id: hangman-stella-01
 game_type: hangman
 language: en
 title: Money words, one letter at a time
-source: ASPIRE knowledge base (data/knowledge_base.csv)
+source: ASPIRE knowledge base
 
 closing:
   lead: Keep some. Spend some. Share some.
   text: >-
-    All eight words belong to the same habit. Money comes to you, and you decide
+    These words all sit around one decision. Money comes to you, and you choose
     what each part of it is for before it disappears. Keep a little back every
     single time, put it somewhere safe, and watch what you are saving for get
     closer week by week.
@@ -37,7 +39,7 @@ entries:
   - id: hangman-stella-01-money
     language: en
     word: MONEY
-    hint: the big one — every other word here is about it
+    hint: notes, coins and what sits in a bank account — one plain word for all of it
     definition: >-
       What everybody agrees to take when you buy or sell something. In Saint
       Kitts and Nevis we use the Eastern Caribbean dollar.
@@ -49,10 +51,10 @@ entries:
   - id: hangman-stella-01-coin
     language: en
     word: COIN
-    hint: something small and hard you can hold in your hand
+    hint: the metal kind of change, not the paper kind
     definition: >-
-      A round piece of metal money. The ones you will see in your change are 5
-      cents, 10 cents, 25 cents and the round EC$1.
+      A small round piece of metal used as money. The ones you will see in your
+      change are 5 cents, 10 cents, 25 cents and the EC$1.
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable
@@ -61,11 +63,11 @@ entries:
   - id: hangman-stella-01-save
     language: en
     word: SAVE
-    hint: an action word — what a piggy jar helps you do
+    hint: an action word — what a money jar helps you do
     definition: >-
       To keep some of your money instead of using all of it, so you still have
-      it later for something bigger or for a surprise. Even small amounts add up
-      when you do it every time.
+      it later for something bigger or for something you did not expect. Even
+      small amounts add up when you do it every time.
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable
@@ -110,7 +112,7 @@ entries:
   - id: hangman-stella-01-goal
     language: en
     word: GOAL
-    hint: something you are working towards
+    hint: not a thing you can hold — it is what a savings plan is pointed at
     definition: >-
       The thing you are saving up for. Write it down, then colour in a little
       more every time you get closer to it.

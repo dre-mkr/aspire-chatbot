@@ -141,6 +141,17 @@ class AspireState(TypedDict, total=False):
     #: one English sentence to a Spanish assistant.
     auto_language: bool
 
+    #: Set when the reader asked for a story and was asked what about.
+    #:
+    #: The whole storytelling feature is two turns, and this is the latch
+    #: between them. It is also the ONLY way a story can begin: nothing in the
+    #: planner, the tutor or the router can set it, so the assistant cannot
+    #: start telling stories at a reader who did not ask.
+    awaiting_story_topic: bool
+
+    #: What the story should be about, for the one turn that tells it.
+    story_topic: str | None
+
     #: Every video already offered in this conversation, whether or not it was
     #: watched.
     #:
@@ -247,6 +258,8 @@ def initial_state(
         # exactly the places a fixture stops resembling a real session.
         locale_override=None,
         auto_language=True,
+        awaiting_story_topic=False,
+        story_topic=None,
         offered_video=None,
         videos_offered=[],
         identity_proven=identity_proven,

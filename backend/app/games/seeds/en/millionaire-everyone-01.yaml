@@ -15,6 +15,11 @@
 # entry names its rows in `source_document`. All the rows drawn on carry
 # audience=general. Nothing about amounts, ages or eligibility appears here:
 # those change, and a quiz card is a bad place to be out of date.
+#
+# Distractors are length-balanced on purpose. In three of these six the right
+# answer used to be the longest string on the card, which hands a player who
+# knows nothing a way to win half the set; the wrong options now run at or past
+# the length of the right one.
 
 id: millionaire-everyone-01
 game_type: millionaire
@@ -23,21 +28,21 @@ title: What you already have a right to know
 source: ASPIRE knowledge base
 
 closing:
-  lead: Most of this is settled, written down and lookup-able.
+  lead: Most of this is settled, written down and easy to look up.
   text: >-
     These six run from what ASPIRE is to what to do on the worst day. The rate
     the EC dollar is pegged at, the floor under savings interest, and who owns a
-    credit union are all fixed facts you can check rather than guess at — and so
-    is where a scam gets reported. Nobody is born knowing any of it, which is
-    the whole reason the education pillar exists.
+    credit union are all matters of record you can check rather than guess at —
+    and so is where a scam gets reported. Nobody is born knowing any of it,
+    which is the whole reason the education pillar exists.
 
 entries:
   - id: millionaire-everyone-01-acronym
     language: en
     question: What does the name ASPIRE stand for?
     choices:
-      - Advancing Savings, Property, Insurance and Retirement Earnings
-      - A Student Programme for Investment, Retirement and Employment
+      - Advancing Savings, Property, Insurance and Retirement Earnings for Youth
+      - A Savings Programme for Investment, Retirement and Educational Expenses
       - Achieving Success through Personal Investment, Resources, and Education
       - Accounts, Shares and Public Investment for Regional Enterprise
     answer_index: 2
@@ -58,9 +63,9 @@ entries:
     question: ASPIRE is built on three pillars. Which three?
     choices:
       - Savings, investments and financial education
-      - Savings, insurance and pensions
-      - Scholarships, school meals and uniforms
-      - Banking, taxes and trade
+      - Savings, insurance and a contributory pension
+      - Scholarships, free school meals and school uniforms
+      - Bank accounts, tax relief and small business grants
     answer_index: 0
     explanation: >-
       The three pillars are savings, investments and financial education. Each
@@ -73,7 +78,7 @@ entries:
     difficulty_band: warmup
     persona_bands: [everyone]
     volatility: stable
-    source_document: ASPIRE knowledge base (ASP-004, ASP-238, ASP-018)
+    source_document: ASPIRE knowledge base (ASP-004, ASP-238, ASP-018, ASP-154)
 
   - id: millionaire-everyone-01-peg
     language: en
@@ -93,13 +98,13 @@ entries:
     difficulty_band: warmup
     persona_bands: [everyone]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-005)
+    source_document: ASPIRE knowledge base (FIN-005, FIN-035, FIN-006)
 
   - id: millionaire-everyone-01-credit-union
     language: en
     question: What makes a credit union different from a commercial bank?
     choices:
-      - It is owned and run by the Government
+      - It is owned and run by the Government, which appoints the board and sets the rates
       - It can lend money but is not allowed to hold savings
       - It operates with no regulator supervising it
       - It is owned by its members, who elect the board and share in the surplus

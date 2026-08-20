@@ -56,9 +56,32 @@ QA_WORD_CAPS: dict[str, int | None] = {
 }
 
 
-def cap_for(band: str, agent: str | None) -> int | None:
-    """The word ceiling for this turn: the lesson cap, the QA cap, or the plain chat cap."""
-    if agent in LEARNING_AGENTS:
+#: The ceiling for a turn that is TELLING A STORY.
+#:
+#: A story needs its own table because none of the others fit: a five-year-old's
+#: plain-chat cap is 35 words, which truncates a story mid-sentence, and
+#: `truncate_at_sentence` does it silently -- the build passes, the tests pass,
+#: and the reader gets half a story. That is the likeliest way this feature
+#: could have shipped broken.
+#:
+#: Still capped, and not generously. A story a child has to scroll is not a
+#: story they will finish, and the per-persona shapes in `qa/nodes.py` already
+#: ask for five or six sentences at the youngest band; this is the backstop for
+#: when the model ignores them.
+STORY_WORD_CAPS: dict[str, int | None] = {
+    "5-8": 160,
+    "9-12": 240,
+    "13-15": 340,
+    "16-18": 420,
+    "adult": 450,
+}
+
+
+def cap_for(band: str, agent: str | None, *, story: bool = False) -> int | None:
+    """The word ceiling for this turn: story, lesson, QA, or plain chat."""
+    if story:
+        table = STORY_WORD_CAPS
+    elif agent in LEARNING_AGENTS:
         table = LESSON_WORD_CAPS
     elif agent in QA_AGENTS:
         table = QA_WORD_CAPS
@@ -94,9 +117,11 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-def over_cap(text: str, band: str, agent: str | None = None) -> bool:
+def over_cap(
+    text: str, band: str, agent: str | None = None, *, story: bool = False
+) -> bool:
     """Whether this reply exceeds the ceiling for its band and its kind of turn."""
-    cap = cap_for(band, agent)
+    cap = cap_for(band, agent, story=story)
     return cap is not None and word_count(text) > cap
 
 
@@ -119,9 +144,11 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
     return budget.rstrip(",;:") + "…"
 
 
-def shorten_instruction(band: str, current: int, agent: str | None = None) -> str:
+def shorten_instruction(
+    band: str, current: int, agent: str | None = None, *, story: bool = False
+) -> str:
     """The re-prompt for gate (a)."""
-    cap = cap_for(band, agent)
+    cap = cap_for(band, agent, story=story)
     return (
         f"That reply is {current} words. A learner in the {band} band can take "
         f"at most {cap}. Say the same thing in {cap} words or fewer. Keep the "
@@ -284,13 +311,19 @@ def make_safety_out(reprompt: Reprompt | None = None):
             report["widgets_carried"] = len(widgets)
 
         # ── (a) length ──────────────────────────────────────────────────────
-        if over_cap(text, band, agent):
+        # A story is a different KIND of turn, so it is measured against a
+        # different table. Without this the youngest band's 35-word chat cap
+        # cuts every story mid-sentence, silently.
+        story = bool(state.get("story_topic"))
+        if over_cap(text, band, agent, story=story):
             report["length_violation"] = word_count(text)
             if reprompt is not None:
                 timing.note_reprompt("length")
-                text = await reprompt(shorten_instruction(band, word_count(text), agent), text)
-            if over_cap(text, band, agent):
-                cap = cap_for(band, agent)
+                text = await reprompt(
+                    shorten_instruction(band, word_count(text), agent, story=story), text
+                )
+            if over_cap(text, band, agent, story=story):
+                cap = cap_for(band, agent, story=story)
                 assert cap is not None  # `over_cap` is False when the cap is None
                 logger.info(
                     "Truncating a %s-band reply at the last complete sentence "

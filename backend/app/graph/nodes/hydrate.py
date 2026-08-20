@@ -65,6 +65,9 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         update["quick_replies"] = []
         update["safety_flags"] = {}
         update["halt_reason"] = None
+        # Lives for exactly the turn that tells the story. Left set, every
+        # later question would be answered as another story.
+        update["story_topic"] = None
         update["retrieved"] = []
         update["qa_related"] = []
         update["groundedness"] = 0.0

@@ -5,20 +5,24 @@
 # Orion's card, so interest, compounding and risk are all said plainly rather
 # than talked around.
 #
-# Every definition is grounded in a row of the project knowledge base, cited in
-# `source_document`. Nothing about the programme is asserted here that the
-# corpus does not already say.
+# Every claim here — in the hint as well as the definition — is grounded in a
+# row of the project knowledge base, and every row used is cited in
+# `source_document`. Where a hint carries the ASPIRE- or region-specific part
+# (the ECSE, reinvested dividends, why starting early wins), the row behind it
+# is cited too. Nothing about the programme is asserted that the corpus does not
+# already say.
 #
 # Editing rules the loader enforces: `word` is uppercase with at least three
 # distinct letters, and neither the hint nor the definition may contain the word
 # itself. The hint is a category nudge — it says what kind of thing the answer
-# is, not what it means. The definition is the teaching, shown last.
+# is, not what it means — and it must not simply restate the definition, or
+# hint 3 has nothing left to teach. The definition is the teaching, shown last.
 
 id: hangman-orion-01
 game_type: hangman
 language: en
 title: Guess the money word
-source: ASPIRE knowledge base
+source: ASPIRE knowledge base (data/knowledge_base.csv)
 
 closing:
   lead: Ten words, one habit.
@@ -32,7 +36,7 @@ entries:
   - id: hangman-orion-01-budget
     language: en
     word: BUDGET
-    hint: a written plan, made before the money moves rather than after
+    hint: a planning word — a document you make, not an amount you have
     definition: >-
       a plan for your money — what is coming in, what has to go out, and what is
       left over
@@ -87,20 +91,20 @@ entries:
     difficulty_band: warmup
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-124, ASP-100)
+    source_document: ASPIRE knowledge base (FIN-124, FIN-128, ASP-100)
 
   - id: hangman-orion-01-dividend
     language: en
     word: DIVIDEND
     hint: shareholders watch for this once or twice a year
     definition: >-
-      a share of a company's profit paid out to the people who own it; under
-      ASPIRE these payments are automatically reinvested rather than paid out,
+      a slice of a company's profit paid to the people who own its shares; in
+      ASPIRE yours are reinvested automatically instead of reaching you as cash,
       so the holding keeps growing
     difficulty_band: warmup
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-196, ASP-090)
+    source_document: ASPIRE knowledge base (FIN-196, ASP-099, ASP-090)
 
   - id: hangman-orion-01-inflation
     language: en
@@ -124,19 +128,20 @@ entries:
     difficulty_band: warmup
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-023)
+    source_document: ASPIRE knowledge base (FIN-023, FIN-024)
 
   - id: hangman-orion-01-equity
     language: en
     word: EQUITY
     hint: on the ECSE this is the owning side of the market, as against lending
     definition: >-
-      ownership in a company — the slice of the business that belongs to the
-      shareholder, carrying a claim on part of its profits
+      the ownership side of a company — the stake a shareholder holds, carrying
+      a claim on part of the profits but no promise of repayment, which is what
+      separates it from a bond
     difficulty_band: warmup
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-194, ASP-280)
+    source_document: ASPIRE knowledge base (FIN-194, FIN-200, ASP-280)
 
   - id: hangman-orion-01-return
     language: en
@@ -149,4 +154,4 @@ entries:
     difficulty_band: warmup
     persona_bands: [orion]
     volatility: stable
-    source_document: ASPIRE knowledge base (FIN-205, FIN-132)
+    source_document: ASPIRE knowledge base (FIN-192, FIN-205)
