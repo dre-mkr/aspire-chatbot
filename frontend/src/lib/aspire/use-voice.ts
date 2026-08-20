@@ -79,6 +79,16 @@ interface VoicePrefs {
 	 * from everyone who never opens this menu.
 	 */
 	autoLanguage: boolean;
+	/**
+	 * Whether the games may make a sound.
+	 *
+	 * On, unlike `autoSpeak`, and the difference is who asked. Reading every
+	 * answer aloud happens to a reader who only wanted to read; a coin landing
+	 * in a piggy bank happens inside a game they chose to start, in response to
+	 * a button they pressed. It is still one tap away in the same menu, because
+	 * the room a child is in is not always a room that wants noise.
+	 */
+	gameSound: boolean;
 }
 
 const DEFAULT_PREFS: VoicePrefs = {
@@ -86,6 +96,7 @@ const DEFAULT_PREFS: VoicePrefs = {
 	speed: "1",
 	language: "en",
 	autoLanguage: true,
+	gameSound: true,
 };
 
 function readPrefs(): VoicePrefs {
@@ -105,6 +116,8 @@ function readPrefs(): VoicePrefs {
 				: "en",
 			autoLanguage:
 				typeof parsed.autoLanguage === "boolean" ? parsed.autoLanguage : true,
+			gameSound:
+				typeof parsed.gameSound === "boolean" ? parsed.gameSound : true,
 		};
 	} catch {
 		return DEFAULT_PREFS;
@@ -172,6 +185,8 @@ export function useVoice({
 	 */
 	const enableAutoLanguage = useCallback(() => setAutoLanguage(true), []);
 
+	const [gameSound, setGameSound] = useState(DEFAULT_PREFS.gameSound);
+
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
 	const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -196,6 +211,7 @@ export function useVoice({
 		setAutoSpeak(prefs.autoSpeak);
 		setSpeed(prefs.speed);
 		setAutoLanguage(prefs.autoLanguage);
+		setGameSound(prefs.gameSound);
 		setPrefsLoaded(true);
 	}, []);
 
@@ -205,12 +221,12 @@ export function useVoice({
 		try {
 			window.localStorage.setItem(
 				PREFS_KEY,
-				JSON.stringify({ autoSpeak, speed, language, autoLanguage }),
+				JSON.stringify({ autoSpeak, speed, language, autoLanguage, gameSound }),
 			);
 		} catch {
 			// Private browsing throws. Preferences are a convenience, not a feature.
 		}
-	}, [autoSpeak, autoLanguage, language, prefsLoaded, speed]);
+	}, [autoSpeak, autoLanguage, gameSound, language, prefsLoaded, speed]);
 
 	// A 404 or a disabled module both mean "no voice": unavailable, not an error.
 	useEffect(() => {
@@ -510,6 +526,8 @@ export function useVoice({
 		setLanguage,
 		autoLanguage,
 		enableAutoLanguage,
+		gameSound,
+		toggleGameSound: () => setGameSound((on) => !on),
 		setSpeed,
 		toggleAutoSpeak: () => setAutoSpeak((on) => !on),
 		play,

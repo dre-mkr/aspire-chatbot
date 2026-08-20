@@ -4,7 +4,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { type AspireVideo, fetchVideos } from "#/lib/aspire/videos";
 import type {
 	ChartDirective,
-	CitationsDirective,
 	Directive,
 	EscalatedDirective,
 	ProgressDirective,
@@ -58,7 +57,6 @@ const KNOWN = new Set([
 	"review_card",
 	"chart",
 	"progress",
-	"citations",
 	"escalated",
 	"widget",
 	"video",
@@ -97,9 +95,6 @@ export function DirectiveView({
 
 		case "video":
 			return <OfferedVideo directive={directive as VideoDirective} />;
-
-		case "citations":
-			return <Citations directive={directive as CitationsDirective} />;
 
 		case "progress":
 			return <Progress directive={directive as ProgressDirective} />;
@@ -251,30 +246,6 @@ function SignupCard({ directive }: { directive: SignupDirective }) {
 				{label}
 			</Link>
 		</div>
-	);
-}
-
-function Citations({ directive }: { directive: CitationsDirective }) {
-	return (
-		<details
-			style={{
-				marginBlockStart: "0.5rem",
-				fontSize: "calc(var(--band-type, 16px) - 2px)",
-				color: "var(--quiet)",
-			}}
-		>
-			<summary style={{ cursor: "pointer", minHeight: "44px" }}>
-				Where this came from ({directive.refs.length})
-			</summary>
-			<ul style={{ margin: "0.5rem 0 0", paddingInlineStart: "1.25rem" }}>
-				{directive.refs.map((ref) => (
-					<li key={ref.kb_id}>
-						<span style={{ fontFamily: "var(--font-mono)" }}>{ref.kb_id}</span>
-						{ref.title ? ` — ${ref.title}` : null}
-					</li>
-				))}
-			</ul>
-		</details>
 	);
 }
 

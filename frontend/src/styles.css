@@ -6890,3 +6890,532 @@ body {
 	font-size: 0.75rem;
 	line-height: 1.45;
 }
+
+/* ── Millionaire, Hangman, and the piggy bank ──────────────────────────────
+   Both cards reuse `.game*` — the head, the buttons, the meaning block — so
+   only what is genuinely new to them is here. */
+
+:root {
+	--piggy: #f0a6c9;
+	--piggy-dark: #e07fae;
+	--piggy-deep: #7b2a56;
+	--coin-face: #f6c453;
+	--coin-edge: #b8860b;
+}
+
+/* ── the piggy-bank progress bar ─────────────────────────────────────────── */
+
+.piggy {
+	margin: 4px 0 20px;
+}
+
+.piggy__track {
+	position: relative;
+	height: 8px;
+	border-radius: 999px;
+	background: var(--wash-9);
+}
+
+.piggy__fill {
+	height: 100%;
+	border-radius: 999px;
+	background: linear-gradient(90deg, var(--plum), var(--magenta));
+	transition: width 520ms var(--ease);
+}
+
+.piggy__rungs {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	justify-content: space-around;
+	align-items: center;
+	padding: 0 4%;
+}
+
+.piggy__rungs span {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--wash-18);
+}
+
+.piggy__rungs span[data-done] {
+	background: rgb(255 255 255 / 0.85);
+}
+
+/* The bank rides the fill. `left` is a percentage of the track, and the
+   translate pulls it back by half its own width so it sits ON the point rather
+   than starting at it. */
+.piggy__walker {
+	position: absolute;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	transition: left 520ms var(--ease);
+	pointer-events: none;
+}
+
+.piggy__bank {
+	display: block;
+	filter: drop-shadow(0 2px 5px rgb(30 10 55 / 0.25));
+}
+
+/* A right answer: the bank gives a pleased little wiggle. */
+.piggy[data-mood="fed"] .piggy__bank {
+	animation: piggy-wiggle 620ms var(--ease);
+}
+
+/* A wrong one: a slower, smaller sway. Not the wrong-guess shake used
+   elsewhere — that reads as a buzzer, and this is a learning game. */
+.piggy[data-mood="dropped"] .piggy__bank {
+	animation: piggy-sway 620ms var(--ease);
+}
+
+@keyframes piggy-wiggle {
+	0%,
+	100% {
+		transform: translateY(0) rotate(0deg);
+	}
+	25% {
+		transform: translateY(-3px) rotate(-5deg);
+	}
+	60% {
+		transform: translateY(-1px) rotate(4deg);
+	}
+}
+
+@keyframes piggy-sway {
+	0%,
+	100% {
+		transform: rotate(0deg);
+	}
+	35% {
+		transform: rotate(-4deg);
+	}
+	70% {
+		transform: rotate(3deg);
+	}
+}
+
+/* The coin. Arrives from above and drops into the slot, or climbs back out
+   and falls away. */
+.piggy__coin {
+	position: absolute;
+	left: 50%;
+	top: 0;
+	margin-left: -8px;
+}
+
+.piggy[data-mood="fed"] .piggy__coin {
+	animation: coin-in 620ms var(--ease) both;
+}
+
+.piggy[data-mood="dropped"] .piggy__coin {
+	animation: coin-out 620ms var(--ease) both;
+}
+
+@keyframes coin-in {
+	0% {
+		transform: translateY(-26px) scale(0.7);
+		opacity: 0;
+	}
+	40% {
+		opacity: 1;
+	}
+	100% {
+		transform: translateY(-6px) scale(1);
+		opacity: 0;
+	}
+}
+
+@keyframes coin-out {
+	0% {
+		transform: translate(0, -6px) scale(1);
+		opacity: 0;
+	}
+	30% {
+		opacity: 1;
+	}
+	100% {
+		transform: translate(16px, 18px) scale(0.8) rotate(40deg);
+		opacity: 0;
+	}
+}
+
+.piggy__count {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 22px 0 0;
+	color: var(--slate);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── Millionaire ─────────────────────────────────────────────────────────── */
+
+.game__question {
+	margin: 0 0 16px;
+	color: var(--ink);
+	font-size: var(--band-type, 1.0625rem);
+	font-weight: 600;
+	line-height: 1.45;
+}
+
+.quiz__choices {
+	display: grid;
+	gap: 10px;
+}
+
+@media (min-width: 560px) {
+	.quiz__choices {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+.quiz__choice {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	min-height: 52px;
+	padding: 10px 14px;
+	border: 1px solid var(--control-line);
+	border-radius: 14px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.9375rem;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		border-color var(--swift),
+		transform var(--swift);
+}
+
+.quiz__choice:hover:not(:disabled) {
+	background: var(--wash-6);
+	border-color: var(--plum);
+}
+
+.quiz__choice:active:not(:disabled) {
+	transform: translateY(1px);
+}
+
+.quiz__choice:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.quiz__letter {
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: var(--wash-12);
+	color: var(--plum);
+	font-size: 0.8125rem;
+	font-weight: 700;
+}
+
+.game__verdict {
+	margin: 0 0 12px;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+
+.game__verdict[data-outcome="incorrect"] {
+	color: var(--color-warn-ink);
+}
+
+.game__cheer {
+	color: var(--magenta);
+}
+
+/* ── Hangman ─────────────────────────────────────────────────────────────── */
+
+.game__word {
+	margin: 0 0 14px;
+	color: var(--plum);
+	font-family: ui-monospace, "JetBrains Mono", monospace;
+	font-size: clamp(1.25rem, 5vw, 1.75rem);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-align: center;
+	word-break: break-word;
+}
+
+.hangman__lives {
+	display: flex;
+	justify-content: center;
+	margin: 0 0 16px;
+}
+
+.hangman__lives > span[aria-hidden] {
+	display: flex;
+	gap: 6px;
+}
+
+.hangman__life {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--magenta);
+	transition: background var(--settle);
+}
+
+.hangman__life[data-spent] {
+	background: var(--wash-14);
+}
+
+.hangman__keys {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
+	gap: 6px;
+	margin-bottom: 16px;
+}
+
+.hangman__key {
+	min-height: 40px;
+	border: 1px solid var(--control-line);
+	border-radius: 9px;
+	background: #fff;
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.875rem;
+	font-weight: 650;
+	cursor: pointer;
+	transition:
+		background var(--swift),
+		color var(--swift),
+		border-color var(--swift);
+}
+
+.hangman__key:hover:not(:disabled) {
+	background: var(--wash-6);
+	border-color: var(--plum);
+}
+
+/* A tried letter stays visible and says which way it went, so the board is a
+   record rather than a row of dead buttons. */
+.hangman__key[data-used] {
+	opacity: 1;
+	cursor: default;
+	border-color: transparent;
+	background: var(--wash-9);
+	color: var(--quiet);
+}
+
+.hangman__key[data-hit] {
+	background: var(--wash-m-16);
+	color: var(--magenta);
+}
+
+.game__hints {
+	margin: 0 0 14px;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 6px;
+}
+
+.game__hints li {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	color: var(--slate);
+	font-size: 0.875rem;
+}
+
+/* ── shared tails ────────────────────────────────────────────────────────── */
+
+.game__resolved,
+.game__complete {
+	display: grid;
+	gap: 2px;
+}
+
+.game__recap {
+	margin: 12px 0 16px;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 10px;
+}
+
+.game__recap li {
+	display: flex;
+	gap: 9px;
+	color: var(--slate);
+	font-size: 0.875rem;
+	line-height: 1.5;
+}
+
+.game__recap-mark {
+	flex-shrink: 0;
+	width: 18px;
+	color: var(--success);
+}
+
+.game__closing {
+	margin-top: 14px;
+	padding: 14px;
+	border-radius: 14px;
+	background: var(--wash-6);
+}
+
+.game__closing-lead {
+	margin: 0 0 6px;
+	color: var(--quiet);
+	font-size: 0.75rem;
+	font-weight: 650;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.game__closing-head {
+	margin: 0 0 6px;
+	color: var(--ink);
+	font-weight: 650;
+}
+
+.game__closing-text {
+	margin: 0;
+	color: var(--slate);
+	font-size: 0.875rem;
+	line-height: 1.55;
+}
+
+.game__exit-note {
+	margin: 10px 0 0;
+	color: var(--quiet);
+	font-size: 0.8125rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* The bank's POSITION and the coin COUNT both carry meaning, so they still
+	   change — instantly. Only the travel and the wiggle go. This follows the
+	   rule already set for the wrong-guess shake: replaced, not deleted. */
+	.piggy__fill,
+	.piggy__walker {
+		transition: none !important;
+	}
+
+	.piggy__bank,
+	.piggy__coin {
+		animation: none !important;
+	}
+
+	.quiz__choice,
+	.hangman__key,
+	.hangman__life {
+		transition: none !important;
+	}
+}
+
+/* ── Sources, continued ────────────────────────────────────────────────────
+   The panel above was a grey pill reading "3 sources", which is what metadata
+   looks like rather than what an answer's evidence looks like. These override
+   the earlier block deliberately: the earlier rules stay so a client on a
+   cached stylesheet still gets something coherent. */
+
+.sources__toggle {
+	/* Brand-tinted, so it reads as part of the answer rather than chrome. */
+	background: var(--wash-6);
+	border-color: var(--wash-18);
+	color: var(--plum);
+	font-weight: 600;
+	/* 44px: this is a control a child taps. */
+	min-height: 44px;
+	padding-inline: 12px;
+}
+
+.sources__toggle:hover {
+	background: var(--wash-12);
+	border-color: var(--plum-light);
+}
+
+.sources__label {
+	white-space: nowrap;
+}
+
+/* The count as a badge rather than a word, so the label stays constant and the
+   eye lands on the number. */
+.sources__count {
+	display: grid;
+	place-items: center;
+	min-width: 19px;
+	height: 19px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--plum);
+	color: #fff;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.answer .sources__list {
+	/* `ol` now, so the browser's own numbering has to go: the markers are
+	   drawn as badges below and two sets of numbers is one too many. */
+	list-style: none;
+	counter-reset: none;
+}
+
+.answer .source {
+	display: flex;
+	gap: 11px;
+	align-items: flex-start;
+}
+
+.source__n {
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	margin-top: 1px;
+	border-radius: 50%;
+	background: var(--wash-12);
+	color: var(--plum);
+	font-size: 0.6875rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.source__body {
+	min-width: 0;
+}
+
+/* The question the row answers, first and in the reader's own register. The id
+   follows it as a reference rather than leading as a label. */
+.answer .source__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 5px;
+}
+
+.source__label {
+	color: var(--ink);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.answer .source__text {
+	margin: 0;
+	color: var(--slate);
+	font-size: 0.8125rem;
+	line-height: 1.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sources__chevron {
+		transition: none !important;
+	}
+}

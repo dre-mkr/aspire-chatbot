@@ -1,6 +1,7 @@
 /** The chat transport. */
 
 import { streamTurn } from "../stream/client";
+import { displayNameFor, promptKindFor } from "./game-kinds";
 import { forget, graphSession } from "../stream/session";
 import type {
 	CitationsDirective,
@@ -179,9 +180,9 @@ export async function streamAspire(
 					const game = (directive as GameDirective).game;
 					startedGame = {
 						gameType: game,
-						displayName: game.replace(/_/g, " "),
+						displayName: displayNameFor(game),
 						// The transcript picks its component from this.
-						kind: game === "true_false" ? "statement" : "scramble",
+						kind: promptKindFor(game),
 						total: 0,
 						concept: (directive as GameDirective).concept ?? "saving_basics",
 					};

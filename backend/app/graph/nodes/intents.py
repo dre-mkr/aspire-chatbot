@@ -114,6 +114,8 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
         r"\bany games?\b",
         r"\b(?:word )?scramble\b",
         r"\btrue or false\b",
+        r"\bhangman\b",
+        r"\bmillionaire\b",
         r"\bjugar\b",
         r"\b(?:un|el) juego\b",
         r"\bjouer\b",
@@ -147,6 +149,12 @@ _NAMED_GAME: tuple[tuple[re.Pattern[str], str], ...] = (
         "true_false",
     ),
     (re.compile(r"\bmillionaire\b|\bmillonario\b|\bmillionnaire\b"), "millionaire"),
+    (
+        re.compile(
+            r"\bhangman\b|\bahorcado\b|\ble pendu\b|\bpendu\b"
+        ),
+        "hangman",
+    ),
 )
 
 

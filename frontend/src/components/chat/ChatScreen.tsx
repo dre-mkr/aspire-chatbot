@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { engineGameType } from "#/lib/aspire/game-kinds";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
 	useCallback,
@@ -133,9 +134,7 @@ export function ChatScreen() {
 				reported: false,
 			};
 			// Start it here: the state poll alone never starts one, so the card sat inactive forever.
-			const engineName =
-				{ scramble: "word_scramble", true_false: "true_false" }[gameType] ??
-				gameType;
+			const engineName = engineGameType(gameType);
 			// The persona is what selects the age-appropriate item set. Omitting it
 			// meant the engine's own filter never ran, so a five-year-old on Stella
 			// was served the Orion set -- compound interest, 5% returns, "no more
@@ -735,6 +734,7 @@ export function ChatScreen() {
 											play: voice.play,
 										}}
 										directiveContext={directiveContext}
+										gameSound={voice.gameSound}
 										game={
 											game && threadId
 												? {

@@ -1,0 +1,152 @@
+# ASPIRE hangman — Orion bank (ages 13–18)
+#
+# Ten words a teenager will actually meet: on a bank statement, in a lesson on
+# the investment side of ASPIRE, or in the small print of a loan. Written for
+# Orion's card, so interest, compounding and risk are all said plainly rather
+# than talked around.
+#
+# Every definition is grounded in a row of the project knowledge base, cited in
+# `source_document`. Nothing about the programme is asserted here that the
+# corpus does not already say.
+#
+# Editing rules the loader enforces: `word` is uppercase with at least three
+# distinct letters, and neither the hint nor the definition may contain the word
+# itself. The hint is a category nudge — it says what kind of thing the answer
+# is, not what it means. The definition is the teaching, shown last.
+
+id: hangman-orion-01
+game_type: hangman
+language: en
+title: Guess the money word
+source: ASPIRE knowledge base
+
+closing:
+  lead: Ten words, one habit.
+  text: >-
+    Most of these describe the same thing from different angles: money that is
+    put to work rather than left sitting. A plan decides what is spare, saving
+    and owning put the spare part to work, and time does the rest. The words are
+    only hard until someone says them out loud once.
+
+entries:
+  - id: hangman-orion-01-budget
+    language: en
+    word: BUDGET
+    hint: a written plan, made before the money moves rather than after
+    definition: >-
+      a plan for your money — what is coming in, what has to go out, and what is
+      left over
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-075)
+
+  - id: hangman-orion-01-interest
+    language: en
+    word: INTEREST
+    hint: a bank pays you this on savings and charges you on a loan
+    definition: >-
+      the price of using someone else's money — the bank pays it to you when you
+      save, and you pay it to the bank when you borrow
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-122)
+
+  - id: hangman-orion-01-invest
+    language: en
+    word: INVEST
+    hint: an action word — what you do with money you will not need for years
+    definition: >-
+      to put money into shares, bonds or a business you expect to grow in value
+      or pay you an income, accepting that the value can drop as well as rise
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-192)
+
+  - id: hangman-orion-01-scarcity
+    language: en
+    word: SCARCITY
+    hint: an economics word for why nobody, at any income, can have everything
+    definition: >-
+      resources are limited while wants are not, which is why every one of us
+      has to choose and set priorities
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-022)
+
+  - id: hangman-orion-01-compound
+    language: en
+    word: COMPOUND
+    hint: it describes a kind of growth, and it is why starting early beats starting big
+    definition: >-
+      growth that builds on itself — the money your savings already earned
+      starts earning as well, so each year works on a bigger base
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-124, ASP-100)
+
+  - id: hangman-orion-01-dividend
+    language: en
+    word: DIVIDEND
+    hint: shareholders watch for this once or twice a year
+    definition: >-
+      a share of a company's profit paid out to the people who own it; under
+      ASPIRE these payments are automatically reinvested rather than paid out,
+      so the holding keeps growing
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-196, ASP-090)
+
+  - id: hangman-orion-01-inflation
+    language: en
+    word: INFLATION
+    hint: an economics word about prices, not about the number in your account
+    definition: >-
+      prices rising over time, so the same EC$100 buys less than it did before —
+      which is why money left doing nothing quietly loses buying power
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-018)
+
+  - id: hangman-orion-01-asset
+    language: en
+    word: ASSET
+    hint: a thing you own, and the opposite of a liability
+    definition: >-
+      something you own that has value and may earn you money or grow — savings,
+      shares, land, tools or a business
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-023)
+
+  - id: hangman-orion-01-equity
+    language: en
+    word: EQUITY
+    hint: on the ECSE this is the owning side of the market, as against lending
+    definition: >-
+      ownership in a company — the slice of the business that belongs to the
+      shareholder, carrying a claim on part of its profits
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-194, ASP-280)
+
+  - id: hangman-orion-01-return
+    language: en
+    word: RETURN
+    hint: the number people quote when they compare one investment with another
+    definition: >-
+      what your money earns you on top of what you put in, whether from a rise
+      in value or income paid out; the higher the expected figure, the higher
+      the risk that comes with it
+    difficulty_band: warmup
+    persona_bands: [orion]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-205, FIN-132)

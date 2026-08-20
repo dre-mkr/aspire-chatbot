@@ -51,7 +51,7 @@ class GameDirective(_Directive):
     """Launch one of the real game components."""
 
     t: Literal["game"] = "game"
-    game: Literal["scramble", "true_false", "millionaire"]
+    game: Literal["scramble", "true_false", "millionaire", "hangman"]
     concept: str
     difficulty: Literal[1, 2, 3] = 1
 

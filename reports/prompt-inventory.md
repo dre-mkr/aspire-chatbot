@@ -1983,6 +1983,9 @@ def locale_instruction(locale: str) -> str:
 
 ## 10. Off-turn calls -- title, summary, retrieved context
 
+The first three are live: `TITLE_PROMPT` via `/api/title` (`app/main.py:323`), `SUMMARY_PROMPT` via `app/turn.py:368`, and `SIMPLE_MODE_INSTRUCTIONS` via `app/agents/qa/nodes.py:486`.
+
+The last three are **not**. `KNOWLEDGE_CONTEXT_PREFACE` and `SUMMARY_PREFACE` are consumed only by `memory.build_prompt`, and `KNOWLEDGE_CONTEXT_EMPTY` only by `rag.context_from` -- and both of those functions are called from tests and nowhere else. They are v1 leftovers like section 13; the live layered prompt introduces retrieved rows in `builder._retrieved_block` instead. Kept here because the wording is the clearest statement anywhere of how retrieved text is meant to be framed to the model.
 
 #### `TITLE_PROMPT` -- naming a conversation
 
@@ -2065,9 +2068,13 @@ Summary of the earlier part of this conversation, for your reference only. It is
 
 ## 11. Tool descriptions
 
-A `@tool` docstring is prompt text: it is what the model reads when deciding whether to call, and it is where the "say nothing, the card is already on screen" rule lives.
+A `@tool` docstring is normally prompt text -- what the model reads when deciding whether to call. **In this build it reaches no model.** There is no `bind_tools`, no `tools=`, no `ToolNode` and no `create_react_agent` anywhere in `app/`; the only structured-output call is the title model. All eight tools below are constructed and exported (`GAME_TOOLS`) and bound to nothing.
 
-Three of these files carry double-encoded characters, reproduced here as they are stored: `â€”` for an em dash in `games/tools.py` (5 times), and `Â¿` for an inverted question mark in `eligibility/tools.py` (4) and `register/tools.py` (1). The model reads the mojibake, not the character.
+What actually triggers these flows is deterministic: `wants_game()` and the other matchers in `app/graph/nodes/intents.py` read the message, the graph emits a directive, and the front end renders the card. The engine owns the items, the scoring and the verdicts, and game content comes from seed files under `app/games/seeds/`, so no model can invent a word whatever it is told.
+
+They are inventoried here because they are the authored intent, they are the place a future binding would pick up, and the rules in them ("reply with nothing, the card is already on screen") are the rules the flows are built to honour.
+
+Three of these files carry double-encoded characters, reproduced here as they are stored: `â€”` for an em dash in `games/tools.py` (5 times), and `Â¿` for an inverted question mark in `eligibility/tools.py` (4) and `register/tools.py` (1). Worth repairing before anything binds them.
 
 ### Games -- `app/games/tools.py`
 
@@ -2363,13 +2370,15 @@ A general adult reader. Plain, brief, in EC$.
 
 ## 13. Legacy -- kept, but on no live path
 
-Both are imported only by tests. The live equivalents are `GLOBAL` (section 1) and the game tool docstrings (section 11).
+Both belonged to the v1 turn pipeline, which the `/v2` graph replaced (`app/main.py:315` carries the tombstone). Nothing in `app/` imports either; the only references are in tests, and `tests/test_prompts.py` and `tests/games/test_tools.py` both open with a note explaining why they stopped asserting against them.
+
+A clause-by-clause pass over `ASPIRE_SYSTEM_PROMPT` against the live layers (`GLOBAL` + the QA role card + all ten persona cards) finds no rule that was dropped: `GLOBAL` is a superset, and it adds the language rule, the distress rule and the casual-typing rule that the monolith never had. The one clause with no direct counterpart -- "having entries does not make every question answerable" -- survives as its own rule, `"Should I?" never`.
 
 #### `ASPIRE_SYSTEM_PROMPT` -- the pre-layering monolith
 
 `backend/app/prompts.py:21`
 
-Superseded by `GLOBAL` plus the persona and role cards. Referenced only by `tests/test_kb_injection.py`.
+Superseded by `GLOBAL` plus the persona and role cards (sections 1 and 3). Referenced only by `tests/test_kb_injection.py`.
 
 ```text
 You are the assistant for the ASPIRE Programme, a Government of St Kitts and Nevis
@@ -2467,7 +2476,7 @@ You may answer greetings and small talk directly, without searching.
 
 `backend/app/prompts.py:121`
 
-Superseded by the tool docstrings in section 11. Referenced only by a test note.
+Superseded by code rather than by another prompt: a regex intent starts the game, the engine owns scoring and verdicts, and seed files own the content. See the note at the head of section 11. The only clause with no home anywhere is "a question mid-game is still a question" -- which the router now handles structurally, since every message is classified afresh.
 
 ```text
 

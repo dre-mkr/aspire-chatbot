@@ -7,6 +7,7 @@ import type {
 	WidgetInteraction,
 } from "../stream/types";
 import { type AskResult, AspireError, type Source } from "./api";
+import { gameTitleFor } from "./game-kinds";
 import {
 	type StoredConversation,
 	type StoredMessage,
@@ -140,24 +141,9 @@ function prefersReducedMotion() {
 	);
 }
 
-/** What to call a conversation that opened with a game. */
-const GAME_TITLES: Record<string, Record<string, string>> = {
-	word_scramble: {
-		en: "Word scramble practice",
-		es: "Práctica de palabras revueltas",
-		fr: "Entraînement de mots mêlés",
-	},
-	true_false: {
-		en: "True or false round",
-		es: "Ronda de verdadero o falso",
-		fr: "Tour de vrai ou faux",
-	},
-};
-
+/** What to call a conversation that opened with a game. See `game-kinds`. */
 function gameTitle(gameType: string, language: string): string | null {
-	const byLanguage = GAME_TITLES[gameType];
-	if (!byLanguage) return null;
-	return byLanguage[language] ?? byLanguage.en;
+	return gameTitleFor(gameType, language);
 }
 
 /** What to call a conversation that opened with the eligibility check. */
