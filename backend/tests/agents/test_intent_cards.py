@@ -583,3 +583,49 @@ def test_a_story_gets_more_room_than_the_same_turn_would_otherwise():
     plain_words = len(plain["messages"][0].content.split())
     told_words = len(told["messages"][0].content.split())
     assert told_words > plain_words, (plain_words, told_words)
+
+
+class TestEveryCardIntentBypassesTheResponseCache:
+    """A card intent missing from `_wants_card` fails silently and completely.
+
+    The layer-1 cache answers before the graph runs, so a cached turn never
+    executes the card node -- and any state that node would have set is never
+    set. The reply looks right, the chips look right, and the feature does
+    nothing. This is how the story flow broke: the ask-turn was served from
+    cache, `awaiting_story_topic` was never written, and the reader's chosen
+    topic came back as an ordinary question.
+    """
+
+    def test_every_intent_the_card_node_claims_is_excluded_from_the_cache(self):
+        from app.api.stream import _wants_card
+
+        for message in (
+            "am I eligible for ASPIRE",
+            "lets play a game",
+            "lets play hangman",
+            "can we play millionaire",
+            "tell me a story",
+            "Watch the ASPIRE video about scarcity",
+        ):
+            assert _wants_card(message), message
+
+    def test_an_ordinary_question_is_still_cacheable(self):
+        """The guard must not disable the cache for everything."""
+        from app.api.stream import _wants_card
+
+        for message in (
+            "what is ASPIRE",
+            "how do I open an account",
+            "what does scarcity mean",
+        ):
+            assert not _wants_card(message), message
+
+    def test_a_story_turn_is_never_replayed_to_anybody_else(self):
+        from app.turn import TurnRecord, cacheable
+
+        told = TurnRecord(thread_id="t", question="q", reply="Once in Basseterre...")
+        told.story = True
+        assert not cacheable(told)
+
+        ordinary = TurnRecord(thread_id="t", question="q", reply="ASPIRE is a programme.")
+        assert cacheable(ordinary)
