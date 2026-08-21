@@ -168,7 +168,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</div>
 
 			{/* Elegant Header */}
-			<header className="relative z-10 w-full max-w-[90rem] mx-auto px-4 sm:px-8 pt-8 pb-5 flex items-center justify-between">
+			<header className="relative z-10 w-full max-w-[90rem] mx-auto px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
 				<div className="flex items-center gap-8">
 					<Brandmark variant="header" />
 					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
@@ -190,14 +190,14 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</header>
 
 			{/* Main Content */}
-			<main className="relative z-10 flex-1 w-full max-w-[90rem] mx-auto px-4 sm:px-8 py-2 flex flex-col justify-center">
+			<main className="relative z-10 flex-1 w-full max-w-[90rem] mx-auto px-4 sm:px-8 flex flex-col justify-center">
 				
 				{/* Hero Section */}
-				<div className="max-w-4xl mb-6 relative z-10">
-					<h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
+				<div className="max-w-4xl mb-5 relative z-10">
+					<h1 className="text-5xl md:text-6xl lg:text-[4.75rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
 						Where will your<br />money <span className="italic text-transparent bg-clip-text bg-gradient-to-r from-[#c22f99] via-[#482977] to-[#1A103C] pr-2">take you!</span>
 					</h1>
-					<p className="text-lg md:text-xl text-[#482977] font-medium mb-6 tracking-wide">
+					<p className="text-lg md:text-xl text-[#482977] font-medium mb-4 tracking-wide">
 						Ask. Play. Explore. Build your money future.
 					</p>
 
@@ -290,7 +290,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 				</div>
 
 				{/* Cards Grid - Restored to Deep Brand Colors */}
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 relative z-10">
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5 relative z-10">
 					
 					{/* Ask ASPIRE Card */}
 					<button type="button" onClick={() => startConversation("Hello ASPIRE, I am ready to explore the financial and learning ecosystem in St. Kitts and Nevis.")} className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(194,47,153,0.3)] hover:border-[#c22f99] flex flex-row items-center justify-between h-32 cursor-pointer">
@@ -382,7 +382,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 				{/* `pb-10`: this row sat flush against the footer, so the guides card
 				    and the Saint Kitts and Nevis line touched with nothing between
 				    them. A closing line deserves its own air. */}
-				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-10">
+				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-4">
 					{/* Try something quick */}
 					<div className="lg:col-span-7">
 						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
@@ -471,7 +471,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			
 			{/* Institutional Footer */}
 			<footer className="relative z-10 w-full border-t border-[#482977]/10 bg-white/90 backdrop-blur-xl mt-auto">
-				<div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-4 flex flex-wrap gap-6 items-center justify-between">
+				<div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-3 flex flex-wrap gap-6 items-center justify-between">
 					{/* THREE STATISTICS WERE HERE, AND NONE OF THEM WERE TRUE.
 					  *
 					  * "4,200+ young learners", "18,745 lessons completed" and
