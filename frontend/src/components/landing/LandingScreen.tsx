@@ -99,7 +99,10 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								rgba(255,255,255,0.95) 75%,
 								#ffffff 100%
 							),
-							url('/images/hero-bg.png') center center / cover no-repeat
+							image-set(
+								url('/images/hero-bg.webp') type('image/webp'),
+								url('/images/hero-bg.jpg') type('image/jpeg')
+							) center center / cover no-repeat
 						`,
 						filter: 'saturate(1.0) brightness(1.0)'
 					}}

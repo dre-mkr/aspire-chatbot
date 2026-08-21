@@ -1,30 +1,37 @@
-# Landing background images — NOT COMMITTED, and here is why
+# Landing background artwork
 
-`hero-bg.png` and `aspire-world-bg.png` are referenced by the landing and the
-About / Parents / Educators views, and they are deliberately absent.
+`hero-bg.webp` (68 KB) with `hero-bg.jpg` (98 KB) as the fallback, referenced
+through `image-set()` by the landing hero and by the About, Parents and
+Educators views.
 
-The two files that arrived with the design bundle were **corrupt**. A valid PNG
-opens with `89 50 4E 47`; both opened with `EF BF BD 50 4E 47` — the `0x89` had
-been replaced by U+FFFD, the Unicode replacement character, and the 3.4 MB file
-carried 777,328 more of them. The binary had been round-tripped through UTF-8
-text somewhere in the export. `file` reported them as `data`, not as images, and
-no browser would have drawn either one.
+## One image, four surfaces
 
-They were also byte-identical to each other, so the bundle shipped one broken
-image under two names.
+The design bundle shipped this artwork twice, as `hero-bg.png` and
+`aspire-world-bg.png`. The two files were byte-identical, so the second name
+bought nothing and both now resolve to the same file.
 
-## What happens without them
+## Why it is not the PNG that arrived
 
-Nothing breaks. Each usage layers the image *under* a white gradient, so the
-background falls back to the gradient alone. The page is quieter than intended
-but correct.
+The two PNGs in the bundle were **corrupt**. A valid PNG opens `89 50 4E 47`;
+both opened `EF BF BD 50 4E 47` — the `0x89` replaced by U+FFFD, with 777,328
+more replacement sequences through a 3.4 MB file. The binary had been round
+tripped through UTF-8 text somewhere in the export, `file` reported them as
+`data`, and no browser would have drawn either one.
 
-## To restore
+The artwork here was re-exported from the original and encoded properly:
 
-Drop the real artwork in here under these two names. Please also:
+    source PNG   1830 KB   1672x941
+    webp           68 KB   1600 wide, q72
+    jpeg           98 KB   1600 wide, q74, mozjpeg
 
-- export at the size actually needed — the originals were 3.4 MB each, and the
-  readers are on phones on mobile data in St Kitts and Nevis
-- prefer WebP with a PNG or JPEG fallback
-- check the file really is what it claims: `file hero-bg.png` should say
-  `PNG image data`, never `data`
+That is a 96% reduction, and it matters: the readers are children in St Kitts
+and Nevis on phones, on mobile data. The image also sits under a near-opaque
+white veil in every usage, so it never needs to be crisp — quality 72 is
+indistinguishable once the veil is over it.
+
+## If you replace it
+
+Keep both formats and both names, re-run the same encode, and check the result
+really is an image before committing it:
+
+    file hero-bg.webp    # must say "RIFF ... Web/P image", never "data"

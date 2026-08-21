@@ -19,7 +19,10 @@ export function EducatorsView({ onBack }: EducatorsViewProps) {
 								rgba(255,255,255,0.92) 72%,
 								#ffffff 100%
 							),
-							url('/images/aspire-world-bg.png') center top / cover no-repeat
+							image-set(
+								url('/images/hero-bg.webp') type('image/webp'),
+								url('/images/hero-bg.jpg') type('image/jpeg')
+							) center top / cover no-repeat
 						`,
 						filter: 'saturate(0.85) brightness(1.12)'
 					}}
