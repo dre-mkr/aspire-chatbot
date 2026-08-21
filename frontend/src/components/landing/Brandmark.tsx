@@ -49,15 +49,21 @@ export function Brandmark({ variant = "hero" }: { variant?: "hero" | "header" } 
 			>
 				<div className="absolute inset-0 bg-[#c22f99]/10 blur-2xl rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
-				{/* Falling stars behind/around the wordmark. Hero only: at header
-				    scale they crowd the nav rather than decorate it. */}
-				{variant === "hero" ? (
-					<div className="absolute inset-0 pointer-events-none z-0 overflow-visible" style={{ top: '-20px', bottom: '-100px' }}>
-						<i className="ph-fill ph-star absolute text-[#fed141] text-2xl falling-star falling-star-1 drop-shadow-md"></i>
-						<i className="ph-fill ph-star absolute text-[#fed141] text-xl falling-star falling-star-2 drop-shadow-md"></i>
-						<i className="ph-fill ph-star absolute text-[#fed141] text-2xl falling-star falling-star-3 drop-shadow-md"></i>
-					</div>
-				) : null}
+				{/* Falling stars behind the mark, in both lockups.
+				  *
+				  * They were hero-only for a while, on the theory that they would
+				  * crowd the nav at header scale. They do not -- what crowds it is
+				  * a fall written for a 340px mark playing out behind a 224px one,
+				  * which drops them through the navigation. The fall is scaled
+				  * instead, in `.brandmark--header .falling-star`. */}
+				<div
+					className="absolute inset-0 pointer-events-none z-0 overflow-visible"
+					style={variant === "header" ? { top: "-10px", bottom: "-34px" } : { top: "-20px", bottom: "-100px" }}
+				>
+					<i className={`ph-fill ph-star absolute text-[#fed141] falling-star falling-star-1 drop-shadow-md ${variant === "header" ? "text-sm" : "text-2xl"}`}></i>
+					<i className={`ph-fill ph-star absolute text-[#fed141] falling-star falling-star-2 drop-shadow-md ${variant === "header" ? "text-xs" : "text-xl"}`}></i>
+					<i className={`ph-fill ph-star absolute text-[#fed141] falling-star falling-star-3 drop-shadow-md ${variant === "header" ? "text-sm" : "text-2xl"}`}></i>
+				</div>
 
 				<picture>
 					{/* The lockup: mark and expansion in one artwork, as supplied.

@@ -7887,3 +7887,34 @@ a.source__site--link:hover .source__out {
 		transition: none;
 	}
 }
+
+/* The header lockup is roughly two thirds the hero's size, so the fall is too.
+ * At the hero's 150px a star clears the mark and lands in the navigation. */
+@keyframes fallAndFadeCompact {
+	0% {
+		transform: translateY(-6px) rotate(0deg) scale(0.9);
+		opacity: 0;
+	}
+	12% {
+		opacity: 0.85;
+	}
+	70% {
+		opacity: 0.6;
+	}
+	100% {
+		transform: translateY(58px) rotate(180deg) scale(0.6);
+		opacity: 0;
+	}
+}
+
+.brandmark--header .falling-star {
+	animation-name: fallAndFadeCompact;
+	animation-duration: 4.6s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.brandmark--header .falling-star {
+		animation: none;
+		display: none;
+	}
+}
