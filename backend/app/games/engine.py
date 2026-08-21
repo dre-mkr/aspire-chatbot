@@ -71,6 +71,17 @@ class NoContentAvailable(GameError):
     reason = "no_set_for_language"
 
 
+#: Whose bank a persona is served from when it has none of its own.
+#:
+#: Guardians and teachers have no authored sets. Until they do, they are served
+#: the 13-18 material, which is the closest thing to an adult register already
+#: written. Delete an entry here the day its own seeds land.
+_CONTENT_BANK: dict[Persona, Persona] = {
+    Persona.AURORA: Persona.ORION,
+    Persona.NOVA: Persona.ORION,
+}
+
+
 class PersonaNotEligible(GameError):
     reason = "not_available_for_persona"
 
@@ -249,6 +260,24 @@ class GameEngine:
                 f"Games are for account holders; {persona.value} is not one."
             )
 
+        # Which bank this player is served from, which is not always their own.
+        #
+        # `aurora` and `nova` have no seed files -- the banks on disk are
+        # stella, orion and guest -- so opening games to them without this
+        # traded one refusal for another: `PersonaNotEligible` became
+        # `NoContentAvailable`, and a control that throws is a control that
+        # cannot ship.
+        #
+        # They borrow the 13-18 bank rather than the youngest: it is the set
+        # that names the EC$500 split and works at a sourced rate, which is the
+        # material a parent or a teacher would expect to be shown. It is a
+        # stand-in and it is meant to be replaced -- author `*-aurora-*.yaml`
+        # and `*-nova-*.yaml` and this mapping stops applying to them.
+        #
+        # The session still records the reader's OWN persona, so nothing
+        # downstream starts believing a teacher is a teenager.
+        content_persona = _CONTENT_BANK.get(persona, persona)
+
         if self._store.get(session_id) is not None:
             raise GameAlreadyRunning("A game is already running here.")
 
@@ -277,13 +306,13 @@ class GameEngine:
         game_set = None
         servable: list[Entry] = []
         for candidate in sets:
-            items = self._servable(candidate.entries, persona)
+            items = self._servable(candidate.entries, content_persona)
             if not items:
                 continue
             if game_set is None:
                 game_set = candidate
             servable.extend(items)
-            if persona is None:
+            if content_persona is None:
                 break
 
         if game_set is None:

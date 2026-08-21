@@ -18,7 +18,21 @@ from app.domain import Language, Persona
 # quietly does less. Aurora and Nova stay out on purpose -- both are written
 # around programme information and teaching material, and a guardian mid-form
 # does not want a quiz.
-PLAYING_PERSONAS = frozenset({Persona.STELLA, Persona.ORION, Persona.GUEST})
+#: Who may play. Everyone, now, and that is a decision rather than an oversight.
+#:
+#: This was `{stella, orion, guest}`, so `start` RAISED `PersonaNotEligible` for
+#: a guardian or a teacher. That made any "play a game" control a button that
+#: could not work for two of the six voices -- and a control that throws for
+#: some readers is worse than no control.
+#:
+#: Offering is still not the same as allowing, and that distinction has moved
+#: into the cards where it belongs: Imani does not raise an activity unprompted
+#: with a parent who has four minutes, and Azuri is evaluating rather than
+#: playing. Ask either of them for a game and they can now hand one over.
+#:
+#: The frozenset is kept rather than deleted so that narrowing this again is one
+#: line, in the place the last narrowing was.
+PLAYING_PERSONAS = frozenset(Persona)
 
 
 class Volatility(str, Enum):

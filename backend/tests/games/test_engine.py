@@ -74,9 +74,15 @@ def test_account_holders_can_play(engine, persona):
 
 
 @pytest.mark.parametrize("persona", [Persona.AURORA, Persona.NOVA])
-def test_non_holders_are_declined(engine, persona):
-    with pytest.raises(PersonaNotEligible):
-        engine.start(SESSION, persona=persona)
+def test_a_guardian_or_teacher_may_now_play(engine, persona):
+    """These two used to raise, which made any "play a game" control a button
+    that could not work for a third of the voices.
+
+    Offering is still not allowing: Imani never raises an activity unprompted
+    and Azuri is evaluating rather than playing, and both cards say so. But
+    asked directly, the engine hands one over rather than refusing.
+    """
+    assert engine.start(SESSION, persona=persona) is not None
 
 
 def test_unknown_persona_may_play(engine):

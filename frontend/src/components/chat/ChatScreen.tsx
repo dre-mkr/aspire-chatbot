@@ -35,6 +35,7 @@ import {
 } from "#/lib/aspire/queries";
 import type { AnswerSearch } from "#/lib/aspire/search";
 import { ensureSession } from "#/lib/aspire/session";
+import { useSession } from "#/lib/aspire/use-session";
 import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
 import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
@@ -83,6 +84,9 @@ export function ChatScreen() {
 		personaNotice,
 		dismissPersonaNotice,
 	} = useAnswerSettings();
+
+	/** Read only for the orb's colour: the band is what separates Skye from Kaleb. */
+	const { session: identity } = useSession();
 
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
@@ -652,6 +656,12 @@ export function ChatScreen() {
 			<div
 				className="app"
 				data-phase="chat"
+				/* The orb's colour, and nothing else, reads this. One attribute at
+				   the root beats drilling the persona through the transcript to
+				   reach a decorative sphere. Falls back to `guest`, which is the
+				   voice that answers before it knows who is reading. */
+				data-persona={persona || "guest"}
+				data-band={identity?.ageBand || undefined}
 				data-rail={railClosed ? "collapsed" : "expanded"}
 			>
 				<div className="atmosphere" aria-hidden="true">
