@@ -7848,44 +7848,6 @@ a.source__site--link:hover .source__out {
 	}
 }
 
-/* ── The island, behind the conversation ──────────────────────────────────
- *
- * The same artwork the landing opens with, carried through to the chat so the
- * two surfaces feel like one place rather than two products.
- *
- * FAINT ON PURPOSE, AND THIS IS THE ONE PLACE THAT MATTERS. A landing page is
- * looked at; a transcript is READ, at length, by a five-year-old. So the scene
- * sits at 12% under a near-opaque wash rather than the 22-88% ramp the landing
- * uses -- present enough to recognise, nowhere near enough to compete with a
- * sentence. Body text keeps the full contrast it had.
- *
- * `fixed`, so it does not scroll with the transcript: a moving mountain behind
- * moving text is nausea, not atmosphere.
- */
-.app[data-phase="chat"] .atmosphere::before {
-	content: "";
-	position: fixed;
-	inset: 0;
-	/* No white wash here. There used to be one AT 0.9-0.93 ALPHA, on top of a
-	 * layer already set to 12% opacity -- two dimmers multiplied, leaving about
-	 * 1% of the artwork actually visible. It was not faint, it was absent.
-	 *
-	 * The number looks high and is not. `.workspace` sits over this at 74%
-	 * opaque white and `.rail` at 88%, so what actually reaches the eye is about
-	 * 0.55 x 0.26 -- roughly 14%. That wash is also what keeps body text at full
-	 * contrast no matter what the artwork does underneath it.
-	 *
-	 * Set it by what survives the stack, not by what the number reads as. */
-	background:
-		image-set(
-			url("/images/hero-bg.webp") type("image/webp"),
-			url("/images/hero-bg.jpg") type("image/jpeg")
-		)
-		center center / cover no-repeat;
-	opacity: 0.55;
-	pointer-events: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.app[data-phase="chat"] .atmosphere::before {
 		transition: none;
@@ -7975,4 +7937,52 @@ a.source__site--link:hover .source__out {
 		animation: none;
 		display: none;
 	}
+}
+
+/* ── The island, on the chat canvas ───────────────────────────────────────
+ *
+ * On `.workspace`, not on `.atmosphere`. In chat phase `.frame` covers all but
+ * a 16px margin -- this file says so at the `.atmosphere span` rule -- so
+ * anything painted on the atmosphere is painting into a strip nobody sees.
+ * Three earlier attempts died there while the opacity was being blamed.
+ *
+ * `backdrop-filter` on this element blurs what is BEHIND it, not its own
+ * background, so the scene stays sharp and the content over it is untouched.
+ *
+ * The veils are shaped rather than flat: a radial that protects the reading
+ * column on the left, and a vertical fade that opens the top for atmosphere
+ * and closes the bottom into a working surface. The mountain sits top-right,
+ * where no sentence goes, so that is where the scene is allowed to be seen.
+ *
+ * VERIFY AT 1440px OR WIDER. Below about 900 the rail opens as an overlay and
+ * blurs the content behind it, which looks like a bug in this and is not.
+ */
+.app[data-phase="chat"] .workspace {
+	background:
+		radial-gradient(
+			circle at 24% 42%,
+			rgb(255 255 255 / 0.92) 0%,
+			rgb(255 255 255 / 0.8) 22%,
+			rgb(255 255 255 / 0.46) 48%,
+			rgb(255 255 255 / 0.1) 70%,
+			transparent 84%
+		),
+		linear-gradient(
+			to bottom,
+			rgb(255 255 255 / 0.06) 0%,
+			rgb(255 255 255 / 0.2) 34%,
+			rgb(255 255 255 / 0.52) 68%,
+			rgb(255 255 255 / 0.78) 100%
+		),
+		image-set(
+			url("/images/hero-bg.webp") type("image/webp"),
+			url("/images/hero-bg.jpg") type("image/jpeg")
+		)
+		right top / cover no-repeat;
+}
+
+/* The composer is the smallest type and the control everyone uses, so it keeps
+ * a surface of its own rather than whatever the scene is doing behind it. */
+.app[data-phase="chat"] .composer {
+	background: rgb(255 255 255 / 0.94);
 }
