@@ -541,3 +541,83 @@ class TestARequiredConceptMustBeTaught:
         from app.curriculum.schema import load_all
 
         load_all(refresh=True)
+
+
+class TestTheArithmeticInAKeyIsTheArithmeticInThePrompt:
+    """A worked example whose key contradicts its own prompt.
+
+    `l03_a_goal` at 13-15 asked "EC$450 and you keep EC$25 a week -- roughly how
+    many weeks?", offered [Ten, Two, One hundred], keyed Ten, and 450/25 is 18.
+    The third hint rung said it out loud: "EC$450 at EC$25 a week is eighteen,
+    so ten is the closest of these."
+
+    So the lesson taught a fourteen-year-old to divide -- "Price it, date it,
+    divide it. That is the whole method" -- and then marked the division wrong,
+    naming the right answer in the sentence that rejected it. Joseph Lin checks
+    arithmetic and so does a judge with a rubric.
+    """
+
+    def test_every_division_question_divides_exactly_into_its_key(self):
+        import re
+
+        from app.curriculum.schema import load_all
+
+        words = {"ten": 10, "two": 2, "one hundred": 100, "five": 5, "twenty": 20}
+        problems = []
+        for module in load_all(refresh=True).modules:
+            for lesson in module.lessons:
+                for question in lesson.check_questions:
+                    if question.answer is None or not question.options:
+                        continue
+                    key = words.get(question.options[question.answer].strip().lower())
+                    if key is None:
+                        continue
+                    for band, prompt in (question.prompt or {}).items():
+                        found = [
+                            int(n.replace(",", ""))
+                            for n in re.findall(r"EC\$([\d,]+)", prompt)
+                        ]
+                        if len(found) != 2 or "how many weeks" not in prompt.lower():
+                            continue
+                        goal, rate = max(found), min(found)
+                        if rate and goal / rate != key:
+                            problems.append(
+                                f"{lesson.id}/{question.id}/{band}: {goal}/{rate} = "
+                                f"{goal / rate:g}, key says {key}"
+                            )
+        assert not problems, "; ".join(problems)
+
+    def test_the_second_hint_rung_names_the_two_options_that_get_rendered(self):
+        """`narrow_options` renders options 0 and 1. A rung that names 0 and 2
+        tells the reader to choose between two things and shows a different two.
+        """
+        from app.curriculum.schema import load_all
+
+        words = ("ten", "two", "one hundred", "five", "twenty")
+        problems = []
+        for module in load_all(refresh=True).modules:
+            for lesson in module.lessons:
+                for question in lesson.check_questions:
+                    if question.answer is None or len(question.options or ()) < 3:
+                        continue
+                    rendered = {
+                        question.options[question.answer].strip().lower(),
+                        next(
+                            o.strip().lower()
+                            for i, o in enumerate(question.options)
+                            if i != question.answer
+                        ),
+                    }
+                    for band, rungs in (question.hints or {}).items():
+                        if len(rungs) < 2:
+                            continue
+                        # "one of these two" is English, not an option name.
+                        rung = rungs[1].lower().replace("these two", "")
+                        named = {w for w in words if w in rung}
+                        stray = named - rendered
+                        if stray:
+                            problems.append(
+                                f"{lesson.id}/{question.id}/{band}: rung 2 names "
+                                f"{sorted(stray)}, chips show {sorted(rendered)}"
+                            )
+        assert not problems, "; ".join(problems)

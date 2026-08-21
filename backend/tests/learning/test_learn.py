@@ -545,3 +545,63 @@ class TestTheLessonRuns:
         state = await lesson_graph.ainvoke(state_for("teach me", band="5-8"))
         allowed = {lesson.id for lesson in curriculum.lessons_for_band("5-8")}
         assert state["learning"]["lesson_id"] in allowed
+
+
+class TestAChildWhoTypesTheRightAnswerIsMarkedRight:
+    """The old rule was `text == correct or correct in text`, so anything the
+    reader typed that was SHORTER than the option failed.
+
+        options [Ten, Two, One hundred], typed "10"   -> marked WRONG
+        options ["No -- it is fine", ...], typed "no" -> marked WRONG
+
+    Both are the commonest possible way to answer, and both were failures. A
+    nine-year-old who does the arithmetic correctly and writes the numeral was
+    told they were wrong and sent down the hint ladder.
+    """
+
+    class _Q:
+        def __init__(self, options, answer):
+            self.options, self.answer, self.accept = options, answer, []
+
+    NUMBERS = ["Ten", "Two", "One hundred"]
+    YESNO = ["No -- it is fine", "Yes -- always"]
+
+    def test_a_numeral_answers_a_number_word(self):
+        from app.agents.learn.graph import grade_answer
+
+        for typed in ("10", "ten", "Ten", " ten ", "about ten weeks"):
+            assert grade_answer(self._Q(self.NUMBERS, 0), typed), typed
+
+    def test_the_short_form_of_a_dashed_option_is_accepted(self):
+        from app.agents.learn.graph import grade_answer
+
+        for typed in ("no", "No", "no.", "No -- it is fine"):
+            assert grade_answer(self._Q(self.YESNO, 0), typed), typed
+
+    def test_a_wrong_answer_is_still_wrong(self):
+        from app.agents.learn.graph import grade_answer
+
+        for typed in ("18", "two", "2", "one hundred", "100"):
+            assert not grade_answer(self._Q(self.NUMBERS, 0), typed), typed
+        for typed in ("yes", "Yes -- always"):
+            assert not grade_answer(self._Q(self.YESNO, 0), typed), typed
+
+    def test_a_bare_index_no_longer_passes_a_numeric_question(self):
+        """`text in {str(answer), str(answer + 1)}` marked "1" correct for every
+        question whose answer index is 0. On the goal questions the options ARE
+        numbers, so a learner typing an amount was marked right by accident --
+        which teaches nothing and inflates mastery."""
+        from app.agents.learn.graph import grade_answer
+
+        assert not grade_answer(self._Q(self.NUMBERS, 0), "1")
+        # Not index 1 -> "2": on this question "2" is the digit form of "Two",
+        # which IS option 1, so accepting it is correct and not an index match.
+        assert not grade_answer(self._Q(self.NUMBERS, 2), "3")
+
+    def test_a_bare_index_still_works_where_no_option_is_a_number(self):
+        """The behaviour the index rule was added for, kept where it is safe."""
+        from app.agents.learn.graph import grade_answer
+
+        assert grade_answer(self._Q(["Saving", "Spending"], 0), "1")
+        assert grade_answer(self._Q(["Saving", "Spending"], 0), "saving")
+        assert not grade_answer(self._Q(["Saving", "Spending"], 0), "spending")

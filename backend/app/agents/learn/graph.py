@@ -186,18 +186,98 @@ def wants_a_different_lesson(text: str) -> bool:
     return bool(_WANTS_ANOTHER.search(text or ""))
 
 
+#: Number words a child actually types, and the digits they mean.
+#:
+#: Only what appears in the options today, plus the neighbours a learner reaches
+#: for. This is a lookup, not arithmetic: "one hundred" is here because an option
+#: says it, and nothing tries to parse open-ended English into a number.
+_NUMBER_WORDS: dict[str, str] = {
+    "zero": "0", "none": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "eleven": "11", "twelve": "12", "fifteen": "15", "eighteen": "18",
+    "twenty": "20", "thirty": "30", "fifty": "50", "one hundred": "100",
+    "a hundred": "100", "hundred": "100",
+}
+
+
+def _clean(text: str) -> str:
+    """Lowercased, trimmed, and stripped of the punctuation a person types."""
+    return re.sub(r"[\s]+", " ", (text or "").strip().lower()).strip(" .!?,;:'\"")
+
+
+def _forms(text: str) -> set[str]:
+    """Every way a reader might write this answer.
+
+    The option itself, the clause before an em-dash or double hyphen -- "No -- it
+    is fine" is answered "no" by almost everybody -- and the digit form of a
+    number word, plus the word form of a digit.
+    """
+    cleaned = _clean(text)
+    if not cleaned:
+        return set()
+    out = {cleaned}
+    head = _clean(re.split(r"\s+--\s+|\s+—\s+|,", cleaned, maxsplit=1)[0])
+    if head:
+        out.add(head)
+    for form in tuple(out):
+        if form in _NUMBER_WORDS:
+            out.add(_NUMBER_WORDS[form])
+        for word, digit in _NUMBER_WORDS.items():
+            if form == digit:
+                out.add(word)
+    return out
+
+
 def grade_answer(question: CheckQuestion, answer: str) -> bool:
-    """Whether the child got it."""
-    text = (answer or "").strip().lower()
+    """Whether the child got it.
+
+    THE BUG THIS REPLACES, and it is the one most likely to be met in front of a
+    judge: the old rule was `text == correct or correct in text`, so anything
+    the reader typed that was SHORTER than the option text failed.
+
+        "How many weeks?"  options [Ten, Two, One hundred]
+        typed "10"   ->  "ten" in "10" is False  ->  marked WRONG
+
+        "Is it bad to spend some of your money?"  options
+        ["No -- it is fine", "Yes -- always"]
+        typed "no"   ->  marked WRONG
+
+    A nine-year-old who does the arithmetic correctly and writes the numeral is
+    told they are wrong and sent down the hint ladder. A five-year-old who
+    answers a yes/no question with "no" is told they are wrong. Both are the
+    commonest possible way to answer, and both were failures.
+
+    The second half was worse. `text in {str(answer), str(answer + 1)}` was there
+    so a typed index could stand in for a tapped chip -- but the options ARE
+    numbers on the goal questions, so a learner typing "1" as an amount was
+    marked CORRECT for every question whose answer index is 0, and "2" for every
+    question whose answer index is 1. A right mark for the wrong reason teaches
+    nothing and inflates mastery.
+
+    So index matching now applies only when the option text is not itself a
+    number. Where the options are numbers, the numbers are the answer.
+    """
+    text = _clean(answer)
     if not text:
         return False
     if question.answer is not None and question.options:
-        correct = question.options[question.answer].strip().lower()
-        if text == correct or correct in text:
+        accepted = _forms(question.options[question.answer])
+        if text in accepted:
             return True
-        # A tapped chip sends the option text; a typed answer may be the option's index.
-        if text in {str(question.answer), str(question.answer + 1)}:
+        # "the answer is ten", "I think about ten weeks". Kept from the old rule,
+        # and only for the full option text: matching the short head here would
+        # accept "no" inside "I do not know".
+        if _clean(question.options[question.answer]) in text:
             return True
+        # A typed index standing in for a tapped chip -- but ONLY where no option
+        # is itself a number, or the index and the answer collide.
+        numeric = any(
+            form.isdigit() for option in question.options for form in _forms(option)
+        )
+        if not numeric and text in {str(question.answer), str(question.answer + 1)}:
+            return True
+        # A different option, spelled any of its ways, is a wrong answer and not
+        # an unrecognised one.
         return False
     return any(word.lower() in text for word in question.accept)
 

@@ -225,7 +225,13 @@ lessons:
         prompt:
           "5-8": "Your goal costs ten coins. You put in one coin every week. How many weeks?"
           "9-12": "A goal costs EC$100 and you keep EC$10 a week. How many weeks?"
-          "13-15": "A goal costs EC$450 and you keep EC$25 a week. Roughly how many weeks?"
+          # WAS EC$450 at EC$25, whose answer is 18 -- and the key said "Ten".
+          # The third hint rung admitted it in the same breath: "EC$450 at EC$25
+          # a week is eighteen, so ten is the closest of these." The lesson
+          # taught a fourteen-year-old to divide, then marked the division wrong.
+          # Joseph Lin checks arithmetic; so does a judge with a rubric.
+          # EC$250 at EC$25 is exactly ten, which is what the options already say.
+          "13-15": "A goal costs EC$250 and you keep EC$25 a week. How many weeks?"
         options: ["Ten", "Two", "One hundred"]
         answer: 0
         hints:
@@ -239,8 +245,11 @@ lessons:
             - "It is ten. EC$100 divided by EC$10 a week is ten weeks."
           "13-15":
             - "Close. Divide the goal by what you keep each week."
-            - "It is one of these two: ten, or one hundred?"
-            - "It is about ten weeks -- EC$450 at EC$25 a week is eighteen, so ten is the closest of these."
+            # Rung 2 named options 0 and 2 while `narrow_options` renders 0 and 1,
+            # so the reader was told to choose between two things and shown a
+            # different two.
+            - "It is one of these two: ten, or two?"
+            - "It is ten. EC$250 divided by EC$25 a week is ten weeks exactly."
 
       - id: q2_name_a_goal
         prompt:
@@ -418,7 +427,13 @@ lessons:
     check_questions:
       - id: q1_when_to_decide
         prompt:
-          "5-8": "You have three coins. Your plan says keep one. How many can you spend?"
+          # WAS "You have three coins. Your plan says keep one. How many can you
+          # spend?" -- a counting question, sharing the options of a WHEN
+          # question. A five-year-old was shown three timing chips and a hint
+          # ladder ending "Two. One kept, two to use", which is not on screen.
+          # `options` is one list for every band, so the 5-8 prompt has to ask
+          # what the options answer.
+          "5-8": "When do you put your keeping coin in the tin?"
           "9-12": "When is the best time to decide how much to keep?"
           "13-15": "When should the split be decided?"
           "16-18": "In a month you know will be thin, what gets decided first?"
@@ -426,16 +441,19 @@ lessons:
         answer: 0
         hints:
           "5-8":
-            - "Take away the one you keep."
-            - "Three coins. One goes in the tin. How many are left?"
-            - "Two. One kept, two to use."
+            - "Think about which coin moves first."
+            - "It is one of these two: before you spend, or at the shop?"
+            - "Before you spend any. The tin coin goes in first. Then you spend the rest."
           "9-12":
             - "Think about what is left at the end of a week when you did not decide first."
             - "It is one of these two: before you spend, or at the shop?"
             - "Before you spend any! It is much easier to keep money you have not already got in your hand."
           "13-15":
             - "Think about which order actually leaves something to save."
-            - "One of these two: before, or at the end of the week?"
+            # WAS "before, or at the end of the week?" -- options 0 and 2, while
+            # `narrow_options` renders 0 and 1. The reader was told to choose
+            # between two things and shown a different two.
+            - "One of these two: before you spend, or at the shop?"
             - "Before. Keeping first is the whole method -- what is left at the end of a week is usually nothing."
           "16-18":
             - "Which decision, made late, costs you the most?"
