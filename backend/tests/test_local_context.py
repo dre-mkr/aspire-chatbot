@@ -337,11 +337,28 @@ class TestTheCardsAskForMoreThanTheOutboundGateAllows:
     pins the overlap so that decision is visible in the suite rather than
     discovered in a transcript, and it fails the moment either side changes --
     which is the point.
+
+    ONE OF THE TWO IS NOW SETTLED. At 5-8 the card yielded: it teaches that
+    money left alone gets bigger and does not name the thing, because a
+    five-year-old does not need the noun and cannot check the number behind it.
+    The gate was always right there and the card was asking for a reply the gate
+    would then take apart.
+
+    THE 9-12 ONE IS STILL OPEN, deliberately. `compound` is a harder call than
+    `interest`: a twelve-year-old in Form 1 is taught this at school, the card
+    is built around using real words correctly and defining them once in
+    passing, and lifting the term is arguably the right answer rather than the
+    lazy one. That is a decision for the ASPIRE team, not for whoever next
+    reads this file.
     """
 
-    def test_the_5_8_card_names_a_word_the_5_8_gate_still_strips(self):
+    def test_the_5_8_card_no_longer_names_the_word_its_gate_strips(self):
+        """Settled: the card yielded, and the gate is unchanged behind it."""
         card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
-        assert "what interest is" in card
+        assert "what interest is" not in card
+        # The idea survives; only the noun is gone.
+        assert "money left alone gets bigger" in card
+        # And the gate still holds, which is what made the card wrong, not weak.
         assert [v.term for v in vocab.check("what interest is", "5-8")] == ["interest"]
 
     def test_the_9_12_card_asks_for_arithmetic_the_9_12_gate_still_strips(self):
