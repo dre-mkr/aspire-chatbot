@@ -7866,19 +7866,23 @@ a.source__site--link:hover .source__out {
 	content: "";
 	position: fixed;
 	inset: 0;
+	/* No white wash here. There used to be one AT 0.9-0.93 ALPHA, on top of a
+	 * layer already set to 12% opacity -- two dimmers multiplied, leaving about
+	 * 1% of the artwork actually visible. It was not faint, it was absent.
+	 *
+	 * The number looks high and is not. `.workspace` sits over this at 74%
+	 * opaque white and `.rail` at 88%, so what actually reaches the eye is about
+	 * 0.55 x 0.26 -- roughly 14%. That wash is also what keeps body text at full
+	 * contrast no matter what the artwork does underneath it.
+	 *
+	 * Set it by what survives the stack, not by what the number reads as. */
 	background:
-		linear-gradient(
-			to bottom,
-			rgb(255 255 255 / 0.93) 0%,
-			rgb(255 255 255 / 0.9) 45%,
-			rgb(255 255 255 / 0.93) 100%
-		),
 		image-set(
 			url("/images/hero-bg.webp") type("image/webp"),
 			url("/images/hero-bg.jpg") type("image/jpeg")
 		)
 		center center / cover no-repeat;
-	opacity: 0.12;
+	opacity: 0.55;
 	pointer-events: none;
 }
 
