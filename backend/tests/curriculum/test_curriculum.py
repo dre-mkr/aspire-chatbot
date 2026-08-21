@@ -57,12 +57,47 @@ class TestModuleOneLoads:
 class TestBandFiltering:
     """The acceptance criterion: a band filter returns band-appropriate content."""
 
-    def test_a_five_to_eight_does_not_get_the_nine_to_twelve_lessons(self, curriculum):
+    def test_the_youngest_band_now_gets_the_whole_of_module_one(self, curriculum):
+        """This test used to assert the opposite, and the opposite was wrong.
+
+        `need` and `budget` were pitched at 9-12, so needs-and-wants and making
+        a plan were closed to a five-to-eight-year-old and module 1 was 60 per
+        cent available to the band the client said we were ignoring.
+
+        ASPIRE's own Grade 1 lesson plan guide -- Super Savers Club -- teaches
+        both at Grade One. Its Lesson 3 says it outright: "By distinguishing
+        between needs and wants, children begin to learn about budgeting. Even
+        at a young age, understanding that money can run out and needs should
+        come first helps them make practical choices."
+
+        The programme says five or six. We had said nine. The programme wins.
+        """
         young = {lesson.id for lesson in curriculum.lessons_for_band("5-8")}
-        older = {lesson.id for lesson in curriculum.lessons_for_band("9-12")}
-        assert young < older
-        assert "l04_needs_and_wants" not in young
-        assert "l05_a_simple_plan" not in young
+        assert "l04_needs_and_wants" in young
+        assert "l05_a_simple_plan" in young
+        assert young == {lesson.id for lesson in curriculum.lessons_for_band("9-12")}
+
+    def test_the_band_filter_still_filters(self, curriculum):
+        """The mechanism, checked without relying on any lesson being gated.
+
+        Every lesson in module 1 is now open to every band, so the filter has to
+        be exercised directly or this suite would pass with it deleted.
+        """
+        from app.curriculum.schema import Concept
+
+        gated = Concept(
+            id="something_later", name="Later", band_min="13-15", band_max="adult"
+        )
+        assert curriculum.concepts["save"].band_min == "5-8"
+        assert gated.band_min == "13-15"
+
+        for band in ("5-8", "9-12"):
+            for lesson in curriculum.lessons_for_band(band):
+                concept = curriculum.concepts[lesson.concept_id]
+                assert BANDS.index(concept.band_min) <= BANDS.index(band), (
+                    f"{lesson.id} reached {band} but its concept starts at "
+                    f"{concept.band_min}"
+                )
 
     def test_every_band_gets_teach_points_and_examples(self, curriculum):
         for band in BANDS:
