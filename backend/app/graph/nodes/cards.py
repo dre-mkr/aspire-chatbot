@@ -26,7 +26,7 @@ from app.schemas.directives import (
     VideoDirective,
     directive_payload,
 )
-from app.videos import by_id
+from app.videos import by_id, requested
 
 logger = logging.getLogger(__name__)
 
@@ -286,31 +286,20 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     }
 
 
-def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
-    """Play the video offered last turn, if the reader just said yes to it.
+#: What the reader is asked when they request "a video" without saying which.
+#:
+#: Titles come from the catalog, never from the model, for the same reason the
+#: catalog is server-owned at all: a name invented here is a promise of
+#: something that does not exist.
+_VIDEO_WHICH: dict[str, str] = {
+    "en": "We have two. Which one?",
+    "es": "Tenemos dos. ¿Cuál quieres?",
+    "fr": "Nous en avons deux. Laquelle ?",
+}
 
-    Three things have to be true, and the last is the one that matters: an
-    offer was actually made, this message accepts it, and the id still names
-    something in the catalog. That last check is why the catalog is server-owned
-    -- an id reaching here from a stale checkpoint, or from a client that made
-    one up, resolves to nothing and the turn carries on as an ordinary question.
 
-    The offer is cleared either way. A reader who says yes gets the video once;
-    a reader who asks something else has moved on, and a "yes" three turns later
-    should not reach back and open a player.
-    """
-    offered = state.get("offered_video")
-    if not offered:
-        return None
-    if not wants_video(message):
-        # They asked something else. The offer has expired.
-        return {"offered_video": None}
-
-    video = by_id(str(offered))
-    if video is None:
-        logger.info("offered video %r is no longer in the catalog", offered)
-        return {"offered_video": None}
-
+def _play(state: AspireState, video: Any) -> dict[str, Any]:
+    """The turn that opens the player. One place, so both routes match."""
     return {
         "offered_video": None,
         "active_agent": _holding_agent(state),
@@ -325,6 +314,83 @@ def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
         ],
         "messages": [AIMessage(content=f"Here it is — {video.title}.")],
         "safety_flags": {"card": "video"},
+    }
+
+
+def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Play a video: the one just offered, or the one just asked for.
+
+    TWO routes reach a player, and until now only the first existed.
+
+    **Accepting an offer.** Three things have to be true, and the last is the
+    one that matters: an offer was actually made, this message accepts it, and
+    the id still names something in the catalog. That last check is why the
+    catalog is server-owned -- an id reaching here from a stale checkpoint, or
+    from a client that made one up, resolves to nothing and the turn carries on
+    as an ordinary question.
+
+    The offer is cleared either way. A reader who says yes gets the video once;
+    a reader who asks something else has moved on, and a "yes" three turns later
+    should not reach back and open a player.
+
+    **Asking outright.** `_WATCH` has always matched "show me the video" -- its
+    own comment says "accepting an offer, or asking for one outright" -- but
+    with no standing offer this function returned None and the request fell
+    through to the model, which cannot open a player. That is the measured
+    defect: a reader asked six times and got one video, on the single turn an
+    offer happened to be standing.
+
+    The request route is NOT filtered by persona. `for_persona` decides what is
+    pushed at someone who did not ask; it has nothing to say about someone who
+    did. In practice that is the difference between a parent who reads with
+    difficulty being able to reach the only non-text thing here, and not.
+    """
+    offered = state.get("offered_video")
+    asking = wants_video(message)
+
+    if offered:
+        if not asking:
+            # They asked something else. The offer has expired.
+            return {"offered_video": None}
+        video = by_id(str(offered))
+        if video is None:
+            logger.info("offered video %r is no longer in the catalog", offered)
+            return {"offered_video": None}
+        return _play(state, video)
+
+    if not asking:
+        return None
+
+    # Local, and from `app.domain`: this module also imports an unrelated
+    # `Language` from `app.eligibility.models` further down, and the two are
+    # not the same enum.
+    from app.domain import Language
+
+    locale = str(state.get("locale") or "en")
+    try:
+        language = Language(locale)
+    except ValueError:
+        language = Language.EN
+    matches = requested(message, language=language)
+
+    if not matches:
+        # Outside English there is nothing to play. Let the turn be answered
+        # normally rather than apologising for a library they cannot use.
+        return None
+    if len(matches) == 1:
+        return _play(state, matches[0])
+
+    # They asked for "a video" without saying which. Offering the choice is
+    # the only honest move; picking one for them is a guess wearing an answer's
+    # clothes. Their reply names a subject and comes straight back here.
+    titles = [video.title for video in matches]
+    return {
+        "active_agent": _holding_agent(state),
+        "messages": [
+            AIMessage(content=_VIDEO_WHICH.get(locale, _VIDEO_WHICH["en"]))
+        ],
+        "quick_replies": titles,
+        "safety_flags": {"card": "video_choice"},
     }
 
 
