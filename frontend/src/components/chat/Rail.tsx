@@ -226,6 +226,19 @@ export function Rail({
 							</span>
 							<span className="rail__fold">Stories</span>
 						</button>
+						{/* Lessons are the point of the product and had no door at all.
+						    "teach me about ..." is the phrase the tutor answers to --
+						    see `tests/learning/test_learn.py` -- so the seed says it. */}
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("Teach me about saving.")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-graduation-cap" />
+							</span>
+							<span className="rail__fold">Learn</span>
+						</button>
 						<button
 							type="button"
 							className="btn-help btn-seed"
