@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "@phosphor-icons/web/bold";
+@import "@phosphor-icons/web/fill";
+@import "@phosphor-icons/web/duotone";
 
 /* ── Webfonts, self-hosted ── */
 
@@ -140,6 +143,39 @@
 	--reading-width: 660px;
 }
 
+@keyframes slideUpFade {
+	0% {
+		opacity: 0;
+		transform: translateY(20px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes subtleFall {
+	0% {
+		transform: translateY(-20vh) rotate(0deg);
+		opacity: 0;
+	}
+	10% {
+		opacity: 1;
+	}
+	90% {
+		opacity: 1;
+	}
+	100% {
+		transform: translateY(120vh) rotate(360deg);
+		opacity: 0;
+	}
+}
+
+.coin-fall {
+	animation: subtleFall linear infinite;
+	top: -20vh;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -185,16 +221,7 @@ body {
 	display: flex;
 	height: 100dvh;
 	overflow: hidden;
-	background: linear-gradient(
-		180deg,
-		#33165c 0%,
-		#482977 17%,
-		#6b3a9c 36%,
-		#ab3199 53%,
-		#e0a0d0 67%,
-		#faeff6 80%,
-		#ffffff 92%
-	);
+	background: #ffffff;
 
 	/* Phase-driven geometry. */
 	--rail-w: 0px;
@@ -970,7 +997,8 @@ body {
 	flex-direction: column;
 	flex: 1;
 	min-width: 0;
-	background: var(--panel-bg);
+	background: rgba(255, 255, 255, 0.74);
+	backdrop-filter: blur(10px);
 	transition: background var(--morph);
 }
 
@@ -2438,7 +2466,7 @@ body {
 .composer-slot {
 	display: flex;
 	justify-content: center;
-	padding: 4px 24px 0;
+	padding: 4px 24px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .composer {
@@ -4404,7 +4432,7 @@ body {
 	}
 
 	.composer-slot {
-		padding: 4px 12px 0;
+		padding: 4px 12px calc(8px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.follow-ups {
@@ -5487,6 +5515,23 @@ body {
 	overflow-wrap: anywhere;
 }
 
+.account__setting {
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--hairline);
+	margin-bottom: 4px;
+}
+.account__toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.8125rem;
+	color: var(--ink);
+	cursor: pointer;
+}
+.account__toggle input[type="checkbox"] {
+	cursor: pointer;
+	accent-color: var(--color-magenta);
+}
 .account__item {
 	display: flex;
 	align-items: center;
@@ -6847,13 +6892,18 @@ body {
 .app::before {
 	content: "";
 	position: absolute;
-	inset: -20%;
+	inset: 0;
 	z-index: 0;
 	background:
-		radial-gradient(48% 42% at 22% 18%, rgb(194 47 153 / 0.34), transparent 62%),
-		radial-gradient(46% 46% at 78% 34%, rgb(107 66 161 / 0.36), transparent 64%);
-	will-change: transform;
-	animation: brand-wash 46s ease-in-out infinite;
+		linear-gradient(
+			to bottom,
+			rgba(255, 255, 255, 0.12) 0%,
+			rgba(255, 255, 255, 0.58) 38%,
+			rgba(255, 255, 255, 0.92) 72%,
+			#ffffff 100%
+		),
+		url('/images/aspire-world-bg.png') center top / cover no-repeat;
+	filter: saturate(0.85) brightness(1.12);
 	pointer-events: none;
 }
 
@@ -7527,5 +7577,72 @@ a.source__site--link:hover .source__out {
 @media (forced-colors: active) {
 	a.source__site--link {
 		text-decoration: underline;
+	}
+}
+
+.frame[data-care="true"] {
+	border: 2px solid theme('colors.red.500');
+	box-shadow: 0 0 20px theme('colors.red.500/0.2') inset;
+}
+.frame[data-care="true"] .composer textarea {
+	background-color: theme('colors.red.50');
+	color: theme('colors.red.900');
+}
+.frame[data-care="true"] .composer textarea::placeholder {
+	color: theme('colors.red.400');
+}
+
+
+/* ── Brandmark: the falling stars ─────────────────────────────────────────
+ *
+ * These lived in an inline `<style>` block inside Brandmark.tsx. Moved here
+ * because a rule in a component's own <style> tag cannot be reached by the
+ * `prefers-reduced-motion` blocks in this file -- so the one animation on the
+ * page that never stops was the one animation nobody could turn off.
+ *
+ * `infinite` on a children's service needs an opt-out. It has one now.
+ */
+@keyframes fallAndFade {
+	0% {
+		transform: translateY(-10px) rotate(0deg) scale(0.9);
+		opacity: 0;
+	}
+	10% {
+		opacity: 0.9;
+	}
+	70% {
+		opacity: 0.7;
+	}
+	100% {
+		transform: translateY(150px) rotate(180deg) scale(0.6);
+		opacity: 0;
+	}
+}
+
+.falling-star {
+	animation: fallAndFade 4s ease-in-out infinite;
+}
+
+.falling-star-1 {
+	animation-delay: 0s;
+	left: 25%;
+}
+
+.falling-star-2 {
+	animation-delay: 1.2s;
+	left: 55%;
+}
+
+.falling-star-3 {
+	animation-delay: 2.8s;
+	left: 85%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* Hidden rather than paused. A star frozen mid-fall reads as a rendering
+	 * fault; the wordmark is the brand and it stands on its own. */
+	.falling-star {
+		animation: none;
+		display: none;
 	}
 }

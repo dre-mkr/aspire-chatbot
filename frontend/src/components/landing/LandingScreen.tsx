@@ -1,489 +1,405 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AccountControl } from "#/components/auth/AccountControl";
-import { Composer } from "#/components/chat/Composer";
-import { FirstRun } from "#/components/chat/FirstRun";
-import { Rail } from "#/components/chat/Rail";
-import { VoiceConsent, VoiceNote } from "#/components/chat/Voice";
-import { CloseIcon, MenuIcon } from "#/components/icons";
-import { Brandmark } from "#/components/landing/Brandmark";
-import { GuideChooser } from "#/components/onboarding/GuideChooser";
-import { newThreadId } from "#/lib/aspire/conversations";
-import { clearEligibilityResult } from "#/lib/aspire/eligibility";
-import { downloadTranscript } from "#/lib/aspire/export";
-import { guideAsked, rememberGuideAsked } from "#/lib/aspire/guide-choice";
-import {
-	readLandingDraft,
-	stageFirstTurn,
-	stashLandingDraft,
-} from "#/lib/aspire/handoff";
-import { type StoredConversation, titleFor } from "#/lib/aspire/history";
-import { starterPrompts } from "#/lib/aspire/knowledge";
-import { upsertConversation } from "#/lib/aspire/queries";
-import type { AnswerSearch } from "#/lib/aspire/search";
-import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
-import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
-import { useConversationList } from "#/lib/aspire/use-conversation-list";
-import { useVoice } from "#/lib/aspire/use-voice";
+import React, { useState } from 'react';
+import { useNavigate } from "@tanstack/react-router";
+import { Brandmark } from './Brandmark';
+import { HistoryView } from './HistoryView';
+import { JourneyView } from './JourneyView';
+import { StoriesView } from './StoriesView';
+import { ParentsView } from './ParentsView';
+import { EducatorsView } from './EducatorsView';
+import { AboutView } from './AboutView';
+import { stageFirstTurn } from "#/lib/aspire/handoff";
 
-/**
- * The empty state, and nothing else. It has no transcript, no games, and no
- * eligibility card, because it can never have a conversation to put them in.
+/** What the reward is called, which is not settled.
  *
- * Sending is a handoff rather than a send: the id is minted here, the rail row
- * is committed here, and the question is left for the chat page to ask. That
- * is what keeps this page free of the streaming machinery.
+ * "Magic Coins" here, "Hero Bucks" and "Super Saver Bucks" on the Grade 1
+ * classroom chart. Three names for one thing is how a child ends up believing
+ * they are three things. Named once, in one place, so the decision is one edit
+ * when it is made.
  */
-export function LandingScreen() {
+const COIN_LABEL = "Magic Coins";
+
+/** The reader's balance, or null when there is nobody signed in to have one.
+ *
+ * Null on purpose. It was `142` -- a literal, shown to every visitor, including
+ * the ones who had never earned a coin.
+ */
+const coinBalance: number | null = null;
+
+type ViewState = 'landing' | 'chat' | 'history' | 'journey' | 'stories' | 'parents' | 'educators' | 'about';
+type PersonaId = 'skye' | 'kaleb' | 'zion' | 'imani' | 'azuri';
+
+interface LandingScreenProps {
+	onStartConversation?: (message: string) => void;
+}
+
+const PERSONAS = [
+	{ id: 'skye', name: 'Skye', icon: '🦋', color: 'bg-[#c22f99]' },
+	{ id: 'kaleb', name: 'Kaleb', icon: '🚀', color: 'bg-[#3b82f6]' },
+	{ id: 'zion', name: 'Zion', icon: '🎧', color: 'bg-[#fed141]' },
+	{ id: 'imani', name: 'Imani', icon: '📚', color: 'bg-[#482977]' },
+	{ id: 'azuri', name: 'Azuri', icon: '👩🏾‍🏫', color: 'bg-[#10b981]' },
+] as const;
+
+export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const navigate = useNavigate();
-	const router = useRouter();
-	const queryClient = useQueryClient();
-
-	/** The three answer settings, read from the address. */
-	const {
-		simpleMode,
-		toggleSimpleMode,
-		persona,
-		setPersona,
-		lang,
-		setLanguageInUrl,
-		personaNotice,
-		dismissPersonaNotice,
-	} = useAnswerSettings();
-
-	/**
-	 * Who is reading, asked once per browser before the first question.
-	 *
-	 * Only when nothing has answered it already: a persona in the address or
-	 * derived from a signed-in account IS the answer, and asking again would be
-	 * asking someone to repeat themselves.
-	 *
-	 * Gated on the opening having finished. The two used to open together and
-	 * sit on top of each other — two dialogs, two focus traps, and on a phone
-	 * one panel visibly behind the other.
-	 */
-	const [introDone, setIntroDone] = useState(false);
-	const finishIntro = useCallback(() => setIntroDone(true), []);
-
-	/**
-	 * Whether this browser has never been put the question.
-	 *
-	 * After mount, never during render: there is no `localStorage` in SSR, and
-	 * reading it while rendering would mismatch the server's HTML.
-	 */
-	const [unasked, setUnasked] = useState(false);
-	useEffect(() => {
-		setUnasked(!guideAsked());
-	}, []);
-
-	const [guideDismissed, setGuideDismissed] = useState(false);
-	const askGuide = introDone && unasked && !guideDismissed && persona === null;
-
-	// Declared below, used here: the chooser opens on arrival, so there is no
-	// trigger to give focus back to. Left alone it lands on `<body>` and Tab
-	// restarts at the top of the page; the box they came to type in is better.
-	const focusComposerRef = useRef<() => void>(() => {});
-
-	const closeGuide = useCallback(() => {
-		rememberGuideAsked();
-		setGuideDismissed(true);
-		focusComposerRef.current();
-	}, []);
-
-	/** The rail's list and its row actions. No conversation is open here. */
-	const { renameChat, regenerateTitle, deleteChat } = useConversationList();
-
-	const [drawerOpen, setDrawerOpen] = useState(false);
-
-	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
+	const [activeView, setActiveView] = useState<ViewState>('landing');
+	const [selectedPersona, setSelectedPersona] = useState<PersonaId | null>(null);
 
-	// Restored in an effect, never in the initialiser: the server renders an
-	// empty box, and a different first client render would fail to hydrate.
-	//
-	// Anything ALREADY in the box wins. Both routes are full-document SSR, so
-	// the composer is painted and focusable before React attaches, and this
-	// effect used to overwrite whatever had been typed in that window with the
-	// stashed draft -- usually nothing. The e2e harness documents the symptom
-	// from the outside and works around it by retrying up to four times
-	// (`e2e/lib/turn.mjs`), which is the shape of a defect nobody had located.
-	//
-	// A partial fix, honestly: this recovers the value only if React's
-	// hydration left it in place. When React has already reconciled the
-	// controlled `value` to empty, there is nothing here to read and the
-	// behaviour is exactly what it was -- so this cannot make anything worse,
-	// but it is not the whole of T3.4 either.
-	useEffect(() => {
-		const field = document.getElementById("aspire-composer");
-		const typed = field instanceof HTMLTextAreaElement ? field.value : "";
-		setDraft(typed || readLandingDraft());
-	}, []);
-	useEffect(() => {
-		stashLandingDraft(draft);
-	}, [draft]);
-
-	const voice = useVoice({
-		onTranscript: setDraft,
-		threadId: null,
-		language: lang,
-		persona,
-		onLanguageChange: setLanguageInUrl,
-	});
-
-	/** Bumped whenever the composer should take the cursor. */
-	const [focusSignal, setFocusSignal] = useState(1);
-	const focusComposer = useCallback(() => setFocusSignal((n) => n + 1), []);
-	focusComposerRef.current = focusComposer;
-
-	// Nothing here writes a chat's name, so the tab goes back to the product's.
-	useEffect(() => {
-		if (typeof document === "undefined") return;
-		document.title = DEFAULT_DOCUMENT_TITLE;
-	}, []);
-
-	/**
-	 * Warms the conversation screen once this one is idle.
-	 *
-	 * Splitting the two pages took the transcript, the directives and the whole
-	 * widget set out of this page's download — but it also moved them onto the
-	 * far side of the send button, which is the worst moment to be fetching
-	 * anything. Asking for the chunk on idle keeps both: nothing extra in the
-	 * first paint's way, and nothing left to fetch by the time a question is
-	 * ready. Only the component, never the loader: there is no conversation to
-	 * load yet.
-	 */
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		const warm = () => {
-			const route = router.routesById["/chat/$chatId"];
-			if (route) void router.loadRouteChunk(route);
-		};
-		// `requestIdleCallback` is still missing on older Safari.
-		const idle = window.requestIdleCallback;
-		if (idle) {
-			const handle = idle(warm, { timeout: 2500 });
-			return () => window.cancelIdleCallback?.(handle);
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Enter" && draft.trim()) {
+			startConversation(draft);
 		}
-		const timer = setTimeout(warm, 1200);
-		return () => clearTimeout(timer);
-	}, [router]);
+	};
 
-	/**
-	 * One press is one conversation, however fast it is repeated. Never
-	 * cleared: this page is on its way out, and a second staged turn would
-	 * replace the first under a different id, leaving the chat page that is
-	 * already navigating to look for a question that is no longer there.
-	 */
-	const handingOff = useRef(false);
-
-	/**
-	 * Opens a conversation and leaves its first question for the chat page.
-	 * Both the composer and the starter chips arrive here.
-	 */
-	const startConversation = useCallback(
-		(raw: string) => {
-			const text = raw.trim();
-			if (!text || handingOff.current) return;
-			handingOff.current = true;
-
-			voice.stopPlayback();
-
-			const threadId = newThreadId();
-			// Committed now, not when the answer settles: this is the rail's row.
-			upsertConversation(queryClient, {
-				threadId,
-				title: titleFor(text),
-				updatedAt: Date.now(),
-				messages: [{ role: "user", text }],
-			});
+	const startConversation = (message: string) => {
+		if (onStartConversation) {
+			onStartConversation(message);
+		} else {
+			const threadId = crypto.randomUUID();
 			stageFirstTurn({
 				threadId,
-				question: text,
-				simple: simpleMode,
-				// Captured here, where it is right: see `PendingTurn.language`.
-				language: voice.language,
+				question: message,
+				simple: false,
+				language: "en"
 			});
-			// The question has left, so it is not also a draft to come back to.
-			stashLandingDraft("");
+			navigate({ to: "/chat/$chatId", params: { chatId: threadId } });
+		}
+	};
 
-			void navigate({
-				to: "/chat/$chatId",
-				params: { chatId: threadId },
-				// Carried, not dropped.
-				search: (previous: AnswerSearch) => previous,
-				replace: true,
-				viewTransition: true,
-			});
-		},
-		[navigate, queryClient, simpleMode, voice.language, voice.stopPlayback],
-	);
+	if (activeView === 'history') {
+		return <HistoryView onBack={() => setActiveView('landing')} onSelectChat={(id) => navigate({ to: "/chat/$chatId", params: { chatId: id } })} />;
+	}
 
-	// Captured on open, not in the effect: by then the workspace is inert and focus has moved.
-	const railTrigger = useRef<HTMLElement | null>(null);
+	if (activeView === 'journey') {
+		return <JourneyView onBack={() => setActiveView('landing')} />;
+	}
 
-	const openDrawer = useCallback(() => {
-		railTrigger.current = document.activeElement as HTMLElement | null;
-		setDrawerOpen(true);
-	}, []);
+	if (activeView === 'parents') return <ParentsView onBack={() => setActiveView('landing')} />;
+	if (activeView === 'educators') return <EducatorsView onBack={() => setActiveView('landing')} />;
+	if (activeView === 'about') return <AboutView onBack={() => setActiveView('landing')} />;
 
-	// Trap focus and Escape, or Tab walks straight out of the drawer into the page behind it.
-	useEffect(() => {
-		if (!drawerOpen) return;
-
-		// `:not([inert])`, because the first button in the rail is `.rail__mark`
-		// — the A that toggles it — and that one is inert exactly when the drawer
-		// is open. Focusing it did nothing, so opening the drawer dropped focus
-		// on `<body>` and Tab restarted at the top of the page behind it.
-		document
-			.getElementById("aspire-rail")
-			?.querySelector<HTMLElement>("button:not([inert])")
-			?.focus();
-
-		const close = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setDrawerOpen(false);
-		};
-		window.addEventListener("keydown", close);
-		return () => {
-			window.removeEventListener("keydown", close);
-			const trigger = railTrigger.current;
-			railTrigger.current = null;
-			if (trigger?.isConnected) trigger.focus();
-		};
-	}, [drawerOpen]);
-
-	const handleOpenPast = useCallback(
-		(conversation: StoredConversation) => {
-			setDrawerOpen(false);
-			void navigate({
-				to: "/chat/$chatId",
-				params: { chatId: conversation.threadId },
-				search: (previous: AnswerSearch): AnswerSearch => ({
-					// "Explain it simply" belongs to the reader, so it survives moving between conversations.
-					...previous,
-					// Language does not.
-					...(conversation.language ? { lang: conversation.language } : {}),
-				}),
-				viewTransition: true,
-			});
-		},
-		[navigate],
-	);
-
-	/** This page is the new chat, so the press is a no-op with a cursor. */
-	const startNewChat = useCallback(() => {
-		setDrawerOpen(false);
-		focusComposer();
-	}, [focusComposer]);
-
-	/** Cmd/Ctrl+Shift+O — the same binding both reference products use. */
-	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => {
-			if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
-			if (event.code !== "KeyO") return;
-			event.preventDefault();
-			startNewChat();
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [startNewChat]);
-
-	const handleDeleteConversation = useCallback(
-		(conversation: StoredConversation) => {
-			clearEligibilityResult(conversation.threadId);
-			deleteChat(conversation.threadId);
-		},
-		[deleteChat],
-	);
-
-	const handleSaveConversation = useCallback(
-		(conversation: StoredConversation) => {
-			downloadTranscript(
-				conversation.messages,
-				// The conversation's own language when it is known, the interface language otherwise.
-				conversation.language ?? voice.language,
-			);
-		},
-		[voice.language],
-	);
+	if (activeView === 'stories') {
+		return <StoriesView onBack={() => setActiveView('landing')} />;
+	}
 
 	return (
-		<div
-			className="app"
-			data-phase="landing"
-			data-rail={drawerOpen ? "expanded" : "collapsed"}
-		>
-			{askGuide ? (
-				<GuideChooser
-					onChoose={(next) => {
-						// `null` is the general option, which is also what
-						// `setPersona` takes to mean "no band".
-						setPersona(next);
-						closeGuide();
-					}}
-					onSkip={closeGuide}
-				/>
-			) : null}
+		<div className="relative min-h-screen bg-white flex flex-col font-sans overflow-x-hidden selection:bg-[#c22f99]/20 text-[#1A103C]">
 
-			<div className="atmosphere" aria-hidden="true">
-				<span />
-				<span />
-				<span />
-				<span />
+			{/* Scenic Background Layers */}
+			<div className="absolute inset-0 pointer-events-none z-0 overflow-hidden bg-[#1A103C]">
+				<div 
+					className="absolute inset-0" 
+					style={{
+						background: `
+							linear-gradient(
+								to bottom,
+								rgba(255,255,255,0.3) 0%,
+								rgba(255,255,255,0.7) 40%,
+								rgba(255,255,255,0.95) 75%,
+								#ffffff 100%
+							),
+							url('/images/hero-bg.png') center center / cover no-repeat
+						`,
+						filter: 'saturate(1.0) brightness(1.0)'
+					}}
+				></div>
 			</div>
 
-			{/* First visit only: a short opening, and then the chooser above.
-			    Renders nothing at all for a returning reader. */}
-			<FirstRun onDone={finishIntro} />
-
-			<div className="frame">
-				{/* A drawer at every width here, never a column: there is nothing to sit beside. */}
-				<Rail
-					collapsed={!drawerOpen}
-					unreachable={!drawerOpen}
-					activeThreadId={null}
-					onToggle={() => setDrawerOpen((open) => !open)}
-					onNewChat={startNewChat}
-					onOpenPast={handleOpenPast}
-					onSaveConversation={handleSaveConversation}
-					onRenameConversation={(conversation, title) =>
-						renameChat(conversation.threadId, title)
-					}
-					onRegenerateTitle={(conversation) =>
-						regenerateTitle(conversation.threadId)
-					}
-					onDeleteConversation={handleDeleteConversation}
-				/>
-
-				{drawerOpen ? (
-					<button
-						type="button"
-						className="rail-scrim"
-						onClick={() => setDrawerOpen(false)}
-					>
-						<span className="sr-only">Close conversations</span>
+			{/* Elegant Header */}
+			<header className="relative z-10 w-full max-w-[90rem] mx-auto px-4 sm:px-8 py-4 flex items-center justify-between">
+				<div className="flex items-center gap-8">
+					<Brandmark />
+					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
+						<button type="button" onClick={() => setActiveView('stories')} className="text-[#c22f99] hover:text-[#8a1c6a] transition-colors font-bold cursor-pointer">Explore</button>
+						<button type="button" onClick={() => setActiveView('journey')} className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors cursor-pointer">Journey</button>
+						<button type="button" onClick={() => setActiveView('parents')} className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors font-bold cursor-pointer">For Parents</button>
+						<button type="button" onClick={() => setActiveView('educators')} className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors font-bold cursor-pointer">For Educators</button>
+						<button type="button" onClick={() => setActiveView('about')} className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors font-bold cursor-pointer">About ASPIRE</button>
+					</nav>
+				</div>
+				<div className="flex items-center gap-4">
+					<button type="button" onClick={() => navigate({ to: "/signin" })} className="hidden sm:block text-sm font-semibold text-[#1A103C]/70 hover:text-[#1A103C] transition-colors px-4 py-2 cursor-pointer">
+						Sign in
 					</button>
-				) : null}
-
-				<main className="workspace" inert={drawerOpen || undefined}>
-					{/* The way to the input without walking the whole page. */}
-					<a href="#aspire-composer" className="skip-link">
-						Skip to the message box
-					</a>
-
-					{/* There is no bar up here to hold it, so it stands on its own.
-
-					    Not gated on having a history any more. The rail carries
-					    "How to use ASPIRE AI", and gating this button meant the one
-					    reader most likely to want it -- somebody here for the first
-					    time, with nothing in their history -- was the only reader
-					    who could not reach it. The empty history has had its own
-					    written state all along, so opening onto it was always an
-					    intended destination. */}
-					<button
-						type="button"
-						className="rail-open"
-						onClick={openDrawer}
-						aria-controls="aspire-rail"
-						aria-expanded={drawerOpen}
-					>
-						<MenuIcon />
-						<span className="sr-only">Open menu and conversations</span>
+					<button type="button" onClick={() => setActiveView('history')} aria-label="View learning history" className="w-10 h-10 rounded-full border border-[#482977]/20 flex items-center justify-center text-[#482977] bg-white hover:bg-[#F8E7F0] hover:text-[#c22f99] hover:border-[#c22f99]/30 transition-all shadow-sm cursor-pointer">
+						<i className="ph-duotone ph-magic-wand text-lg"></i>
 					</button>
+				</div>
+			</header>
 
-					{/* The way into an account, whenever the sidebar is not there to carry it. */}
-					{/* `inert` as well as the CSS, because they cover different people. */}
-					<div
-						className="account-slot"
-						data-shown={!drawerOpen || undefined}
-						inert={drawerOpen || undefined}
-					>
-						<AccountControl variant="corner" />
-					</div>
+			{/* Main Content */}
+			<main className="relative z-10 flex-1 w-full max-w-[90rem] mx-auto px-4 sm:px-8 py-2 flex flex-col justify-center">
+				
+				{/* Hero Section */}
+				<div className="max-w-4xl mb-6 relative z-10">
+					<h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
+						Where will your<br />money <span className="italic text-transparent bg-clip-text bg-gradient-to-r from-[#c22f99] via-[#482977] to-[#1A103C] pr-2">take you!</span>
+					</h1>
+					<p className="text-lg md:text-xl text-[#482977] font-medium mb-6 tracking-wide">
+						Ask. Play. Explore. Build your money future.
+					</p>
 
-					<div className="stage">
-						<div className="thread">
-							<div className="thread__inner">
-								<div className="hero">
-									<Brandmark />
-									<h1 className="hero__title">
-										What do you want to learn about money today?
-									</h1>
-									<p className="hero__sub">
-										Ask me about investing, your ASPIRE modules, or the
-										programme itself.
-									</p>
+					{/* Search / Ask Input */}
+					<div className="relative bg-white/80 backdrop-blur-2xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex flex-col shadow-[0_15px_40px_rgba(72,41,119,0.1)] ring-1 ring-white hover:ring-[#c22f99]/20 transition-all duration-500 max-w-2xl">
+						<input
+							type="text"
+							value={draft}
+							onChange={(e) => setDraft(e.target.value)}
+							onKeyDown={handleKeyDown}
+							placeholder="Ask me anything about money or ASPIRE..."
+							className="bg-transparent text-lg text-[#1A103C] placeholder-[#1A103C]/40 focus:outline-none py-2 px-2 w-full mb-3 font-medium"
+						/>
+						
+						<div className="flex items-end justify-between border-t border-[#482977]/10 pt-3 px-1">
+							<div className="flex flex-col">
+								<span className="text-[9px] font-bold uppercase tracking-wider text-[#482977]/60 mb-1 ml-[28px]">Choose your guide</span>
+								<div className="flex items-center gap-2">
+									<i className="ph-duotone ph-user text-[#482977]/60 text-lg"></i>
+									<select 
+										value={selectedPersona || ""} 
+										onChange={(e) => setSelectedPersona(e.target.value as PersonaId)}
+										className="appearance-none bg-transparent border-none text-sm font-semibold text-[#482977] outline-none cursor-pointer hover:text-[#c22f99] transition-colors"
+									>
+										<option value="" className="bg-white">Guest</option>
+										{PERSONAS.map(p => (
+											<option key={p.id} value={p.id} className="bg-white text-[#1A103C]">{p.name}</option>
+										))}
+									</select>
+									<i className="ph-bold ph-caret-down text-[#482977]/40 text-xs -ml-1"></i>
 								</div>
 							</div>
-						</div>
-
-						{voice.phase === "consent" ? (
-							<div className="voice-slot">
-								<VoiceConsent onAllow={voice.allowMic} onDeny={voice.denyMic} />
-							</div>
-						) : null}
-
-						{voice.note ? (
-							<div className="voice-slot">
-								<VoiceNote
-									note={voice.note}
-									onAction={voice.runNoteAction}
-									onDismiss={voice.dismissNote}
-								/>
-							</div>
-						) : null}
-
-						{/* Sits in the voice-note slot, directly above the picker that caused it. */}
-						{personaNotice ? (
-							<div className="voice-slot">
-								<output className="voice-note" data-tone="warn">
-									<span className="voice-note__text">{personaNotice}</span>
-									<button
-										type="button"
-										className="icon-btn icon-btn--sm"
-										onClick={dismissPersonaNotice}
-									>
-										<CloseIcon />
-										<span className="sr-only">Dismiss</span>
-									</button>
-								</output>
-							</div>
-						) : null}
-
-						<Composer
-							onSend={startConversation}
-							busy={false}
-							onStop={() => {}}
-							simpleMode={simpleMode}
-							onToggleSimpleMode={toggleSimpleMode}
-							persona={persona}
-							onPersonaChange={setPersona}
-							draft={draft}
-							onDraftChange={setDraft}
-							focusSignal={focusSignal}
-							voice={voice}
-						/>
-
-						<div className="starters">
-							<div className="starters__row">
-								{starterPrompts.map((prompt) => (
-									<button
-										key={prompt}
-										type="button"
-										className="starter"
-										onClick={() => startConversation(prompt)}
-									>
-										{prompt}
-									</button>
-								))}
+							
+							<div className="flex items-center gap-2">
+								<button 
+									type="button"
+									aria-label="Voice input"
+									className="w-10 h-10 rounded-full flex items-center justify-center transition-colors bg-[#F8E7F0]/50 text-[#c22f99] hover:bg-[#F8E7F0] ring-1 ring-[#c22f99]/20 cursor-pointer"
+								>
+									<i className="ph-bold ph-microphone text-lg"></i>
+								</button>
+								<button 
+									type="button"
+									onClick={() => startConversation(draft)}
+									disabled={!draft.trim()}
+									aria-label="Send message"
+									className="w-10 h-10 rounded-full bg-gradient-to-r from-[#c22f99] to-[#8a1c6a] flex items-center justify-center text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_4px_15px_rgba(194,47,153,0.4)] transition-all cursor-pointer"
+								>
+									<i className="ph-bold ph-paper-plane-right text-base"></i>
+								</button>
 							</div>
 						</div>
 					</div>
+					
+					{/* Floating Gamification Widget */}
+					<button 
+						type="button"
+						className="hidden lg:flex text-left absolute top-0 right-0 lg:translate-x-12 xl:translate-x-24 bg-white/90 backdrop-blur-2xl border border-[#482977]/20 rounded-2xl p-4 flex-col gap-1 shadow-[0_20px_50px_rgba(72,41,119,0.15)] animate-float-slow z-20 hover:scale-105 transition-transform cursor-pointer group w-64" 
+						onClick={() => setActiveView("journey")}
+					>
+						<div className="text-[#1A103C] text-sm font-bold mb-1">You're on your way!</div>
+						{/* The progress bar and "720 / 1,000 XP" were literals, and a bar
+						  * was the wrong shape for the number anyway: a balance is earned
+						  * AND SPENT, so spending would run it backwards and read as a
+						  * punishment for using what you earned. A bar only ever goes up.
+						  *
+						  * So this is one figure, not a bar. The honest source is the
+						  * cumulative earned total; it is not wired here because the
+						  * landing page is answered before anyone has signed in.
+						  * `coinBalance` stays null until there is a session to read,
+						  * and the row simply does not render.
+						  */}
+						{coinBalance !== null && (
+							<div className="flex items-center gap-2 border-t border-[#482977]/10 pt-2 mt-1 w-full">
+								{/* amber-700, not #fed141: the brand gold is 1.46:1 on white and fails AA.
+								  * It stays gold on the dark cards, where it measures 12:1. */}
+								<i className="ph-fill ph-coin text-[#b45309] text-sm drop-shadow-sm"></i>
+								<span className="text-xs text-[#482977] font-bold">{COIN_LABEL}</span>
+								<span className="text-xs text-[#1A103C] font-black ml-auto">{coinBalance}</span>
+							</div>
+						)}
+					</button>
+				</div>
 
-					{/* One text node: as two, the flex gap made "can" and "make" run together when copied. */}
-					<p className="disclaimer">ASPIRE AI can make mistakes.</p>
-				</main>
-			</div>
+				{/* Cards Grid - Restored to Deep Brand Colors */}
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 relative z-10">
+					
+					{/* Ask ASPIRE Card */}
+					<button type="button" onClick={() => startConversation("Hello ASPIRE, I am ready to explore the financial and learning ecosystem in St. Kitts and Nevis.")} className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(194,47,153,0.3)] hover:border-[#c22f99] flex flex-row items-center justify-between h-32 cursor-pointer">
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<div className="flex items-center gap-2 mb-1">
+									<h3 className="text-xl font-display font-semibold text-white">Ask ASPIRE</h3>
+									<span className="bg-[#c22f99] text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">New</span>
+								</div>
+								<p className="text-[#c22f99] font-medium text-xs mb-1 drop-shadow-md">Your AI Guide</p>
+								<p className="text-white/70 text-xs leading-snug line-clamp-2">Get smart answers to your money questions.</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#c22f99]/20 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end">
+							<i className="ph-duotone ph-robot text-[4rem] text-white/90 group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-500 drop-shadow-[0_0_20px_rgba(194,47,153,0.6)]"></i>
+						</div>
+					</button>
+
+					{/* Play Card */}
+					<button type="button" onClick={() => startConversation("Start the ASPIRE savings challenge to help me manage my 1,000 XCD youth grant.")} className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(59,130,246,0.3)] hover:border-[#3b82f6] flex flex-row items-center justify-between h-32 cursor-pointer">
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<h3 className="text-xl font-display font-semibold text-white mb-1">Play</h3>
+								<p className="text-[#3b82f6] font-medium text-xs mb-1 drop-shadow-md">Today's Challenge</p>
+								<p className="text-white/70 text-xs leading-snug line-clamp-2">Learn by doing. Earn coins and level up!</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#3b82f6]/20 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end items-center">
+							<i className="ph-duotone ph-game-controller text-[4rem] text-blue-300 group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-500 drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"></i>
+							<i className="ph-fill ph-coin text-2xl text-[#fed141] absolute -bottom-1 -left-2 animate-bounce drop-shadow-lg"></i>
+						</div>
+					</button>
+
+					{/* Explore Card */}
+					<button type="button" onClick={() => setActiveView("stories")} className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(244,63,94,0.3)] hover:border-[#f43f5e] flex flex-row items-center justify-between h-32 cursor-pointer">
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<h3 className="text-xl font-display font-semibold text-white mb-1">Explore</h3>
+								<p className="text-[#f43f5e] font-medium text-xs mb-1 drop-shadow-md">Miracle Mountain</p>
+								<p className="text-white/70 text-xs leading-snug line-clamp-2">Listen to a story or watch an adventure.</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#f43f5e]/20 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end">
+							<i className="ph-duotone ph-play-circle text-[4rem] text-rose-300 group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.6)]"></i>
+							<i className="ph-fill ph-sparkle text-xl text-[#fed141] absolute top-0 right-0 animate-pulse drop-shadow-lg"></i>
+						</div>
+					</button>
+
+					{/* My Journey Card */}
+					<button type="button" onClick={() => setActiveView("journey")} className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(254,209,65,0.3)] hover:border-[#fed141] flex flex-row items-center justify-between h-32 cursor-pointer">
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<h3 className="text-xl font-display font-semibold text-white mb-1">My Journey</h3>
+								<p className="text-[#fed141] font-medium text-xs mb-2 drop-shadow-md">Your progress path</p>
+								<div className="flex gap-3 text-[10px] font-medium text-white/70">
+									<div className="flex flex-col"><span className="text-[#fed141] text-sm leading-none font-bold">3</span> Badges</div>
+									<div className="flex flex-col"><span className="text-white text-sm leading-none font-bold">7</span> Lessons</div>
+								</div>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#fed141]/10 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end items-center">
+							<div className="w-[4rem] h-[4rem] rounded-full border-[4px] border-[#1A103C] border-t-[#fed141] border-r-[#fed141] flex items-center justify-center relative group-hover:rotate-45 transition-transform duration-700 shadow-lg bg-[#231548]">
+								<i className="ph-fill ph-star text-[2rem] text-[#fed141] group-hover:-rotate-45 transition-transform duration-700 drop-shadow-[0_0_15px_rgba(254,209,65,0.6)]"></i>
+							</div>
+						</div>
+					</button>
+				</div>
+
+				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
+					{/* Try something quick */}
+					<div className="lg:col-span-7">
+						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
+							<i className="ph-bold ph-lightning text-[#c22f99]"></i> Try something quick
+						</h3>
+						<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+							<button type="button" onClick={() => startConversation('What exactly is the ASPIRE program in St. Kitts and Nevis?')} className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#c22f99]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer">
+								<div className="w-8 h-8 rounded-full bg-fuchsia-50 flex items-center justify-center text-[#c22f99]">
+									<i className="ph-duotone ph-graduation-cap text-lg"></i>
+								</div>
+								<div className="text-left mt-1">
+									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">What is ASPIRE?</div>
+									<div className="text-[10px] font-medium text-[#482977]/70 leading-tight">Learn the basics</div>
+								</div>
+							</button>
+							<button type="button" onClick={() => startConversation('How can you get the Grant Money?')} className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#fed141]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer">
+								<div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">
+									<i className="ph-duotone ph-coins text-lg"></i>
+								</div>
+								<div className="text-left mt-1">
+									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">Grant Money</div>
+									<div className="text-[10px] font-medium text-[#482977]/70 leading-tight">Learn about the ASPIRE grant</div>
+								</div>
+							</button>
+							<button type="button" onClick={() => startConversation('Help me build wealth in St. Kitts and Nevis.')} className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#482977]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer">
+								<div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-[#482977]">
+									<i className="ph-duotone ph-chart-line-up text-lg"></i>
+								</div>
+								<div className="text-left mt-1">
+									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">SKN Wealth Builder</div>
+									<div className="text-[10px] font-medium text-[#482977]/70 leading-tight">Build your future</div>
+								</div>
+							</button>
+						</div>
+					</div>
+
+					{/* Meet your guides */}
+					<div className="lg:col-span-5">
+						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
+							<i className="ph-bold ph-users text-blue-500"></i> Meet your guides
+						</h3>
+						<div className="bg-white/80 backdrop-blur-xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex gap-4 overflow-x-auto no-scrollbar shadow-sm">
+							{[
+								{ name: 'Skye', color: 'from-[#c22f99] to-pink-500', icon: 'ph-butterfly' },
+								{ name: 'Kaleb', color: 'from-blue-500 to-cyan-500', icon: 'ph-rocket' },
+								{ name: 'Zion', color: 'from-[#fed141] to-amber-500', icon: 'ph-headphones' },
+								{ name: 'Imani', color: 'from-[#482977] to-indigo-500', icon: 'ph-book-open' },
+								{ name: 'Azuri', color: 'from-emerald-500 to-teal-500', icon: 'ph-chalkboard-teacher' },
+							].map(guide => (
+								<div key={guide.name} className="flex flex-col items-center gap-2 flex-shrink-0 group">
+									<div className={`w-14 h-14 rounded-full bg-gradient-to-br ${guide.color} p-[2px] shadow-sm cursor-pointer group-hover:scale-110 transition-transform`}>
+										<div className="w-full h-full bg-[#1A103C] rounded-full border-[1.5px] border-[#1A103C] flex items-center justify-center relative overflow-hidden">
+											<div className={`absolute inset-0 bg-gradient-to-br ${guide.color} opacity-20`}></div>
+											<i className={`ph-duotone ${guide.icon} text-xl text-white drop-shadow-sm`}></i>
+										</div>
+									</div>
+									<span className="text-[11px] font-bold text-[#1A103C]">{guide.name}</span>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			</main>
+			
+			{/* Institutional Footer */}
+			<footer className="relative z-10 w-full border-t border-[#482977]/10 bg-white/90 backdrop-blur-xl mt-auto">
+				<div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-4 flex flex-wrap gap-6 items-center justify-between">
+					{/* THREE STATISTICS WERE HERE, AND NONE OF THEM WERE TRUE.
+					  *
+					  * "4,200+ young learners", "18,745 lessons completed" and
+					  * "2.1M+ Magic Coins earned" were literals written during a
+					  * design pass. On a Government of St Kitts and Nevis service
+					  * those are published claims about programme adoption, and
+					  * anyone may quote them back.
+					  *
+					  * Deleted rather than zeroed: a placeholder number is still a
+					  * number a reader believes. The band is left in place so real
+					  * counts can be dropped in when there is an endpoint to serve
+					  * them.
+					  */}
+
+					<div className="flex items-center gap-4">
+						<div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center">
+							<i className="ph-duotone ph-heart text-xl text-rose-500"></i>
+						</div>
+						<div>
+							<div className="text-sm text-[#482977]/70 font-semibold">For a stronger Saint Kitts & Nevis</div>
+							<div className="text-[#1A103C] font-bold">Our future. Our choice. 🇰🇳</div>
+						</div>
+					</div>
+				</div>
+			</footer>
 		</div>
 	);
 }
