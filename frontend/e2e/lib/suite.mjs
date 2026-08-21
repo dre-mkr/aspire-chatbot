@@ -98,6 +98,36 @@ function judge(step, record) {
 	}
 	if (want.citations && !ui?.sources) reasons.push("no citations panel");
 
+	// `citations: true` proves the panel opened. These prove it is worth
+	// opening: that a source is named, that its link is a real one, and that
+	// the same page is not listed twice.
+	if (want.sourceLinks) {
+		const rows = ui?.sourceList ?? [];
+		if (rows.length === 0) reasons.push("the sources panel listed nothing");
+		if (rows.some((row) => !row.name)) reasons.push("a source had no name");
+
+		const linked = rows.filter((row) => row.href);
+		if (linked.length === 0) reasons.push("no source was clickable");
+		for (const row of linked) {
+			if (!/^https?:\/\//.test(row.href)) {
+				reasons.push(`a source link is not a web address: ${row.href}`);
+			}
+			if (row.target !== "_blank" || !/noopener/.test(row.rel ?? "")) {
+				reasons.push(`a source link opens unsafely: ${row.href}`);
+			}
+		}
+
+		const seen = new Set(linked.map((row) => row.href));
+		if (seen.size !== linked.length) {
+			reasons.push("the same page was listed more than once");
+		}
+	}
+
+	// The counterpart: a turn that answered from nothing must show nothing.
+	if (want.noCitations && ui?.sources) {
+		reasons.push(`a sources panel appeared on a turn with no sources (${ui.sources})`);
+	}
+
 	record.skipped = skipped;
 	return reasons;
 }

@@ -14,6 +14,7 @@ import {
 	CheckIcon,
 	ChevronDownIcon,
 	CopyIcon,
+	ExternalLinkIcon,
 	PauseIcon,
 	RetryIcon,
 	SourcesIcon,
@@ -30,6 +31,7 @@ import {
 	type InlineNode,
 	parseInline,
 } from "#/lib/aspire/knowledge";
+import { type GroupedSource, groupSources } from "#/lib/aspire/sources";
 import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
@@ -161,17 +163,9 @@ export function Transcript({
 	/** The suggestions belonging to the answer at the tail, revealed or not. */
 	const chips = streaming ? streaming.followUps : followUps;
 
-	/** What a screen reader is told, and when. */
-	const settled = streaming ? undefined : messages.at(-1);
-	const announcement = streaming
-		? ""
-		: isThinking
-			? "Finding an answer."
-			: settled?.role === "assistant"
-				? `Answer ready. ${answerToText(settled.blocks)}`
-				: settled?.role === "error"
-					? settled.text
-					: "";
+	/* What a screen reader is told lives in `ChatScreen`, which owns the app's
+	   one status region. This file used to carry a second one saying much the
+	   same thing, and the two together read every answer out twice. */
 
 	/** Windowing, and how far down the scroller this list starts. */
 	const listRef = useRef<HTMLDivElement>(null);
@@ -332,11 +326,6 @@ export function Transcript({
 
 	return (
 		<div className="transcript" ref={listRef}>
-			{/* `<output>` is a status region by definition, so the role is implicit. */}
-			<output className="sr-only" aria-live="polite" aria-atomic="true">
-				{announcement}
-			</output>
-
 			{windowed ? (
 				<div
 					className="transcript__window"
@@ -530,16 +519,28 @@ function Inline({ nodes }: { nodes: Array<InlineNode> }) {
 }
 
 /**
- * The knowledge-base rows an answer was built from.
+ * Where an answer came from, and how to go and read it.
  *
  * Closed by default and one tap to open, because most readers do not want it and
  * the ones who do want it badly. What changed here is how easy it is to find:
  * it was a grey pill reading "3 sources" that looked like metadata, and it now
  * says what it is, in the brand's own colour, with the count as a badge.
  *
- * The panel is deliberately plain. Everything in it is corpus text — the row's
- * own question and its own words — so there is nothing to summarise, and a
- * child reading it should meet the same sentence the assistant read.
+ * One entry per SOURCE, not per row. The server cites the knowledge-base rows
+ * it used, and four rows off the ASPIRE FAQ page are four rows and one source —
+ * so they group under one heading with the extracts beneath it, rather than
+ * printing the same link four times. The count is the number of sources, which
+ * is the number a reader would say out loud.
+ *
+ * The panel is deliberately plain. Everything under a heading is corpus text —
+ * the row's own question and its own words — so there is nothing to summarise,
+ * and a child reading it should meet the same sentence the assistant read.
+ *
+ * The heading is a link only when there is something real to open. A source
+ * with no public page (the programme's own teaching material), a row whose
+ * stored URL would not validate, and a reader whose persona is shown no links
+ * all render the same way: named, not linked. Named-but-not-linked is the
+ * honest outcome, and it is never a fabricated URL.
  *
  * There is no "no sources" state, and that is a property rather than an
  * omission: the server builds this panel from the intersection of what was
@@ -548,6 +549,8 @@ function Inline({ nodes }: { nodes: Array<InlineNode> }) {
  */
 function Sources({ sources }: { sources: Array<Source> }) {
 	if (sources.length === 0) return null;
+	const groups = groupSources(sources);
+	if (groups.length === 0) return null;
 
 	return (
 		// Opening grows the thread by the panel's height, which scroll-follow does not cover.
@@ -563,42 +566,103 @@ function Sources({ sources }: { sources: Array<Source> }) {
 			<summary className="sources__toggle">
 				<SourcesIcon />
 				<span className="sources__label">Where this came from</span>
-				<span className="sources__count">{sources.length}</span>
+				<span className="sources__count">{groups.length}</span>
+				{/* The badge reads as a bare number otherwise, and it counts
+				    sources now rather than rows — worth saying out loud. */}
+				<span className="sr-only">
+					{groups.length === 1 ? "source" : "sources"}
+				</span>
 				<ChevronDownIcon size={14} className="sources__chevron" />
 			</summary>
 
 			<ol className="sources__list">
-				{sources.map((source, index) => {
-					const label = source.metadata?.question ?? source.metadata?.category;
-					const reference = source.metadata?.kb_id;
-					// The snippet earns its space only when it says something the label does not.
-					const snippet =
-						source.content && source.content !== String(label ?? "")
-							? source.content
-							: null;
-					return (
-						// biome-ignore lint/suspicious/noArrayIndexKey: snippets can repeat text; position is their identity
-						<li key={index} className="source">
-							{/* Numbered, so "the second one" is a thing a reader can say. */}
-							<span className="source__n" aria-hidden="true">
-								{index + 1}
-							</span>
-							<div className="source__body">
-								<p className="source__head">
-									{label ? (
-										<span className="source__label">{String(label)}</span>
-									) : null}
-									{reference ? (
-										<span className="source__ref">{String(reference)}</span>
-									) : null}
-								</p>
-								{snippet ? <p className="source__text">{snippet}</p> : null}
-							</div>
-						</li>
-					);
-				})}
+				{groups.map((group, index) => (
+					<li key={group.key} className="source">
+						{/* Numbered, so "the second one" is a thing a reader can say. */}
+						<span className="source__n" aria-hidden="true">
+							{index + 1}
+						</span>
+						<div className="source__body">
+							<SourceHead group={group} />
+							{group.extracts.map((extract, position) =>
+								// A row with nothing to show is nothing to show. Without this
+								// it renders as an empty bordered gap under the heading.
+								extract.question || extract.kbId || extract.snippet ? (
+									// biome-ignore lint/suspicious/noArrayIndexKey: two rows of one page can repeat both id and text; position is their identity
+									<div key={position} className="source__extract">
+										{extract.question || extract.kbId ? (
+											<p className="source__head">
+												{extract.question ? (
+													<span className="source__label">
+														{extract.question}
+													</span>
+												) : null}
+												{extract.kbId ? (
+													<span className="source__ref">{extract.kbId}</span>
+												) : null}
+											</p>
+										) : null}
+										{extract.snippet ? (
+											<p className="source__text">{extract.snippet}</p>
+										) : null}
+									</div>
+								) : null,
+							)}
+						</div>
+					</li>
+				))}
 			</ol>
 		</details>
+	);
+}
+
+/**
+ * A source's own name, as a link where there is one.
+ *
+ * `target="_blank"` and `rel="noopener noreferrer"` for the same reason every
+ * other outbound link in the app carries them, and because leaving mid-answer
+ * would lose the conversation. The domain sits under the title rather than
+ * beside it: it is the thing a cautious reader checks before tapping, and a
+ * title long enough to wrap should not push it off the row.
+ */
+function SourceHead({ group }: { group: GroupedSource }) {
+	if (!group.label && !group.domain) {
+		// Attributed to nothing. The extracts below still stand on their own,
+		// and inventing a heading for them would be the one thing this panel
+		// must never do.
+		return null;
+	}
+
+	const name = group.label || group.domain;
+	if (!group.href) {
+		// No domain line. A host is a URL written shorter, and this branch is
+		// where a reader who is shown no links ends up — printing the domain
+		// beneath the name would hand them the thing the gate withheld. The
+		// server blanks it too; this is the second of the two.
+		return (
+			<p className="source__origin">
+				<span className="source__site">{name}</span>
+			</p>
+		);
+	}
+
+	return (
+		<p className="source__origin">
+			<a
+				className="source__site source__site--link"
+				href={group.href}
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				{name}
+				<ExternalLinkIcon className="source__out" aria-hidden="true" />
+				{/* Says where it goes, for a reader who cannot see the icon. */}
+				<span className="sr-only">(opens {group.domain} in a new tab)</span>
+			</a>
+			{group.domain ? (
+				<span className="source__domain">{group.domain}</span>
+			) : null}
+		</p>
 	);
 }
 

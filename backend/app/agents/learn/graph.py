@@ -746,7 +746,15 @@ async def _teach_invoke(messages):
 
 
 async def _teach_retrieve(query: str):
-    """Knowledge-base rows for the RAG-teach fallback, searched on the UTTERANCE."""
+    """Knowledge-base rows for the RAG-teach fallback, searched on the UTTERANCE.
+
+    The audience is hardcoded to "youth" and `resolve_concept` calls this with
+    the query alone, so `learning_sample` and `learning_preview` are read
+    against a slice that is not theirs. Harmless today -- `AUDIENCE_TAGS` maps
+    "public" and "youth" identically -- and a real defect the moment the two
+    diverge. Left as it is rather than given a parameter nobody passes: fixing
+    it means threading the agent name down through `resolve_concept`.
+    """
     from app.agents.qa.graph import _search
     from app.agents.qa.nodes import _permitted
 

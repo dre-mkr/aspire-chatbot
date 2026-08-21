@@ -67,6 +67,7 @@ def contacts() -> dict[str, str]:
     return {
         "email": settings.aspire_contact_email,
         "phone": settings.aspire_contact_phone,
+        "phone_alt": settings.aspire_contact_phone_alt,
         "website": settings.aspire_contact_website,
         "office": settings.aspire_contact_office,
     }

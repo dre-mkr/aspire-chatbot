@@ -10,6 +10,7 @@ from typing import Any, Literal
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
+from app.context.session_context import conversation_reference
 from app.graph.state import MINOR_BANDS, AspireState
 from app.safety import pii
 from app.schemas.directives import EscalatedDirective
@@ -223,9 +224,14 @@ def make_open_ticket(persist=None):
                 # The reference has already been minted and is about to be shown.
                 logger.exception("Could not persist ticket %s", ticket_id)
 
+        # `ref` is the `ASP-#####` the persona cards ask a reader to quote. It
+        # is derived from the session id rather than stored, so this line is
+        # what lets the ASPIRE team turn a reference a caller read down the
+        # phone back into the conversation it belongs to.
         logger.warning(
-            "escalation ticket=%s priority=%s category=%s guardian=%s session=%s",
+            "escalation ticket=%s ref=%s priority=%s category=%s guardian=%s session=%s",
             ticket_id,
+            conversation_reference(str(state.get("session_id") or "")),
             decision.priority,
             decision.category,
             decision.notify_guardian,

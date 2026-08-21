@@ -4,7 +4,15 @@ from pydantic import BaseModel, Field
 
 
 class Source(BaseModel):
-    """One knowledge-base snippet the agent actually retrieved for this turn."""
+    """One knowledge-base snippet the agent actually retrieved for this turn.
+
+    NOT the live contract. Nothing constructs a `ChatResponse`: the only chat
+    route is `POST /v2/chat/stream`, and a turn's sources reach the client as a
+    `CitationsDirective` (`app/schemas/directives.py`) carrying one `CitationRef`
+    per cited row -- kb_id, the row's question and snippet, and its validated
+    `url`/`site`/`page`/`domain`. Anything reviving this model must carry those
+    fields too, or it will serve sources with nothing to open.
+    """
 
     content: str
     metadata: dict = Field(default_factory=dict)

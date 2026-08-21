@@ -38,15 +38,34 @@ def normalise(query: str) -> str:
 
 @lru_cache(maxsize=1)
 def corpus_fingerprint() -> str:
-    """A short digest of the knowledge base the answers were built from."""
-    path = get_settings().resolved(get_settings().knowledge_base_csv)
+    """A short digest of the knowledge base the answers were built from.
+
+    Covers the source registry as well as the CSV. A cached answer carries its
+    citations, and `data/sources.yaml` decides what those citations are CALLED
+    -- so renaming a source or adding a page title, without this, would leave
+    every shelved answer citing it by the old name for the whole seven-day TTL,
+    and `_replay` would write that stale wording permanently into conversation
+    history on the way past.
+    """
+    settings = get_settings()
+    path = settings.resolved(settings.knowledge_base_csv)
     try:
-        digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()[:12]
+        digest = hashlib.sha256(Path(path).read_bytes())
     except OSError:
         # No corpus to fingerprint is not a reason to stop answering.
         logger.warning("Could not fingerprint %s; caching without one.", path)
         return "nocorpus"
-    return digest
+
+    from app.sources import REGISTRY_PATH
+
+    try:
+        digest.update(REGISTRY_PATH.read_bytes())
+    except OSError:
+        # The registry only supplies wording; without it citations fall back to
+        # their domain, which is a coherent state and not one to stop for.
+        logger.warning("Could not fingerprint %s; caching without it.", REGISTRY_PATH)
+
+    return digest.hexdigest()[:12]
 
 
 def namespace() -> str:

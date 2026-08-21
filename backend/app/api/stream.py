@@ -64,6 +64,10 @@ _DEVICE_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 #: only these, and no words, has said nothing to the reader.
 DECORATIONS: frozenset[str] = frozenset({"quick_replies", "citations"})
 
+#: How many cited rows one turn may send. Matches `CitationsDirective.refs`'s own
+#: ceiling; the panel collapses them to at most a handful of distinct sources.
+CITATION_REFS_MAX = 8
+
 #: What to say when the graph produced no answer at all -- a bug, said out loud
 #: rather than served as an empty message the reader cannot tell from a hang.
 EMPTY_TURN: dict[str, str] = {
@@ -182,7 +186,7 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
         if cached is not None:
             logger.info("cache hit session=%s", thread_id)
             timing.annotate(cache_hit=True, cache_layer="exact")
-            async for frame in _replay(interceptor, record, cached, started):
+            async for frame in _replay(interceptor, record, cached, started, claims):
                 yield frame
             return
 
@@ -309,7 +313,7 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
 
     # ── the turn's directives ──
     # Emitted after the prose, from the closing summary `persist` published.
-    directives = _closing_directives(turn)
+    directives = _closing_directives(turn, claims=claims)
 
     # A paused `interrupt()` is asking the reader for something, and its payload is the directive.
     directives.extend(await _pending_interrupts(graph, config))
@@ -438,12 +442,17 @@ async def _replay(
     record: "turn_service.TurnRecord",
     cached: "turn_service.CachedTurn",
     started: float,
+    claims: Any = None,
 ) -> AsyncIterator[str]:
     """Serve a cached answer over the same wire shape as a live one."""
     yield interceptor.token(cached.reply).encode()
 
+    # `claims` is threaded through so a replayed turn goes past the same link
+    # gate a live one does. Without it, a cached answer written for an adult
+    # would hand a five-year-old the links the live path withholds.
     directives = list(_closing_directives(
-        {"quick_replies": cached.quick_replies, "citations": cached.citations}
+        {"quick_replies": cached.quick_replies, "citations": cached.citations},
+        claims=claims,
     ))
     for directive in directives:
         yield interceptor.directive(directive).encode()
@@ -487,7 +496,9 @@ def _chip(text: str) -> QuickReplyOption:
     return QuickReplyOption(label=label, value=said[:CHIP_VALUE_CHARS])
 
 
-def _closing_directives(turn: dict[str, Any]) -> list[dict[str, Any]]:
+def _closing_directives(
+    turn: dict[str, Any], *, claims: Any = None
+) -> list[dict[str, Any]]:
     """The directives derivable from the finished turn, in render order."""
     out: list[dict[str, Any]] = list(turn.get("ui_directives") or [])
 
@@ -500,24 +511,112 @@ def _closing_directives(turn: dict[str, Any]) -> list[dict[str, Any]]:
             )
         )
 
-    citations = turn.get("citations") or []
-    if citations:
-        out.append(
-            directive_payload(
-                CitationsDirective(
-                    refs=[
-                        CitationRef(
-                            kb_id=citation.get("kb_id", ""),
-                            title=citation.get("title", ""),
-                            question=citation.get("question", ""),
-                            snippet=citation.get("snippet", ""),
-                        )
-                        for citation in citations[:8]
-                    ]
-                )
+    refs = citation_refs(turn.get("citations") or [], claims=claims)
+    if refs:
+        out.append(directive_payload(CitationsDirective(refs=refs)))
+    return out
+
+
+def citation_refs(
+    citations: list[dict[str, Any]], *, claims: Any = None
+) -> list[CitationRef]:
+    """The turn's citations, as the refs the client renders.
+
+    Two things happen here and nowhere else, so that a live turn and a replayed
+    cached one cannot drift apart:
+
+    *The link gate.* `safety_out.strips_links` decides whether this reader gets
+    links at all, and a citation is not the exception to it -- a five-year-old
+    who never sees a URL in the prose should not be handed one in the panel. The
+    source keeps its NAME either way, so nothing goes un-attributed; it simply
+    is not a link. `claims` is effectively required: omitting it withholds every
+    link rather than granting them.
+
+    *A last validation.* The URL was validated when the citation was built, but
+    a turn can also arrive from the response cache or the checkpointer, written
+    by an older build against an older registry. Re-checking is cheap, and it is
+    the only guarantee that what reaches an `href` was validated by THIS code.
+
+    Deduplication is NOT done here. Every row keeps the URL it actually came
+    from, and the panel groups the rows under their shared source -- so five
+    chunks off one page render as one heading with five extracts beneath it,
+    and a conversation reloaded from history groups identically without the
+    server having to remember what it collapsed.
+    """
+    from app import sources
+    from app.graph.account import YOUNGEST_BAND
+    from app.graph.nodes.safety_out import strips_links
+
+    # Fails CLOSED. `claims=None`, a claims object missing either field, or an
+    # empty persona all resolve to the youngest reader, so the answer to "we do
+    # not know who this is" is the same one `conversations._UnknownReader`
+    # gives: a child until proven otherwise. Defaulting to `adult` here meant a
+    # future call site that forgot to thread `claims` would quietly hand links
+    # to every reader, and nothing would fail to say so.
+    linkable = not strips_links(
+        str(getattr(claims, "persona", "") or "stella"),
+        str(getattr(claims, "age_band", "") or YOUNGEST_BAND),
+    )
+
+    refs: list[CitationRef] = []
+    distinct: set[str] = set()
+    unattributed = 0
+
+    # `list(...)` rather than a slice on the argument: this is fed from JSONB, a
+    # response-cache entry and a checkpoint, and one of those could hand over a
+    # tuple, a generator or something with no `__getitem__` at all.
+    for citation in list(citations or [])[:CITATION_REFS_MAX]:
+        if not isinstance(citation, dict):
+            continue
+        raw = str(citation.get("url") or "")
+        url = sources.safe_url(raw) if linkable else None
+        if raw and url is None and linkable:
+            # Validated once already, so reaching here means the stored value
+            # came from an older build or a hand-edited row. Worth saying.
+            logger.warning(
+                "Dropped a stored citation URL that no longer validates (row %s).",
+                citation.get("kb_id"),
+            )
+        if url:
+            distinct.add(sources.canonical(url) or url)
+        elif not str(citation.get("site") or citation.get("page") or ""):
+            unattributed += 1
+
+        # Clipped here as well as where the source was named. A stored turn can
+        # carry a value written before the caps existed, and `CitationRef`'s
+        # length limits raise from inside the streaming generator -- so an
+        # over-long page title would not degrade one citation, it would kill
+        # the turn, and `_replay` would serve the same failure every time the
+        # question was asked again.
+        refs.append(
+            CitationRef(
+                kb_id=str(citation.get("kb_id") or ""),
+                title=str(citation.get("title") or ""),
+                question=str(citation.get("question") or ""),
+                snippet=str(citation.get("snippet") or ""),
+                url=url or "",
+                site=sources.clip(str(citation.get("site") or ""), sources.MAX_SITE_CHARS),
+                page=sources.clip(str(citation.get("page") or ""), sources.MAX_PAGE_CHARS),
+                # Withheld with the link, not just alongside it. `aspire.gov.kn`
+                # IS a URL, and printing it under a source for a reader the
+                # product never shows one to would defeat the gate by half.
+                domain=str(citation.get("domain") or "")[:253] if linkable else "",
+                updated=sources.clip(
+                    str(citation.get("updated") or ""), sources.MAX_UPDATED_CHARS
+                ),
             )
         )
-    return out
+
+    if refs:
+        logger.info(
+            "Citations: %d row(s), %d linkable source(s), %d with no source at "
+            "all, links %s.",
+            len(refs),
+            len(distinct),
+            unattributed,
+            "on" if linkable else "withheld for this reader",
+        )
+    return refs
 
 
 # ── the model calls this transport supplies to the graph ─────────────────────

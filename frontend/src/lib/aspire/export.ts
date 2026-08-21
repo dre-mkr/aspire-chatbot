@@ -2,6 +2,7 @@
 
 import type { StoredMessage } from "./history";
 import { answerToText } from "./knowledge";
+import { groupSources } from "./sources";
 import type { ChatMessage } from "./use-conversation";
 
 /** A turn this module can write out. */
@@ -52,11 +53,23 @@ export function transcriptToText(
 
 		lines.push(`ASPIRE AI:  ${answerToText(message.blocks)}`);
 
-		if (message.sources.length > 0) {
+		// Grouped the same way the panel groups them, and carrying the URL: a
+		// saved transcript whose sources cannot be checked afterwards is a list
+		// of assertions. The row ids come too, because they are what a reader
+		// quotes when they ring somebody about an answer.
+		const groups = groupSources(message.sources);
+		if (groups.length > 0) {
 			lines.push("", "  Sources");
-			for (const source of message.sources) {
-				const label = source.metadata?.question ?? source.metadata?.category;
-				lines.push(`  · ${String(label ?? source.content.slice(0, 80))}`);
+			for (const group of groups) {
+				const name = group.label || group.domain;
+				if (name) lines.push(`  · ${name}`);
+				if (group.href) lines.push(`    ${group.href}`);
+				for (const extract of group.extracts) {
+					const said = extract.question || extract.snippet.slice(0, 80);
+					if (!said) continue;
+					const ref = extract.kbId ? ` [${extract.kbId}]` : "";
+					lines.push(`    - ${said}${ref}`);
+				}
 			}
 		}
 		lines.push("");

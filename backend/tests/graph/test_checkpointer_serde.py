@@ -68,6 +68,45 @@ def test_a_citation_survives_the_round_trip_as_a_citation():
     assert restored.kb_id == "ASP-029"
 
 
+def test_a_citations_provenance_survives_the_round_trip():
+    """A turn resumed from a checkpoint must still know where its answer came from.
+
+    Provenance rides in the same field a conversation's state is written to, so
+    a serde regression here would not raise -- it would quietly serve a
+    conversation whose sources had lost their links.
+    """
+    citation = Citation(
+        kb_id="ASP-029",
+        url="https://aspire.gov.kn/#faqs",
+        site="ASPIRE",
+        page="Frequently asked questions",
+        domain="aspire.gov.kn",
+        updated="2026-07-30",
+    )
+    restored = _roundtrip(citation, _serde())
+
+    assert isinstance(restored, Citation)
+    assert restored.url == "https://aspire.gov.kn/#faqs"
+    assert restored.site == "ASPIRE"
+    assert restored.page == "Frequently asked questions"
+    assert restored.domain == "aspire.gov.kn"
+    assert restored.updated == "2026-07-30"
+
+
+def test_a_chunks_source_url_survives_the_round_trip():
+    """`ground_check` reads it off the chunk to build the citation."""
+    chunk = KBChunk(
+        kb_id="ASP-042",
+        content="Ages 5 to 18.",
+        source_url="https://aspire.gov.kn/#faqs",
+        metadata={"question": "Who is eligible?", "as_of": "2026-07-30"},
+    )
+    restored = _roundtrip(chunk, _serde())
+
+    assert restored.source_url == "https://aspire.gov.kn/#faqs"
+    assert restored.metadata["as_of"] == "2026-07-30"
+
+
 def test_a_directive_survives_the_round_trip():
     """`EscalatedDirective` was in 108 live checkpoint rows and was not in the report's list of two."""
     from app.schemas.directives import EscalatedDirective

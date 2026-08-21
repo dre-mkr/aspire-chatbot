@@ -13,9 +13,12 @@ _DIR: Final[Path] = Path(__file__).resolve().parent
 
 #: Which card a persona gets.
 #:
-#: `NAMES` plus `everyone`. `everyone` is a persona everywhere else -- `domain.py`,
-#: `access.py`, `state.py` -- but it is the absence of an audience rather than a
-#: character, so it has no display name and cannot come from `NAMES` alone.
+#: `everyone` used to be carried here as an exception: it is a persona everywhere
+#: else -- `domain.py`, `access.py`, `state.py` -- but it named the absence of an
+#: audience rather than a character, so it had no label of its own. It has one
+#: now. The default card introduces itself as Guest, answers before it knows who
+#: is reading, and is a voice like the other five, so it is a `NAMES` row like
+#: the other five. The union is kept so a future nameless persona is one line.
 KNOWN: Final[frozenset[str]] = frozenset(NAMES) | {"everyone"}
 
 #: The card used when the persona is missing or unrecognised.
@@ -94,4 +97,9 @@ def persona_card(persona: str | None, age_band: str | None = None) -> str:
     band = (age_band or "").strip() or FALLBACK_BAND
     # `str.replace`, not `str.format`: a card is prose that may one day contain a
     # brace, and `format` would raise on it in front of a reader.
-    return _card_text(name, band).replace(PLACEHOLDER, display_name(name))
+    #
+    # The band is passed to `display_name` as well as to `_card_text`, because
+    # `stella` answers to two labels: Skye on the 5-8 card and Kaleb on the 9-12
+    # one. Looking the label up by persona alone put the younger name on the
+    # older card, which is the exact mismatch the band split exists to end.
+    return _card_text(name, band).replace(PLACEHOLDER, display_name(name, band))

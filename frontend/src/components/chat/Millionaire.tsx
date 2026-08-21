@@ -271,8 +271,14 @@ function Complete({
 			<ul className="game__recap">
 				{covered.map((entry) => (
 					<li key={entry.question} data-outcome={entry.outcome}>
-						<span className="game__recap-mark" aria-hidden="true">
+						<span className="game__recap-mark">
 							{entry.outcome === "correct" ? <CheckIcon /> : null}
+							{/* The tick was the only sign of how a question went, and it
+							    was hidden from screen readers — which left the recap
+							    reading as a plain list with no outcome in it at all. */}
+							<span className="sr-only">
+								{entry.outcome === "correct" ? "Right." : "Not right."}
+							</span>
 						</span>
 						<span>
 							<strong>{entry.question}</strong>

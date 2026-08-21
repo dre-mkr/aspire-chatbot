@@ -147,6 +147,7 @@ def _aspire_own() -> frozenset[str]:
         for value in (
             settings.aspire_contact_email,
             settings.aspire_contact_phone,
+            settings.aspire_contact_phone_alt,
             settings.aspire_contact_website,
             settings.aspire_contact_office,
         )

@@ -9,6 +9,7 @@ from langgraph.graph import START, StateGraph
 from langgraph.types import Command
 
 from app.agents.qa.nodes import (
+    CorpusRow,
     make_generate,
     make_ground_check,
     make_hybrid_retrieve,
@@ -120,6 +121,8 @@ async def _search(query: str, k: int):
             score=relevance,
             relevance=relevance,
             source="dense",
+            # `_as_document` has already made the column win over the CSV copy.
+            source_url=str(document.metadata.get("source_url") or ""),
             metadata=dict(document.metadata),
         )
         for index, (document, relevance) in enumerate(scored)
@@ -132,7 +135,7 @@ async def _search(query: str, k: int):
 #: the critical path, followed by a Python-side permission filter. Measured on
 #: this machine: 610-720 ms warm, 4.9 s on the first read of a cold process, for
 #: a table that changes only when `ingest` runs.
-_CORPUS: dict[str, list[tuple[str, str]]] = {}
+_CORPUS: dict[str, list[CorpusRow]] = {}
 _CORPUS_AT: str | None = None
 
 
@@ -143,8 +146,14 @@ def forget_corpus() -> None:
     _CORPUS_AT = None
 
 
-async def _corpus(audience: str) -> list[tuple[str, str]]:
-    """Every corpus row this audience may see, as `(kb_id, text)`, for BM25."""
+async def _corpus(audience: str) -> list[CorpusRow]:
+    """Every corpus row this audience may see, for BM25.
+
+    Carries the row's source alongside its text. BM25 does not need provenance
+    to rank, but a lexical-only hit becomes a chunk and then a citation, and
+    before this it became one with no source attached -- so an answer grounded
+    on an exact-term match cited a row that could not say where it came from.
+    """
     from sqlalchemy import select
 
     from app.cache import corpus_fingerprint
@@ -172,20 +181,33 @@ async def _corpus(audience: str) -> list[tuple[str, str]]:
             return []
         rows = (
             await db.execute(
-                select(Document.kb_id, Document.content, Document.metadata_)
+                select(
+                    Document.kb_id,
+                    Document.content,
+                    Document.metadata_,
+                    Document.source_url,
+                )
             )
         ).all()
 
     from app.agents.qa.nodes import _permitted
     from app.graph.state import KBChunk
 
-    permitted: list[tuple[str, str]] = []
-    for kb_id, content, metadata in rows:
+    permitted: list[CorpusRow] = []
+    for kb_id, content, metadata, source_url in rows:
         if not kb_id or not content:
             continue
-        chunk = KBChunk(kb_id=str(kb_id), content=content, metadata=dict(metadata or {}))
+        stored = dict(metadata or {})
+        if (source_url or "").strip():
+            stored["source_url"] = source_url.strip()
+        chunk = KBChunk(
+            kb_id=str(kb_id),
+            content=content,
+            source_url=str(source_url or ""),
+            metadata=stored,
+        )
         if _permitted(chunk, audience):
-            permitted.append((str(kb_id), content))
+            permitted.append(CorpusRow(str(kb_id), content, stored))
 
     _CORPUS[audience] = permitted
     return permitted

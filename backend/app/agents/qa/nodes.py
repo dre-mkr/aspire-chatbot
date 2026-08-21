@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from typing import Any, Final
+from collections.abc import Iterable, Sequence
+from typing import Any, Final, NamedTuple
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import Command
 
 from app.config import get_settings
+from app.context.session_context import conversation_reference
 from app.graph.state import AspireState, Citation, KBChunk
 from app.messages import text_of
 from app.schemas.directives import CHIP_LABEL_CHARS
@@ -120,6 +122,31 @@ def rrf_fuse(
     return scores
 
 
+class CorpusRow(NamedTuple):
+    """One knowledge-base row as the lexical side sees it.
+
+    A tuple, and the first two fields are still `(kb_id, content)`, because that
+    is the shape the eval harness and the tests hand in and there is no reason
+    to make them carry provenance they do not have. `corpus_rows` widens either
+    form to this one.
+    """
+
+    kb_id: str
+    content: str
+    #: The row's stored metadata, `source_url` included. Empty when the caller
+    #: supplied the short form, which costs the citation its link and nothing else.
+    metadata: dict[str, Any]
+
+
+def corpus_rows(rows: Iterable[Any]) -> list[CorpusRow]:
+    """`(id, text)` or `(id, text, metadata)` rows, widened to `CorpusRow`."""
+    out: list[CorpusRow] = []
+    for row in rows:
+        stored = row[2] if len(row) > 2 else None
+        out.append(CorpusRow(str(row[0]), str(row[1]), dict(stored or {})))
+    return out
+
+
 #: Built indexes, by whatever key the caller says identifies this corpus.
 #:
 #: Tokenising ~706 rows and constructing `BM25Okapi` ran on every question, on
@@ -128,7 +155,7 @@ def rrf_fuse(
 _INDEXES: dict[str, tuple[int, Any]] = {}
 
 
-def _index_for(corpus: list[tuple[str, str]], cache_key: str | None):
+def _index_for(corpus: Sequence[Any], cache_key: str | None):
     """The BM25 index for this corpus, built once when the caller names it."""
     from rank_bm25 import BM25Okapi
 
@@ -139,7 +166,9 @@ def _index_for(corpus: list[tuple[str, str]], cache_key: str | None):
         if cached is not None and cached[0] == len(corpus):
             return cached[1]
 
-    tokenised = [_tokens(f"{identifier} {text}") for identifier, text in corpus]
+    # Indexed positionally, so a row carrying metadata tokenises the same as one
+    # that does not: only the id and the text have ever fed the index.
+    tokenised = [_tokens(f"{row[0]} {row[1]}") for row in corpus]
     if not any(tokenised):
         return None
 
@@ -156,12 +185,12 @@ def forget_indexes() -> None:
 
 def bm25_rank(
     query: str,
-    corpus: list[tuple[str, str]],
+    corpus: Sequence[Any],
     top: int,
     *,
     cache_key: str | None = None,
 ) -> list[str]:
-    """BM25 over `(id, text)` pairs.
+    """BM25 over `(id, text)` pairs, or over `CorpusRow`s.
 
     Without a `cache_key` the index is built fresh, which is what the offline
     eval harness wants: it drives this directly over a CSV sample and has no
@@ -206,10 +235,10 @@ def make_hybrid_retrieve(search=None, corpus=None):
                 # A dense failure is survivable BECAUSE there is a second retriever.
                 logger.warning("Dense retrieval failed; BM25 only.", exc_info=True)
 
-        rows: list[tuple[str, str]] = []
+        rows: list[CorpusRow] = []
         if corpus is not None:
             try:
-                rows = await corpus(audience)
+                rows = corpus_rows(await corpus(audience))
             except Exception:
                 logger.warning("Could not load the corpus for BM25.", exc_info=True)
 
@@ -226,12 +255,24 @@ def make_hybrid_retrieve(search=None, corpus=None):
         except Exception:  # pragma: no cover - no CSV on this box
             key = None
         lexical = bm25_rank(query, rows, settings.qa_retrieve_k, cache_key=key)
-        text_by_id = dict(rows)
+        # By row rather than by text: a lexical-only hit becomes a citation, and
+        # a citation with no metadata is a source the reader cannot see. It used
+        # to be built from the text alone, so every BM25 answer cited a row with
+        # no question, no title and no link.
+        row_by_id = {row.kb_id: row for row in rows}
         for identifier in lexical:
-            if identifier not in by_id:
-                by_id[identifier] = KBChunk(
-                    kb_id=identifier, content=text_by_id.get(identifier, ""), source="bm25"
-                )
+            if identifier in by_id:
+                continue
+            row = row_by_id.get(identifier)
+            stored = dict(row.metadata) if row else {}
+            by_id[identifier] = KBChunk(
+                kb_id=identifier,
+                title=str(stored.get("question") or stored.get("title") or ""),
+                content=row.content if row else "",
+                source="bm25",
+                source_url=str(stored.get("source_url") or ""),
+                metadata=stored,
+            )
 
         rankings = [[chunk.kb_id for chunk in dense], lexical]
         fused = rrf_fuse(rankings, k=settings.qa_rrf_k)
@@ -578,7 +619,14 @@ def _generation_messages(
         # A broken context must not cost the answer; fall through to the plain prompt.
         logger.warning("Could not build the layered QA prompt; using the plain one.", exc_info=True)
 
-    block = "\n\n".join(f"[{chunk.kb_id}] {chunk.content}" for chunk in chunks)
+    # Same scrubbing as the layered prompt: this fallback is reached when the
+    # layered one could not be built, which is no reason to start showing the
+    # model the URLs the other path takes off.
+    from app.sources import without_provenance
+
+    block = "\n\n".join(
+        f"[{chunk.kb_id}] {without_provenance(chunk.content)}" for chunk in chunks
+    )
     system = GENERATE_SYSTEM.format(context=block)
     audience = (
         f"Reader: age band {state.get('age_band')}, persona "
@@ -640,6 +688,7 @@ def _figures_in_our_own_contacts() -> set[str]:
     supplied = " ".join(
         (
             settings.aspire_contact_phone,
+            settings.aspire_contact_phone_alt,
             settings.aspire_contact_office,
             settings.aspire_contact_website,
         )
@@ -647,20 +696,216 @@ def _figures_in_our_own_contacts() -> set[str]:
     return {normalise_figure(match.group(0)) for match in _FIGURE.finditer(supplied)}
 
 
-def unattributed_figures(answer: str, chunks: list[KBChunk]) -> list[str]:
-    """Figures in the answer that appear in no chunk."""
-    corpus = " ".join(chunk.content for chunk in chunks)
-    known = {normalise_figure(match.group(0)) for match in _FIGURE.finditer(corpus)}
-    known |= _figures_in_our_own_contacts()
+#: How far a figure may be from the ones it was given. One operation, no more.
+#:
+#: A worked example is arithmetic ON the extracts, not a claim about the
+#: programme, and a gate that cannot tell the two apart declines the answer for
+#: doing the sum it was asked for. Measured on "if the minimum deposit is EC$25,
+#: what do 4 of them cost?": the answer cited the row correctly, stated EC$100,
+#: and was thrown away whole.
+#:
+#: The exemption is bounded three ways, and all three matter.
+#:
+#: ONE operation. Not a chain, so a search cannot wander to an arbitrary value.
+#:
+#: Both operands must be QUANTITIES the reader was actually given -- stated in a
+#: retrieved extract, or written in their own question. A figure from nowhere
+#: has nothing to be built out of.
+#:
+#: And at least one operand must come from the QUESTION. This is what keeps the
+#: exemption to the case it exists for. "What do 4 deposits cost?" is a reader
+#: asking for a calculation on a figure they supplied; "how much does ASPIRE
+#: pay?" is a factual question, and there an amount the corpus does not contain
+#: is exactly as suspect as it was before -- the exemption does not apply to it
+#: at all. Without this clause a four-chunk retrieval yields enough operands to
+#: derive several hundred values, and a fabricated amount could land on one.
+#:
+#: None of it is a substitute for grounding: the answer must still cite a
+#: retrieved extract to be served, which is checked separately and not relaxed.
+#: A runaway guard, not a policy. `_derivation` is |asked| x |given| and |asked|
+#: is one or two figures from a question, so this is never the binding
+#: constraint on a real turn -- `ground_check` reads the four reranked chunks,
+#: which yield a dozen or so quantities once the bookkeeping is scrubbed off.
+_DERIVATION_OPERAND_CAP = 64
 
-    missing: list[str] = []
+#: Money is stated to the cent, so a derived figure has to land on one.
+_DERIVATION_TOLERANCE = 0.005
+
+
+def _numeric(value: str) -> float | None:
+    """A normalised figure as a number, or None when it will not parse."""
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _operands(values: set[str]) -> list[float]:
+    """Figures as numbers, smallest first, capped.
+
+    Ordered numerically rather than by their string form -- sorting `{"1000",
+    "25"}` as text puts "1000" first for no reason anybody chose -- and
+    ASCENDING, so that if the cap ever bites it drops the largest figures
+    rather than the small counts a worked example multiplies by. Losing the `4`
+    from "what do 4 of them cost?" would break the exemption at exactly the
+    case it exists for.
+    """
+    numbers = sorted(
+        n for n in (_numeric(value) for value in values) if n is not None
+    )
+    return numbers[:_DERIVATION_OPERAND_CAP]
+
+
+def _derivation(
+    target: float, asked: list[float], given: list[float]
+) -> tuple[float, float] | None:
+    """The pair of figures one arithmetic step lands on `target` from, or None.
+
+    `asked` is figures from the reader's question, `given` is every figure
+    available. One operand is drawn from each, so the reader's own number is
+    always part of the sum.
+
+    A derivation must produce a NUMBER THAT IS NOT ONE OF ITS OWN OPERANDS.
+    Without that clause the identity operations hand back whatever they were
+    given -- `9999 * 1` is 9999, and a corpus row containing a `1` anywhere
+    would make any figure the reader named "derivable" from itself. That is not
+    a calculation; it is the check agreeing with the question.
+
+    The operands are returned rather than a bare yes, because which figures did
+    the work decides which of them the answer may restate. See
+    `unattributed_figures`.
+    """
+    for a in asked:
+        for b in given:
+            candidates = [a + b, a - b, b - a, a * b, a * b / 100.0]
+            if b:
+                candidates.append(a / b)
+            if a:
+                candidates.append(b / a)
+            for candidate in candidates:
+                if abs(candidate - target) >= _DERIVATION_TOLERANCE:
+                    continue
+                if (
+                    abs(candidate - a) < _DERIVATION_TOLERANCE
+                    or abs(candidate - b) < _DERIVATION_TOLERANCE
+                ):
+                    continue
+                return a, b
+    return None
+
+
+def unattributed_figures(
+    answer: str,
+    chunks: list[KBChunk],
+    conversation_ref: str = "",
+    question: str = "",
+) -> list[str]:
+    """Figures in the answer that appear in no chunk and follow from nothing given.
+
+    `conversation_ref` is the `ASP-#####` the persona cards ask the reader to
+    quote. It reaches the model from the prompt rather than from an extract, so
+    without it here the five digits of a reference the prompt just supplied read
+    as an invention -- the same shape as the contact-number exemption above, and
+    a decline welded onto an answer that had done exactly as it was told.
+
+    `question` is the reader's own words, and figures in it are theirs to
+    COMPUTE WITH -- not to have asserted back. "If I save EC$10 every week for
+    5 weeks, how much will I have?" is answered from what they supplied and
+    from arithmetic; the corpus was never going to contain EC$50, and a gate
+    that demanded it declined the answer. "Does ASPIRE pay EC$9,999?" answered
+    "yes, EC$9,999" is the same figure making a claim it has not earned, and
+    that one is still caught.
+    """
+    from app.sources import without_provenance
+
+    # Measured against what the model was SHOWN, not against the stored row.
+    # `ingest` appends the CSV's bookkeeping columns to a row's text, so the raw
+    # content ends `as_of: 2026-07-30` -- putting 7, 30 and 2026 into nearly
+    # every retrieval as figures the model never actually saw. The prompt is
+    # built from the scrubbed text; so is this.
+    corpus = " ".join(without_provenance(chunk.content) for chunk in chunks)
+
+    # Quantities: what the extracts state, and what the reader put in their own
+    # question. `_INNOCUOUS` is deliberately not among them -- with 1 to 10 in
+    # the operand pool, 9 divided by 2 makes 4.5 and the gate stops catching
+    # anything. Nor are the contact numbers: a phone number is not a quantity,
+    # and its digits would derive half the number line.
+    stated = {normalise_figure(m.group(0)) for m in _FIGURE.finditer(corpus)}
+    asked = (
+        {normalise_figure(m.group(0)) for m in _FIGURE.finditer(question)}
+        if question
+        else set()
+    )
+
+    # `asked` is NOT part of `known`, and that distinction is the whole safety
+    # of it. A figure the reader typed may be COMPUTED WITH; it may not be
+    # asserted back as fact. Otherwise "ASPIRE pays EC$9,999, right?" answered
+    # "Yes, EC$9,999" passes a gate whose entire job is to catch exactly that.
+    known = stated | _figures_in_our_own_contacts()
+    if conversation_ref:
+        known |= {
+            normalise_figure(match.group(0))
+            for match in _FIGURE.finditer(conversation_ref)
+        }
+
+    from_question = _operands(asked)
+    every_quantity = _operands(stated | asked)
+
+    # Pass one: which figures stand on their own, and which figures of the
+    # reader's the answer actually WORKED WITH.
+    unexplained: list[str] = []
+    echoed: list[tuple[str, float | None]] = []
+    #: Figures that were an operand of a derivation that landed.
+    worked_with: list[float] = []
+
     for match in _FIGURE.finditer(answer):
         raw = match.group(0)
         value = normalise_figure(raw)
-        if value in _INNOCUOUS or value in known:
+        target = _numeric(value)
+
+        # Tested FIRST, and for every figure, because it answers a different
+        # question from "may this be here": it answers "was this worked out".
+        # "20% of EC$25 is EC$5" works out a five, and five is an innocuous
+        # small integer -- so checking only the figures that had nowhere else
+        # to come from would find no working in a worked example.
+        pair = (
+            _derivation(target, from_question, every_quantity)
+            if target is not None and from_question
+            else None
+        )
+        if pair is not None:
+            worked_with.extend(pair)
+
+        if value in _INNOCUOUS or value in known or pair is not None:
             continue
-        missing.append(raw)
-    return missing
+        if value in asked:
+            # The reader's own figure, said back to them. Held aside rather
+            # than allowed: see below.
+            echoed.append((raw, target))
+            continue
+        unexplained.append(raw)
+
+    # Pass two: an echo is licensed by having been PART OF the working.
+    #
+    # "20% of EC$50 is EC$10" restates two figures the reader supplied, and it
+    # restates them as the working for a third the answer computed. That is not
+    # a claim about the programme, and declining it would decline every worked
+    # example a reader sets up.
+    #
+    # "Does ASPIRE pay EC$9,999?" answered "Yes, ASPIRE pays EC$9,999" restates
+    # one figure and computes nothing with it. There the echo IS the claim, and
+    # a gate that let a reader put a number into an answer by naming it in the
+    # question would be worse than no gate at all.
+    #
+    # Per figure rather than per turn, so a turn that legitimately works one
+    # sum out does not thereby license every other number the reader mentioned.
+    for raw, target in echoed:
+        if target is not None and any(
+            abs(target - operand) < _DERIVATION_TOLERANCE for operand in worked_with
+        ):
+            continue
+        unexplained.append(raw)
+    return unexplained
 
 
 #: English function words, removed before measuring coverage.
@@ -781,7 +1026,15 @@ def make_ground_check(threshold: float | None = None):
                     f"{coverage_floor:.0%} and {needed} term(s).",
                 )
 
-        missing = unattributed_figures(answer, chunks)
+        reference = conversation_reference(str(state.get("session_id") or ""))
+        # `_latest_user_text`, NOT `query`. `query` is `qa_query`, which
+        # `rewrite_query` produced with a model call -- so passing it here would
+        # let the LLM put a figure into the set the gate treats as supplied by
+        # the reader, which is the model handing itself a licence. The reader's
+        # own words are the only thing they can be said to have supplied.
+        missing = unattributed_figures(
+            answer, chunks, reference, _latest_user_text(state)
+        )
         if missing:
             logger.warning(
                 "Ungrounded figures %s in an answer for session %s; escalating.",
@@ -805,7 +1058,12 @@ def make_ground_check(threshold: float | None = None):
             )
 
         # A citation to something not retrieved is worse than none: it is fabricated.
-        invented = cited - known
+        #
+        # The conversation reference is subtracted first. It wears the same
+        # `ASP-` prefix as a knowledge-base row because the cards ask the reader
+        # to quote it that way, and a model that brackets it out of habit was
+        # having a correct answer thrown away as a fabricated citation.
+        invented = cited - known - {reference}
         if invented:
             return _ungrounded(
                 state,
@@ -814,13 +1072,12 @@ def make_ground_check(threshold: float | None = None):
             )
 
         # Inline markers are stripped from the prose, so this panel is the only provenance.
+        #
+        # Built from the chunks the answer CITED, in retrieval order -- not from
+        # everything retrieved. Ten rows can come back for a question that three
+        # of them answer, and the seven the model did not use are not sources.
         citations = [
-            Citation(
-                kb_id=chunk.kb_id,
-                title=chunk.title,
-                question=str(chunk.metadata.get("question") or "").strip(),
-                snippet=snippet_of(chunk.content),
-            )
+            citation_for(chunk)
             for chunk in chunks
             if chunk.kb_id in grounded_citations
         ]
@@ -842,6 +1099,37 @@ def make_ground_check(threshold: float | None = None):
         )
 
     return ground_check
+
+
+def citation_for(chunk: KBChunk) -> Citation:
+    """One retrieved row, as the reference a reader is shown.
+
+    The only place a `Citation` is built from a chunk, so the naming and the
+    URL validation happen once. Nothing here reads the answer: the model chose
+    WHICH rows are cited, and the application decides what each one says about
+    itself. That split is what stops a URL from ever being invented -- there is
+    no path by which the model could supply one.
+    """
+    ref = chunk.provenance()
+    if ref is None:
+        # An answer can be perfectly grounded in a row whose source is missing
+        # or unusable. It still cites, by id and by its own words; it just has
+        # nothing to link to. `app.sources` has already logged why.
+        logger.info(
+            "Row %s was cited with no usable source; the citation carries no link.",
+            chunk.kb_id,
+        )
+    return Citation(
+        kb_id=chunk.kb_id,
+        title=chunk.title,
+        question=str(chunk.metadata.get("question") or "").strip(),
+        snippet=snippet_of(chunk.content),
+        url=ref.url if ref else "",
+        site=ref.site if ref else "",
+        page=ref.page if ref else "",
+        domain=ref.domain if ref else "",
+        updated=ref.updated if ref else "",
+    )
 
 
 #: How much of a cited row the sources panel shows.

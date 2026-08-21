@@ -145,6 +145,47 @@ That mapping lives in one function — `row_to_document` in `app/ingest.py`. To
 teach it new column names, edit the `QUESTION_COLUMNS` / `ANSWER_COLUMNS` /
 `CATEGORY_COLUMNS` sets at the top of that file.
 
+### Where a row says it came from
+
+Every row should carry a **`source_url`**. It is the only provenance the corpus
+stores, and it is what becomes the clickable source under an answer.
+
+Two values are legitimate:
+
+- a web address — `https://aspire.gov.kn/#faqs`. Prefer the **specific page** the
+  row was taken from over the site's front door; the citation shows whichever
+  you write.
+- `internal:<name>` — programme material with no public page, e.g.
+  `internal:aspire-financial-education`. The source is still named under the
+  answer; it simply has no link, which is the honest outcome.
+
+Anything else is refused at ingest and stored as NULL, with a warning naming the
+row. A row with no source still cites — by its id and its own words — it just
+cannot be opened.
+
+An optional **`source_title`** column overrides what that page is called. Add it
+and re-ingest; no code change is needed.
+
+### What a source is called
+
+`data/sources.yaml` turns a URL into words a reader recognises: a site name per
+host, and a page title per URL. Nothing in it decides *which* source an answer
+gets — only how it is worded. A URL that is not listed still cites, falling back
+to its own domain.
+
+```bash
+python -m tools.sources_check                    # every corpus source, and what it cites as
+python -m tools.sources_check https://x.gov.kn/p # the canonical key for a pages: entry
+pytest tests/test_sources.py                     # run after editing the registry
+```
+
+`pages:` keys are written in **canonical** form — no `www.`, no trailing slash on
+anything but the root, tracking parameters removed. A key that is not canonical
+never matches and nothing says so, which is what `sources_check` is for.
+
+Editing either file changes the corpus fingerprint, so cached answers carrying
+the old wording are retired on the next request.
+
 ## Ingest
 
 ```bash
@@ -213,6 +254,33 @@ Response:
   ]
 }
 ```
+
+The live client uses `POST /v2/chat/stream`, where a turn's sources arrive as a
+`citations` directive after the prose — one entry per cited row, carrying where
+it came from:
+
+```json
+{
+  "t": "citations",
+  "refs": [
+    {
+      "kb_id": "ASP-014",
+      "question": "Who is eligible for ASPIRE?",
+      "snippet": "ASPIRE is open to children aged 5 to 18 who are...",
+      "url": "https://aspire.gov.kn/#faqs",
+      "site": "ASPIRE",
+      "page": "Frequently asked questions",
+      "domain": "aspire.gov.kn"
+    }
+  ]
+}
+```
+
+`url` is empty — and only empty, never guessed — when the row's source has no
+public page, when its stored URL will not validate, or when the reader's persona
+is shown no links at all. `site` and `page` name the source either way. Rows
+sharing a page are grouped under one heading by the client, so the panel lists
+sources rather than rows.
 
 `reply` is markdown, limited by the system prompt to prose, `-` bullets, and
 occasional `**bold**`. `follow_ups` are two suggested next questions, produced by
@@ -331,9 +399,14 @@ The current mapping picks premade voices against each persona's brief: Jessica
 reassuring) for `aurora`, and Alice (clear educator) for `nova`.
 
 Personas are named by KEY here, not by label. The label a reader sees lives in
-`app/prompting/personas/names.py` and is a client's choice — today Sky, Zion,
-Imani and Azuri — while the key is the identifier the access matrix, the
+`app/prompting/personas/names.py` and is a client's choice — today Skye, Zion,
+Imani, Azuri and Guest — while the key is the identifier the access matrix, the
 session token and these voice settings are all wired to.
+
+One key can carry two labels. `stella` is Skye on the 5-8 card and Kaleb on the
+9-12 one, because the two cards are two voices: a gentle helper for a child who
+cannot yet read a rate, and a dry older cousin who names the EC$500 split and
+shows the workings. The per-band labels live in `BAND_NAMES` in the same file.
 
 Delivery per persona lives in `app/voice/registry.py`: `stella` is the slowest
 because five-year-olds are decoding the words as they arrive, `orion` is never

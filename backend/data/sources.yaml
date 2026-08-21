@@ -1,0 +1,82 @@
+# Where the knowledge base's answers come from, named the way a reader would
+# name them.
+#
+# The knowledge base stores a `source_url` per row and nothing else about the
+# source, so a citation could only ever show a bare URL. This file is the one
+# place that turns a URL into something a twelve-year-old can read: a site name
+# and, where the row points at a particular page, that page's own name.
+#
+# NOTHING here decides WHICH source an answer gets. That is settled by what was
+# retrieved and what the answer cited. This file only supplies the wording.
+#
+# Editing it is safe and expected: a URL that is not listed still cites fine —
+# it falls back to its domain — so add entries as the corpus grows rather than
+# ahead of it. Run `pytest tests/test_sources.py` after editing; the suite
+# checks every entry parses and every corpus URL still resolves to something.
+
+# ── the web ──────────────────────────────────────────────────────────────────
+
+# Whose site it is. Keyed by host, with `www.` and the scheme already off.
+# Every page on the host inherits this when no `pages` entry names it.
+sites:
+  aspire.gov.kn: ASPIRE
+  gov.kn: Government of St Kitts and Nevis
+  sknis.gov.kn: SKN Information Service
+  skncgtoronto.gov.kn: SKN Consulate General, Toronto
+  technology.gov.kn: Ministry of Technology, St Kitts and Nevis
+  socialsecurity.kn: St Kitts and Nevis Social Security Board
+  sknird.com: SKN Inland Revenue Department
+  fsrc.kn: Financial Services Regulatory Commission
+  eccb-centralbank.org: Eastern Caribbean Central Bank
+  ecseonline.com: Eastern Caribbean Securities Exchange
+  ecsrc.com: Eastern Caribbean Securities Regulatory Commission
+  eccuretailbond.com: ECCU Retail Bond
+  gpfi.org: Global Partnership for Financial Inclusion
+  moneyandpensionsservice.org.uk: Money and Pensions Service
+  jumpstart.org: Jump$tart Coalition
+  facebook.com: Facebook
+  instagram.com: Instagram
+
+# What the particular page is called. Keyed by the canonical form of the URL —
+# scheme and host lowercased, `www.` kept off, tracking parameters dropped, a
+# trailing slash off anything but the root. `tools/sources_check.py` prints the
+# canonical form of any URL, so a new entry never has to be guessed at.
+#
+# A page with no entry is named from its own path, which is why most of the
+# corpus needs no line here at all.
+pages:
+  https://aspire.gov.kn/: Official website
+  https://aspire.gov.kn/#faqs: Frequently asked questions
+  https://gov.kn/: Official website
+  https://gov.kn/national-accomplishments/aspire_info: About the ASPIRE Programme
+  https://technology.gov.kn/aspire: ASPIRE
+  https://sknis.gov.kn/2024/11/28/governments-innovative-aspire-programme-will-help-to-level-the-financial-playing-field-for-all-children-across-st-kitts-and-nevis:
+    ASPIRE will level the financial playing field for every child
+  https://sknis.gov.kn/2025/12/11/aspire-launches-official-social-media-platforms-join-the-movement-to-empower-our-youth:
+    ASPIRE launches its official social media platforms
+  https://sknis.gov.kn/2025/07/08/the-cable-and-aspire-programme-partner-to-offer-daily-registration-support-for-families:
+    The Cable and ASPIRE partner on daily registration support
+  https://skncgtoronto.gov.kn/2025/05/08/aspire-financial-literacy-day-2025-set-to-empower-youth-across-saint-kitts-and-nevis:
+    ASPIRE Financial Literacy Day 2025
+  https://sknird.com/the-inland-revenue-department-confirms-return-of-vat-rate-to-17-effective-july-01-2025:
+    VAT returns to 17% from 1 July 2025
+  https://gpfi.org/publications/oecdinfe-core-competencies-framework-financial-literacy-youth:
+    OECD/INFE core competencies framework for youth financial literacy
+  https://instagram.com/aspire.skn: ASPIRE on Instagram
+  https://instagram.com/reel/DavmiplD7mD: ASPIRE programme reel
+  https://facebook.com/drterrancedrew/posts/our-children-should-not-have-to-begin-adulthood-from-zerothrough-the-aspire-prog/1500850785396561:
+    Prime Minister Drew on the ASPIRE Programme
+
+# ── everything that is not a web page ────────────────────────────────────────
+
+# Programme material — workbooks, quiz decks, teaching packs — that the ASPIRE
+# team wrote and that has no public URL. A row pointing at one of these is
+# still attributed, by name; it simply has nothing to link to, which is the
+# honest outcome and not a failure.
+#
+# Keyed by the whole `internal:...` value the knowledge base stores.
+documents:
+  internal:aspire-financial-education: ASPIRE financial education material
+  internal:eccb-aspire-quiz: ECCB ASPIRE quiz
+  internal:eccb-aspire-affirmations: ECCB ASPIRE affirmations
+  internal:eccb-aspire-word-scramble: ECCB ASPIRE word scramble

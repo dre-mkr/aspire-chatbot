@@ -48,7 +48,18 @@ class KBChunk(BaseModel):
     relevance: float = 0.0
     #: Which retriever produced it, so a fusion result can be explained.
     source: str = "fused"
+    #: The `documents.source_url` column, carried as its own field rather than
+    #: left in `metadata` alone. `metadata` is whatever the CSV happened to hold
+    #: and a row can reach here without it -- BM25 builds chunks from the corpus
+    #: index, not from a retriever row -- so provenance gets a declared home.
+    source_url: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    def provenance(self) -> Any:
+        """This chunk's source, named and validated, or None when it has none."""
+        from app import sources
+
+        return sources.describe(self.metadata, stored_url=self.source_url)
 
 
 class Citation(BaseModel):
@@ -62,6 +73,23 @@ class Citation(BaseModel):
     snippet: str = ""
     #: The clause in the answer this reference supports, when grounding could attribute one.
     supports: str = ""
+
+    # ── where the row came from ──
+    #
+    # Filled from `documents.source_url` by way of `app.sources`, never by the
+    # model. A row whose stored URL is missing, internal or unparseable arrives
+    # here with `url` empty and the rest of the naming intact, which is the
+    # difference between "we cannot link this" and "we have no source".
+    #: A validated https/http URL, or "" when this source has no public page.
+    url: str = ""
+    #: Whose source it is -- "ASPIRE", "Eastern Caribbean Central Bank".
+    site: str = ""
+    #: Which page of theirs -- "Frequently asked questions".
+    page: str = ""
+    #: The host, for the line under the title.
+    domain: str = ""
+    #: The corpus row's `as_of` date: when it was last checked against the source.
+    updated: str = ""
 
 
 # ── reducers ─────────────────────────────────────────────────────────────────

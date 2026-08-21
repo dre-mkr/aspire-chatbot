@@ -166,6 +166,17 @@ export async function streamAspire(
 								title: ref.title,
 								question: ref.question || ref.title,
 							},
+							// Kept as its own object rather than folded into
+							// `metadata`: this is the server's validated provenance,
+							// and the panel must be able to tell "no source" from
+							// "a source with an empty field".
+							origin: {
+								url: ref.url ?? "",
+								site: ref.site ?? "",
+								page: ref.page ?? "",
+								domain: ref.domain ?? "",
+								updated: ref.updated ?? "",
+							},
 						});
 					}
 					return;

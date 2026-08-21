@@ -115,7 +115,7 @@ lessons:
 
       - id: q2_explain_back
         prompt:
-          "5-8": "Can you tell Sky what saving means, in your own words?"
+          "5-8": "Can you tell Skye what saving means, in your own words?"
           "9-12": "In your own words -- what does saving mean?"
           "13-15": "Say it back to me in your own words: what is saving?"
         graded: false
@@ -227,7 +227,7 @@ lessons:
 
       - id: q2_name_a_goal
         prompt:
-          "5-8": "What would YOU save for? Tell Sky."
+          "5-8": "What would YOU save for? Tell Skye."
           "9-12": "What is one thing you would save for?"
           "13-15": "Name a goal of your own, and roughly what it costs."
         graded: false

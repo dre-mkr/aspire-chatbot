@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from app.context.session_context import SessionContext, Turn
+from app.config import get_settings
+from app.context.session_context import (
+    SessionContext,
+    Turn,
+    conversation_reference,
+)
 from app.graph.state import KBChunk
 from app.prompting import GLOBAL, build_messages, persona_card
 from app.prompting.global_rules import LOAD_BEARING
 from app.prompting.personas import FALLBACK, KNOWN
-from app.prompting.personas.names import NAMES
+from app.prompting.personas.names import NAMES, display_name
 
 ROLE = "Answer the question from the reference material."
 
@@ -74,11 +79,12 @@ class TestPersonaCards:
             agent_role=ROLE,
             user_text="hi",
         )
-        # Read from `NAMES`, never spelled out. The label is a client's choice
-        # and changes in one line; pinning it here is what turns that one line
-        # back into a hunt through the test suite.
-        assert f"You are {NAMES['stella']}" in stella[0].content
-        assert f"You are {NAMES['aurora']}" in aurora[0].content
+        # Read from the name table, never spelled out. The label is a client's
+        # choice and changes in one line; pinning it here is what turns that one
+        # line back into a hunt through the test suite. Looked up WITH the band,
+        # because `stella` answers to Skye at 5-8 and Kaleb at 9-12.
+        assert f"You are {display_name('stella', '9-12')}" in stella[0].content
+        assert f"You are {display_name('aurora', 'adult')}" in aurora[0].content
         assert stella[0].content != aurora[0].content
 
 
@@ -204,7 +210,7 @@ class TestTheLearnAgentUsesIt:
 
         prefix, per_turn = seen[-1][0].content, seen[-1][1].content
         assert "Never invent a figure" in prefix
-        assert f"You are {NAMES['stella']}" in prefix
+        assert f"You are {display_name('stella', '9-12')}" in prefix
         assert "THE IDEA" in prefix
         assert "what is saving" in per_turn
         assert "learning about saving" in per_turn
@@ -252,3 +258,88 @@ class TestTheReaderIsDescribedToTheModel:
 
         assert settings.aspire_contact_email in composed
         assert settings.aspire_contact_phone in composed
+
+
+class TestTheCardsRuntimePlaceholders:
+    """A card quotes ASPIRE's details inside the script it reads out loud.
+
+    `_contact_block` states them once and says, in the prompt, that they are the
+    only ones. The six persona cards then quote them again inside the escalation
+    sentence a reader is actually given -- "email {email} or call {phone}" --
+    because a script with the details in it is the one the model reads back, and
+    a script that says "the contact details above" is the one it paraphrases.
+
+    Two places saying a phone number is one place saying it wrong, so the cards
+    carry placeholders and the builder fills them from settings. The same goes
+    for the conversation reference, which belongs to the session rather than to
+    the deployment.
+    """
+
+    def _prefix(self, **overrides) -> str:
+        return build_messages(
+            context=_context(**overrides), agent_role=ROLE, user_text="hi"
+        )[0].content
+
+    def test_no_placeholder_survives_into_the_prompt(self):
+        """A reader must never be told to quote a brace."""
+        import re
+
+        for persona, band in (
+            ("stella", "5-8"),
+            ("stella", "9-12"),
+            ("orion", "13-15"),
+            ("orion", "16-18"),
+            ("aurora", "adult"),
+            ("nova", "adult"),
+            ("everyone", "5-8"),
+        ):
+            prefix = self._prefix(
+                persona=persona,
+                age_band=band,
+                conversation_ref=conversation_reference("a-session"),
+            )
+            assert re.search(r"\{[A-Za-z0-9_]+\}", prefix) is None, (persona, band)
+
+    def test_both_published_numbers_reach_the_model(self):
+        """The cards offer two lines, so the block that authorises them must list two."""
+        settings = get_settings()
+        prefix = self._prefix()
+        assert settings.aspire_contact_phone in prefix
+        assert settings.aspire_contact_phone_alt in prefix
+
+    def test_the_card_quotes_the_settings_value_not_a_literal(self, monkeypatch):
+        """Change the number in one place and the escalation script follows."""
+        from app.config import get_settings as fresh
+
+        monkeypatch.setenv("ASPIRE_CONTACT_PHONE", "+1 (869) 555-0000")
+        fresh.cache_clear()
+        try:
+            prefix = self._prefix()
+            assert "+1 (869) 555-0000" in prefix
+            assert "667-5566" not in prefix
+        finally:
+            fresh.cache_clear()
+
+    def test_the_reference_is_the_sessions_own(self):
+        reference = conversation_reference("session-one")
+        assert reference.startswith("ASP-") and reference[4:].isdigit()
+        assert len(reference[4:]) == 5
+        assert reference in self._prefix(conversation_ref=reference)
+
+    def test_the_reference_is_the_same_on_every_turn_of_a_session(self):
+        """A reader given it, who hangs up and comes back, must get the same one."""
+        assert conversation_reference("session-one") == conversation_reference("session-one")
+        assert conversation_reference("session-one") != conversation_reference("session-two")
+
+    def test_the_reference_does_not_break_the_cache_breakpoint(self):
+        """It sits in the stable prefix, so it has to be stable."""
+        reference = conversation_reference("session-one")
+        first = self._prefix(conversation_ref=reference)
+        later = self._prefix(conversation_ref=reference, display_name="Ana")
+        assert first == later
+
+    def test_a_sessionless_context_gets_a_phrase_rather_than_a_dangling_prefix(self):
+        """"Tell them so they know we talked" is a sentence with a hole in it."""
+        prefix = self._prefix(conversation_ref="")
+        assert "your conversation reference" in prefix
+        assert "ASP-#####" not in prefix

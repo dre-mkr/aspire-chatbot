@@ -1,5 +1,5 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 /** The shell both auth pages sit in. */
 
@@ -39,9 +39,36 @@ export function AuthSurface({
 	footLinkTo,
 	footNote,
 }: AuthSurfaceProps) {
+	/**
+	 * Moving between sign-up steps replaces the whole form and says nothing.
+	 * Focus stayed on the "Continue" button that had just been replaced, so a
+	 * keyboard user Tabbed on from wherever the browser dropped them and a
+	 * screen reader was told nothing at all. Sending focus to the new heading
+	 * reads the step out and puts the next Tab at the top of the new form.
+	 *
+	 * Not on arrival — only on a step that changed under someone already here.
+	 */
+	const headingRef = useRef<HTMLHeadingElement>(null);
+	const lastStep = useRef(step?.current);
+	useEffect(() => {
+		const current = step?.current;
+		if (current === undefined || lastStep.current === current) return;
+		lastStep.current = current;
+		headingRef.current?.focus();
+	}, [step?.current]);
+
 	return (
 		<div className="auth">
-			<div className="auth__panel">
+			{/* The pitch is the whole first half of this page in reading order, so
+			    the way past it is stated before it. `.skip-link` is the same
+			    control the chat screen uses for the same reason. */}
+			<a href="#auth-form" className="skip-link">
+				Skip to the form
+			</a>
+
+			{/* Supplementary to the task: somebody is here to sign in, not to read
+			    the pitch. Announced as `complementary` so it can be skipped over. */}
+			<aside className="auth__panel" aria-label="About ASPIRE">
 				{/* Ambient only: two blurred washes that give the gradient depth. */}
 				<div className="auth__orb auth__orb--a" aria-hidden="true" />
 				<div className="auth__orb auth__orb--b" aria-hidden="true" />
@@ -78,10 +105,10 @@ export function AuthSurface({
 						A programme of the Government of St. Kitts and Nevis.
 					</span>
 				</div>
-			</div>
+			</aside>
 
-			<div className="auth__column">
-				<div className="auth__form">
+			<main className="auth__column">
+				<div className="auth__form" id="auth-form">
 					{onBack ? (
 						<button type="button" className="auth__back" onClick={onBack}>
 							<svg
@@ -123,7 +150,11 @@ export function AuthSurface({
 					) : null}
 
 					<div className="auth__head">
-						<h2 className="auth__title">{title}</h2>
+						{/* `-1`, so it takes focus on a step change without becoming a
+						    tab stop of its own. */}
+						<h2 className="auth__title" ref={headingRef} tabIndex={-1}>
+							{title}
+						</h2>
 						<p className="auth__sub">{subtitle}</p>
 					</div>
 
@@ -145,7 +176,7 @@ export function AuthSurface({
 						</div>
 					) : null}
 				</div>
-			</div>
+			</main>
 		</div>
 	);
 }

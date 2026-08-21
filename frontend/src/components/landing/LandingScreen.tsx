@@ -58,17 +58,37 @@ export function LandingScreen() {
 	 * Only when nothing has answered it already: a persona in the address or
 	 * derived from a signed-in account IS the answer, and asking again would be
 	 * asking someone to repeat themselves.
+	 *
+	 * Gated on the opening having finished. The two used to open together and
+	 * sit on top of each other — two dialogs, two focus traps, and on a phone
+	 * one panel visibly behind the other.
 	 */
-	const [askGuide, setAskGuide] = useState(false);
+	const [introDone, setIntroDone] = useState(false);
+	const finishIntro = useCallback(() => setIntroDone(true), []);
+
+	/**
+	 * Whether this browser has never been put the question.
+	 *
+	 * After mount, never during render: there is no `localStorage` in SSR, and
+	 * reading it while rendering would mismatch the server's HTML.
+	 */
+	const [unasked, setUnasked] = useState(false);
 	useEffect(() => {
-		// After mount, never during render: there is no `localStorage` in SSR,
-		// and reading it while rendering would mismatch the server's HTML.
-		if (persona === null && !guideAsked()) setAskGuide(true);
-	}, [persona]);
+		setUnasked(!guideAsked());
+	}, []);
+
+	const [guideDismissed, setGuideDismissed] = useState(false);
+	const askGuide = introDone && unasked && !guideDismissed && persona === null;
+
+	// Declared below, used here: the chooser opens on arrival, so there is no
+	// trigger to give focus back to. Left alone it lands on `<body>` and Tab
+	// restarts at the top of the page; the box they came to type in is better.
+	const focusComposerRef = useRef<() => void>(() => {});
 
 	const closeGuide = useCallback(() => {
 		rememberGuideAsked();
-		setAskGuide(false);
+		setGuideDismissed(true);
+		focusComposerRef.current();
 	}, []);
 
 	/** The rail's list and its row actions. No conversation is open here. */
@@ -114,21 +134,7 @@ export function LandingScreen() {
 	/** Bumped whenever the composer should take the cursor. */
 	const [focusSignal, setFocusSignal] = useState(1);
 	const focusComposer = useCallback(() => setFocusSignal((n) => n + 1), []);
-
-	/**
-	 * Whether the reader has started using the assistant.
-	 *
-	 * The brief asks the logo to keep moving "until the user begins interacting",
-	 * which is earlier than navigating away: typing the first character is the
-	 * moment attention moves to the composer, and something orbiting above it
-	 * from then on is competing with the thing they came to do.
-	 *
-	 * One-way. It never goes back to false on this screen — clearing the box is
-	 * not un-starting, and restarting an animation under someone mid-sentence
-	 * would be worse than never having stopped.
-	 */
-	const [engaged, setEngaged] = useState(false);
-	const engage = useCallback(() => setEngaged(true), []);
+	focusComposerRef.current = focusComposer;
 
 	// Nothing here writes a chat's name, so the tab goes back to the product's.
 	useEffect(() => {
@@ -225,9 +231,13 @@ export function LandingScreen() {
 	useEffect(() => {
 		if (!drawerOpen) return;
 
+		// `:not([inert])`, because the first button in the rail is `.rail__mark`
+		// — the A that toggles it — and that one is inert exactly when the drawer
+		// is open. Focusing it did nothing, so opening the drawer dropped focus
+		// on `<body>` and Tab restarted at the top of the page behind it.
 		document
 			.getElementById("aspire-rail")
-			?.querySelector<HTMLElement>("button")
+			?.querySelector<HTMLElement>("button:not([inert])")
 			?.focus();
 
 		const close = (event: KeyboardEvent) => {
@@ -322,9 +332,9 @@ export function LandingScreen() {
 				<span />
 			</div>
 
-			{/* First visit only: a short opening, then the persona question.
+			{/* First visit only: a short opening, and then the chooser above.
 			    Renders nothing at all for a returning reader. */}
-			<FirstRun onChoosePersona={setPersona} />
+			<FirstRun onDone={finishIntro} />
 
 			<div className="frame">
 				{/* A drawer at every width here, never a column: there is nothing to sit beside. */}
@@ -395,8 +405,7 @@ export function LandingScreen() {
 						<div className="thread">
 							<div className="thread__inner">
 								<div className="hero">
-									<div className="orb orb--hero" aria-hidden="true" />
-									<Brandmark still={engaged} />
+									<Brandmark />
 									<h1 className="hero__title">
 										What do you want to learn about money today?
 									</h1>
@@ -450,12 +459,7 @@ export function LandingScreen() {
 							persona={persona}
 							onPersonaChange={setPersona}
 							draft={draft}
-							onDraftChange={(next) => {
-								// The first character typed is the moment attention moves
-								// to the composer, and is where the orbit stops.
-								if (next) engage();
-								setDraft(next);
-							}}
+							onDraftChange={setDraft}
 							focusSignal={focusSignal}
 							voice={voice}
 						/>
@@ -467,10 +471,7 @@ export function LandingScreen() {
 										key={prompt}
 										type="button"
 										className="starter"
-										onClick={() => {
-											engage();
-											startConversation(prompt);
-										}}
+										onClick={() => startConversation(prompt)}
 									>
 										{prompt}
 									</button>

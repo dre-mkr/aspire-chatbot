@@ -299,6 +299,17 @@ export function SourcesIcon(props: IconProps) {
 	);
 }
 
+/** Marks a source link as leaving ASPIRE for the site it came from. */
+export function ExternalLinkIcon(props: IconProps) {
+	return (
+		<Icon size={13} {...props}>
+			<path d="M14 4h6v6" />
+			<path d="M20 4 11 13" />
+			<path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
+		</Icon>
+	);
+}
+
 /** Opens the ASPIRE video library. A film frame, not a play triangle. */
 export function VideoIcon(props: IconProps) {
 	return (

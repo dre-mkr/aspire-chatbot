@@ -21,9 +21,9 @@ export interface Persona {
 export const PERSONAS: ReadonlyArray<Persona> = [
 	{
 		id: "stella",
-		name: "Sky",
+		name: "Skye & Kaleb",
 		audience: "Ages 5–12",
-		blurb: "Short answers, simple words, and a slower reading voice.",
+		blurb: "Skye answers 5 to 8; Kaleb answers 9 to 12, in his own voice.",
 	},
 	{
 		id: "orion",
@@ -45,7 +45,7 @@ export const PERSONAS: ReadonlyArray<Persona> = [
 	},
 	{
 		id: "everyone",
-		name: "Everyone",
+		name: "Guest",
 		audience: "General",
 		blurb: "Balanced answers for a mixed audience. The default.",
 	},

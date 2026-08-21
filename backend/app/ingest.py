@@ -8,12 +8,14 @@ import csv
 import logging
 import sys
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 
 from langchain_core.documents import Document as LangchainDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import delete, func, select, text
 
+from app import sources
 from app.config import Settings, get_settings
 from app.db import session
 from app.db.models import EMBEDDING_DIMENSIONS, Document, dimensions_for
@@ -27,10 +29,26 @@ ANSWER_COLUMNS = {"answer", "a", "response", "content", "body", "text"}
 CATEGORY_COLUMNS = {"category", "topic", "section", "tag", "tags"}
 
 #: CSV columns read into real table columns.
-ID_COLUMNS = {"id", "kb_id", "ref", "code"}
-AUDIENCE_COLUMNS = {"audience", "persona", "audiences", "for"}
-SOURCE_URL_COLUMNS = {"source_url", "url", "source", "link"}
-LANGUAGE_COLUMNS = {"language", "lang", "locale"}
+ID_COLUMNS = ("id", "kb_id", "ref", "code")
+AUDIENCE_COLUMNS = ("audience", "persona", "audiences", "for")
+
+#: Where a row says it came from, most specific name first.
+#:
+#: `source` is NOT in this list, and its absence is the fix for a defect the
+#: repo already knew about but only defended against in one tool. `metadata`
+#: always carries a `source` key holding the CSV's FILENAME, injected by
+#: `row_to_document`, and `_pick` used to accept it -- so a row whose
+#: `source_url` cell was blank was stored with `source_url =
+#: "knowledge_base.csv"`. Not a URL, not NULL, and indistinguishable downstream
+#: from a real value. A CSV column that happened to be called `source` and sat
+#: to the left of `source_url` did the same thing to a row that HAD a URL.
+SOURCE_URL_COLUMNS = ("source_url", "url", "link")
+
+LANGUAGE_COLUMNS = ("language", "lang", "locale")
+
+# A `source_title` column needs no entry here: every CSV cell is kept verbatim
+# in `metadata_`, and `app.sources.TITLE_KEYS` reads it from there. Adding the
+# column to the knowledge base and re-ingesting is the whole change.
 
 #: Used when the CSV names no language.
 DEFAULT_LANGUAGE = "en"
@@ -124,13 +142,22 @@ def chunk_documents(
     return splitter.split_documents(documents)
 
 
-def _pick(metadata: dict, candidates: set[str]) -> str | None:
-    """First metadata value whose key matches, case-insensitively."""
-    for key, value in metadata.items():
-        if str(key).lower() in candidates:
-            text_value = str(value).strip()
-            if text_value:
-                return text_value
+def _pick(metadata: dict, candidates: Sequence[str]) -> str | None:
+    """First non-empty value among these keys, in the order the CALLER named them.
+
+    It used to walk the metadata in its own insertion order and take whatever
+    matched first, which made the answer depend on CSV column order: a `url`
+    column to the left of `source_url` won, and so did the injected `source`
+    key. The caller knows which name is most specific; the file does not.
+    """
+    lowered = {str(key).strip().lower(): value for key, value in metadata.items()}
+    for candidate in candidates:
+        value = lowered.get(candidate)
+        if value is None:
+            continue
+        text_value = str(value).strip()
+        if text_value:
+            return text_value
     return None
 
 
@@ -163,7 +190,7 @@ def _rows_for(chunks: list[LangchainDocument], vectors: list[list[float]]) -> li
                 # The CSV's `audience` vocabulary -- general | parent | student | teacher.
                 persona_tags=[audience] if audience else [],
                 account_status_tags=[],
-                source_url=_pick(metadata, SOURCE_URL_COLUMNS),
+                source_url=_source_url(metadata, kb_id),
                 chunk_index=index,
                 kb_id=kb_id,
                 metadata_=metadata,
@@ -171,6 +198,38 @@ def _rows_for(chunks: list[LangchainDocument], vectors: list[list[float]]) -> li
         )
 
     return rows
+
+
+def _source_url(metadata: dict, kb_id: str | None) -> str | None:
+    """A row's stored source, checked at the door.
+
+    Two shapes are legitimate: a web address, and an `internal:...` name for
+    programme material with no public page. Anything else is a data defect --
+    a filename, a note, a half-typed URL -- and it is refused HERE, once, rather
+    than being written and then rejected on every turn that retrieves the row.
+
+    Refused means NULL, not corrected. There is no repair that would not be a
+    guess, and a guessed provenance is worse than an absent one.
+    """
+    raw = _pick(metadata, SOURCE_URL_COLUMNS)
+    if not raw:
+        logger.warning("Row %s names no source; it will cite by id only.", kb_id or "?")
+        return None
+
+    if raw.lower().startswith(sources.DOCUMENT_SCHEME):
+        return raw
+    if sources.safe_url(raw) is not None:
+        # Stored as authored, not canonicalised: this is the address a reader
+        # opens, and `app.sources` is the one place that decides how to shorten it.
+        return raw
+
+    logger.warning(
+        "Row %s stored an unusable source_url (%r); writing NULL rather than a "
+        "value nothing downstream can trust.",
+        kb_id or "?",
+        raw[:64],
+    )
+    return None
 
 
 def _check_dimensions(settings: Settings, vectors: list[list[float]]) -> None:

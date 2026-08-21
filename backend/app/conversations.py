@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -103,6 +104,56 @@ async def get_conversations(principal: Principal = Depends(require_principal)) -
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _UnknownReader:
+    """The reader we could not identify: treated as the youngest one.
+
+    `citation_refs` reads exactly these two fields. Passing `None` instead would
+    mean "no gate", which is what the offline tools want and is the wrong answer
+    for a person: an unidentified reader on a service whose readers start at
+    five is a child until proven otherwise.
+    """
+
+    persona: str = "stella"
+    age_band: str = "5-8"
+
+
+async def _reader_claims(principal: Principal, persona: str | None):
+    """Who is reopening this conversation, so history obeys the same gates a live turn does.
+
+    Derived from the account rather than from the stored conversation, because
+    the row records the persona and not the age band, and `strips_links` needs
+    both. A failure here withholds links: this gate protects children, and the
+    conservative answer when we cannot tell is the one that withholds.
+    """
+    from app.graph.account import claims_for
+
+    try:
+        return await claims_for(str(principal.user_id), requested_persona=persona)
+    except Exception:
+        logger.warning(
+            "Could not derive claims for a transcript read; withholding source "
+            "links for this reader.",
+            exc_info=True,
+        )
+        return _UnknownReader()
+
+
+def _replayed_sources(stored: list[dict], claims) -> list[dict]:
+    """Stored citations, put through the gates the live wire applies.
+
+    History used to hand back `extra["sources"]` verbatim, which meant a
+    reopened conversation skipped every check the SSE path makes: the link gate
+    that withholds URLs from the youngest readers, the cap on how many rows one
+    turn may cite, and the re-validation of a URL written by an older build. It
+    also leaked `supports`, an internal grounding field the client has no use
+    for. Routing both paths through `citation_refs` is what stops them drifting.
+    """
+    from app.api.stream import citation_refs
+
+    return [ref.model_dump() for ref in citation_refs(list(stored), claims=claims)]
+
+
 @router.get("/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: str, principal: Principal = Depends(require_principal)
@@ -121,6 +172,8 @@ async def get_conversation(
             raise HTTPException(status_code=404, detail="No such conversation.")
 
         row = await db.get(Conversation, conversation_id)
+
+    claims = await _reader_claims(principal, row.persona if row else None)
 
     messages: list[TranscriptMessage] = []
     for turn in turns:
@@ -145,7 +198,7 @@ async def get_conversation(
             TranscriptMessage(
                 role="assistant",
                 text=turn.content,
-                sources=extra.get("sources") or [],
+                sources=_replayed_sources(extra.get("sources") or [], claims),
                 follow_ups=extra.get("follow_ups") or [],
             )
         )

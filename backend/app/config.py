@@ -212,6 +212,14 @@ class Settings(BaseSettings):
     # a government service is a visible error.
     aspire_contact_email: str = "aspire@gov.kn"
     aspire_contact_phone: str = "+1 (869) 667-5566"
+    #: The second published line, which the persona cards offer beside the first.
+    #:
+    #: Separate from `aspire_contact_phone` rather than folded into it as one
+    #: string, because the number is also what `safety/pii.py` exempts from
+    #: redaction and what `agents/qa/nodes.py` counts as an already-published
+    #: figure. Both match on digits, and neither can tell two numbers glued
+    #: together apart from an invention.
+    aspire_contact_phone_alt: str = "+1 (869) 762-1947"
     aspire_contact_website: str = "aspire.gov.kn"
     aspire_contact_office: str = "The Cable Office, Cayon Street, Basseterre (Mon-Fri, 9:00 AM - 3:00 PM)"
 

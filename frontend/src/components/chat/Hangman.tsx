@@ -282,6 +282,17 @@ export function Hangman({
 									data-hit={hit || undefined}
 									onClick={() => guessLetter(letter)}
 									disabled={busy || used || !asking}
+									// A tried letter says which way it went in colour alone,
+									// which is nothing to a screen reader and nothing to a
+									// reader who cannot tell the two washes apart. The name
+									// says it in words.
+									aria-label={
+										hit
+											? `${letter}, in the word`
+											: used
+												? `${letter}, not in the word`
+												: letter
+									}
 								>
 									{letter}
 								</button>

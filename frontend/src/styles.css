@@ -56,9 +56,16 @@
 	/* Muted text is tinted from the brand purple rather than left neutral grey. */
 	--color-slate: #554d63;
 	--color-quiet: #6a6177;
+	/* 3.93:1 on white — under WCAG 1.4.3. For disabled controls, which the
+	   criterion exempts, and for nothing that has to be read. */
 	--color-faint: #857d92;
 
+	/* 3.30:1 on white. Clears the 3:1 that WCAG 1.4.11 asks of an icon or a
+	   swatch, and nothing near the 4.5:1 that text needs — so `--success-ink`
+	   below carries the wording, the same split `--warn` and `--warn-ink` use. */
 	--color-success: #16a34a;
+	/* 5.02:1 on white. */
+	--color-success-ink: #15803d;
 	/* 5.9:1 on the page surface — a failure has to be readable, not just red. */
 	--color-danger: #b3261e;
 	/* A wrong guess in a game is not an error. */
@@ -81,6 +88,7 @@
 	--quiet: var(--color-quiet);
 	--faint: var(--color-faint);
 	--success: var(--color-success);
+	--success-ink: var(--color-success-ink);
 	--danger: var(--color-danger);
 
 	/* Brand tints all derive from these, so a palette change leaves no stray hardcoded colour. */
@@ -195,16 +203,31 @@ body {
 	--panel-bg: transparent;
 	--chrome: rgb(255 255 255 / 0.95);
 	--hero-opacity: 1;
-	--hero-max: min(380px, 44vh);
-	/* 0.34, not 0.7: at 0.7 the tail row took a quarter of the viewport and the
-	   whole greeting sat pinned to the top with nothing under it. */
-	--starters-row: 0.34fr;
-	--composer-min: min(168px, 22vh);
-	--input-h: min(96px, 12vh);
+	/* Room for the whole greeting, not a guess at it.
+	   `min(380px, 44vh)` was under the lockup's own height at every window size
+	   ever measured — 380 against 417 on a phone and 468 on a 1080p screen — so
+	   the question was sliced through the middle of its letters and the line
+	   under it never appeared anywhere at all. The tiers further down keep the
+	   greeting inside this by shrinking the lockup on short screens, which is
+	   where the pressure actually comes from; this is the ceiling the phase
+	   morph animates away from, and it has to clear the content it holds. */
+	--hero-max: 32.5rem;
+	/* 0.14, not 0.34: a quarter of the leftover space bought one 42px row of
+	   chips a 215px lane on a 1080p screen, and took it from the greeting. */
+	--starters-row: 0.14fr;
+	/* `rem`, not `px`. As pixels these froze at 100% text: at 200% a typed
+	   question ran to 256px inside a 96px box, so two thirds of what somebody
+	   had written sat below the fold of their own input. The viewport cap stays,
+	   because a short window still cannot spare the height. */
+	--composer-min: min(10.5rem, 22vh);
+	--input-h: min(6rem, 14vh);
 }
 
-/* The ring is plum everywhere it lands on a light surface. */
-.app[data-phase="landing"] .rail-open {
+/* The ring is plum everywhere it lands on a light surface. The two controls
+   that do not are up here in the corners, on the dark end of the gradient,
+   where plum on plum measures 1.14:1 and reads as no ring at all. */
+.app[data-phase="landing"] .rail-open,
+.app[data-phase="landing"] .account-slot {
 	--focus-ring: #ffffff;
 }
 
@@ -217,8 +240,8 @@ body {
 	--hero-opacity: 0;
 	--hero-max: 0px;
 	--starters-row: 0fr;
-	--composer-min: 112px;
-	--input-h: 46px;
+	--composer-min: 7rem;
+	--input-h: 2.875rem;
 }
 
 .app[data-phase="chat"][data-rail="collapsed"] {
@@ -678,10 +701,13 @@ body {
 .composer__send,
 .follow-up,
 .tool-btn,
-.voice-switch {
+.voice-switch,
+.field__reveal,
+.auth__back {
 	position: relative;
 }
 
+/* The two auth controls were the only 40px buttons in the app without this. */
 .text-btn::after,
 .play-btn::after,
 .voice-choice::after,
@@ -690,7 +716,9 @@ body {
 .composer__send::after,
 .follow-up::after,
 .tool-btn::after,
-.voice-switch::after {
+.voice-switch::after,
+.field__reveal::after,
+.auth__back::after {
 	content: "";
 	position: absolute;
 	top: 50%;
@@ -703,7 +731,8 @@ body {
 /* These sit alone or with wide gaps, so they can grow in both axes. */
 .composer__mic::after,
 .composer__send::after,
-.tool-btn::after {
+.tool-btn::after,
+.field__reveal::after {
 	width: max(100%, 44px);
 }
 
@@ -1101,6 +1130,20 @@ body {
 	transition: grid-template-rows var(--morph);
 }
 
+/* On the landing screen the greeting, the box and the chips are one block, and
+   that block is centred. The grid above gives the thread all the leftover
+   height, which pins the greeting to the top of the screen and the box near the
+   bottom with a field of gradient between them — three things at three
+   different heights instead of one composition. Flex here rather than
+   `align-content`, so `.thread` keeps a real `min-height: 0` to shrink into on
+   a short window instead of overflowing off both edges. */
+.app[data-phase="landing"] .stage {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0;
+}
+
 /* The thread now runs to the top of the viewport — there is no bar above it to stop against. */
 .thread {
 	display: flex;
@@ -1135,6 +1178,16 @@ body {
 	width: 100%;
 }
 
+/* The greeting is not a short conversation, so it does not want the bottom
+   anchor. `.stage` centres the whole block above; this only has to get out of
+   the way. Zero rather than `auto`: an `auto` margin on an item taller than its
+   scroller centres the overflow, and the half above the top edge can never be
+   scrolled back to — which is how the second line of the greeting disappeared
+   at 200% text on a phone. */
+.app[data-phase="landing"] .thread__inner {
+	margin-top: 0;
+}
+
 /* ── Hero ───────────────────────────────────────────────────────────────── */
 
 .hero {
@@ -1146,6 +1199,13 @@ body {
 	text-align: center;
 	opacity: var(--hero-opacity);
 	max-height: var(--hero-max);
+	/* A backstop, not the mechanism: the height tiers are what keep the greeting
+	   inside this box. Without it, anything that overflows escapes into the
+	   scroll container and gets cut at the composer's top edge instead — which
+	   is how a sliced headline shipped. The margin is for the orb's glow and the
+	   orbiting arrow, both drawn outside their elements on purpose. */
+	overflow: clip;
+	overflow-clip-margin: 24px;
 	/* Rows 2 and 3 of ANIMATION-INVENTORY.md, and the reason the greeting fades rather than vanishing. */
 	transition:
 		opacity 380ms var(--ease),
@@ -1207,33 +1267,6 @@ body {
 	box-shadow:
 		inset 0 -3px 7px rgb(53 29 90 / 0.5),
 		0 4px 12px rgb(72 41 119 / 0.25);
-}
-
-.orb--hero {
-	--orb-size: 64px;
-	margin-bottom: 20px;
-}
-
-.orb--hero::after {
-	box-shadow:
-		inset 0 -6px 14px rgb(53 29 90 / 0.55),
-		inset 0 4px 10px rgb(255 255 255 / 0.5),
-		0 12px 30px rgb(53 29 90 / 0.35);
-}
-
-/* Bloom behind the hero orb only — at message scale it would just look blurry */
-.orb--hero::before {
-	content: "";
-	position: absolute;
-	inset: -18px;
-	border-radius: 999px;
-	background: radial-gradient(
-		circle,
-		rgb(255 255 255 / 0.55) 0%,
-		rgb(217 77 179 / 0.35) 45%,
-		transparent 72%
-	);
-	filter: blur(12px);
 }
 
 .orb--thinking {
@@ -2564,7 +2597,12 @@ body {
 
 /* ── Route states: not found, error, pending ─────────────────────────────── */
 
-/* The whole viewport, because these replace the view rather than sit inside it. */
+/* The whole viewport, because these replace the view rather than sit inside it.
+   Which is also what made them unreadable: with no surface of their own they
+   landed on the `body`'s deep plum wearing the text colours of a light card —
+   `--prose` on `--plum-deep` is 1.19:1, so "That page does not exist" was a
+   headline nobody could read. They carry the brand wash now, like the opening,
+   and the type is white on it. */
 .route-state {
 	display: flex;
 	flex-direction: column;
@@ -2574,6 +2612,9 @@ body {
 	height: 100dvh;
 	padding: 24px;
 	text-align: center;
+	background: linear-gradient(160deg, var(--plum-deep), var(--plum));
+	/* Plum on plum is not a focus ring. */
+	--focus-ring: #ffffff;
 }
 
 .route-state__orb {
@@ -2611,13 +2652,15 @@ body {
 	margin: 0;
 	font-size: 1.375rem;
 	font-weight: 600;
-	color: var(--prose);
+	color: #fff;
 }
 
+/* Tinted from the surface it sits on rather than left grey: 8.8:1 at the
+   lighter end of the wash, and it still reads as the quieter of the two. */
 .route-state__body {
 	margin: 0;
 	max-width: 40ch;
-	color: var(--quiet);
+	color: rgb(255 255 255 / 0.86);
 	line-height: 1.6;
 	text-wrap: pretty;
 }
@@ -2644,10 +2687,18 @@ body {
 	cursor: pointer;
 }
 
+/* The second way out, on the same dark wash: a plum hairline and slate text
+   were both invisible on it. */
 .route-state__action--quiet {
-	border: 1px solid var(--control-line);
+	border: 1px solid rgb(255 255 255 / 0.42);
 	background: transparent;
-	color: var(--slate);
+	color: #fff;
+	font-weight: 500;
+}
+
+.route-state__action--quiet:hover {
+	border-color: rgb(255 255 255 / 0.7);
+	background: rgb(255 255 255 / 0.08);
 }
 
 /* Nothing but the orb. */
@@ -2832,6 +2883,33 @@ body {
 	opacity: 0.38;
 	box-shadow: none;
 	cursor: not-allowed;
+}
+
+/* Not yet attached — see `Composer`'s `live`. The page is painted and the box
+   takes typing seconds before React reaches this button, and "not ready yet"
+   and "there is nothing to send" are different states that looked identical.
+   A slow breath rather than a spinner: this is usually gone before it is
+   noticed, and something urgent here would be the wrong promise. */
+.composer__send[data-waking] {
+	cursor: progress;
+	animation: send-waking 1.1s var(--ease) infinite;
+}
+
+@keyframes send-waking {
+	0%,
+	100% {
+		opacity: 0.3;
+	}
+	50% {
+		opacity: 0.55;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.composer__send[data-waking] {
+		animation: none;
+		opacity: 0.45;
+	}
 }
 
 .composer__end {
@@ -3690,7 +3768,9 @@ body {
 	border: 1.5px solid var(--wash-14);
 	border-radius: 16px;
 	background: var(--wash-3);
-	color: var(--faint);
+	/* Not `--faint`: this is the resting label a reader has to read, and
+	   `--faint` is 3.93:1 on this wash. */
+	color: var(--quiet);
 	font-size: var(--pill-fs);
 	font-weight: 600;
 	letter-spacing: 0.05em;
@@ -4390,19 +4470,74 @@ body {
 	}
 }
 
+/* ── Short screens: the greeting takes its height back ────────────────────
+   The lockup sizes on width — `13vw` orbit, `19vw` wordmark — but the space it
+   has to fit into is measured in height. A 1366x768 laptop, the machine most of
+   these readers actually sit at, is wide enough to draw the lockup at full size
+   and too short to hold it, so it was drawn at full size and then cut off. The
+   `.app` selector carries these above the width-only trims further down the
+   file, which would otherwise win on order. */
+
+@media (max-height: 820px) {
+	.app .brandmark {
+		gap: 10px;
+		margin-bottom: 16px;
+	}
+
+	.app .brandmark__wordmark {
+		width: clamp(132px, 16vw, 168px);
+	}
+
+	.app .hero__title {
+		font-size: clamp(1.75rem, 3.4vw, 2.25rem);
+	}
+}
+
+@media (max-height: 700px) {
+	.app .brandmark {
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+
+	.app .brandmark__expansion {
+		font-size: 0.6875rem;
+		line-height: 1.4;
+	}
+
+	.app .hero__title {
+		font-size: clamp(1.5rem, 3vw, 1.875rem);
+	}
+
+	.app .hero__sub {
+		font-size: 0.9375rem;
+	}
+
+	.app {
+		--composer-min: 7rem;
+	}
+}
+
 /* Short viewports — a phone in landscape, a small window, or a soft keyboard taking half the screen. */
 @media (max-height: 600px) {
 	.app {
 		--hero-max: 0px;
 		--hero-opacity: 0;
 		--starters-row: auto;
-		--composer-min: 96px;
-		--input-h: 44px;
+		--composer-min: 6rem;
+		--input-h: 2.75rem;
+	}
+
+	/* There is no room for the greeting here, so it is gone rather than merely
+	   transparent: at zero opacity it was still painting and still being read
+	   out. `display: none` and not `visibility: hidden`, because the row it
+	   sits in should collapse with it. */
+	.app[data-phase="landing"] .hero {
+		display: none;
 	}
 
 	.app[data-phase="chat"] {
-		--composer-min: 96px;
-		--input-h: 44px;
+		--composer-min: 6rem;
+		--input-h: 2.75rem;
 	}
 
 	.starters__row {
@@ -4439,8 +4574,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
 	/* Ambient and ornamental — nothing here reports state. */
 	.atmosphere span,
-	.orb--hero,
-	.orb--hero::before,
 	.orb--thinking,
 	.voice-stars--play path,
 	.game__stars svg {
@@ -4934,8 +5067,9 @@ body {
 	content: "○ ";
 }
 
+/* Words, so the ink rather than the mark colour. */
 .auth__reqs li[data-ok] {
-	color: var(--success);
+	color: var(--success-ink);
 }
 
 .auth__reqs li[data-ok]::before {
@@ -5000,14 +5134,28 @@ body {
 	padding-right: 54px;
 }
 
+/* `--quiet`, not `--faint`: a placeholder is text, and `--faint` is 3.93:1 on
+   white — under the 4.5:1 that WCAG 1.4.3 asks of it. `--quiet` is 5.9:1 and
+   still reads as the hint rather than the value. */
 .field__input::placeholder {
-	color: var(--faint);
+	color: var(--quiet);
 	opacity: 1;
 }
 
 .field__input:focus {
 	border-color: var(--plum);
 	box-shadow: 0 0 0 4px var(--wash-18);
+}
+
+/* Forced colours strip `box-shadow`, and the outline was turned off above, so
+   in High Contrast these fields had no focus indicator at all. Same fix, same
+   reason as `.composer:focus-within`. */
+@media (forced-colors: active) {
+	.field__input:focus,
+	.adm-field__input:focus {
+		outline: 3px solid Highlight;
+		outline-offset: 2px;
+	}
 }
 
 .field__input[data-error] {
@@ -5571,10 +5719,11 @@ body {
 	color: var(--magenta);
 }
 
+/* Small print, but print: `--faint` is 3.93:1 and this is under 14px. */
 .w-note {
 	margin: 8px 0 0;
 	font-size: calc(var(--band-type, 16px) - 3px);
-	color: var(--faint);
+	color: var(--quiet);
 }
 
 .w-running {
@@ -6116,9 +6265,10 @@ body {
 	}
 }
 
-/* ── First visit: the opening, then "who is here?" ────────────────────────── */
-/* Both phases sit above everything and neither blocks the app underneath from
-   having already rendered — the assistant is usable the moment this clears. */
+/* ── First visit: the opening ─────────────────────────────────────────────── */
+/* Sits above everything, and does not block the app underneath from having
+   already rendered — the assistant is usable the moment this clears. Who is
+   reading is asked after it, by the guide chooser below, and by nothing else. */
 
 .intro {
 	position: fixed;
@@ -6183,121 +6333,15 @@ body {
 	}
 }
 
-/* The question. A scrim rather than the full brand wash: the app behind it is
-   the thing being introduced, and hiding it entirely makes this feel like a gate. */
-.intro--ask {
-	background: rgb(30 10 55 / 0.5);
-	backdrop-filter: blur(3px);
-	justify-content: center;
-}
-
-.intro__panel {
-	width: min(560px, 100%);
-	max-height: calc(100dvh - 48px);
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	padding: 26px 24px 20px;
-	border: 1px solid var(--wash-12);
-	border-radius: 22px;
-	background: #fff;
-	box-shadow: 0 24px 60px -12px rgb(30 10 55 / 0.45);
-	animation: rise 260ms var(--ease) both;
-}
-
-.intro__title {
-	margin: 0 0 6px;
-	font-size: 1.25rem;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	color: var(--ink);
-}
-
-.intro__sub {
-	margin: 0 0 18px;
-	color: var(--slate);
-	font-size: 0.9375rem;
-	line-height: 1.55;
-}
-
-.intro__options {
-	display: grid;
-	gap: 8px;
-}
-
-/* 64px minimum: the youngest readers this is written for are five. */
-.intro__option {
-	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 2px 12px;
-	min-height: 64px;
-	padding: 12px 14px;
-	border: 1px solid var(--control-line);
-	border-radius: 14px;
-	background: #fff;
-	text-align: left;
-	font: inherit;
-	cursor: pointer;
-	transition:
-		background var(--swift),
-		border-color var(--swift),
-		transform var(--swift);
-}
-
-.intro__option:hover {
-	background: var(--wash-3);
-	border-color: var(--plum-light);
-	transform: translateY(-1px);
-}
-
-.intro__option-name {
-	font-size: 1rem;
-	font-weight: 700;
-	color: var(--ink);
-}
-
-.intro__option-audience {
-	grid-column: 2;
-	grid-row: 1;
-	align-self: center;
-	color: var(--quiet);
-	font-size: 0.8125rem;
-}
-
-.intro__option-blurb {
-	grid-column: 1 / -1;
-	color: var(--slate);
-	font-size: 0.875rem;
-	line-height: 1.45;
-}
-
-.intro__skip {
-	display: block;
-	width: 100%;
-	margin-top: 14px;
-	padding: 10px;
-	border: none;
-	border-radius: 12px;
-	background: transparent;
-	color: var(--quiet);
-	font: inherit;
-	font-size: 0.875rem;
-	cursor: pointer;
-}
-
-.intro__skip:hover {
-	background: var(--wash-3);
-	color: var(--slate);
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.intro,
 	.intro__mark,
-	.intro__word,
-	.intro__panel {
+	.intro__word {
 		animation-duration: 1ms !important;
 	}
 }
-/* ── the guide chooser ───────────────────────────────────────────────────────
+
+/* ── The guide chooser ───────────────────────────────────────────────────────
    Asked once, before the first question. The band decides the voice, the
    vocabulary ladder, the examples and the check questions, and the only way to
    set it used to be a composer control a first-time reader never opens. */
@@ -6307,9 +6351,16 @@ body {
 	inset: 0;
 	z-index: 60;
 	display: grid;
-	place-items: center;
+	/* `start` plus `margin: auto` on the panel, not `place-items: center`.
+	   A centred grid item taller than its scroller overflows equally in both
+	   directions, and the half above the top edge cannot be scrolled back to —
+	   which on a 320px screen took the title with it. This centres a panel that
+	   fits and lets a taller one scroll from its own top. */
+	align-items: start;
+	justify-items: center;
 	padding: 24px 16px;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	background: rgb(30 10 55 / 0.42);
 	backdrop-filter: blur(3px);
 	animation: fade-in 200ms var(--ease) both;
@@ -6318,6 +6369,7 @@ body {
 .guide {
 	width: 100%;
 	max-width: 520px;
+	margin-block: auto;
 	padding: 28px 28px 20px;
 	border-radius: 16px;
 	background: #fff;
@@ -6587,13 +6639,22 @@ body {
 	list-style: none;
 }
 
+/* One column until there is room for the still beside the words. The breakpoint
+   is the card's own width, not the viewport's: this card is used in the panel
+   AND inside a chat turn, which are different widths.
+
+   The container is the `<li>` around the card, not the card. A `@container`
+   rule cannot match the element that declares the container, so with
+   `container-type` on `.video-card` itself the two-column rule below never
+   applied anywhere — every card was one column on a 1440px desktop. */
+.video-lib__list > li,
+.video-offer {
+	container-type: inline-size;
+}
+
 .video-card {
 	display: grid;
-	/* One column until there is room for the still beside the words. The
-	   breakpoint is the card's own width, not the viewport's: this card is used
-	   in the panel AND inside a chat turn, which are different widths. */
 	gap: 14px;
-	container-type: inline-size;
 }
 
 @container (min-width: 460px) {
@@ -6760,55 +6821,6 @@ body {
 	margin-bottom: 26px;
 }
 
-.brandmark__orbit {
-	width: clamp(92px, 13vw, 124px);
-	aspect-ratio: 1;
-}
-
-.brandmark__svg {
-	display: block;
-	width: 100%;
-	height: 100%;
-	overflow: visible;
-}
-
-/* The mark is a raster; keep its edges crisp as it scales up. */
-.brandmark__mark {
-	image-rendering: auto;
-}
-
-.brandmark__arrow {
-	stroke: var(--magenta);
-	stroke-width: 5;
-}
-
-.brandmark__head {
-	fill: var(--magenta);
-}
-
-/* One transform on one group. `transform-box: fill-box` would re-origin to the
-   arrow's own bounds; the origin has to be the MARK's centre, so it is given in
-   the viewBox's coordinates instead. */
-.brandmark__arrow-spin {
-	transform-origin: 60px 60px;
-	animation: brand-orbit 18s linear infinite;
-}
-
-@keyframes brand-orbit {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-/* Interaction stops it. Paused rather than removed, so it holds wherever it
-   reached instead of snapping back to the top of the circle. */
-.brandmark[data-still] .brandmark__arrow-spin {
-	animation-play-state: paused;
-}
-
 .brandmark__wordmark {
 	width: clamp(150px, 19vw, 190px);
 	height: auto;
@@ -6862,8 +6874,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	/* Both are ornamental and report nothing, so they stop outright. */
-	.brandmark__arrow-spin,
+	/* Ornamental and reports nothing, so it stops outright. */
 	.app::before {
 		animation: none !important;
 	}
@@ -7414,8 +7425,107 @@ body {
 	line-height: 1.55;
 }
 
+/* ── Where a source came from ───────────────────────────────────────────────
+   The heading of a source entry: whose page it is, and the domain under it.
+   This is the only outbound link in the transcript that ASPIRE itself chose —
+   `.answer-link` targets come from a language model, these come from the
+   knowledge base's own `source_url` column — so it is styled as provenance
+   rather than as prose: no underline at rest, and the domain beneath it in the
+   quiet colour, because the domain is what a careful reader checks. */
+
+.answer .source__origin {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 0 0 8px;
+}
+
+/* A step above the extract question below it (0.8125rem/600). The heading is
+   the entry; the questions are what was taken from it, and at the same size in
+   the same weight the eye had nothing to structure the row by. */
+.source__site {
+	color: var(--plum-deep);
+	font-size: 0.875rem;
+	font-weight: 600;
+	line-height: 1.35;
+	/* A page title can be a whole headline; it wraps rather than clipping. */
+	text-wrap: pretty;
+}
+
+a.source__site--link {
+	/* `inline`, not `inline-flex`: a flex container makes the whole title one
+	   item and the icon another, so on a title that wraps to three lines the
+	   icon centres itself against the middle line. Inline lets it sit after the
+	   last word, which is where a trailing mark belongs. */
+	display: inline;
+	color: var(--plum);
+	text-decoration: none;
+	/* A URL has no spaces to break at, and the panel is inside `overflow:
+	   hidden` — without this an unbroken host clips instead of wrapping. */
+	overflow-wrap: anywhere;
+	border-radius: 3px;
+	transition:
+		color var(--swift),
+		text-decoration-color var(--swift);
+}
+
+a.source__site--link:hover {
+	color: var(--magenta);
+	text-decoration: underline;
+	text-decoration-color: currentColor;
+	text-decoration-thickness: 1.5px;
+	text-underline-offset: 3px;
+}
+
+a.source__site--link:focus-visible {
+	outline: 2px solid var(--magenta);
+	outline-offset: 3px;
+}
+
+/* Trails the last word of a title that may be one line or three, and does not
+   get orphaned onto a line of its own — `margin-left` on an inline SVG keeps
+   it attached to the text that precedes it. */
+.source__out {
+	flex-shrink: 0;
+	margin-left: 5px;
+	vertical-align: -1px;
+	opacity: 0.65;
+}
+
+a.source__site--link:hover .source__out {
+	opacity: 1;
+}
+
+.source__domain {
+	color: var(--quiet);
+	font-size: 0.75rem;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+/* The rows cited from this source, indented under it so the grouping reads as
+   a grouping. Hairline rather than indentation alone: at 13px the eye needs an
+   edge to follow. */
+.source__extract {
+	padding-left: 10px;
+	border-left: 2px solid var(--wash-12);
+}
+
+.source__extract + .source__extract {
+	margin-top: 10px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-	.sources__chevron {
+	.sources__chevron,
+	a.source__site--link {
 		transition: none !important;
+	}
+}
+
+/* A link that only has colour to distinguish it fails when colour is taken
+   away; forced-colors mode gets the underline back. */
+@media (forced-colors: active) {
+	a.source__site--link {
+		text-decoration: underline;
 	}
 }

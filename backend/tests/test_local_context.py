@@ -30,7 +30,13 @@ from app.prompting.personas import (
     _DIR,
     persona_card,
 )
-from app.prompting.personas.names import NAMES, PLACEHOLDER, display_name
+from app.prompting.personas.names import (
+    BAND_NAMES,
+    NAMES,
+    PLACEHOLDER,
+    all_labels,
+    display_name,
+)
 from app.safety import vocab
 
 #: The six band cards: `(persona, band)`, and the file each must live in.
@@ -60,19 +66,43 @@ CURRICULUM: list[Path] = sorted(Path("app/curriculum/content").rglob("*.y*ml"))
 #: substitutes `{name}` wherever it appears and simply does not notice the
 #: literal beside it. Add to this list whenever `NAMES` changes.
 #:
-#: `Sky` is deliberately absent: it was retired once and is now the label
-#: `stella` carries, so banning it would fail the build on the current name.
+#: `Sky` is here now. It was the label `stella` carried until the six-card
+#: rewrite, which renamed it to `Skye` and gave the 9-12 band its own name --
+#: and a one-letter rename is exactly the kind that survives silently. The
+#: checks below are whole-word, so `Sky` does not fire on `Skye`.
 RETIRED_NAMES: tuple[str, ...] = (
     "Stella", "Orion", "Aurora", "Nova",
-    "Skai", "Dion", "Prosper", "Destiny", "Star",
+    "Skai", "Dion", "Prosper", "Destiny", "Star", "Sky",
 )
 
-#: Where a card stops describing itself and starts naming what it refuses.
+#: Where a card stops speaking in its own voice and starts listing its contents.
 #:
-#: A card that BANS a word has to name it, so the ladder is checked against the
-#: half above this heading only. Without the split every prohibition reads as a
-#: violation of itself -- which is how the first version of this test failed.
-BAN_HEADING = "WHAT YOU NEVER SAY"
+#: The ladder is checked above this heading only. Below it a card is a
+#: specification -- the topics it may cover, the lines it may not cross, the
+#: script it reads at an escalation -- and a specification has to name the thing
+#: it is scoping. Without the split every prohibition reads as a violation of
+#: itself, which is how the first version of this test failed.
+VOICE_ENDS_AT = "DELIVERABLES"
+
+#: Where a card starts naming what it refuses. Every card must have one.
+BAN_HEADING = "RED LINES"
+
+#: How a card marks a word it is naming in order to forbid it.
+#:
+#: `never` rather than a heading, because the six-card rewrite moved the
+#: prohibitions out of one block at the foot and spread them through the card:
+#: the tone section bans a vocabulary, the red lines ban a behaviour, and the
+#: care block bans a claim. A scan that reads those as the card's own speech
+#: fails the build on `NEVER: mall, dime` -- the line whose whole job is to keep
+#: `mall` out.
+_FORBIDS = re.compile(r"\bnever\b", re.IGNORECASE)
+
+#: Where one bullet or numbered rule ends and the next begins.
+#:
+#: Items, not lines, because a prohibition wraps: `NEVER: mall, dime, cookie,`
+#: ends a line and `"vacation", US dollars, "grade 2"` begins the next one, and
+#: a line-by-line scan sees the second half with no `never` anywhere near it.
+_ITEM_START = re.compile(r"^\s*(?:-\s|\d+\.\s)")
 
 
 # ── the place ────────────────────────────────────────────────────────────────
@@ -120,9 +150,33 @@ def _scannable(text: str) -> str:
     return _LOCAL_HOMOGRAPHS.sub(" ", text)
 
 
+def _items(text: str) -> list[str]:
+    """A card split into the units a rule is written in, continuations attached."""
+    items: list[str] = []
+    current: list[str] = []
+    for line in text.splitlines():
+        if current and (_ITEM_START.match(line) or not line.strip()):
+            items.append("\n".join(current))
+            current = []
+        current.append(line)
+    if current:
+        items.append("\n".join(current))
+    return items
+
+
+def what_the_card_says(text: str) -> str:
+    """A card with the rules that name a word in order to forbid it removed.
+
+    Everything the card asserts, and nothing it refuses. `NEVER: mall, dime` is
+    the card working; a scan that cannot tell it from `meet me at the mall` is a
+    gate that fails on its own protection, which is a gate people delete.
+    """
+    return "\n".join(item for item in _items(text) if not _FORBIDS.search(item))
+
+
 def foreign_words_in(text: str) -> list[str]:
     """Every American-English word in `text`, in the order they appear."""
-    scannable = _scannable(text)
+    scannable = _scannable(what_the_card_says(text))
     found = [
         word
         for word in FOREIGN_WORDS
@@ -133,9 +187,9 @@ def foreign_words_in(text: str) -> list[str]:
     return found
 
 
-def before_the_ban_list(text: str) -> str:
-    """The half of a card that speaks, rather than the half that refuses."""
-    return text.split(BAN_HEADING, 1)[0]
+def the_cards_own_voice(text: str) -> str:
+    """The part of a card that speaks, rather than the part that specifies."""
+    return what_the_card_says(text.split(VOICE_ENDS_AT, 1)[0])
 
 
 class TestNothingStraysOutsideStKittsAndNevis:
@@ -199,43 +253,103 @@ class TestTheVocabularyLadder:
         ("persona", "band"), sorted(BAND_CARDS), ids=lambda value: str(value)
     )
     def test_a_card_stays_on_its_own_bands_ladder(self, persona, band):
-        """Checked above the ban heading, where the card is speaking in its own voice."""
-        spoken = before_the_ban_list(_read(_DIR / BAND_CARDS[(persona, band)]))
+        """Checked where the card is speaking, not where it is specifying."""
+        spoken = the_cards_own_voice(_read(_DIR / BAND_CARDS[(persona, band)]))
         assert vocab.check(spoken, band) == []
 
-    def test_the_5_8_card_never_uses_the_word_interest(self):
-        """"the money makes a little more money", and leave it there."""
-        spoken = before_the_ban_list(_read(_DIR / BAND_CARDS[("stella", "5-8")]))
-        assert "interest" not in spoken.lower()
+    def test_the_5_8_card_puts_no_number_on_anything(self):
+        """Skye may say what interest IS. It may never say what it is worth.
 
-    def test_the_9_12_card_uses_interest_and_does_not_compound_it(self):
-        spoken = before_the_ban_list(_read(_DIR / BAND_CARDS[("stella", "9-12")])).lower()
-        assert "interest" in spoken
-        assert "compound" not in spoken
+        The step this rung makes is not a word. It is that the youngest reader
+        gets the picture and nobody gets to hand them a figure they cannot
+        check -- no rate, no percentage, no balance, and no date for when the
+        money can be touched, because "when you are eighteen" is a promise.
+        """
+        card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
+        assert "as pictures, never as numbers" in card
+        assert "NEVER state a rate, a percentage, a balance or a projected amount" in card
+        assert "NEVER give a date, an age, or a number of years" in card
 
-    def test_the_13_15_card_says_compound_interest(self):
-        spoken = before_the_ban_list(_read(_DIR / BAND_CARDS[("orion", "13-15")])).lower()
-        assert "compound interest" in spoken
+    def test_the_9_12_card_shows_the_split_and_a_sourced_worked_example(self):
+        """Kaleb is the first rung that gets arithmetic, and only at a sourced rate."""
+        card = _read(_DIR / BAND_CARDS[("stella", "9-12")])
+        assert "EC$500 savings / EC$500 investment" in card
+        assert "compounded twice a\n    year" in card
+        assert "SOURCED rate" in card
+        assert "NEVER give a projected value using a rate you cannot point at" in card
+
+    @pytest.mark.parametrize("band", ["13-15", "16-18"])
+    def test_the_teen_cards_require_a_source_url_for_every_figure(self, band):
+        """Zion's step up is provenance: this reader opens the other tab."""
+        card = _read(_DIR / BAND_CARDS[("orion", band)])
+        assert "source_url" in card
+        assert "with the workings shown" in card
 
     def test_the_step_up_is_a_step_at_every_rung(self):
-        """5-8 withholds it, 9-12 names it, 13-15 compounds it. In that order."""
-        spoken = {
-            band: before_the_ban_list(_read(_DIR / BAND_CARDS[(persona, band)])).lower()
+        """No figures, then a sourced worked example, then a checkable source.
+
+        The finding this whole split exists for is a twelve-year-old answered
+        six years below themselves, so what matters is that consecutive rungs
+        differ -- and that the difference runs one way.
+        """
+        card = {
+            band: _read(_DIR / BAND_CARDS[(persona, band)])
             for persona, band in BAND_CARDS
         }
-        assert "interest" not in spoken["5-8"]
-        assert "interest" in spoken["9-12"] and "compound" not in spoken["9-12"]
-        assert "compound interest" in spoken["13-15"]
+        assert "never as numbers" in card["5-8"]
+        assert "never as numbers" not in card["9-12"]
+        assert "SOURCED rate" in card["9-12"]
+        assert "source_url" not in card["9-12"]
+        assert "source_url" in card["13-15"]
+
+    def test_the_withdrawal_answer_does_not_move_between_bands(self):
+        """One sourced rule, one answer, every band. Said on the card, not hoped for."""
+        for persona, band in (("stella", "9-12"), ("orion", "13-15"), ("orion", "16-18")):
+            card = _read(_DIR / BAND_CARDS[(persona, band)])
+            assert "NEVER answer the withdrawal question differently" in card
 
     def test_a_card_may_name_the_word_it_bans(self):
         """The split is load-bearing: without it every prohibition self-violates."""
         whole = _read(_DIR / BAND_CARDS[("stella", "5-8")])
-        assert vocab.check(whole, "5-8"), "the ban list should name 'interest'"
-        assert vocab.check(before_the_ban_list(whole), "5-8") == []
+        assert vocab.check(whole, "5-8"), "the red lines should name 'percentage'"
+        assert vocab.check(the_cards_own_voice(whole), "5-8") == []
 
     @pytest.mark.parametrize("path", ALL_CARDS, ids=lambda path: path.name)
-    def test_every_card_has_the_heading_the_split_depends_on(self, path):
-        assert BAN_HEADING in _read(path)
+    def test_every_card_has_the_headings_the_split_depends_on(self, path):
+        text = _read(path)
+        assert VOICE_ENDS_AT in text
+        assert BAN_HEADING in text
+
+
+class TestTheCardsAskForMoreThanTheOutboundGateAllows:
+    """A recorded disagreement, not a passing grade.
+
+    The six-card rewrite raised what the two youngest bands may be taught: the
+    5-8 card names interest as something it may explain "as pictures", and the
+    9-12 card asks for a worked example "compounded twice a year". The outbound
+    vocabulary gate in `app/safety/vocab.py` still bans both words at both
+    bands, so an answer that does exactly what its card asks is rewritten by
+    `safety_out` -- a wasted model call and a worse answer, though not an
+    unsafe one, because the gate holds either way.
+
+    Which side moves is a child-safety decision and a human's to make: lift the
+    terms from `_BAN`, or take the two lines back out of the cards. This test
+    pins the overlap so that decision is visible in the suite rather than
+    discovered in a transcript, and it fails the moment either side changes --
+    which is the point.
+    """
+
+    def test_the_5_8_card_names_a_word_the_5_8_gate_still_strips(self):
+        card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
+        assert "what interest is" in card
+        assert [v.term for v in vocab.check("what interest is", "5-8")] == ["interest"]
+
+    def test_the_9_12_card_asks_for_arithmetic_the_9_12_gate_still_strips(self):
+        card = _read(_DIR / BAND_CARDS[("stella", "9-12")])
+        assert "compounded twice a" in card
+        assert [v.term for v in vocab.check("compounded twice a year", "9-12")] == [
+            "compound"
+        ]
 
 
 class TestTheNameIsOneLine:
@@ -243,22 +357,21 @@ class TestTheNameIsOneLine:
     def test_no_card_hardcodes_a_persona_name(self, path):
         """A client picking a nicer name must not be a fifty-file migration.
 
-        Every card, not only the six band ones. The undifferentiated four are
-        still reachable as the fallback, and they were written before the split
-        with their names spelled out -- so a reader on an unrecognised band was
-        greeted by the old name for as long as they stayed there.
+        Every card, including the default one. `everyone` used to be exempt
+        from carrying the placeholder because it had no label to fill in; it
+        introduces itself as Guest now, so the exemption is gone and the rule is
+        the same for all seven.
         """
         text = _read(path)
-        # `everyone` is exempt from carrying the placeholder, and from nothing
-        # else. It is the one persona with no label to fill in -- its card
-        # answers "a reader who has not said who they are" and is written
-        # unnamed on purpose -- so a placeholder there would substitute to an
-        # empty string mid-sentence. The ban below still applies to it.
-        if _persona_of(path) in NAMES:
-            assert PLACEHOLDER in text
-        # Whole words. `Star` is a substring of `Starting`, and a retired label
-        # that fails the build on ordinary prose is a gate people delete.
-        for label in (*NAMES.values(), *RETIRED_NAMES):
+        assert PLACEHOLDER in text
+        # `all_labels`, not `NAMES.values()`: a per-band label like Kaleb is a
+        # label like any other, and a check that only knew the whole-persona
+        # ones would let a card spell it out.
+        #
+        # Whole words. `Star` is a substring of `Starting`, and `Sky` is a
+        # substring of `Skye` -- a retired label that fails the build on the
+        # current one is a gate people delete.
+        for label in (*all_labels(), *RETIRED_NAMES):
             assert not re.search(rf"\b{re.escape(label)}\b", text)
 
     @pytest.mark.parametrize("path", CURRICULUM, ids=lambda path: path.name)
@@ -271,17 +384,36 @@ class TestTheNameIsOneLine:
         That is fine until the label changes -- and then it is silent, which is
         how `Skai` outlived the rename that retired it. The current name is
         allowed here precisely because it has to be.
+
+        Whole words here too, since `Sky` was retired in favour of `Skye`: a
+        substring check cannot tell a one-letter rename from the name that
+        replaced it, and would fail the build on the label the file is now
+        supposed to be carrying.
         """
         text = _read(path)
         for label in RETIRED_NAMES:
-            assert not re.search(rf"{re.escape(label)}", text), (
+            assert not re.search(rf"\b{re.escape(label)}\b", text), (
                 f"{path.name} still says {label!r}; the personas are now "
-                f"{', '.join(sorted(NAMES.values()))}"
+                f"{', '.join(sorted(all_labels()))}"
             )
 
     def test_the_label_is_filled_in_when_the_card_is_read(self):
         assert NAMES["stella"] in persona_card("stella", "5-8")
         assert PLACEHOLDER not in persona_card("stella", "5-8")
+
+    def test_the_band_label_wins_over_the_persona_label(self):
+        """`stella` is one key and two voices, so it is one key and two names.
+
+        Skye is a gentle helper for a child who cannot yet read a rate; Kaleb is
+        a dry older cousin who names the EC$500 split and shows the workings.
+        Handing the older card the younger name is the same mismatch the band
+        split exists to end, one layer up.
+        """
+        kaleb = BAND_NAMES[("stella", "9-12")]
+        younger = persona_card("stella", "5-8")
+        older = persona_card("stella", "9-12")
+        assert NAMES["stella"] in younger and kaleb not in younger
+        assert kaleb in older and NAMES["stella"] not in older
 
     def test_a_rename_touches_one_line_and_no_card(self, monkeypatch):
         from app.prompting.personas import _card_text
@@ -289,21 +421,39 @@ class TestTheNameIsOneLine:
         before = NAMES["stella"]
         monkeypatch.setitem(NAMES, "stella", "Cora")
         _card_text.cache_clear()
-        card = persona_card("stella", "9-12")
+        card = persona_card("stella", "5-8")
         assert "Cora" in card and before not in card
 
-    def test_every_known_persona_has_a_label_but_the_nameless_one(self):
-        """`everyone` is known and deliberately unlabelled. Everything else is both.
+    def test_a_band_rename_touches_one_line_and_no_card(self, monkeypatch):
+        """A per-band label is one line in the same file, on the same terms."""
+        from app.prompting.personas import _card_text
 
-        It is a persona in its own right -- its own card, its own row in the
-        access matrix, its own entry in the picker -- but it names the absence
-        of an audience rather than a character, so there is no name for a reader
-        to be greeted by. Asserting the difference rather than equality keeps
-        the rename guarantee intact: a label in `NAMES` with no card, or a card
-        with no label, still fails here.
+        before = BAND_NAMES[("stella", "9-12")]
+        monkeypatch.setitem(BAND_NAMES, ("stella", "9-12"), "Renard")
+        _card_text.cache_clear()
+        card = persona_card("stella", "9-12")
+        assert "Renard" in card and before not in card
+
+    def test_a_band_with_no_label_of_its_own_falls_back_to_the_persona(self):
+        """Only the pairs that differ are listed; every other pair falls through."""
+        assert display_name("stella", "5-8") == NAMES["stella"]
+        assert display_name("orion", "16-18") == NAMES["orion"]
+        assert display_name("stella", "99-100") == NAMES["stella"]
+        assert display_name("stella") == NAMES["stella"]
+
+    def test_every_known_persona_has_a_label(self):
+        """`everyone` has one now, and it is a `NAMES` row like the other four.
+
+        It used to be the exception: a persona everywhere else in the codebase
+        -- `domain.py`, `access.py`, `state.py` -- but the absence of an
+        audience rather than a character, so there was no name for a reader to
+        be greeted by. The default card introduces itself as Guest and answers
+        before it knows who is reading, which is a voice like the other five.
+        Asserting equality keeps the rename guarantee intact: a label with no
+        card, or a card with no label, still fails here.
         """
-        assert set(NAMES) == set(KNOWN) - {"everyone"}
-        assert display_name("everyone") == ""
+        assert set(NAMES) == set(KNOWN)
+        assert display_name("everyone") == NAMES["everyone"]
 
     def test_the_key_is_not_the_label(self):
         """`stella` is a database id that happens to be a word."""
@@ -315,9 +465,10 @@ class TestTheLoaderPicksTheMostSpecificCard:
         ("persona", "band"), sorted(BAND_CARDS), ids=lambda value: str(value)
     )
     def test_each_pair_gets_its_own_card(self, persona, band):
+        """The label is in the TASK paragraph, which is where a card opens."""
         assert (_DIR / BAND_CARDS[(persona, band)]).is_file()
-        opening = persona_card(persona, band).splitlines()[0]
-        assert NAMES[persona] in opening
+        opening = chr(10).join(persona_card(persona, band).splitlines()[:4])
+        assert display_name(persona, band) in opening
 
     def test_the_six_cards_all_differ(self):
         cards = {persona_card(persona, band) for persona, band in BAND_CARDS}
@@ -329,6 +480,21 @@ class TestTheLoaderPicksTheMostSpecificCard:
     def test_an_unknown_band_stays_inside_the_persona(self):
         """A reader must not change persona because somebody added a band."""
         assert NAMES["orion"] in persona_card("orion", "99-100")
+
+    def test_the_undifferentiated_cards_are_gone_and_nothing_needs_them(self):
+        """`{persona}.md` was the safety net while the band split landed.
+
+        The six-card rewrite replaced every band card, and the four
+        undifferentiated ones had no counterpart in it -- so they would have
+        stayed on disk contradicting the cards that replaced them, reachable by
+        any reader whose band the loader did not recognise. The step below them
+        keeps the property they were there for: an unknown band gets the
+        youngest card of the SAME persona, never another persona's.
+        """
+        assert not list(_DIR.glob("stella.md"))
+        for persona in ("stella", "orion", "aurora", "nova"):
+            assert not (_DIR / f"{persona}.md").is_file()
+            assert persona_card(persona, "99-100").strip()
 
     def test_an_unknown_persona_gets_the_most_restrictive_card(self):
         assert persona_card("nobody", "9-12") == persona_card(FALLBACK, "9-12")

@@ -116,6 +116,21 @@ export interface CitationsDirective {
 		title: string;
 		question?: string;
 		snippet?: string;
+		/**
+		 * Where the row came from. Read off the knowledge base's `source_url`
+		 * column and validated server-side — never written by the model, and
+		 * never present unless the corpus actually held one.
+		 *
+		 * `url` is empty for a source with no public page (the programme's own
+		 * teaching material) and for a reader whose persona gets no links at
+		 * all; `site`/`page` still name it in both cases, so a source is
+		 * attributed even when it cannot be opened.
+		 */
+		url?: string;
+		site?: string;
+		page?: string;
+		domain?: string;
+		updated?: string;
 	}>;
 }
 

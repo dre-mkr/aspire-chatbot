@@ -20,10 +20,29 @@ export function newThreadId(): string {
 	return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * A stored citation, as the server persisted it.
+ *
+ * Flat — `{kb_id, question, snippet, url, ...}` — which is NOT the `{content,
+ * metadata}` shape the renderer takes. That mismatch is what `normaliseSource`
+ * exists to bridge; typing it as `Source` here was what hid the bridge's bug.
+ */
+interface WireSource {
+	kb_id?: string;
+	title?: string;
+	question?: string;
+	snippet?: string;
+	url?: string;
+	site?: string;
+	page?: string;
+	domain?: string;
+	updated?: string;
+}
+
 interface WireMessage {
 	role: string;
 	text?: string;
-	sources?: Array<Source>;
+	sources?: Array<WireSource | Source>;
 	follow_ups?: Array<string>;
 	game_type?: string | null;
 }
@@ -99,8 +118,21 @@ function isConversationList(
 }
 
 /** The prose a turn is rendered from. */
-/** Give a stored citation the shape the renderer expects. */
-function normaliseSource(source: Source | Record<string, unknown>): Source {
+function text(value: unknown): string {
+	return typeof value === "string" ? value : "";
+}
+
+/**
+ * Give a stored citation the shape the renderer expects.
+ *
+ * The server persists citations flat, and the renderer reads the row's own
+ * words out of `content`. The previous version moved every unrecognised key
+ * into `metadata` and left `content` empty, so a reloaded conversation showed
+ * the question and the reference and lost the evidence underneath them — the
+ * one part of the panel that is the source's own text. `snippet` is now read
+ * into `content` explicitly, and the provenance fields into `origin`.
+ */
+function normaliseSource(source: Source | WireSource): Source {
 	if (
 		source &&
 		typeof source === "object" &&
@@ -108,10 +140,23 @@ function normaliseSource(source: Source | Record<string, unknown>): Source {
 		source.metadata
 	)
 		return source as Source;
-	const { content, ...rest } = (source ?? {}) as Record<string, unknown>;
+
+	const stored = (source ?? {}) as Record<string, unknown>;
+	const { content, snippet, url, site, page, domain, updated, ...rest } = stored;
+	const origin = {
+		url: text(url),
+		site: text(site),
+		page: text(page),
+		domain: text(domain),
+		updated: text(updated),
+	};
 	return {
-		content: typeof content === "string" ? content : "",
+		content: text(content) || text(snippet),
 		metadata: rest as Record<string, string | number>,
+		// Only when the row was actually attributed. An absent `origin` is how
+		// the panel knows there is nothing to name, rather than a name that is
+		// the empty string.
+		...(origin.url || origin.site || origin.page ? { origin } : {}),
 	};
 }
 

@@ -67,6 +67,25 @@
 			},
 			"autoPort": false,
 			"port": 8001
+		},
+		{
+			"name": "aspire-web",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": [
+				"run",
+				"dev",
+				"--prefix",
+				"frontend",
+				"--",
+				"--port",
+				"3010",
+				"--strictPort"
+			],
+			"autoPort": false,
+			"port": 3010,
+			"env": {
+				"VITE_ASPIRE_API_URL": "http://localhost:8010"
+			}
 		}
 	]
 }

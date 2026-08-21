@@ -144,7 +144,47 @@ export async function readSurfaces(page) {
 			eligibility: !!document.querySelector("section.game.elig"),
 			upload: !!document.querySelector('input[type="file"]'),
 			review: !!document.querySelector(".review-card, dl"),
-			sources: text("details.sources summary"),
+			// THIS turn's panel, not the first one on the page. Every other
+			// field here is a `document`-wide `querySelector` because the
+			// surfaces it reads are singletons; a sources panel is not — every
+			// grounded answer in the conversation has one, and reading the
+			// first meant a later turn was always judged on an earlier turn's
+			// citations. `noCitations` could never have passed.
+			...(() => {
+				const answers = [...document.querySelectorAll(".turn--assistant")];
+				const last = answers[answers.length - 1];
+				const panel = last?.querySelector("details.sources") ?? null;
+				const clean = (node) => {
+					if (!node) return "";
+					// `innerText` includes visually-hidden text: `.sr-only` is
+					// clipped, not display:none, so the link's "(opens ... in a
+					// new tab)" would land in the name.
+					const copy = node.cloneNode(true);
+					for (const hidden of copy.querySelectorAll(".sr-only")) hidden.remove();
+					return (copy.textContent || "").replace(/\s+/g, " ").trim();
+				};
+				return {
+					sources: panel ? clean(panel.querySelector("summary")) : null,
+					// The panel's own rows, so a suite can prove the sources are
+					// real and not merely present. `href` is read off the anchor,
+					// which is the only place a citation URL reaches a reader.
+					sourceList: [...(panel?.querySelectorAll(".source") ?? [])].map(
+						(row) => {
+							const link = row.querySelector("a.source__site--link");
+							return {
+								name: clean(row.querySelector(".source__site")),
+								domain: clean(row.querySelector(".source__domain")),
+								href: link ? link.getAttribute("href") : null,
+								target: link ? link.getAttribute("target") : null,
+								rel: link ? link.getAttribute("rel") : null,
+								refs: [...row.querySelectorAll(".source__ref")].map((node) =>
+									clean(node),
+								),
+							};
+						},
+					),
+				};
+			})(),
 			signupLink: !!document.querySelector('a[href^="/signup"]'),
 			lastAnswer: (() => {
 				const all = [...document.querySelectorAll(".turn--assistant")];

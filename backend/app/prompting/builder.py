@@ -39,9 +39,46 @@ def _contact_block() -> str:
         "and never adapt these.\n"
         f"- Email: {details['email']}\n"
         f"- Phone: {details['phone']}\n"
+        f"- Phone (second line): {details['phone_alt']}\n"
         f"- Website: {details['website']}\n"
         f"- In person: {details['office']}"
     )
+
+
+#: What a card's runtime placeholders are written as.
+#:
+#: `{name}` is filled in by `persona_card` and is not here: a label belongs to a
+#: persona and changes with a client's taste. These four belong to a deployment
+#: and to a conversation, and the cards quote them inside the escalation script
+#: the reader is actually read out -- "email {email} or call {phone}". Written
+#: out rather than left literal for the same reason the contact block exists at
+#: all: two places saying a phone number is one place saying it wrong.
+_CARD_FIELDS = ("email", "phone", "phone2", "ref")
+
+#: What `{ref}` becomes when there is no session to derive one from.
+#:
+#: A phrase rather than an empty string, because the sentence around it is read
+#: aloud: "Tell them so they know we talked" is a sentence with a hole in it,
+#: and a dangling `ASP-` is worse.
+_NO_REFERENCE = "your conversation reference"
+
+
+def _fill_card(card: str, context: SessionContext) -> str:
+    """A persona card with this deployment's contacts and this session's reference."""
+    from app.agents.escalation.decline import contacts
+
+    details = contacts()
+    values = {
+        "email": details["email"],
+        "phone": details["phone"],
+        "phone2": details["phone_alt"],
+        "ref": context.conversation_ref or _NO_REFERENCE,
+    }
+    # `str.replace`, not `str.format`, for the reason `persona_card` gives: a
+    # card is prose, and a brace in it would raise in front of a reader.
+    for field in _CARD_FIELDS:
+        card = card.replace("{" + field + "}", values[field])
+    return card
 
 
 def stable_prefix(context: SessionContext, agent_role: str) -> str:
@@ -51,7 +88,7 @@ def stable_prefix(context: SessionContext, agent_role: str) -> str:
         for part in (
             GLOBAL,
             _contact_block(),
-            persona_card(context.persona, context.age_band),
+            _fill_card(persona_card(context.persona, context.age_band), context),
             agent_role,
         )
         if part and part.strip()
@@ -87,11 +124,21 @@ def _turn_context(context: SessionContext) -> str:
 
 
 def _retrieved_block(chunks: Iterable[Any]) -> str:
-    """Retrieved rows, formatted for the human turn."""
+    """Retrieved rows, formatted for the human turn.
+
+    Each row arrives carrying the CSV's bookkeeping columns -- `keywords`,
+    `audience`, `as_of` and, most of all, `source_url`. `without_provenance`
+    takes them off. The model is asked to cite by `[ASP-xxx]` id and never to
+    write a URL, and it was being shown one per extract; the citation panel is
+    built from the metadata the application kept, not from anything the model
+    can read here.
+    """
+    from app.sources import without_provenance
+
     lines = [
-        f"[{getattr(chunk, 'kb_id', '?')}] {getattr(chunk, 'content', '').strip()}"
+        f"[{getattr(chunk, 'kb_id', '?')}] {body}"
         for chunk in chunks
-        if getattr(chunk, "content", "").strip()
+        if (body := without_provenance(getattr(chunk, "content", "") or ""))
     ]
     return f"{_CONTEXT_HEADING}\n" + "\n\n".join(lines) if lines else ""
 

@@ -86,6 +86,37 @@ export function configFor(band: string | null | undefined): BandConfig {
 	return CONFIGS[(band ?? "") as AgeBand] ?? FALLBACK;
 }
 
+/**
+ * The band a chosen guide implies.
+ *
+ * This whole table used to run on one route — `/admin/widgets`, the internal
+ * preview — so every real reader fell through to `FALLBACK` and got the
+ * five-year-old's interface: 20px type, 64px targets, no dragging. A teacher
+ * uploading a document got it too.
+ *
+ * Conservative on purpose, in two directions. A guide that spans two bands
+ * takes the younger one — `stella` covers 5 to 12 and gets `5-8` — and a reader
+ * who has not said who they are keeps the fallback rather than being assumed
+ * adult. Nothing here can shrink a target for somebody who did not ask.
+ *
+ * The server's `age_band` on the graph session is finer than this, and when it
+ * is plumbed through it should win; this is what the client can know on its own.
+ */
+export function bandForPersona(persona: string | null | undefined): AgeBand {
+	switch (persona) {
+		case "stella":
+			return "5-8";
+		case "orion":
+			return "13-15";
+		case "aurora":
+		case "nova":
+			return "adult";
+		default:
+			// `everyone`, or nobody has said. A child may be reading.
+			return FALLBACK.band;
+	}
+}
+
 export function AgeBandProvider({
 	band,
 	children,
@@ -97,11 +128,15 @@ export function AgeBandProvider({
 	const config = useMemo(() => configFor(band), [band]);
 	return (
 		<BandContext.Provider value={config}>
-			{/* A CSS variable as well as context: widgets read the scale from inline styles. */}
+			{/* A CSS variable as well as context: widgets read the scale from inline
+			    styles. `display: contents` so this can wrap a whole screen without
+			    becoming a box in the middle of its layout — custom properties still
+			    inherit down the element tree from an element that has no box. */}
 			<div
 				data-age-band={config.band}
 				style={
 					{
+						display: "contents",
 						"--band-type": `${config.typeScale}px`,
 						"--band-target": `${config.touchTarget}px`,
 					} as React.CSSProperties

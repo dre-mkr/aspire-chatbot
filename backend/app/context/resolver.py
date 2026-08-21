@@ -12,6 +12,7 @@ from app.context.session_context import (
     SessionContext,
     TicketRef,
     Turn,
+    conversation_reference,
     now_local,
 )
 from app.graph.state import AspireState
@@ -210,6 +211,7 @@ def make_resolve_context(loader=None):
             display_name=payload.get("display_name"),
             recent_turns=_recent_turns(state),
             running_summary=str(state.get("summary") or ""),
+            conversation_ref=conversation_reference(session_id),
             mastery=dict(payload.get("mastery") or {}),
             concepts_seen_today=list(payload.get("concepts_seen_today") or []),
             last_game=last_game,

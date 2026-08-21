@@ -97,13 +97,23 @@ def _example(lesson: Lesson, band: str) -> str:
 
 
 def _grounding(chunks: list[KBChunk]) -> str:
-    """Retrieved rows, framed as background rather than as something to quote."""
+    """Retrieved rows, framed as background rather than as something to quote.
+
+    `without_provenance` takes the CSV's bookkeeping columns off first. A lesson
+    is told never to cite a reference number, and it was being handed rows that
+    ended `source_url: https://aspire.gov.kn/` -- the one kind of reference a
+    child's lesson has no business reproducing.
+    """
+    from app.sources import without_provenance
+
     if not chunks:
         return (
             "You have no reference material this turn. Teach the idea above and "
             "state no amounts, dates or deadlines you were not given."
         )
-    body = "\n".join(f"- {chunk.content.strip()}" for chunk in chunks if chunk.content.strip())
+    body = "\n".join(
+        f"- {text}" for chunk in chunks if (text := without_provenance(chunk.content))
+    )
     if not body:
         return "You have no reference material this turn."
     return (

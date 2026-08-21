@@ -160,6 +160,29 @@ class CitationRef(BaseModel):
     question: str = ""
     snippet: str = ""
 
+    # ── where the row came from ──
+    #
+    # A URL in a directive is a departure from the rule `VideoDirective` states
+    # -- "an id, never a URL" -- and it is deliberate, on grounds the video case
+    # does not share. That rule exists because `safety_out.strip_links` gates
+    # PROSE, so a model-written URL smuggled through a directive would evade the
+    # one control the youngest personas depend on. A citation URL is not
+    # model-written: it comes from `documents.source_url`, is validated by
+    # `app.sources` against scheme, host and port before it is ever set, and
+    # cannot be influenced by anything the reader or the model says. The link
+    # gate is applied to it explicitly, in `app.api.stream`, rather than being
+    # inherited by accident.
+    #: A validated https/http URL, or "" when the source has no public page.
+    url: str = Field(default="", max_length=2048)
+    #: Whose source it is -- "ASPIRE", "Eastern Caribbean Central Bank".
+    site: str = Field(default="", max_length=160)
+    #: Which page of theirs -- "Frequently asked questions".
+    page: str = Field(default="", max_length=200)
+    #: The host, shown under the title. Never the full URL.
+    domain: str = Field(default="", max_length=253)
+    #: When the row was last checked against its source.
+    updated: str = Field(default="", max_length=32)
+
 
 class CitationsDirective(_Directive):
     """Where an answer came from."""

@@ -137,6 +137,24 @@ def _run_sync(coro):
     return _sync_loop.run_until_complete(coro)
 
 
+def _as_document(
+    content: str, metadata: dict | None, source_url: str | None
+) -> LangchainDocument:
+    """One row as a Document, with the `source_url` COLUMN as the authority.
+
+    `metadata` is whatever the CSV held, copied verbatim at ingest, and it
+    usually carries a `source_url` of its own. The column is the one ingest
+    validated and the one a future re-index writes, so when the two disagree the
+    column wins -- otherwise a corrected URL would be shadowed by the stale copy
+    sitting in the JSON beside it.
+    """
+    merged = dict(metadata or {})
+    stored = (source_url or "").strip()
+    if stored:
+        merged["source_url"] = stored
+    return LangchainDocument(page_content=content, metadata=merged)
+
+
 class PgVectorRetriever(BaseRetriever):
     """Top-k nearest chunks from `documents`, by cosine distance."""
 
@@ -148,15 +166,20 @@ class PgVectorRetriever(BaseRetriever):
 
     def _statement(self, vector: list[float]):
         distance = Document.embedding.cosine_distance(vector)
-        statement = select(Document.content, Document.metadata_)
+        statement = select(Document.content, Document.metadata_, Document.source_url)
         if self.max_cosine_distance is not None:
             statement = statement.where(distance <= self.max_cosine_distance)
         return statement.order_by(distance).limit(self.k)
 
     def _scored_statement(self, vector: list[float]):
-        """`_statement`, plus the distance itself as a third column."""
+        """`_statement`, plus the distance itself as a fourth column."""
         distance = Document.embedding.cosine_distance(vector)
-        statement = select(Document.content, Document.metadata_, distance.label("distance"))
+        statement = select(
+            Document.content,
+            Document.metadata_,
+            Document.source_url,
+            distance.label("distance"),
+        )
         if self.max_cosine_distance is not None:
             statement = statement.where(distance <= self.max_cosine_distance)
         return statement.order_by(distance).limit(self.k)
@@ -175,10 +198,10 @@ class PgVectorRetriever(BaseRetriever):
 
         return [
             (
-                LangchainDocument(page_content=content, metadata=dict(metadata or {})),
+                _as_document(content, metadata, source_url),
                 max(0.0, 1.0 - float(distance)),
             )
-            for content, metadata, distance in rows
+            for content, metadata, source_url, distance in rows
         ]
 
     async def asearch_by_vector(self, vector: list[float]) -> list[LangchainDocument]:
@@ -192,10 +215,9 @@ class PgVectorRetriever(BaseRetriever):
                 )
             rows = (await db.execute(self._statement(vector))).all()
 
-        # `metadata` is returned as stored, so a source keeps the shape it had under Chroma.
         return [
-            LangchainDocument(page_content=content, metadata=dict(metadata or {}))
-            for content, metadata in rows
+            _as_document(content, metadata, source_url)
+            for content, metadata, source_url in rows
         ]
 
     async def _search(self, query: str) -> list[LangchainDocument]:

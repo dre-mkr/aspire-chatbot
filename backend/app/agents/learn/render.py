@@ -234,10 +234,16 @@ def build_teach_context(context: TeachContext) -> str:
         parts.append("\n".join(block))
 
     if context.supporting:
+        # `without_provenance` strips the CSV's bookkeeping columns first. The
+        # instruction below says never cite a reference number, and the rows
+        # were arriving with `id: ASP-042` and `source_url: https://...` in
+        # them -- both of them reference numbers of a kind, one of them a URL.
+        from app.sources import without_provenance
+
         rows = "\n".join(
-            f"- {str(getattr(row, 'content', row)).strip()}"
+            f"- {text}"
             for row in context.supporting
-            if str(getattr(row, "content", row)).strip()
+            if (text := without_provenance(str(getattr(row, "content", row))))
         )
         if rows:
             parts.append(

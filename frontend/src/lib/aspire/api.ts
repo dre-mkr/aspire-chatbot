@@ -2,10 +2,29 @@
 
 import type { Directive } from "../stream/types";
 
+/**
+ * Where a cited row came from, when the knowledge base knew.
+ *
+ * Every field is the server's, validated there; nothing here is derived from an
+ * answer's text. `url` is empty whenever there is nothing to open — programme
+ * material with no public page, a row whose stored URL would not validate, or a
+ * reader whose persona is not shown links — and `site`/`page` still name the
+ * source in all three cases.
+ */
+export interface SourceOrigin {
+	url: string;
+	site: string;
+	page: string;
+	domain: string;
+	updated: string;
+}
+
 /** One knowledge-base snippet the agent actually used for an answer. */
 export interface Source {
 	content: string;
 	metadata: Record<string, string | number>;
+	/** Absent on a row the corpus could not attribute at all. */
+	origin?: SourceOrigin;
 }
 
 /** The game a turn started, when it started one. */

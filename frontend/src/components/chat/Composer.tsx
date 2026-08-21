@@ -78,12 +78,31 @@ export function Composer({
 	focusSignal,
 	voice,
 }: ComposerProps) {
-	const canSend = draft.trim().length > 0 && !busy;
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const touch = useMediaQuery(TOUCH);
 	const fieldRef = useRef<HTMLTextAreaElement>(null);
 	const counterId = useId();
 	const nearLimit = draft.length >= COUNTER_FROM;
+
+	/**
+	 * Whether this composer is attached yet.
+	 *
+	 * Both routes are full-document SSR, so the box is painted, focusable and
+	 * typeable well before React reaches it — measured at 2.0 to 4.7 seconds
+	 * ahead of it on a throttled machine. Until then `draft` is empty however
+	 * much has been typed, so `canSend` is false and the send button sits
+	 * disabled with nothing to say for itself. Somebody types a question,
+	 * presses send, and nothing happens.
+	 *
+	 * It cannot be made to send in that window — there is no handler to run yet
+	 * — but it can stop pretending to be ready. Below, the button says it is
+	 * starting up rather than that the question is unsendable, and `submit`
+	 * reads the field itself so a state that has not caught up cannot eat one.
+	 */
+	const [live, setLive] = useState(false);
+	useEffect(() => setLive(true), []);
+
+	const canSend = draft.trim().length > 0 && !busy;
 
 	/** Put the cursor in the box so a new chat can be typed into without a click. */
 	// biome-ignore lint/correctness/useExhaustiveDependencies: focusSignal is the trigger, not an input
@@ -103,8 +122,11 @@ export function Composer({
 	const holdToTalk = voice.phase === "rest" && voice.micState === "ready";
 
 	function submit() {
-		if (!canSend) return;
-		onSend(draft);
+		// The field, not just the state. They are the same value once React is
+		// attached; before that the field is the only one that has the question.
+		const text = (draft || fieldRef.current?.value || "").trim();
+		if (!text || busy) return;
+		onSend(text);
 		onDraftChange("");
 	}
 
@@ -280,9 +302,13 @@ export function Composer({
 									type="submit"
 									className="composer__send"
 									disabled={!canSend}
+									data-waking={!live || undefined}
+									title={live ? undefined : "Starting up…"}
 								>
 									<SendIcon />
-									<span className="sr-only">Send message</span>
+									<span className="sr-only">
+										{live ? "Send message" : "Starting up. Send is not ready yet."}
+									</span>
 								</button>
 							)}
 						</div>

@@ -16,7 +16,14 @@ export async function steps() {
 		{
 			say: "What is the ASPIRE programme?",
 			critical: true,
-			expect: { agent: "qa_agent", route: true, mustMatch: /ASPIRE/i, citations: true },
+			note: "the whole attribution chain: answer -> supporting source -> a page that opens",
+			expect: {
+				agent: "qa_agent",
+				route: true,
+				mustMatch: /ASPIRE/i,
+				citations: true,
+				sourceLinks: true,
+			},
 		},
 		{
 			say: "How long has it been running?",
@@ -26,6 +33,14 @@ export async function steps() {
 		{
 			say: "Which branches are on Nevis?",
 			expect: { agent: "qa_agent", citations: true },
+		},
+		{
+			say: "What is 25 + 15?",
+			note: "arithmetic is not a corpus question; a source panel here would be a lie",
+			expect: {
+				agent: ["qa_agent", "escalate_agent"],
+				noCitations: true,
+			},
 		},
 		{
 			say: "What is the capital of France?",

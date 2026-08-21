@@ -791,6 +791,53 @@ def _decline(
 # ── state and logging ────────────────────────────────────────────────────────
 
 
+def _lesson_citations(
+    resolution: ConceptResolution, taught_concept: TeachingConcept | None
+) -> dict[str, Any]:
+    """Sources for a lesson, but only for the lessons that HAVE any.
+
+    Most lessons are authored. The curriculum wrote them, retrieval only runs
+    beside them to keep an amount current, and the prompt says in as many words
+    never to quote or cite the rows -- so attaching a citation panel to one
+    would claim a provenance the lesson does not have. §7's rule is that the
+    sources must match the answer, and for an authored lesson the answer's
+    source is the curriculum.
+
+    The RAG-teach path is the exception and the reason this exists: no authored
+    concept covered the question, `RAG_TEACH_ROLE` told the tutor to teach from
+    the retrieved rows and nothing else, and that lesson genuinely came from the
+    knowledge base. Those rows are cited, the same way and through the same
+    machinery a Q&A answer's are.
+    """
+    if taught_concept is not None or resolution.concept is not None:
+        return {}
+
+    from app.agents.qa.nodes import citation_for
+    from app.config import get_settings
+
+    # Floor-checked per row, not per set. `resolve_concept` takes the RAG-teach
+    # path when the BEST row clears `qa_relevance_floor`, and says nothing about
+    # the rest -- so rows two and three can be far below it. Citing them would
+    # put a source under a lesson they had no part in, which is the one thing a
+    # citation may not do.
+    floor = get_settings().qa_relevance_floor
+    rows = [
+        row
+        for row in (resolution.kb_rows or ())
+        if getattr(row, "kb_id", "")
+        and max(getattr(row, "relevance", 0.0), getattr(row, "score", 0.0)) >= floor
+    ]
+    if not rows:
+        return {}
+    return {"citations": [citation_for(row) for row in rows[:CITATION_LIMIT]]}
+
+
+#: How many rows a RAG-taught lesson may cite. Lower than Q&A's: a lesson draws
+#: on background broadly, and a wall of references under a child's lesson is
+#: noise rather than provenance.
+CITATION_LIMIT = 3
+
+
 def _state_after(
     *,
     state: Any,
@@ -821,6 +868,7 @@ def _state_after(
         # The message is returned as well as emitted.
         "messages": [AIMessage(content=lesson.text)],
         "quick_replies": _chips(band, _chip_options(move, band)),
+        **_lesson_citations(resolution, taught_concept),
         # The widget travels in STATE, not on the custom channel.
         #
         # `_emit_directive` writes it to the stream writer, and a subgraph's

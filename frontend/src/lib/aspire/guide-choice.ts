@@ -2,6 +2,16 @@
 
 const STORAGE_KEY = "aspire.guide-chosen.v1";
 
+/**
+ * The key the removed in-page persona step wrote.
+ *
+ * That step asked this same question, so a browser carrying it has already been
+ * asked and must not be asked again. Nothing writes it any more — the opening
+ * that used to share it has its own key now (`FirstRun`), which is what keeps
+ * "has seen the opening" from being mistaken for "has answered the question".
+ */
+const LEGACY_KEY = "aspire.intro.v1";
+
 function canStore() {
 	// Imported during SSR, where there is no window at all.
 	return typeof window !== "undefined" && !!window.localStorage;
@@ -18,7 +28,10 @@ function canStore() {
 export function guideAsked(): boolean {
 	if (!canStore()) return true; // Never block the app on storage being absent.
 	try {
-		return window.localStorage.getItem(STORAGE_KEY) === "1";
+		return (
+			window.localStorage.getItem(STORAGE_KEY) === "1" ||
+			window.localStorage.getItem(LEGACY_KEY) === "1"
+		);
 	} catch {
 		return true;
 	}

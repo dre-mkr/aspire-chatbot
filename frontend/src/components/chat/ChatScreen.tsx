@@ -40,6 +40,7 @@ import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
 import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
+import { AgeBandProvider, bandForPersona } from "./AgeBandProvider";
 import { ChatTitleBar } from "./ChatTitleBar";
 import { Composer } from "./Composer";
 import { FirstRun } from "./FirstRun";
@@ -253,11 +254,23 @@ export function ChatScreen() {
 	const railClosed = compact ? !drawerOpen : railCollapsed;
 	const drawerModal = compact && drawerOpen;
 
-	// Announce discrete events, not the stream.
+	/**
+	 * Announce discrete events, not the stream. The one status region in the app.
+	 *
+	 * There were two of these, here and in `Transcript`, and both put the whole
+	 * settled answer into a polite region — so every answer was read out twice,
+	 * end to end, with no way to stop the second pass. This is the survivor
+	 * because it is the only one that knows about games and the eligibility
+	 * check; the wording is the other one's, which was better.
+	 *
+	 * Silent while tokens arrive: "Finding an answer." already stands, and
+	 * interrupting it every few hundred milliseconds says nothing new.
+	 */
 	const latest = messages.at(-1);
-	const announcement =
-		isThinking || streaming
-			? "ASPIRE AI is writing a reply."
+	const announcement = streaming
+		? ""
+		: isThinking
+			? "Finding an answer."
 			: latest?.role === "game"
 				? "A game has started. The game card is below."
 				: latest?.role === "eligibility"
@@ -265,7 +278,7 @@ export function ChatScreen() {
 					: latest?.role === "error"
 						? latest.text
 						: latest?.role === "assistant"
-							? answerToText(latest.blocks)
+							? `Answer ready. ${answerToText(latest.blocks)}`
 							: "";
 
 	/** Where each conversation was left, keyed by thread. */
@@ -345,9 +358,13 @@ export function ChatScreen() {
 	useEffect(() => {
 		if (!drawerModal) return;
 
+		// `:not([inert])`, because the first button in the rail is `.rail__mark`
+		// — the A that toggles it — and that one is inert exactly when the drawer
+		// is open. Focusing it did nothing, so opening the drawer dropped focus
+		// on `<body>` and Tab restarted at the top of the page behind it.
 		document
 			.getElementById("aspire-rail")
-			?.querySelector<HTMLElement>("button")
+			?.querySelector<HTMLElement>("button:not([inert])")
 			?.focus();
 
 		const close = (event: KeyboardEvent) => {
@@ -627,225 +644,240 @@ export function ChatScreen() {
 	);
 
 	return (
-		<div
-			className="app"
-			data-phase="chat"
-			data-rail={railClosed ? "collapsed" : "expanded"}
-		>
-			<div className="atmosphere" aria-hidden="true">
-				<span />
-				<span />
-				<span />
-				<span />
-			</div>
+		/* The interface's own age band, which until now ran on the internal
+		   widget-preview route and nowhere else — so every reader, teachers
+		   included, got the five-year-old's configuration by fallback. Derived
+		   from the guide they chose; see `bandForPersona`. */
+		<AgeBandProvider band={bandForPersona(persona)}>
+			<div
+				className="app"
+				data-phase="chat"
+				data-rail={railClosed ? "collapsed" : "expanded"}
+			>
+				<div className="atmosphere" aria-hidden="true">
+					<span />
+					<span />
+					<span />
+					<span />
+				</div>
 
-			{/* First visit only: a short opening, then the persona question.
-			    Renders nothing at all for a returning reader. */}
-			<FirstRun onChoosePersona={setPersona} />
+				{/* First visit only — someone who arrived on a shared link rather than
+			    through the landing page. The chooser is not put here: this reader
+			    is already mid-conversation, and the composer's persona control is
+			    the right way to change guide from inside one. */}
+				<FirstRun />
 
-			<div className="frame">
-				<Rail
-					collapsed={railClosed}
-					unreachable={compact && !drawerOpen}
-					activeThreadId={threadId}
-					onToggle={toggleRail}
-					onNewChat={startNewChat}
-					onOpenPast={handleOpenPast}
-					onSaveConversation={handleSaveConversation}
-					onRenameConversation={(conversation, title) =>
-						renameChat(conversation.threadId, title)
-					}
-					onRegenerateTitle={(conversation) =>
-						regenerateTitle(conversation.threadId)
-					}
-					onDeleteConversation={handleDeleteConversation}
-				/>
-
-				{drawerModal ? (
-					<button
-						type="button"
-						className="rail-scrim"
-						onClick={() => setDrawerOpen(false)}
-					>
-						<span className="sr-only">Close conversations</span>
-					</button>
-				) : null}
-
-				<main className="workspace" inert={drawerModal || undefined}>
-					{/* The way to the input without walking the whole conversation. */}
-					<a href="#aspire-composer" className="skip-link">
-						Skip to the message box
-					</a>
-
-					{/* The way into an account, whenever the sidebar is not there to carry it. */}
-					{/* `inert` as well as the CSS, because they cover different people. */}
-					<div
-						className="account-slot"
-						data-shown={railClosed || undefined}
-						inert={!railClosed || undefined}
-					>
-						<AccountControl variant="corner" />
-					</div>
-
-					{/* Above the transcript, not after it: each answer carries its own
-					    `h2`, and a page whose first heading is an `h2` reads to a
-					    screen reader as a document that starts mid-outline. */}
-					<h1 className="sr-only">Conversation with ASPIRE AI</h1>
-
-					<ChatTitleBar
-						title={activeTitle}
-						showDrawerTrigger={compact}
-						drawerOpen={drawerOpen}
-						onOpenRail={openDrawer}
-						onRename={(title) => {
-							if (threadId) renameChat(threadId, title);
-						}}
+				<div className="frame">
+					<Rail
+						collapsed={railClosed}
+						unreachable={compact && !drawerOpen}
+						activeThreadId={threadId}
+						onToggle={toggleRail}
+						onNewChat={startNewChat}
+						onOpenPast={handleOpenPast}
+						onSaveConversation={handleSaveConversation}
+						onRenameConversation={(conversation, title) =>
+							renameChat(conversation.threadId, title)
+						}
+						onRegenerateTitle={(conversation) =>
+							regenerateTitle(conversation.threadId)
+						}
+						onDeleteConversation={handleDeleteConversation}
 					/>
 
-					<div className="stage">
-						<div
-							className="thread"
-							ref={threadRef}
-							// Banked on every scroll: a chat can also be left by the back button or a shortcut.
-							onScroll={(event) => {
-								// Not during a restore: that scroll is ours, and banking it overwrites the saved offset.
-								if (restoring.current) return;
-								scrollTops.current.set(
-									scrollKey,
-									event.currentTarget.scrollTop,
-								);
-							}}
+					{drawerModal ? (
+						<button
+							type="button"
+							className="rail-scrim"
+							onClick={() => setDrawerOpen(false)}
 						>
-							<div className="thread__inner">
-								<section aria-label="Conversation">
-									<Transcript
-										messages={messages}
-										streaming={streaming}
-										isThinking={isThinking}
-										followUps={followUps}
-										animateAfterId={animateAfterId}
-										scrollRef={threadRef}
-										onRegenerate={handleRegenerate}
-										onAsk={ask}
-										playback={{
-											available: voice.available,
-											playingId: voice.playingId,
-											pausedId: voice.pausedId,
-											play: voice.play,
-										}}
-										directiveContext={directiveContext}
-										gameSound={voice.gameSound}
-										game={
-											game && threadId
-												? {
-														threadId,
-														state: game,
-														onChanged: (state: GameState | null) => {
-															const live = liveGame.current;
-															if (state && live) {
-																live.solved = state.solved;
-																live.total = state.prompt.total;
-															}
-															// Card closed: report the score once, on the game-result channel.
-															if (!state && live && !live.reported) {
-																live.reported = true;
-																sendGameResult({
-																	game: live.gameType,
-																	concept_id: live.concept,
-																	score: live.solved,
-																	max_score: Math.max(1, live.total),
-																	duration_s: live.duration_s,
-																	completed: live.completed,
-																});
-															}
-															setGame(state);
-														},
-														onSummary: (summary) => {
-															const live = liveGame.current;
-															if (!live) return;
-															live.solved = summary.solved;
-															live.total = Math.max(1, summary.total);
-															live.duration_s = Math.max(
-																0,
-																Math.round(summary.duration_seconds),
-															);
-															live.completed = true;
-														},
-													}
-												: null
-										}
-										eligibility={
-											eligibility && threadId
-												? {
-														threadId,
-														state: eligibility,
-														onChanged: setEligibility,
-														// Speaks the question, or the verdict.
-														onSpeak: (text) =>
-															voice.play(ELIGIBILITY_SPEECH_ID, text),
-														speakAvailable: voice.available,
-													}
-												: null
-										}
-									/>
-								</section>
-							</div>
+							<span className="sr-only">Close conversations</span>
+						</button>
+					) : null}
+
+					<main className="workspace" inert={drawerModal || undefined}>
+						{/* The way to the input without walking the whole conversation. */}
+						<a href="#aspire-composer" className="skip-link">
+							Skip to the message box
+						</a>
+
+						{/* The way into an account, whenever the sidebar is not there to carry it. */}
+						{/* `inert` as well as the CSS, because they cover different people. */}
+						<div
+							className="account-slot"
+							data-shown={railClosed || undefined}
+							inert={!railClosed || undefined}
+						>
+							<AccountControl variant="corner" />
 						</div>
 
-						{voice.phase === "consent" ? (
-							<div className="voice-slot">
-								<VoiceConsent onAllow={voice.allowMic} onDeny={voice.denyMic} />
-							</div>
-						) : null}
+						{/* Above the transcript, not after it: each answer carries its own
+					    `h2`, and a page whose first heading is an `h2` reads to a
+					    screen reader as a document that starts mid-outline. */}
+						<h1 className="sr-only">Conversation with ASPIRE AI</h1>
 
-						{voice.note ? (
-							<div className="voice-slot">
-								<VoiceNote
-									note={voice.note}
-									onAction={voice.runNoteAction}
-									onDismiss={voice.dismissNote}
-								/>
-							</div>
-						) : null}
-
-						{/* Sits in the voice-note slot, directly above the picker that caused it. */}
-						{personaNotice ? (
-							<div className="voice-slot">
-								<output className="voice-note" data-tone="warn">
-									<span className="voice-note__text">{personaNotice}</span>
-									<button
-										type="button"
-										className="icon-btn icon-btn--sm"
-										onClick={dismissPersonaNotice}
-									>
-										<CloseIcon />
-										<span className="sr-only">Dismiss</span>
-									</button>
-								</output>
-							</div>
-						) : null}
-
-						<Composer
-							onSend={ask}
-							busy={!settled}
-							onStop={handleStop}
-							simpleMode={simpleMode}
-							onToggleSimpleMode={toggleSimpleMode}
-							persona={persona}
-							onPersonaChange={setPersona}
-							draft={draft}
-							onDraftChange={setDraft}
-							focusSignal={0}
-							voice={voice}
+						<ChatTitleBar
+							title={activeTitle}
+							showDrawerTrigger={compact}
+							drawerOpen={drawerOpen}
+							onOpenRail={openDrawer}
+							onRename={(title) => {
+								if (threadId) renameChat(threadId, title);
+							}}
 						/>
-					</div>
 
-					<output className="sr-only">{announcement}</output>
+						<div className="stage">
+							<div
+								className="thread"
+								ref={threadRef}
+								// Banked on every scroll: a chat can also be left by the back button or a shortcut.
+								onScroll={(event) => {
+									// Not during a restore: that scroll is ours, and banking it overwrites the saved offset.
+									if (restoring.current) return;
+									scrollTops.current.set(
+										scrollKey,
+										event.currentTarget.scrollTop,
+									);
+								}}
+							>
+								<div className="thread__inner">
+									<section aria-label="Conversation">
+										<Transcript
+											messages={messages}
+											streaming={streaming}
+											isThinking={isThinking}
+											followUps={followUps}
+											animateAfterId={animateAfterId}
+											scrollRef={threadRef}
+											onRegenerate={handleRegenerate}
+											onAsk={ask}
+											playback={{
+												available: voice.available,
+												playingId: voice.playingId,
+												pausedId: voice.pausedId,
+												play: voice.play,
+											}}
+											directiveContext={directiveContext}
+											gameSound={voice.gameSound}
+											game={
+												game && threadId
+													? {
+															threadId,
+															state: game,
+															onChanged: (state: GameState | null) => {
+																const live = liveGame.current;
+																if (state && live) {
+																	live.solved = state.solved;
+																	live.total = state.prompt.total;
+																}
+																// Card closed: report the score once, on the game-result channel.
+																if (!state && live && !live.reported) {
+																	live.reported = true;
+																	sendGameResult({
+																		game: live.gameType,
+																		concept_id: live.concept,
+																		score: live.solved,
+																		max_score: Math.max(1, live.total),
+																		duration_s: live.duration_s,
+																		completed: live.completed,
+																	});
+																}
+																setGame(state);
+															},
+															onSummary: (summary) => {
+																const live = liveGame.current;
+																if (!live) return;
+																live.solved = summary.solved;
+																live.total = Math.max(1, summary.total);
+																live.duration_s = Math.max(
+																	0,
+																	Math.round(summary.duration_seconds),
+																);
+																live.completed = true;
+															},
+														}
+													: null
+											}
+											eligibility={
+												eligibility && threadId
+													? {
+															threadId,
+															state: eligibility,
+															onChanged: setEligibility,
+															// Speaks the question, or the verdict.
+															onSpeak: (text) =>
+																voice.play(ELIGIBILITY_SPEECH_ID, text),
+															speakAvailable: voice.available,
+														}
+													: null
+											}
+										/>
+									</section>
+								</div>
+							</div>
 
-					{/* One text node: as two, the flex gap made "can" and "make" run together when copied. */}
-					<p className="disclaimer">ASPIRE AI can make mistakes.</p>
-				</main>
+							{voice.phase === "consent" ? (
+								<div className="voice-slot">
+									<VoiceConsent
+										onAllow={voice.allowMic}
+										onDeny={voice.denyMic}
+									/>
+								</div>
+							) : null}
+
+							{voice.note ? (
+								<div className="voice-slot">
+									<VoiceNote
+										note={voice.note}
+										onAction={voice.runNoteAction}
+										onDismiss={voice.dismissNote}
+									/>
+								</div>
+							) : null}
+
+							{/* Sits in the voice-note slot, directly above the picker that caused it. */}
+							{personaNotice ? (
+								<div className="voice-slot">
+									<output className="voice-note" data-tone="warn">
+										<span className="voice-note__text">{personaNotice}</span>
+										<button
+											type="button"
+											className="icon-btn icon-btn--sm"
+											onClick={dismissPersonaNotice}
+										>
+											<CloseIcon />
+											<span className="sr-only">Dismiss</span>
+										</button>
+									</output>
+								</div>
+							) : null}
+
+							<Composer
+								onSend={ask}
+								busy={!settled}
+								onStop={handleStop}
+								simpleMode={simpleMode}
+								onToggleSimpleMode={toggleSimpleMode}
+								persona={persona}
+								onPersonaChange={setPersona}
+								draft={draft}
+								onDraftChange={setDraft}
+								focusSignal={0}
+								voice={voice}
+							/>
+						</div>
+
+						{/* `<output>` carries `role="status"` implicitly, with less markup.
+					    `aria-atomic`, so a changed tail is not read on its own. */}
+						<output className="sr-only" aria-live="polite" aria-atomic="true">
+							{announcement}
+						</output>
+
+						{/* One text node: as two, the flex gap made "can" and "make" run together when copied. */}
+						<p className="disclaimer">ASPIRE AI can make mistakes.</p>
+					</main>
+				</div>
 			</div>
-		</div>
+		</AgeBandProvider>
 	);
 }

@@ -209,6 +209,27 @@ def final_reply(state: AspireState) -> str:
     return text_of(last) if getattr(last, "type", None) == "ai" else ""
 
 
+def citation_payload(citation: Any) -> dict[str, Any]:
+    """One citation as JSON, whether it arrived as a model or as a plain dict.
+
+    Both shapes are real: a node returns `Citation` objects, and a turn resumed
+    from the checkpointer hands them back as dicts.
+    """
+    from app.graph.state import Citation
+
+    if isinstance(citation, Citation):
+        return citation.model_dump()
+    if isinstance(citation, dict):
+        # Validated rather than passed through, so a stored turn from before a
+        # field existed still comes out with every field the client expects.
+        try:
+            return Citation.model_validate(citation).model_dump()
+        except Exception:
+            logger.warning("A stored citation could not be read back.", exc_info=True)
+            return {}
+    return {}
+
+
 def _publish_turn(state: AspireState) -> None:
     """Hand the transport what it needs to close the turn."""
     try:
@@ -227,16 +248,12 @@ def _publish_turn(state: AspireState) -> None:
         )
 
     # Every field the panel renders: the only crossing citations make to the wire.
-    citations = []
-    for citation in state.get("citations") or []:
-        citations.append(
-            {
-                "kb_id": getattr(citation, "kb_id", ""),
-                "title": getattr(citation, "title", ""),
-                "question": getattr(citation, "question", ""),
-                "snippet": getattr(citation, "snippet", ""),
-            }
-        )
+    #
+    # Dumped from the model rather than enumerated by hand. The hand-written
+    # list here was the last place source metadata could be lost silently: a
+    # field added to `Citation` reached this line and stopped, with nothing
+    # failing to say so.
+    citations = [citation_payload(citation) for citation in state.get("citations") or []]
 
     # The FINAL text, which is not the text the agent streamed.
     #
