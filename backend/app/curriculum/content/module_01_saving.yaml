@@ -320,7 +320,7 @@ lessons:
 
       - id: q2_the_line_moves
         prompt:
-          "5-8": "Tell Sky one need and one want of your own."
+          "5-8": "Tell Skye one need and one want of your own."
           "9-12": "Name one thing that could be a need OR a want, depending."
           "13-15": "Give me something that sits in between, and say what would push it either way."
           "16-18": "Name one thing you have filed on the wrong side, and say why."
@@ -444,7 +444,7 @@ lessons:
 
       - id: q2_explain_plan
         prompt:
-          "5-8": "Tell Sky your plan for three coins. Where does each one go?"
+          "5-8": "Tell Skye your plan for three coins. Where does each one go?"
           "9-12": "Tell me your own plan for EC$10. Where would each part go?"
           "13-15": "Describe your own split, and say why."
           "16-18": "Give me your split for a thin month and a good one, and say what changes."
