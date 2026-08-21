@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.conftest import requires_database
 from app.storage.presign import owns_application
 
 
@@ -17,6 +18,9 @@ class _Claims:
     def __init__(self, session_id: str, user_id: str | None = None) -> None:
         self.session_id = session_id
         self.user_id = user_id
+
+
+pytestmark = requires_database
 
 
 @pytest.fixture(scope="module")
