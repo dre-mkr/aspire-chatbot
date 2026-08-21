@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -38,13 +39,66 @@ _CARD_LOCALES = frozenset({"en", "es", "fr"})
 #: Either of these means the caller has somewhere to register.
 _REGISTRATION_AGENTS = frozenset({"register_agent", "register_agent_step1"})
 
+#: The bands that may be told they can register their own account.
+#:
+#: Published, and in the corpus twice. ASP-049: "From age 12, an ASPIRE
+#: participant can also register for their own account at aspire.gov.kn or at a
+#: branch." ASP-050 says the same in the reader's own words.
+_SELF_REGISTERING_BANDS = ("13-15", "16-18")
+
+#: A child named in the third person. "Register my daughter" is a different
+#: question from "register me", and a band cannot tell them apart.
+_FOR_ANOTHER = re.compile(
+    r"\b(?:my|our|the|she|he)\s+"
+    r"(?:son|daughter|child|children|kid|kids|boy|girl|grandson|granddaughter|"
+    r"grandchild|grandchildren|niece|nephew|godson|goddaughter|godchild)\b"
+    r"|\bfor (?:him|her|them|the child|the children)\b",
+    re.IGNORECASE,
+)
+
+
 #: Who is reading, for the purpose of answering "I want to register".
-def _audience(persona: str, age_band: str) -> str:
-    """`child`, `educator`, or `unaccompanied`."""
+def _audience(persona: str, age_band: str, message: str = "") -> str:
+    """`child`, `young_person`, `educator`, or `unaccompanied`.
+
+    `young_person` is new, because the old three-way split told a
+    seventeen-year-old to go and fetch a parent.
+
+    Every minor band collapsed into `child`, whose copy says "ask your parent or
+    guardian to sign in with their own ASPIRE account". Right for a
+    seven-year-old. Wrong for a fourteen- or seventeen-year-old, against the
+    programme's own published rule -- a participant may register their own
+    account from age 12, at aspire.gov.kn or at a branch.
+
+    The assistant was answering a question about the PROGRAMME with a fact about
+    the ASSISTANT. Both true, not the same answer. Jayden Prentice, seventeen,
+    does his own paperwork and his mother's; "ask a parent" is not merely
+    unhelpful in that house, it is wrong with a published rule behind it.
+
+    The oldest minors were worst served of all: `orion` is not `stella` and
+    `16-18` was not in the band list, so a seventeen-year-old fell through to
+    `unaccompanied` and was told to "create a guardian account" -- advice for an
+    adult applying on somebody else's behalf, handed to a child applying for
+    themselves.
+
+    ORDER IS THE SAFETY PROPERTY. The youngest bands are settled before a single
+    word of the message is read. A nine-year-old typing "register my child" is
+    copying a phrase or testing the bot, not raising one, and reading intent out
+    of a child's prose to widen what they are told is the mistake
+    `_ANONYMOUS_DEFAULT` was moved twice to avoid.
+    """
     if persona == "nova":
         return "educator"
-    if persona == "stella" or age_band in ("5-8", "9-12", "13-15"):
+    if persona == "stella" or age_band in ("5-8", "9-12"):
         return "child"
+    # Above that, applying on somebody else's behalf is a guardian's question
+    # whatever the reader's own age. A sixteen-year-old can be a parent -- an
+    # existing test says so -- and a grandmother raising a grandchild must not be
+    # answered as though she were the applicant.
+    if _FOR_ANOTHER.search(message or ""):
+        return "unaccompanied"
+    if age_band in _SELF_REGISTERING_BANDS:
+        return "young_person"
     return "unaccompanied"
 
 
@@ -65,6 +119,30 @@ _REGISTRATION_HELP: dict[str, dict[str, str]] = {
             "Une demande ASPIRE est remplie par un parent ou tuteur. Demande-lui "
             "de se connecter avec son propre compte ASPIRE et de la commencer "
             "là, ou d'aller sur aspire.gov.kn ou dans une agence."
+        ),
+    },
+    #: 13-15 and 16-18: old enough to register themselves under the published
+    #: rule, and told so -- while staying honest that THIS assistant takes the
+    #: application from a guardian. Saying only the first half would send a
+    #: fourteen-year-old round a loop.
+    "young_person": {
+        "en": (
+            "You can register your own ASPIRE account from age 12 -- at "
+            "aspire.gov.kn, or at any branch. An application through this "
+            "assistant is completed by a parent or guardian, so if you would "
+            "rather do it here, ask yours to start it from their own account."
+        ),
+        "es": (
+            "Puedes registrar tu propia cuenta de ASPIRE desde los 12 años, en "
+            "aspire.gov.kn o en cualquier sucursal. Una solicitud hecha con este "
+            "asistente la completa un padre, madre o tutor, así que si prefieres "
+            "hacerla aquí, pídele que la empiece desde su propia cuenta."
+        ),
+        "fr": (
+            "Tu peux créer ton propre compte ASPIRE à partir de 12 ans, sur "
+            "aspire.gov.kn ou dans une agence. Une demande faite avec cet "
+            "assistant est remplie par un parent ou tuteur, donc si tu préfères "
+            "la faire ici, demande-lui de la commencer depuis son compte."
         ),
     },
     "unaccompanied": {
@@ -115,6 +193,11 @@ _REGISTRATION_CHIPS: dict[str, dict[str, list[str]]] = {
         "en": ["Who registers a child?", "What documents are needed?"],
         "es": ["¿Quién registra?", "¿Qué documentos?"],
         "fr": ["Qui inscrit l'enfant ?", "Quels documents ?"],
+    },
+    "young_person": {
+        "en": ["Register at a branch", "What documents are needed?"],
+        "es": ["Registrarme en una sucursal", "¿Qué documentos?"],
+        "fr": ["M'inscrire en agence", "Quels documents ?"],
     },
     "unaccompanied": {
         "en": ["Create a guardian account", "What documents are needed?"],
@@ -419,7 +502,7 @@ def _open_signup(state: AspireState, message: str) -> dict[str, Any] | None:
 
     persona = str(state.get("persona") or "")
     age_band = str(state.get("age_band") or "")
-    audience = _audience(persona, age_band)
+    audience = _audience(persona, age_band, message)
 
     locale = str(state.get("locale") or "en")
     if locale not in _SIGNUP_INTRO:
@@ -468,7 +551,7 @@ def _registration_help(state: AspireState, message: str) -> dict[str, Any] | Non
 
     persona = str(state.get("persona") or "")
     age_band = str(state.get("age_band") or "")
-    audience = _audience(persona, age_band)
+    audience = _audience(persona, age_band, message)
 
     locale = str(state.get("locale") or "en")
     if locale not in _REGISTRATION_HELP[audience]:
