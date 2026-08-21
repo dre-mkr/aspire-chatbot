@@ -11,7 +11,7 @@ export type GamePersona =
 	| "orion"
 	| "aurora"
 	| "nova"
-	| "everyone";
+	| "guest";
 
 /** How an item is put to the player. */
 export type PromptKind = "scramble" | "statement" | "quiz" | "hangman";

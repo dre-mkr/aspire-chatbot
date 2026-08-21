@@ -126,7 +126,7 @@ export interface CitationsDirective {
 		 * all; `site`/`page` still name it in both cases, so a source is
 		 * attributed even when it cannot be opened.
 		 */
-		url?: string;
+		source_url?: string;
 		site?: string;
 		page?: string;
 		domain?: string;

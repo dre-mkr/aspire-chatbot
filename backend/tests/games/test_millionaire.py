@@ -60,7 +60,7 @@ class TestTheContent:
             for entry in game_set.entries
             for band in entry.persona_bands
         }
-        assert {"stella", "orion", "everyone"} <= bands
+        assert {"stella", "orion", "guest"} <= bands
 
     def test_the_answer_is_not_the_longest_choice_every_time(self, entries):
         """A quiz where the longest option is always right is not a quiz."""

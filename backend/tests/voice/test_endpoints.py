@@ -338,7 +338,7 @@ def test_config_reports_personas_languages_and_limits(client, settings):
         "orion",
         "aurora",
         "nova",
-        "everyone",
+        "guest",
     }
     assert body["languages"] == ["en", "es", "fr"]
     assert body["limits"]["max_duration_seconds"] == settings.max_duration_seconds

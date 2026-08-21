@@ -13,13 +13,13 @@ _DIR: Final[Path] = Path(__file__).resolve().parent
 
 #: Which card a persona gets.
 #:
-#: `everyone` used to be carried here as an exception: it is a persona everywhere
+#: `guest` used to be carried here as an exception: it is a persona everywhere
 #: else -- `domain.py`, `access.py`, `state.py` -- but it named the absence of an
 #: audience rather than a character, so it had no label of its own. It has one
 #: now. The default card introduces itself as Guest, answers before it knows who
 #: is reading, and is a voice like the other five, so it is a `NAMES` row like
 #: the other five. The union is kept so a future nameless persona is one line.
-KNOWN: Final[frozenset[str]] = frozenset(NAMES) | {"everyone"}
+KNOWN: Final[frozenset[str]] = frozenset(NAMES) | {"guest"}
 
 #: The card used when the persona is missing or unrecognised.
 #:

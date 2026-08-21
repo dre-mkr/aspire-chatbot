@@ -181,12 +181,45 @@ def _coerce(
     )
 
 
+#: The agents whose whole job is to teach. Naming them once, here, because two
+#: separate rules below need the same list and they must not drift apart.
+TEACHING_AGENTS: tuple[str, ...] = (
+    "learn_agent",
+    "learning_sample",
+    "learning_preview",
+)
+
+
 def apply_stickiness(decision: Classification, state: AspireState) -> Classification:
     """Keep an ongoing flow unless the proposal clears the threshold."""
     active = state.get("active_agent")
     if not active or active not in (state.get("allowed_agents") or []):
         return decision
     if decision.agent == active:
+        return decision
+
+    # A move INTO teaching is never held back.
+    #
+    # Without this, the routing fix only works on the first turn. A reader asks
+    # "what is compound interest", the classifier correctly proposes the tutor at
+    # around 0.7, the threshold is 0.75, and stickiness quietly keeps them in the
+    # Q&A agent -- which answers by listing facts instead of teaching. That is
+    # precisely the behaviour the client has described, and it survives every fix
+    # made upstream of this function because it happens after them.
+    #
+    # Stickiness exists to stop a flow being interrupted. Teaching IS the flow
+    # this product is for; Q&A is what happens when there is nothing to teach. So
+    # the guard only ever protects a teaching agent from being left, never a
+    # non-teaching one from being entered.
+    if decision.agent in TEACHING_AGENTS and active not in TEACHING_AGENTS:
+        logger.info(
+            "Letting %s take session %s from %s at %.2f: a move into teaching is "
+            "exempt from stickiness.",
+            decision.agent,
+            state.get("session_id"),
+            active,
+            decision.confidence,
+        )
         return decision
 
     threshold = get_settings().classifier_stickiness_threshold
@@ -251,11 +284,9 @@ def build_classifier_model():
 CONTINUATION_FLAGS: tuple[str, ...] = ("widget_interaction", "game_result")
 
 #: Where a continuation goes when the checkpoint has no active agent to resume.
-CONTINUATION_FALLBACKS: tuple[str, ...] = (
-    "learn_agent",
-    "learning_sample",
-    "learning_preview",
-)
+#: The same list as `TEACHING_AGENTS`, and deliberately the same object, because
+#: a continuation is always a reply to something a teaching agent showed.
+CONTINUATION_FALLBACKS: tuple[str, ...] = TEACHING_AGENTS
 
 
 def _continues_an_agent(state: AspireState, allowed: list[str]) -> str | None:

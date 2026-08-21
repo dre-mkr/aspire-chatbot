@@ -95,7 +95,7 @@ _VIDEOS: Final[tuple[Video, ...]] = (
         duration_seconds=262,
         setting="Basseterre, St. Kitts",
         filename="captain-careful-and-the-quest-for-scarcity.mp4",
-        personas=(Persona.STELLA, Persona.ORION, Persona.EVERYONE),
+        personas=(Persona.STELLA, Persona.ORION, Persona.GUEST),
         strong=(
             "scarcity",
             "scarce",
@@ -141,7 +141,7 @@ _VIDEOS: Final[tuple[Video, ...]] = (
         duration_seconds=355,
         setting="Nevis",
         filename="moniques-saving-adventure.mp4",
-        personas=(Persona.STELLA, Persona.ORION, Persona.EVERYONE),
+        personas=(Persona.STELLA, Persona.ORION, Persona.GUEST),
         strong=(
             "saving",
             "savings",

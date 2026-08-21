@@ -34,7 +34,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict
 
@@ -49,6 +49,12 @@ DOCUMENT_SCHEME = "internal:"
 
 #: Analytics parameters, which identify the click rather than the page. Dropping
 #: one cannot change what a server returns, which is why the href drops them too.
+#:
+#: `ref` is deliberately NOT here. It is an analytics parameter on some sites
+#: and a content selector on many more -- an edition, a revision, a document id
+#: -- and dropping it can change what a server returns, which is the one thing
+#: this list promises it cannot do. It also made two genuinely different
+#: documents share a key AND a link.
 TRACKING_PARAMS: frozenset[str] = frozenset(
     {
         "fbclid",
@@ -57,7 +63,6 @@ TRACKING_PARAMS: frozenset[str] = frozenset(
         "mc_cid",
         "mc_eid",
         "msclkid",
-        "ref",
         "ref_src",
         "yclid",
     }
@@ -89,6 +94,13 @@ _UNSAFE = re.compile(r"[\s\x00-\x1f\x7f<>\"'`\\]")
 #: One label of a hostname: letters, digits and inner hyphens, and nothing else.
 _LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
+#: RFC 1035's limits. Enforced because they are also what keeps `domain` inside
+#: the wire schema's own cap: `a.` five hundred times is every-label-valid, has
+#: a letters-only TLD, fits inside `MAX_URL_CHARS`, and yields a 1003-character
+#: "domain" that raises from inside the streaming response.
+MAX_LABEL_OCTETS = 63
+MAX_HOST_OCTETS = 253
+
 
 def _hostname_ok(host: str) -> bool:
     """Whether every label of this host is one a browser would actually resolve.
@@ -114,8 +126,12 @@ def _hostname_ok(host: str) -> bool:
     only catches `10.0.0.5`; `https://127.1/x` is the same machine written
     shorter, has a dot, and has two perfectly good LDH labels.
     """
+    if len(host) > MAX_HOST_OCTETS:
+        return False
     labels = host.split(".")
-    if len(labels) < 2 or not all(_LABEL.match(label) for label in labels):
+    if len(labels) < 2 or any(len(label) > MAX_LABEL_OCTETS for label in labels):
+        return False
+    if not all(_LABEL.match(label) for label in labels):
         return False
     return bool(_TLD.match(labels[-1]))
 
@@ -297,20 +313,37 @@ def _split(raw: Any) -> tuple[str, str, int | None, str, str, str] | None:
 
 
 def _query_without_tracking(query: str) -> str:
-    """The query string with analytics parameters removed and duplicates collapsed."""
+    """The query string with analytics parameters removed and duplicates collapsed.
+
+    Purely SUBTRACTIVE: the kept pairs are the caller's own bytes, spliced back
+    together, never decoded and re-encoded.
+
+    Decoding through `parse_qsl` and rebuilding with `urlencode` looked tidier
+    and was wrong twice. It EXPANDS -- `urlencode` percent-encodes everything
+    outside the unreserved set, so one accented character becomes six -- which
+    means a 448-character stored URL could come back 2148 characters long, past
+    the cap `_split` enforces on its input. `safe_url` then would not accept its
+    own output, and `describe`, which reads the domain off that output, lost the
+    site and the page along with the link: total attribution loss on a row whose
+    stored URL was perfectly good. It also rewrote the reader's link into a
+    different string from the one the corpus authored, which is the thing
+    `safe_url` promises never to do.
+    """
     if not query:
         return ""
-    kept: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for name, value in parse_qsl(query, keep_blank_values=True):
-        lowered = name.lower()
-        if lowered in TRACKING_PARAMS or lowered.startswith(TRACKING_PREFIXES):
+    kept: list[str] = []
+    seen: set[str] = set()
+    for pair in query.split("&"):
+        if not pair:
             continue
-        if (lowered, value) in seen:
+        name = pair.split("=", 1)[0].lower()
+        if name in TRACKING_PARAMS or name.startswith(TRACKING_PREFIXES):
             continue
-        seen.add((lowered, value))
-        kept.append((name, value))
-    return urlencode(kept)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        kept.append(pair)
+    return "&".join(kept)
 
 
 def safe_url(raw: Any) -> str | None:
@@ -497,6 +530,16 @@ def describe(metadata: dict[str, Any] | None, *, stored_url: str | None = None) 
 
     key = canonical(href) or ""
     domain = domain_of(href)
+    if not domain:
+        # `safe_url` accepted this and `domain_of` did not, which cannot happen
+        # while both read the same `_split`. Said out loud rather than shipped:
+        # the citation would go out with no site, no page and no domain -- fully
+        # un-attributed -- on a row whose stored URL was perfectly good.
+        logger.error(
+            "safe_url and domain_of disagree about %r; citing row without a source.",
+            raw[:64],
+        )
+        return None
     # An unregistered host is named by its own domain rather than left blank:
     # "sknis.gov.kn — VAT returns to 17%" still says whose page it is, and a
     # domain is the last thing above showing somebody a raw URL.

@@ -13,7 +13,7 @@ from app.schemas.directives import UIDirective
 # ── the four closed vocabularies identity is drawn from ──
 # Literal rather than str, so an out-of-set value is a type error and not a runtime surprise.
 
-Persona = Literal["stella", "orion", "aurora", "nova", "everyone"]
+Persona = Literal["stella", "orion", "aurora", "nova", "guest"]
 AgeBand = Literal["5-8", "9-12", "13-15", "16-18", "adult"]
 AccountStatus = Literal["prospect", "applicant", "beneficiary", "guardian"]
 Locale = Literal["en", "es", "fr"]
@@ -81,7 +81,12 @@ class Citation(BaseModel):
     # here with `url` empty and the rest of the naming intact, which is the
     # difference between "we cannot link this" and "we have no source".
     #: A validated https/http URL, or "" when this source has no public page.
-    url: str = ""
+    #:
+    #: Named `source_url` to match the column it comes from and the wire field
+    #: the front end reads. Empty is meaningful: a claim the reader cannot check
+    #: should look different from one they can, so the panel can render the
+    #: difference rather than guess at it.
+    source_url: str = ""
     #: Whose source it is -- "ASPIRE", "Eastern Caribbean Central Bank".
     site: str = ""
     #: Which page of theirs -- "Frequently asked questions".

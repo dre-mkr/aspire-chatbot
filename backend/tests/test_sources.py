@@ -133,6 +133,53 @@ class TestSafeUrl:
         given = "https://www.sknis.gov.kn/2024/11/28/a-story/"
         assert sources.safe_url(given) == given
 
+    def test_a_kept_parameter_is_returned_byte_for_byte(self):
+        """The rewrite is subtractive. It must not re-encode what it keeps."""
+        given = "https://gov.kn/p?q=caf%C3%A9&r=a+b&s=x%2Fy"
+        assert sources.safe_url(given) == given
+
+    def test_the_link_never_comes_back_longer_than_it_went_in(self):
+        """Decoding and re-encoding EXPANDS, and past the cap the URL is lost.
+
+        A 374-character stored URL came back 2148 characters -- so `safe_url`
+        would not accept its own output, and `describe`, which reads the domain
+        off that output, lost the site and the page with it.
+        """
+        given = "https://sknird.com/vat?q=" + "é" * 340
+        link = sources.safe_url(given)
+        assert link is not None and len(link) <= len(given)
+
+    def test_safe_url_accepts_its_own_output(self):
+        for url in [
+            "https://aspire.gov.kn/#faqs",
+            "https://sknird.com/vat?q=" + "é" * 340,
+            "https://www.gov.kn/a/b/?x=1&utm_source=y",
+        ]:
+            once = sources.safe_url(url)
+            assert once is not None
+            assert sources.safe_url(once) == once
+
+    def test_a_content_selector_is_not_mistaken_for_tracking(self):
+        """`ref` names an edition on a great many sites; dropping it moves the page."""
+        a = "https://gov.kn/budget?ref=2025-estimates"
+        b = "https://gov.kn/budget?ref=2019-estimates"
+        assert sources.safe_url(a) == a
+        assert sources.canonical(a) != sources.canonical(b)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://" + "a." * 500 + "com/",
+            "https://" + "a" * 300 + ".com/",
+        ],
+    )
+    def test_a_hostname_longer_than_dns_allows_is_refused(self, url: str):
+        """Every label is valid LDH, and the "domain" is 1003 characters."""
+        assert sources.safe_url(url) is None
+
+    def test_a_label_at_the_limit_is_still_fine(self):
+        assert sources.safe_url("https://" + "a" * 63 + ".com/") is not None
+
 
 # ── what counts as the same page ─────────────────────────────────────────────
 

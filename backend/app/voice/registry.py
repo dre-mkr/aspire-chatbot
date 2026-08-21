@@ -57,7 +57,7 @@ _DELIVERY: dict[Persona, dict[str, float]] = {
     Persona.NOVA: {"stability": 0.70, "similarity_boost": 0.78, "style": 0.15, "speed": 0.96},
     # Between Orion's evenness and Aurora's steadiness: the reader is unknown, so
     # the delivery commits to nothing.
-    Persona.EVERYONE: {
+    Persona.GUEST: {
         "stability": 0.65,
         "similarity_boost": 0.75,
         "style": 0.18,
@@ -86,11 +86,11 @@ def _delivery_for(settings: VoiceSettings, persona: Persona) -> dict[str, float]
 
 #: Personas that may borrow another's voice id rather than fail startup.
 #:
-#: `everyone` arrived after the twelve ids were provisioned, and a deployment
-#: that has not been given a thirteenth should keep speaking rather than refuse
-#: to boot. Orion is the understudy because it is the most neutral of the four.
-#: An explicit VOICE_EVERYONE always wins over this.
-_VOICE_UNDERSTUDY: dict[Persona, Persona] = {Persona.EVERYONE: Persona.ORION}
+#: `guest` arrived after the twelve ids were provisioned, and a deployment that
+#: has not been given a thirteenth should keep speaking rather than refuse to
+#: boot. Zion is the understudy because it is the most neutral of the four.
+#: An explicit VOICE_GUEST always wins over this.
+_VOICE_UNDERSTUDY: dict[Persona, Persona] = {Persona.GUEST: Persona.ORION}
 
 
 class VoiceRegistryError(RuntimeError):

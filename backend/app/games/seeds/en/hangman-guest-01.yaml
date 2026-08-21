@@ -1,4 +1,4 @@
-# ASPIRE hangman — everyone bank (mixed audience)
+# ASPIRE hangman — guest bank (mixed audience)
 #
 # Eight words that a parent, a teacher and a sixth-former all need in the same
 # form. Read as plain adult prose, since the same card may be in front of a
@@ -22,10 +22,10 @@
 # than what it means; the definition is the teaching, shown last and used again
 # after a correct guess.
 
-id: hangman-everyone-01
+id: hangman-guest-01
 game_type: hangman
 language: en
-title: Money words everyone meets
+title: Money words guest meets
 source: ASPIRE knowledge base (data/knowledge_base.csv)
 
 closing:
@@ -40,7 +40,7 @@ closing:
     for the rest of a life.
 
 entries:
-  - id: hangman-everyone-01-income
+  - id: hangman-guest-01-income
     language: en
     word: INCOME
     hint: a money-in word — a job, a business and a savings account each produce one
@@ -50,11 +50,11 @@ entries:
       It is the fuel for everything else you do with money, which is why a
       budget starts by writing down what is coming in.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-014, FIN-075)
 
-  - id: hangman-everyone-01-expense
+  - id: hangman-guest-01-expense
     language: en
     word: EXPENSE
     hint: the going-out side of a budget, and the side most people guess too low
@@ -64,11 +64,11 @@ entries:
       month and have to borrow or dip into savings to close the gap. Track a
       full month and the small purchases usually total far more than you guessed.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-015, FIN-016, FIN-076)
 
-  - id: hangman-everyone-01-deposit
+  - id: hangman-guest-01-deposit
     language: en
     word: DEPOSIT
     hint: a banking action, and the opposite of a withdrawal
@@ -77,11 +77,11 @@ entries:
       slip, at some ATMs, or by having your salary paid straight in. Check the
       stamped paperwork matches the amount before you walk away.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-100, FIN-101, FIN-102)
 
-  - id: hangman-everyone-01-receipt
+  - id: hangman-guest-01-receipt
     language: en
     word: RECEIPT
     hint: a small piece of paper worth keeping — a shop hands you one, a teller stamps one
@@ -91,11 +91,11 @@ entries:
       tracking spending accurately. In a business it is also your evidence of
       costs.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-101, FIN-167)
 
-  - id: hangman-everyone-01-currency
+  - id: hangman-guest-01-currency
     language: en
     word: CURRENCY
     hint: eight Eastern Caribbean members share one of these — ours is the EC dollar
@@ -107,11 +107,11 @@ entries:
       import prices here stay predictable and savings are protected from
       sudden swings.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-004, FIN-033, FIN-035)
 
-  - id: hangman-everyone-01-loan
+  - id: hangman-guest-01-loan
     language: en
     word: LOAN
     hint: a credit-and-debt word — you take one out, then repay it over a set term
@@ -122,11 +122,11 @@ entries:
       monthly figure — a longer term means a smaller payment but more total
       interest paid in the end.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-173, FIN-174)
 
-  - id: hangman-everyone-01-insurance
+  - id: hangman-guest-01-insurance
     language: en
     word: INSURANCE
     hint: one of the four ways of handling risk — the one that hands the risk to somebody else
@@ -136,11 +136,11 @@ entries:
       that pooling is what makes a big loss survivable. It transfers risk to
       somebody else rather than removing it.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-249, FIN-250)
 
-  - id: hangman-everyone-01-scam
+  - id: hangman-guest-01-scam
     language: en
     word: SCAM
     hint: a fraud-and-safety word — the Eastern Caribbean Central Bank warned about these on 21 May 2025
@@ -151,6 +151,6 @@ entries:
       promise of high returns with little or no risk, because that combination
       does not exist in legitimate finance.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-230, FIN-231, FIN-232)

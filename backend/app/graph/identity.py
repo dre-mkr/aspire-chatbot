@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 
 from app.auth import ALGORITHM, GRACE, _secret
+from app.domain import normalise_persona
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,9 @@ def decode_session_token(token: str | None, *, grace: timedelta = GRACE) -> Sess
         session_id=str(claims["sid"]),
         user_id=str(user_id) if user_id else None,
         device_id=str(claims["did"]),
-        persona=str(claims["per"]),
+        # A token minted before the `everyone` -> `guest` rename still carries
+        # the old word. It is one dict lookup and it costs nothing.
+        persona=normalise_persona(str(claims["per"])),
         age_band=str(claims["band"]),
         account_status=str(claims["acc"]),
         locale=str(claims.get("loc") or "en"),

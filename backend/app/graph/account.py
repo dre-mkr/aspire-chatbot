@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from app.graph.access import allowed_agents
+from app.domain import normalise_persona
 
 logger = logging.getLogger(__name__)
 
@@ -155,33 +156,44 @@ _ANONYMOUS_BANDS: dict[str, str] = {
     "orion": "13-15",
     "aurora": "adult",
     "nova": "adult",
-    # `everyone` is the mixed-audience voice, so the reader behind it may be a
+    # `guest` is the mixed-audience voice, so the reader behind it may be a
     # child. `13-15` is the balance the picker promises: real words and ordinary
     # sentences rather than a five-year-old's register, but still inside the
     # caps, the vocabulary ladder and the link strip that a minor band carries.
     # `adult` here would hand an unknown reader the ungated row.
-    "everyone": "13-15",
+    "guest": "13-15",
 }
 
 #: What an anonymous visitor gets with no persona picked.
 #
-#: The most restrictive one, because a signed-out visitor is exactly the reader
-#: whose age is unknown. It was `aurora`, so every anonymous session ran as an
-#: adult: no word caps, no vocabulary rules, links left in, and the adult game
-#: set. `/api/auth/anonymous` already forced `stella` for the same visitor
-#: (sessions.py) and the two endpoints simply disagreed -- the frontend reads
-#: `session.persona` only for a registered account, so the restrictive one was
-#: the one being ignored.
+#: HISTORY, because this line has now moved twice and the reasoning matters more
+#: than the value.
+#
+#: It was `aurora`, so every anonymous session ran as an adult: no word caps, no
+#: vocabulary rules, links left in, and the adult game set. That was wrong, and
+#: it was changed to `stella` -- the narrowest identity in the matrix -- on the
+#: correct reasoning that a signed-out visitor may well be a child.
+#
+#: But `stella` is the FIVE-TO-EIGHT voice, and a signed-out visitor is just as
+#: likely to be a parent, a teacher, or a judge opening the link cold. Every one
+#: of them was being answered as a seven-year-old on their first message, which
+#: is the first impression this product makes on anyone who has not signed in.
+#
+#: `guest` is the voice that was built for exactly this: plain adult-readable
+#: prose that a child can still read, so neither reader is misplaced. And it is
+#: not a loosening -- `_ANONYMOUS_BANDS` puts it at `13-15`, which keeps the word
+#: caps, the vocabulary ladder, the link strip and the minor game set. It is the
+#: middle option that did not exist when this line was last argued about.
 #
 #: The picker stays open on purpose: a visitor may still choose aurora or nova,
 #: which is how a parent reads about the programme before signing up. The safety
 #: is in the default, not in a lock.
-_ANONYMOUS_DEFAULT = "stella"
+_ANONYMOUS_DEFAULT = "guest"
 
 
 def anonymous_claims(requested_persona: str | None = None) -> DerivedClaims:
     """The claims for a caller with no account. Persona sets voice and band only."""
-    persona = (requested_persona or "").strip().lower()
+    persona = normalise_persona(requested_persona)
     if persona not in _ANONYMOUS_BANDS:
         persona = _ANONYMOUS_DEFAULT
     return DerivedClaims(

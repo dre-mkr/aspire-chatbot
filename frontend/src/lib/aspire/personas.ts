@@ -5,7 +5,7 @@ export type PersonaId =
 	| "orion"
 	| "aurora"
 	| "nova"
-	| "everyone";
+	| "guest";
 
 export interface Persona {
 	id: PersonaId;
@@ -44,7 +44,7 @@ export const PERSONAS: ReadonlyArray<Persona> = [
 		blurb: "Clear, factual explanations you can teach from.",
 	},
 	{
-		id: "everyone",
+		id: "guest",
 		name: "Guest",
 		audience: "General",
 		blurb: "Balanced answers for a mixed audience. The default.",

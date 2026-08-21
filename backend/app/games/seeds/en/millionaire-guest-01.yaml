@@ -1,4 +1,4 @@
-# ASPIRE quiz ladder — everyone set (mixed audience)
+# ASPIRE quiz ladder — guest set (mixed audience)
 #
 # Six questions for a reader who has not said who they are: an older student,
 # a parent at a sign-up table, a teacher, someone who found the chat and
@@ -21,7 +21,7 @@
 # knows nothing a way to win half the set; the wrong options now run at or past
 # the length of the right one.
 
-id: millionaire-everyone-01
+id: millionaire-guest-01
 game_type: millionaire
 language: en
 title: What you already have a right to know
@@ -37,7 +37,7 @@ closing:
     which is the whole reason the education pillar exists.
 
 entries:
-  - id: millionaire-everyone-01-acronym
+  - id: millionaire-guest-01-acronym
     language: en
     question: What does the name ASPIRE stand for?
     choices:
@@ -54,11 +54,11 @@ entries:
       resources behind it, and the education to use both.
     topic: What ASPIRE is
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (ASP-002, ASP-001)
 
-  - id: millionaire-everyone-01-pillars
+  - id: millionaire-guest-01-pillars
     language: en
     question: ASPIRE is built on three pillars. Which three?
     choices:
@@ -76,11 +76,11 @@ entries:
       financial wisdom outlasts any one balance.
     topic: The three pillars
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (ASP-004, ASP-238, ASP-018, ASP-154)
 
-  - id: millionaire-everyone-01-peg
+  - id: millionaire-guest-01-peg
     language: en
     question: One United States dollar is worth how many Eastern Caribbean dollars?
     choices:
@@ -96,11 +96,11 @@ entries:
       can convert a quoted price in your head instead of looking up a rate.
     topic: The EC dollar peg
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-005, FIN-035, FIN-006)
 
-  - id: millionaire-everyone-01-credit-union
+  - id: millionaire-guest-01-credit-union
     language: en
     question: What makes a credit union different from a commercial bank?
     choices:
@@ -118,11 +118,11 @@ entries:
       Compare rates, fees and access — plenty of people use both.
     topic: Credit unions and banks
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-110, FIN-111, FIN-045)
 
-  - id: millionaire-everyone-01-minimum-savings-rate
+  - id: millionaire-guest-01-minimum-savings-rate
     language: en
     question: What is the least a commercial bank here may pay you on a savings deposit?
     choices:
@@ -141,11 +141,11 @@ entries:
       different number from the legal floor.
     topic: The savings rate floor
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-037, FIN-038, FIN-332)
 
-  - id: millionaire-everyone-01-after-a-scam
+  - id: millionaire-guest-01-after-a-scam
     language: en
     question: You have just realised you sent money to a scammer. What comes first?
     choices:
@@ -165,6 +165,6 @@ entries:
       gets warned.
     topic: After a scam
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-245, FIN-238)

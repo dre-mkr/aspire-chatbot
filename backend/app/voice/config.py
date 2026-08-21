@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config import BASE_DIR
@@ -39,6 +39,10 @@ class VoiceSettings(BaseSettings):
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # The guest voice ids carry an environment alias for their old name, and
+        # an alias would otherwise stop the FIELD name from populating them --
+        # which the tests, and any caller constructing settings directly, rely on.
+        populate_by_name=True,
     )
 
     # Switches the whole module off: no routes mounted, no registry validation.
@@ -58,10 +62,18 @@ class VoiceSettings(BaseSettings):
     voice_orion: str | None = None
     voice_aurora: str | None = None
     voice_nova: str | None = None
-    # `everyone` is the general-purpose voice. Left unset it borrows Orion's id
+    # `guest` is the general-purpose voice. Left unset it borrows Orion's id
     # rather than failing startup -- see `_VOICE_UNDERSTUDY` in `registry`. Set
-    # VOICE_EVERYONE to give it one of its own.
-    voice_everyone: str | None = None
+    # VOICE_GUEST to give it one of its own.
+    #
+    # It was called `everyone` until 20 August 2026. Every id below still accepts
+    # the old VOICE_EVERYONE* environment variable, so a deployment that was
+    # already configured keeps speaking without anybody editing its secrets. Drop
+    # the aliases once the environments have been updated.
+    voice_guest: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VOICE_GUEST", "VOICE_EVERYONE"),
+    )
 
     voice_stella_en: str | None = None
     voice_stella_es: str | None = None
@@ -75,9 +87,18 @@ class VoiceSettings(BaseSettings):
     voice_nova_en: str | None = None
     voice_nova_es: str | None = None
     voice_nova_fr: str | None = None
-    voice_everyone_en: str | None = None
-    voice_everyone_es: str | None = None
-    voice_everyone_fr: str | None = None
+    voice_guest_en: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VOICE_GUEST_EN", "VOICE_EVERYONE_EN"),
+    )
+    voice_guest_es: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VOICE_GUEST_ES", "VOICE_EVERYONE_ES"),
+    )
+    voice_guest_fr: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("VOICE_GUEST_FR", "VOICE_EVERYONE_FR"),
+    )
 
     # --- Delivery overrides ----------------------------------------------
     # Optional, and unset by default: the table in `voice/registry.py` stands

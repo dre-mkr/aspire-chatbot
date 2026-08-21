@@ -15,7 +15,7 @@ from app.config import get_settings
 from app.context.session_context import conversation_reference
 from app.graph.state import AspireState, Citation, KBChunk
 from app.messages import text_of
-from app.schemas.directives import CHIP_LABEL_CHARS
+from app.schemas.directives import CHIP_LABEL_CHARS, CITATION_ID
 
 logger = logging.getLogger(__name__)
 
@@ -437,7 +437,7 @@ _QA_DEPTH: dict[str, str] = {
   asked about it.
 - Close with the one thing the reader should do next, when the extracts name
   one. Never pad; every sentence must carry information from an extract.""",
-    "everyone": """DEPTH AND COMPLETENESS
+    "guest": """DEPTH AND COMPLETENESS
 - Give the direct answer in the first sentence, then the one or two details that
   change what the reader does next.
 - When several extracts bear on the question, join them into one answer rather
@@ -553,7 +553,7 @@ _STORY_BY_PERSONA: dict[str, str] = {
         "Write a short teaching story an educator could use with a class, then "
         "add one line naming the concept and one discussion question."
     ),
-    "everyone": (
+    "guest": (
         "Tell a short story, six to ten sentences, with one clear money idea in "
         "it. End by naming that idea in a line."
     ),
@@ -570,8 +570,8 @@ def _story_instruction(state: AspireState) -> str | None:
     topic = (state.get("story_topic") or "").strip()
     if not topic:
         return None
-    persona = str(state.get("persona") or "everyone")
-    shape = _STORY_BY_PERSONA.get(persona, _STORY_BY_PERSONA["everyone"])
+    persona = str(state.get("persona") or "guest")
+    shape = _STORY_BY_PERSONA.get(persona, _STORY_BY_PERSONA["guest"])
     return (
         f"The reader has asked for a story about: {topic}\n"
         f"{shape}\n"
@@ -647,6 +647,10 @@ def _generation_messages(
 
 #: Numbers and money amounts in an answer.
 _FIGURE = re.compile(r"(?:EC\$|US\$|\$)?\d[\d,]*(?:\.\d+)?%?")
+
+#: A bracketed reference -- `[ASP-042]`, `[FIN-007]`. The same shape
+#: `ground_check` reads to decide which rows an answer cited.
+_CITATION_MARKER = re.compile(rf"\[{CITATION_ID}\]")
 
 #: Small integers used as counts or ordinals; never a factual claim needing attribution.
 _INNOCUOUS = frozenset({"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"})
@@ -777,6 +781,11 @@ def _derivation(
     """
     for a in asked:
         for b in given:
+            if a == b:
+                # `given` contains `asked`, so without this a reader's single
+                # figure is both operands and licenses its own double and its
+                # own square as programme facts.
+                continue
             candidates = [a + b, a - b, b - a, a * b, a * b / 100.0]
             if b:
                 candidates.append(a / b)
@@ -850,6 +859,19 @@ def unattributed_figures(
 
     from_question = _operands(asked)
     every_quantity = _operands(stated | asked)
+
+    # A citation marker is not a figure.
+    #
+    # `_FIGURE` matches the digits inside `[ASP-011]`, and the role card
+    # REQUIRES the model to write that marker -- so the gate was reading the
+    # answer's own citation as an invented number. It never surfaced before
+    # because `known` was built from the raw row text, whose `id: ASP-011`
+    # bookkeeping line happened to license the marker; scrubbing that line for
+    # the prompt took the accident away with it. Measured across all 706 corpus
+    # rows, feeding each row's own answer back verbatim with a correct
+    # citation: 684 of 706 were declined. Removed here rather than licensed,
+    # because the marker is punctuation and never a claim.
+    answer = _CITATION_MARKER.sub(" ", answer)
 
     # Pass one: which figures stand on their own, and which figures of the
     # reader's the answer actually WORKED WITH.
@@ -996,7 +1018,7 @@ def make_ground_check(threshold: float | None = None):
         known = {chunk.kb_id for chunk in chunks}
         cited = {
             match.group(1)
-            for match in re.finditer(r"\[([A-Za-z]{2,6}-\d+)\]", answer)
+            for match in re.finditer(rf"\[({CITATION_ID})\]", answer)
         }
         grounded_citations = cited & known
 
@@ -1124,7 +1146,7 @@ def citation_for(chunk: KBChunk) -> Citation:
         title=chunk.title,
         question=str(chunk.metadata.get("question") or "").strip(),
         snippet=snippet_of(chunk.content),
-        url=ref.url if ref else "",
+        source_url=ref.url if ref else "",
         site=ref.site if ref else "",
         page=ref.page if ref else "",
         domain=ref.domain if ref else "",

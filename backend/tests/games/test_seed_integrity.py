@@ -83,7 +83,7 @@ def test_the_word_bank_is_tiered_by_persona(game):
 
 @pytest.mark.parametrize(
     ("persona", "least"),
-    [(Persona.STELLA, 8), (Persona.ORION, 8), (Persona.EVERYONE, 6)],
+    [(Persona.STELLA, 8), (Persona.ORION, 8), (Persona.GUEST, 6)],
 )
 def test_each_playing_persona_has_a_bank_worth_playing(game, persona, least):
     """The pool a reader actually draws from, not the total on disk."""

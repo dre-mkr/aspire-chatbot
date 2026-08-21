@@ -8,7 +8,7 @@ from typing import Final
 # Runtime frozensets, deliberately duplicated from the Literal types in `state`.
 
 PERSONAS: Final[frozenset[str]] = frozenset(
-    {"stella", "orion", "aurora", "nova", "everyone"}
+    {"stella", "orion", "aurora", "nova", "guest"}
 )
 AGE_BANDS: Final[frozenset[str]] = frozenset({"5-8", "9-12", "13-15", "16-18", "adult"})
 ACCOUNT_STATUSES: Final[frozenset[str]] = frozenset(
@@ -113,10 +113,10 @@ def allowed_agents(
     if persona == "aurora":
         return list(_AURORA)
 
-    if persona == "everyone":
+    if persona == "guest":
         # The general-purpose voice, and deliberately NOT a row of its own.
         #
-        # `everyone` says "I have not told you who I am", which is a statement
+        # `guest` says "I have not told you who I am", which is a statement
         # about register, not about entitlement. Giving it a literal row would
         # mean inventing a set that is either wider than the reader's own --- a
         # privilege escalation available to anyone who edits a URL --- or

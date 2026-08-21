@@ -568,7 +568,7 @@ def citation_refs(
     for citation in list(citations or [])[:CITATION_REFS_MAX]:
         if not isinstance(citation, dict):
             continue
-        raw = str(citation.get("url") or "")
+        raw = str(citation.get("source_url") or "")
         url = sources.safe_url(raw) if linkable else None
         if raw and url is None and linkable:
             # Validated once already, so reaching here means the stored value
@@ -588,19 +588,28 @@ def citation_refs(
         # over-long page title would not degrade one citation, it would kill
         # the turn, and `_replay` would serve the same failure every time the
         # question was asked again.
+        domain = str(citation.get("domain") or "")[: sources.MAX_HOST_OCTETS]
+        site = str(citation.get("site") or "")
+        if not linkable and site.casefold() == domain.casefold():
+            # An unregistered host is NAMED by its own hostname, so blanking
+            # `domain` alone handed the same string back in `site` and defeated
+            # the gate by half. A source with no name left is still attributed
+            # by its page title, its row id and the row's own words.
+            site = ""
+
         refs.append(
             CitationRef(
                 kb_id=str(citation.get("kb_id") or ""),
                 title=str(citation.get("title") or ""),
                 question=str(citation.get("question") or ""),
                 snippet=str(citation.get("snippet") or ""),
-                url=url or "",
-                site=sources.clip(str(citation.get("site") or ""), sources.MAX_SITE_CHARS),
+                source_url=url or "",
+                site=sources.clip(site, sources.MAX_SITE_CHARS),
                 page=sources.clip(str(citation.get("page") or ""), sources.MAX_PAGE_CHARS),
                 # Withheld with the link, not just alongside it. `aspire.gov.kn`
                 # IS a URL, and printing it under a source for a reader the
                 # product never shows one to would defeat the gate by half.
-                domain=str(citation.get("domain") or "")[:253] if linkable else "",
+                domain=domain if linkable else "",
                 updated=sources.clip(
                     str(citation.get("updated") or ""), sources.MAX_UPDATED_CHARS
                 ),

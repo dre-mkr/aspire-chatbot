@@ -77,7 +77,7 @@ def test_a_citations_provenance_survives_the_round_trip():
     """
     citation = Citation(
         kb_id="ASP-029",
-        url="https://aspire.gov.kn/#faqs",
+        source_url="https://aspire.gov.kn/#faqs",
         site="ASPIRE",
         page="Frequently asked questions",
         domain="aspire.gov.kn",
@@ -86,7 +86,7 @@ def test_a_citations_provenance_survives_the_round_trip():
     restored = _roundtrip(citation, _serde())
 
     assert isinstance(restored, Citation)
-    assert restored.url == "https://aspire.gov.kn/#faqs"
+    assert restored.source_url == "https://aspire.gov.kn/#faqs"
     assert restored.site == "ASPIRE"
     assert restored.page == "Frequently asked questions"
     assert restored.domain == "aspire.gov.kn"

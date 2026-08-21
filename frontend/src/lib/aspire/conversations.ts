@@ -32,7 +32,7 @@ interface WireSource {
 	title?: string;
 	question?: string;
 	snippet?: string;
-	url?: string;
+	source_url?: string;
 	site?: string;
 	page?: string;
 	domain?: string;
@@ -142,21 +142,36 @@ function normaliseSource(source: Source | WireSource): Source {
 		return source as Source;
 
 	const stored = (source ?? {}) as Record<string, unknown>;
-	const { content, snippet, url, site, page, domain, updated, ...rest } = stored;
+	const { content, snippet, source_url, site, page, domain, updated, ...rest } =
+		stored;
 	const origin = {
-		url: text(url),
+		url: text(source_url),
 		site: text(site),
 		page: text(page),
 		domain: text(domain),
 		updated: text(updated),
 	};
+
+	// The same fallbacks the live path applies (stream.ts), deliberately kept
+	// in step. They had drifted: live used `snippet || title || kb_id` for the
+	// body and `question || title` for the label, and this read only `snippet`
+	// and only `question` — so a row the corpus stores with no `question`,
+	// which is every non-QA chunk, showed its title while the conversation was
+	// open and nothing at all after a reload.
+	const meta = rest as Record<string, string | number>;
+	const title = typeof meta.title === "string" ? meta.title : "";
+	const kbId = typeof meta.kb_id === "string" ? meta.kb_id : "";
+
 	return {
-		content: text(content) || text(snippet),
-		metadata: rest as Record<string, string | number>,
+		content: text(content) || text(snippet) || title || kbId,
+		metadata: { ...meta, ...(meta.question || !title ? {} : { question: title }) },
 		// Only when the row was actually attributed. An absent `origin` is how
 		// the panel knows there is nothing to name, rather than a name that is
-		// the empty string.
-		...(origin.url || origin.site || origin.page ? { origin } : {}),
+		// the empty string. `domain` counts: a source can arrive with a host and
+		// no site name, and dropping `origin` there un-names it entirely.
+		...(origin.url || origin.site || origin.page || origin.domain
+			? { origin }
+			: {}),
 	};
 }
 

@@ -9,6 +9,7 @@ rather than from a model.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 import pytest
@@ -25,6 +26,7 @@ from app.agents.qa.graph import build_qa_graph  # noqa: E402
 from app.api.stream import CITATION_REFS_MAX, citation_refs  # noqa: E402
 from app.graph.main_graph import citation_payload  # noqa: E402
 from app.graph.state import Citation, KBChunk, initial_state  # noqa: E402
+from app.schemas.directives import CITATION_ID  # noqa: E402
 
 # ── a corpus that says where each row came from ──────────────────────────────
 
@@ -173,11 +175,11 @@ class TestBasicAttribution:
         refs = refs_for(result)
         assert len(refs) == 1
         assert refs[0].kb_id == "ASP-001"
-        assert refs[0].url == "https://aspire.gov.kn/#faqs"
+        assert refs[0].source_url == "https://aspire.gov.kn/#faqs"
         assert refs[0].domain == "aspire.gov.kn"
         assert refs[0].site == "ASPIRE"
         # §26: what reaches an `href` must survive validation.
-        assert sources.safe_url(refs[0].url) == refs[0].url
+        assert sources.safe_url(refs[0].source_url) == refs[0].source_url
 
     @pytest.mark.asyncio
     async def test_the_source_is_the_row_the_answer_cited_and_not_the_others(self):
@@ -204,7 +206,7 @@ class TestPagePrecision:
         state["messages"].append(AIMessage(content="Children aged 5 to 18 [ASP-001]."))
 
         citation = (await nodes.make_ground_check()(state)).update["citations"][0]
-        assert citation.url == "https://aspire.gov.kn/#faqs"
+        assert citation.source_url == "https://aspire.gov.kn/#faqs"
         assert citation.page == "Frequently asked questions"
 
     @pytest.mark.asyncio
@@ -216,7 +218,7 @@ class TestPagePrecision:
         )
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
-        assert {ref.url for ref in refs} == {
+        assert {ref.source_url for ref in refs} == {
             "https://aspire.gov.kn/",
             "https://aspire.gov.kn/#faqs",
         }
@@ -239,8 +241,8 @@ class TestMultipleSources:
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
         assert len(refs) == 3
-        assert len({sources.canonical(ref.url) for ref in refs}) == 3
-        assert all(ref.url for ref in refs)
+        assert len({sources.canonical(ref.source_url) for ref in refs}) == 3
+        assert all(ref.source_url for ref in refs)
 
 
 # ── Test 4 and 5: answers that are not retrieval ─────────────────────────────
@@ -284,6 +286,97 @@ class TestArithmeticIsNotAttributed:
         # The row it points at contains the EC$25; nothing claims to source the EC$100.
         assert "EC$25" in refs[0].snippet
         assert "EC$100" not in refs[0].snippet
+
+
+class TestTheCitationMarkerIsNotAFigure:
+    """`[ASP-011]` contains the digits `011`, and the role card demands it.
+
+    The gate was reading an answer's own citation as an invented number. It
+    never showed because `known` was built from the raw row text, whose
+    `id: ASP-011` line licensed the marker by accident — and scrubbing that
+    line out of the prompt took the accident with it.
+    """
+
+    def test_a_marker_does_not_make_a_correct_answer_ungrounded(self):
+        chunks = [
+            KBChunk(
+                kb_id="ASP-742",
+                content="Answer: Applications are reviewed by the programme office.",
+                relevance=0.9,
+            )
+        ]
+        answer = "Applications are reviewed by the programme office [ASP-742]."
+        assert nodes.unattributed_figures(answer, chunks, "", "who reviews them?") == []
+
+    @pytest.mark.parametrize("marker", ["ASP-011", "FIN-4212", "RES-99"])
+    def test_no_reference_id_reads_as_a_claim(self, marker: str):
+        chunks = [KBChunk(kb_id=marker, content="Answer: The office is on Central Street.")]
+        assert (
+            nodes.unattributed_figures(
+                f"The office is on Central Street [{marker}].", chunks, "", "where is it?"
+            )
+            == []
+        )
+
+    @pytest.mark.parametrize("kb_id", ["ASP-001", "ASP-00A", "ASP-00B", "FIN-4212", "RES-007"])
+    def test_an_id_that_is_not_all_digits_still_cites(self, kb_id: str):
+        """`ASP-00A` is an id somebody wrote, and three readers disagreed on it.
+
+        Grounding, the figure gate and the interceptor each had their own copy
+        of the marker pattern, and two of the three demanded digits after the
+        hyphen. The two rows that define what completing the programme means
+        are `ASP-00A` and `ASP-00B`: every answer drawn from them was declined
+        as uncited, and the marker was left in the prose for the reader to see.
+        """
+        from app.graph.stream_interceptor import strip_citation_markers
+
+        chunks = [KBChunk(kb_id=kb_id, content="Answer: Stay five years or until 18.")]
+        answer = f"Stay five years or until 18 [{kb_id}]."
+
+        assert nodes.unattributed_figures(answer, chunks, "", "how long?") == []
+        cited = set(re.findall(rf"\[({CITATION_ID})\]", answer))
+        assert cited == {kb_id}
+        assert kb_id not in strip_citation_markers(answer)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("kb_id", ["ASP-00A", "ASP-00B"])
+    async def test_the_rows_defining_completion_are_actually_served(self, kb_id: str):
+        state = state_for("what does completing the programme mean")
+        state["retrieved"] = [
+            KBChunk(
+                kb_id=kb_id,
+                content="Answer: Stay a minimum of 5 years or until 18, whichever is later.",
+                relevance=0.9,
+                source_url="https://aspire.gov.kn/",
+                metadata={"question": "What does completing mean?"},
+            )
+        ]
+        state["messages"].append(
+            AIMessage(content=f"A minimum of 5 years or until 18, whichever is later [{kb_id}].")
+        )
+
+        command = await nodes.make_ground_check()(state)
+        assert [c.kb_id for c in command.update["citations"]] == [kb_id]
+
+    def test_every_corpus_row_answering_itself_is_served(self):
+        """The measurement that caught it: 684 of 706 correct answers declined."""
+        from pathlib import Path
+
+        from app.ingest import load_documents
+
+        corpus = Path(__file__).resolve().parent.parent / "data" / "knowledge_base.csv"
+        declined = []
+        for document in load_documents(corpus):
+            kb_id = str(document.metadata.get("id") or "")
+            chunk = KBChunk(kb_id=kb_id, content=document.page_content, relevance=0.9)
+            answer = f"{document.metadata.get('answer', '')} [{kb_id}]"
+            missing = nodes.unattributed_figures(
+                answer, [chunk], "", str(document.metadata.get("question", ""))
+            )
+            if missing:
+                declined.append((kb_id, missing[:3]))
+
+        assert not declined, f"{len(declined)} correct answers would be refused: {declined[:5]}"
 
 
 class TestTheFigureGateAndArithmetic:
@@ -365,6 +458,13 @@ class TestTheFigureGateAndArithmetic:
             "what is 20% of EC$50, and does ASPIRE pay EC$9,999?",
         )
         assert missing == ["EC$9,999"]
+
+    def test_a_readers_figure_cannot_be_both_operands_of_its_own_licence(self):
+        """`given` contains `asked`, so `x + x` and `x * x` were derivable."""
+        chunks = chunks_for("ASP-002")
+        assert nodes.unattributed_figures(
+            "ASPIRE pays EC$19,998 in total.", chunks, "", "does it pay EC$9,999 each?"
+        ) == ["EC$19,998"]
 
     def test_an_identity_operation_does_not_count_as_working_it_out(self):
         """`9999 * 1` is 9999, and a corpus row with a 1 in it is not a calculator."""
@@ -478,7 +578,7 @@ class TestMissingSourceMetadata:
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
         assert len(refs) == 1
-        assert refs[0].url == ""
+        assert refs[0].source_url == ""
         assert refs[0].domain == ""
         # The evidence still shows: the row's own question and its own words.
         assert refs[0].question == "When does the window close?"
@@ -503,7 +603,7 @@ class TestMissingSourceMetadata:
         )
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
-        assert refs[0].url == ""
+        assert refs[0].source_url == ""
         assert refs[0].page == "ASPIRE financial education material"
 
 
@@ -522,7 +622,7 @@ class TestDuplicateSources:
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
         assert len(refs) == 2
-        assert {sources.canonical(ref.url) for ref in refs} == {
+        assert {sources.canonical(ref.source_url) for ref in refs} == {
             "https://aspire.gov.kn/#faqs"
         }
 
@@ -552,24 +652,24 @@ class TestBrokenUrls:
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
         assert len(refs) == 1
-        assert refs[0].url == ""
+        assert refs[0].source_url == ""
         assert refs[0].kb_id == "ASP-007"
 
     def test_a_hostile_url_stored_by_an_older_build_is_dropped_at_the_wire(self):
         """§27: `citation_refs` re-validates, because history is not re-derived."""
         stored = [
-            {"kb_id": "ASP-009", "url": "javascript:alert(1)", "site": "ASPIRE"},
-            {"kb_id": "ASP-010", "url": "http://localhost:9000/admin", "site": "ASPIRE"},
-            {"kb_id": "ASP-011", "url": "https://aspire.gov.kn/", "site": "ASPIRE"},
+            {"kb_id": "ASP-009", "source_url": "javascript:alert(1)", "site": "ASPIRE"},
+            {"kb_id": "ASP-010", "source_url": "http://localhost:9000/admin", "site": "ASPIRE"},
+            {"kb_id": "ASP-011", "source_url": "https://aspire.gov.kn/", "site": "ASPIRE"},
         ]
         refs = citation_refs(stored, claims=Reader())
-        assert [ref.url for ref in refs] == ["", "", "https://aspire.gov.kn/"]
+        assert [ref.source_url for ref in refs] == ["", "", "https://aspire.gov.kn/"]
         # Dropping the link does not drop the attribution.
         assert all(ref.site == "ASPIRE" for ref in refs)
 
     def test_tracking_parameters_are_stripped_before_the_href(self):
-        stored = [{"kb_id": "ASP-001", "url": "https://aspire.gov.kn/p?utm_source=x&id=2"}]
-        assert citation_refs(stored, claims=Reader())[0].url == "https://aspire.gov.kn/p?id=2"
+        stored = [{"kb_id": "ASP-001", "source_url": "https://aspire.gov.kn/p?utm_source=x&id=2"}]
+        assert citation_refs(stored, claims=Reader())[0].source_url == "https://aspire.gov.kn/p?id=2"
 
 
 # ── Test 9: the same question in three languages ─────────────────────────────
@@ -592,7 +692,7 @@ class TestMultilingual:
         state["messages"].append(AIMessage(content=answers[locale]))
 
         refs = refs_for((await nodes.make_ground_check()(state)).update)
-        assert [ref.url for ref in refs] == ["https://aspire.gov.kn/"]
+        assert [ref.source_url for ref in refs] == ["https://aspire.gov.kn/"]
 
 
 # ── Test 10: one conversation, several questions ─────────────────────────────
@@ -623,14 +723,14 @@ class TestAcrossTurns:
             generate_invoke=generating("A national programme [ASP-002]."),
         )
         first = await graph.ainvoke(state_for("what is aspire"))
-        assert [c.url for c in first["citations"]] == ["https://aspire.gov.kn/"]
+        assert [c.source_url for c in first["citations"]] == ["https://aspire.gov.kn/"]
 
         graph = build_qa_graph(
             search=dense_returning("ASP-004"), corpus=corpus,
             generate_invoke=generating("The ECCB issues the EC dollar [ASP-004]."),
         )
         second = await graph.ainvoke(state_for("what does the eccb do"))
-        assert [c.url for c in second["citations"]] == ["https://www.eccb-centralbank.org/"]
+        assert [c.source_url for c in second["citations"]] == ["https://www.eccb-centralbank.org/"]
 
 
 # ── the pipeline's own joins ─────────────────────────────────────────────────
@@ -679,34 +779,34 @@ class TestMetadataSurvivesEveryHop:
             updated="2026-07-30",
         )
         payload = citation_payload(citation)
-        for field in ("kb_id", "title", "question", "snippet", "url", "site", "page", "domain"):
+        for field in ("kb_id", "title", "question", "snippet", "source_url", "site", "page", "domain"):
             assert payload[field] == getattr(citation, field)
 
     def test_a_citation_resumed_from_a_checkpoint_is_read_back_whole(self):
         stored = {
             "kb_id": "ASP-001",
-            "url": "https://aspire.gov.kn/#faqs",
+            "source_url": "https://aspire.gov.kn/#faqs",
             "site": "ASPIRE",
             "page": "Frequently asked questions",
         }
-        assert citation_payload(stored)["url"] == "https://aspire.gov.kn/#faqs"
+        assert citation_payload(stored)["source_url"] == "https://aspire.gov.kn/#faqs"
 
     def test_a_turn_stored_before_the_url_existed_still_reads_back(self):
         """A citation written by an older build has no url key at all."""
         payload = citation_payload({"kb_id": "ASP-001", "title": "t", "snippet": "s"})
         assert payload["kb_id"] == "ASP-001"
-        assert payload["url"] == ""
+        assert payload["source_url"] == ""
 
 
 # ── who is shown a link ──────────────────────────────────────────────────────
 
 
 class TestTheLinkGate:
-    STORED = [{"kb_id": "ASP-001", "url": "https://aspire.gov.kn/", "site": "ASPIRE",
+    STORED = [{"kb_id": "ASP-001", "source_url": "https://aspire.gov.kn/", "site": "ASPIRE",
                "page": "Official website", "domain": "aspire.gov.kn"}]
 
     def test_an_adult_reader_gets_the_link(self):
-        assert citation_refs(self.STORED, claims=Reader("nova", "adult"))[0].url
+        assert citation_refs(self.STORED, claims=Reader("nova", "adult"))[0].source_url
 
     @pytest.mark.parametrize(
         "persona,band", [("stella", "5-8"), ("stella", "9-12"), ("orion", "13-15")]
@@ -716,7 +816,7 @@ class TestTheLinkGate:
     ):
         """The panel is not a way around `safety_out.strips_links`."""
         refs = citation_refs(self.STORED, claims=Reader(persona, band))
-        assert refs[0].url == ""
+        assert refs[0].source_url == ""
 
     @pytest.mark.parametrize(
         "persona,band", [("stella", "5-8"), ("orion", "13-15")]
@@ -742,13 +842,53 @@ class TestTheLinkGate:
         refs = citation_refs(self.STORED, claims=Reader("nova", "adult"))
         assert refs[0].domain == "aspire.gov.kn"
 
+    def test_a_host_used_as_its_own_name_is_withheld_along_with_the_domain(self):
+        """An unregistered source is named by its hostname, which is still a URL.
+
+        Blanking `domain` alone handed the same string straight back in `site`.
+        """
+        unregistered = [
+            {
+                "kb_id": "ASP-500",
+                "source_url": "https://consumerfinance.gov/saving/",
+                "site": "consumerfinance.gov",
+                "page": "Saving",
+                "domain": "consumerfinance.gov",
+            }
+        ]
+        ref = citation_refs(unregistered, claims=Reader("stella", "5-8"))[0]
+        assert ref.source_url == ""
+        assert ref.domain == ""
+        assert ref.site == ""
+        # Still attributed: the page title, the row id and the row's own words.
+        assert ref.page == "Saving"
+        assert ref.kb_id == "ASP-500"
+
+    def test_a_real_site_name_is_kept_even_when_the_link_is_withheld(self):
+        """Only a name that IS the hostname goes. "ASPIRE" is not one."""
+        ref = citation_refs(self.STORED, claims=Reader("stella", "5-8"))[0]
+        assert ref.site == "ASPIRE"
+
+    def test_a_reader_who_gets_links_keeps_a_hostname_name(self):
+        unregistered = [
+            {
+                "kb_id": "ASP-500",
+                "source_url": "https://consumerfinance.gov/saving/",
+                "site": "consumerfinance.gov",
+                "domain": "consumerfinance.gov",
+            }
+        ]
+        ref = citation_refs(unregistered, claims=Reader("nova", "adult"))[0]
+        assert ref.site == "consumerfinance.gov"
+        assert ref.source_url == "https://consumerfinance.gov/saving/"
+
     def test_an_older_orion_gets_the_link(self):
-        assert citation_refs(self.STORED, claims=Reader("orion", "16-18"))[0].url
+        assert citation_refs(self.STORED, claims=Reader("orion", "16-18"))[0].source_url
 
     def test_an_unidentified_reader_is_treated_as_the_youngest_one(self):
         """The gate fails closed: not knowing who this is withholds the link."""
-        assert citation_refs(self.STORED, claims=None)[0].url == ""
-        assert citation_refs(self.STORED, claims=Reader("", ""))[0].url == ""
+        assert citation_refs(self.STORED, claims=None)[0].source_url == ""
+        assert citation_refs(self.STORED, claims=Reader("", ""))[0].source_url == ""
 
     def test_a_claims_object_missing_the_fields_altogether_withholds(self):
         """A call site that forgets to thread claims must not open the gate."""
@@ -756,7 +896,7 @@ class TestTheLinkGate:
         class Nothing:
             pass
 
-        assert citation_refs(self.STORED, claims=Nothing())[0].url == ""
+        assert citation_refs(self.STORED, claims=Nothing())[0].source_url == ""
 
 
 # ── caps and shape ───────────────────────────────────────────────────────────
@@ -765,7 +905,7 @@ class TestTheLinkGate:
 class TestTheWireContract:
     def test_a_turn_may_not_send_more_rows_than_the_directive_allows(self):
         stored = [
-            {"kb_id": f"ASP-{n:03d}", "url": f"https://site{n}.example/p"} for n in range(30)
+            {"kb_id": f"ASP-{n:03d}", "source_url": f"https://site{n}.example/p"} for n in range(30)
         ]
         assert len(citation_refs(stored, claims=Reader())) == CITATION_REFS_MAX
 
@@ -778,10 +918,10 @@ class TestTheWireContract:
 
     def test_a_ref_is_json_serialisable_with_every_field_present(self):
         payload = citation_refs(
-            [{"kb_id": "ASP-001", "url": "https://aspire.gov.kn/"}], claims=Reader()
+            [{"kb_id": "ASP-001", "source_url": "https://aspire.gov.kn/"}], claims=Reader()
         )[0].model_dump()
         assert set(payload) == {
-            "kb_id", "title", "question", "snippet", "url", "site", "page", "domain", "updated",
+            "kb_id", "title", "question", "snippet", "source_url", "site", "page", "domain", "updated",
         }
 
     def test_junk_in_the_stored_list_is_skipped_rather_than_raising(self):
@@ -806,7 +946,7 @@ class TestTheShapeHistoryHandsBack:
         "title": "Who is eligible?",
         "question": "Who is eligible for ASPIRE?",
         "snippet": "Children aged 5 to 18.",
-        "url": "https://aspire.gov.kn/#faqs",
+        "source_url": "https://aspire.gov.kn/#faqs",
         "site": "ASPIRE",
         "page": "Frequently asked questions",
         "domain": "aspire.gov.kn",
@@ -825,7 +965,7 @@ class TestTheShapeHistoryHandsBack:
     def test_the_keys_are_exactly_the_ones_the_client_reads(self):
         """`normaliseSource` splits these into `content`, `metadata` and `origin`."""
         assert set(self.replayed(self.STORED)) == {
-            "kb_id", "title", "question", "snippet", "url", "site", "page", "domain", "updated",
+            "kb_id", "title", "question", "snippet", "source_url", "site", "page", "domain", "updated",
         }
 
     def test_the_evidence_survives_the_round_trip(self):
@@ -834,7 +974,7 @@ class TestTheShapeHistoryHandsBack:
 
     def test_the_source_survives_the_round_trip(self):
         replayed = self.replayed(self.STORED)
-        assert replayed["url"] == "https://aspire.gov.kn/#faqs"
+        assert replayed["source_url"] == "https://aspire.gov.kn/#faqs"
         assert replayed["site"] == "ASPIRE"
         assert replayed["page"] == "Frequently asked questions"
 
@@ -844,7 +984,7 @@ class TestTheShapeHistoryHandsBack:
     def test_history_obeys_the_same_link_gate_a_live_turn_does(self):
         """Reopening a conversation must not hand a child what the live turn withheld."""
         replayed = self.replayed(self.STORED, Reader("stella", "5-8"))
-        assert replayed["url"] == ""
+        assert replayed["source_url"] == ""
         assert replayed["domain"] == ""
         assert replayed["site"] == "ASPIRE"
 
@@ -852,4 +992,4 @@ class TestTheShapeHistoryHandsBack:
         old = {"kb_id": "ASP-001", "question": "Who is eligible?", "snippet": "Ages 5 to 18."}
         replayed = self.replayed(old)
         assert replayed["snippet"] == "Ages 5 to 18."
-        assert replayed["url"] == ""
+        assert replayed["source_url"] == ""

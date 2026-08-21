@@ -22,7 +22,7 @@ NAMES: Final[dict[str, str]] = {
     "orion": "Zion",
     "aurora": "Imani",
     "nova": "Azuri",
-    "everyone": "Guest",
+    "guest": "Guest",
 }
 
 #: Labels that belong to one band rather than to the whole persona.
@@ -34,12 +34,17 @@ NAMES: Final[dict[str, str]] = {
 #: greeted by the voice written for a six-year-old -- and the two cards have
 #: been separate files since. The label follows the card, not the key.
 #:
-#: Only the pairs that differ appear here. Everything else falls through to
-#: `NAMES`, so a persona whose voice does not change with age is still a
-#: one-line rename.
-BAND_NAMES: Final[dict[tuple[str, str], str]] = {
+#: ONLY the pairs that differ from `NAMES`. Writing out `("stella", "5-8"):
+#: "Skye"` as well reads better and quietly breaks the guarantee this whole file
+#: exists for: with both bands pinned here, renaming `NAMES["stella"]` changes
+#: no card, and "a rename is one line" stops being true. There is a test for it.
+BY_BAND: Final[dict[tuple[str, str], str]] = {
     ("stella", "9-12"): "Kaleb",
 }
+
+#: The old name for `BY_BAND`, kept for one release. Nothing in the tree reads
+#: it; a branch written against the earlier spelling would.
+BAND_NAMES = BY_BAND
 
 #: What a card's `{name}` placeholder is written as.
 PLACEHOLDER: Final[str] = "{name}"
@@ -55,7 +60,17 @@ def display_name(persona: str | None, age_band: str | None = None) -> str:
     """
     key = (persona or "").strip().lower()
     band = (age_band or "").strip()
-    return BAND_NAMES.get((key, band)) or NAMES.get(key, "")
+    return BY_BAND.get((key, band)) or NAMES.get(key, "")
+
+
+def every_label() -> tuple[str, ...]:
+    """Every name a reader could be shown, from either table.
+
+    The tests assert on this rather than on `NAMES`, so a label added only to
+    `BY_BAND` is still covered by whatever they check — the vocabulary sweep,
+    chiefly, which has to know that "Kaleb" is a name and not a typo.
+    """
+    return tuple(sorted(set(NAMES.values()) | set(BY_BAND.values())))
 
 
 def all_labels() -> frozenset[str]:

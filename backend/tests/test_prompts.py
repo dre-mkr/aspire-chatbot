@@ -104,7 +104,7 @@ class TestEveryPersonaGetsTheGroundingRules:
     quietly stop being true while the depth half moves.
     """
 
-    PERSONAS = ["stella", "orion", "aurora", "nova", "everyone"]
+    PERSONAS = ["stella", "orion", "aurora", "nova", "guest"]
 
     @pytest.mark.parametrize("persona", PERSONAS)
     def test_the_grounding_rules_survive_every_variant(self, persona):

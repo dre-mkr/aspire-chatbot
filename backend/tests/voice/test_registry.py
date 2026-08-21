@@ -44,16 +44,35 @@ def test_every_persona_and_language_resolves():
             assert (persona, language) in registry
 
 
-def test_everyone_borrows_orions_voice_when_it_has_none_of_its_own():
-    """A deployment provisioned before `everyone` existed must still boot."""
+def test_guest_borrows_zions_voice_when_it_has_none_of_its_own():
+    """A deployment provisioned before the default voice existed must still boot."""
     registry = build_registry(_settings())
     for language in Language:
-        assert registry[(Persona.EVERYONE, language)].voice_id == "voice-orion"
+        assert registry[(Persona.GUEST, language)].voice_id == "voice-orion"
 
 
-def test_an_explicit_everyone_voice_beats_the_understudy():
-    registry = build_registry(_settings(voice_everyone="voice-everyone"))
-    assert registry[(Persona.EVERYONE, Language.EN)].voice_id == "voice-everyone"
+def test_an_explicit_guest_voice_beats_the_understudy():
+    registry = build_registry(_settings(voice_guest="voice-guest"))
+    assert registry[(Persona.GUEST, Language.EN)].voice_id == "voice-guest"
+
+
+def test_the_old_environment_variable_still_works():
+    """`everyone` became `guest` on 20 August. Deployed secrets did not.
+
+    A deployment already carrying VOICE_EVERYONE must keep speaking without
+    anybody editing its environment. Drop this alias, and this test, once the
+    environments have been updated.
+    """
+    import os
+
+    from app.voice.config import VoiceSettings
+
+    os.environ["VOICE_EVERYONE"] = "voice-from-the-old-name"
+    try:
+        settings = VoiceSettings(_env_file=None)
+        assert settings.voice_guest == "voice-from-the-old-name"
+    finally:
+        os.environ.pop("VOICE_EVERYONE", None)
 
 
 def test_validate_passes_when_complete():
@@ -76,7 +95,7 @@ def test_losing_orion_also_loses_the_persona_that_borrows_it():
         validate_registry(settings)
     message = str(exc.value)
     assert "VOICE_ORION" in message
-    assert "VOICE_EVERYONE" in message
+    assert "VOICE_GUEST" in message
     assert f"6 of {len(Persona) * len(Language)}" in message
 
 

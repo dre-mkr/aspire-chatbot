@@ -171,7 +171,7 @@ entries:
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-115, FIN-241)
 
-  - id: tfs-03-everyone-chooses
+  - id: tfs-03-guest-chooses
     statement: Even people with plenty of money have to choose what to spend it on.
     answer: true
     topic: Choosing
@@ -181,7 +181,7 @@ entries:
       There is always more you could want than there is money to pay for it, so
       everybody has to choose. That is true for a child with a few dollars and
       it is true for a grown-up with plenty. Choosing is not a sign that you are
-      short of money. It is simply what having money is like, for everyone.
+      short of money. It is simply what having money is like, for guest.
     paragraphs:
       - >-
         There is always more you could want than there is money to pay for it,
@@ -191,7 +191,7 @@ entries:
         grown-up with plenty.
       - >-
         Choosing is not a sign that you are short of money. It is simply what
-        having money is like, for everyone.
+        having money is like, for guest.
     difficulty_band: warmup
     persona_bands: [stella]
     volatility: stable

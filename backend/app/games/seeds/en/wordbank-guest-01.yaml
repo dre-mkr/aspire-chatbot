@@ -1,4 +1,4 @@
-# ASPIRE word scramble — general bank (the `everyone` persona)
+# ASPIRE word scramble — general bank (the `guest` persona)
 #
 # The reader has not said who they are, so this bank stays in the middle: the
 # words are ones an adult would not find childish and a twelve-year-old would
@@ -6,13 +6,13 @@
 # bank account or a payslip.
 #
 # It is a separate file rather than a widened Stella or Orion bank because the
-# engine selects by `persona_bands`, and putting `everyone` on a child's entry
+# engine selects by `persona_bands`, and putting `guest` on a child's entry
 # would serve that entry to a mixed audience as well.
 #
 # Same editing rules as warmup-01: `scramble` is an anagram of `word`, the hint
 # is a category nudge, and neither hint nor definition contains the word itself.
 
-id: wordbank-everyone-01
+id: wordbank-guest-01
 game_type: word_scramble
 language: en
 title: Unscramble These Words
@@ -26,74 +26,74 @@ closing:
     effort cannot.
 
 entries:
-  - id: wordbank-everyone-01-save
+  - id: wordbank-guest-01-save
     language: en
     word: SAVING
     scramble: GNIVAS
     hint: an action word — it is about keeping, not spending
     definition: putting money aside now so it is there later
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-interest
+  - id: wordbank-guest-01-interest
     language: en
     word: INTEREST
     scramble: TSERETNI
     hint: a word you will hear at the bank
     definition: the extra money a bank pays you for keeping your savings there
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-budget
+  - id: wordbank-guest-01-budget
     language: en
     word: BUDGET
     scramble: GDUBTE
     hint: a plan, made before the money moves
     definition: a plan for what your money will do before you spend it
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-account
+  - id: wordbank-guest-01-account
     language: en
     word: ACCOUNT
     scramble: TNUOCCA
     hint: a thing you open, and it has a number
     definition: the record a bank keeps of the money you hold with them
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-deposit
+  - id: wordbank-guest-01-deposit
     language: en
     word: DEPOSIT
     scramble: DESOPIT
     hint: something you make at a bank, not something you take
     definition: money you put into an account
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-goal
+  - id: wordbank-guest-01-goal
     language: en
     word: GOAL
     scramble: OGAL
     hint: the reason behind the saving
     definition: the thing you are putting money aside for
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-invest
+  - id: wordbank-guest-01-invest
     language: en
     word: INVEST
     scramble: TSEVNI
     hint: an action word — about growing money rather than keeping it still
     definition: putting money into something so it can grow over time
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
 
-  - id: wordbank-everyone-01-eligible
+  - id: wordbank-guest-01-eligible
     language: en
     word: ELIGIBLE
     scramble: EBIGILEL
     hint: it describes a person, and ASPIRE uses it on every form
     definition: allowed to join, because you meet the rules for it
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]

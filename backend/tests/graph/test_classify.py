@@ -271,6 +271,68 @@ class TestStickiness:
         )
         assert result.agent == "learn_agent"
 
+    def test_a_move_into_teaching_is_exempt(self):
+        """The bug this exemption exists for, written as the failure.
+
+        A reader in the middle of a Q&A exchange asks how compound interest
+        works. The classifier correctly proposes the tutor, but at 0.70 -- below
+        the 0.75 threshold -- so stickiness used to keep them in `qa_agent`,
+        which answers by listing facts instead of teaching.
+
+        That is the behaviour the client has described in three meetings, and it
+        survived every fix made upstream, because it happens after them.
+        """
+        state = state_for(
+            {
+                "id": "s5",
+                "persona": "orion",
+                "age_band": "13-15",
+                "account_status": "beneficiary",
+                "user_id": "u",
+                "active_agent": "qa_agent",
+                "utterance": "how does compound interest work",
+            }
+        )
+        assert "learn_agent" in state["allowed_agents"]
+        moved = apply_stickiness(
+            Classification(agent="learn_agent", confidence=0.70), state
+        )
+        assert moved.agent == "learn_agent", (
+            "stickiness is still holding a reader out of the tutor. The routing "
+            "fix only works on the first turn without this."
+        )
+        assert not moved.sticky
+
+    def test_leaving_teaching_is_still_sticky(self):
+        """The exemption is one-directional, or it would cancel stickiness.
+
+        A lesson in progress must not be abandoned on a low-confidence guess.
+        The guard protects a teaching agent from being LEFT; it never protects a
+        non-teaching one from being entered.
+        """
+        state = state_for(
+            {
+                "id": "s6",
+                "persona": "orion",
+                "age_band": "13-15",
+                "account_status": "beneficiary",
+                "user_id": "u",
+                "active_agent": "learn_agent",
+                "utterance": "hm",
+            }
+        )
+        held = apply_stickiness(
+            Classification(agent="qa_agent", confidence=0.40), state
+        )
+        assert held.agent == "learn_agent"
+        assert held.sticky
+
+    def test_the_two_teaching_lists_cannot_drift(self):
+        """One list, two rules. They were separate once and that is how they rot."""
+        from app.graph.nodes.classify import CONTINUATION_FALLBACKS, TEACHING_AGENTS
+
+        assert CONTINUATION_FALLBACKS is TEACHING_AGENTS
+
     def test_no_active_agent_means_no_stickiness(self):
         state = state_for(CASES[0])
         result = apply_stickiness(

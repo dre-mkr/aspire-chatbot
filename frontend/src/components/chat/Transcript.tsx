@@ -656,8 +656,15 @@ function SourceHead({ group }: { group: GroupedSource }) {
 			>
 				{name}
 				<ExternalLinkIcon className="source__out" aria-hidden="true" />
-				{/* Says where it goes, for a reader who cannot see the icon. */}
-				<span className="sr-only">(opens {group.domain} in a new tab)</span>
+				{/* Says where it goes, for a reader who cannot see the icon.
+				    A row stored before the domain existed keeps its link and
+				    loses its host, and "(opens  in a new tab)" is the one thing
+				    this sentence must not say. */}
+				<span className="sr-only">
+					{group.domain
+						? `(opens ${group.domain} in a new tab)`
+						: "(opens in a new tab)"}
+				</span>
 			</a>
 			{group.domain ? (
 				<span className="source__domain">{group.domain}</span>

@@ -171,7 +171,7 @@ export async function streamAspire(
 							// and the panel must be able to tell "no source" from
 							// "a source with an empty field".
 							origin: {
-								url: ref.url ?? "",
+								url: ref.source_url ?? "",
 								site: ref.site ?? "",
 								page: ref.page ?? "",
 								domain: ref.domain ?? "",

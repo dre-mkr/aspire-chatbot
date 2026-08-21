@@ -108,7 +108,7 @@ STATIC_LINES: dict[Persona, dict[Language, list[str]]] = {
             "Désolée, je n'ai pas entendu. Pouvez-vous répéter ?",
         ],
     },
-    Persona.EVERYONE: {
+    Persona.GUEST: {
         Language.EN: [
             "Welcome to ASPIRE AI. Ask me about the programme, money or your modules.",
             "Here's the short answer, and then the detail.",

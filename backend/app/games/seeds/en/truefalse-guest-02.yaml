@@ -1,4 +1,4 @@
-# ASPIRE true or false — general set 2 (the `everyone` persona)
+# ASPIRE true or false — general set 2 (the `guest` persona)
 #
 # A second set for the reader who has not said who they are, so a round draws
 # from a wider bank and playing twice is unlikely to repeat a statement. Same
@@ -30,7 +30,7 @@
 # joined by a space. A client that can break an answer up uses the paragraphs;
 # one that cannot still has the whole explanation.
 
-id: truefalse-everyone-02
+id: truefalse-guest-02
 game_type: true_false
 language: en
 title: True or false
@@ -75,7 +75,7 @@ entries:
         by 2.70; US dollars into EC dollars, multiply by 2.70. So EC$27 is
         US$10, and it was US$10 last year as well.
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-005, FIN-035, FIN-040)
 
@@ -114,7 +114,7 @@ entries:
         kinds of deposit, which measures something different from the legal
         minimum on savings.
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-037, FIN-038, FIN-098, FIN-333)
 
@@ -153,7 +153,7 @@ entries:
         rate. So the sensible place for a sou-sou is alongside an account rather
         than instead of one.
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-067, FIN-068, FIN-118, FIN-037)
 
@@ -192,7 +192,7 @@ entries:
         can differ by product and can change, so the Inland Revenue Department
         is the place to confirm any particular situation.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-221, FIN-225, FIN-143, FIN-228)
 
@@ -233,7 +233,7 @@ entries:
         stop or reverse the transfer, and report it to the police. Speed matters
         more than embarrassment.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-236, FIN-231, FIN-240, FIN-245)
 
@@ -267,6 +267,6 @@ entries:
         It is worth knowing for any account that is opened and then left alone
         for years, which is the ordinary shape of long-term savings.
     difficulty_band: warmup
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-120)

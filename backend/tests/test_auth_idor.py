@@ -189,14 +189,20 @@ def test_chat_works_with_no_identity_at_all(client: TestClient):
     """Part 1: sign-up is never required, and neither is an account."""
     minted = client.post("/v2/session", json={"session_id": str(uuid.uuid4())})
     assert minted.status_code == 200, minted.text
-    # Was `aurora`/`adult`. A signed-out caller is the one reader whose age is
-    # genuinely unknown, so the default is now the most restrictive band rather
-    # than the least -- see `_ANONYMOUS_DEFAULT` in graph/account.py. What this
-    # test is actually about is unchanged: no account is required to chat.
-    assert minted.json()["age_band"] == "5-8", (
-        "an anonymous caller with no picked persona reads as the youngest"
+    # `aurora`/`adult`, then `stella`/`5-8`, now `guest`/`13-15`. The first move
+    # was right about the danger and the second overcorrected: a signed-out
+    # visitor is as likely to be a parent, a teacher or a judge opening the link
+    # cold as a child, and all of them met a five-year-old's register on their
+    # first message. `guest` is the mixed-audience voice, and it is a change of
+    # VOICE and not of permissions -- 13-15 keeps the word caps, the vocabulary
+    # ladder, the link strip and the minor game set. See `_ANONYMOUS_DEFAULT` in
+    # graph/account.py.
+    #
+    # What this test is actually about is unchanged: no account is required.
+    assert minted.json()["age_band"] == "13-15", (
+        "an anonymous caller with no picked persona is still gated as a minor"
     )
-    assert minted.json()["persona"] == "stella"
+    assert minted.json()["persona"] == "guest"
 
     # The picker still works, and picking wider is allowed for a visitor.
     adult = client.post(

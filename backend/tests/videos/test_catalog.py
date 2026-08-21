@@ -89,7 +89,7 @@ class TestTheFilesExist:
 
 class TestWhoMayBeOfferedOne:
     def test_the_children_and_teen_personas_are_offered_both(self):
-        for persona in (Persona.STELLA, Persona.ORION, Persona.EVERYONE):
+        for persona in (Persona.STELLA, Persona.ORION, Persona.GUEST):
             assert len(for_persona(persona)) == len(all_videos())
 
     def test_guardians_and_teachers_are_offered_none_unasked(self):

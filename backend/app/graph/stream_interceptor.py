@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import get_settings
-from app.schemas.directives import WidgetDirective, directive_payload
+from app.schemas.directives import CITATION_ID, WidgetDirective, directive_payload
 from app.widgets.sentinel import CLOSE, OPEN
 from app.messages import text_of
 
@@ -53,7 +53,11 @@ class WireEvent:
 
 
 #: A citation marker as `generate` is instructed to write it: `[ASP-001]`.
-_CITATION = re.compile(r"[ \t]*\[[A-Za-z]{2,8}-\d{1,6}\]")
+#:
+#: `CITATION_ID` is shared with grounding, so a marker this strips is exactly
+#: one grounding counted. When the two disagreed, `[ASP-00A]` was both declined
+#: as uncited AND left in the prose for the reader to see.
+_CITATION = re.compile(rf"[ \t]*\[{CITATION_ID}\]")
 
 #: The longest a partial marker can be before it cannot be one.
 _CITATION_MAX = 16

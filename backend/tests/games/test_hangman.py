@@ -91,7 +91,7 @@ class TestTheContent:
             for entry in game_set.entries
             for band in entry.persona_bands
         }
-        assert {"stella", "orion", "everyone"} <= bands
+        assert {"stella", "orion", "guest"} <= bands
 
     def test_the_youngest_words_are_shorter_than_the_teenagers(self, game):
         """Not a style note: spelling length IS the difficulty in this game."""

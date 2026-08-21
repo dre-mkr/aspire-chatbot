@@ -183,7 +183,7 @@ export function GuideChooser({
 							Continue with ASPIRE AI <b>General</b>
 						</span>
 						<span className="guide-card__blurb">
-							Balanced answers for everyone.
+							Balanced answers for a mixed audience.
 						</span>
 					</span>
 					<ChevronRightIcon />

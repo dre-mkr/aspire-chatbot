@@ -444,7 +444,7 @@ class TestWhoIsOfferedAGame:
 
     @pytest.mark.parametrize(
         ("persona", "band"),
-        [("stella", "9-12"), ("orion", "13-15"), ("everyone", "13-15")],
+        [("stella", "9-12"), ("orion", "13-15"), ("guest", "13-15")],
     )
     async def test_a_playing_persona_still_gets_the_card(self, persona, band) -> None:
         gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)

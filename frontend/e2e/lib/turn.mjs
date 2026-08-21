@@ -114,17 +114,37 @@ export async function actDom(page, action, predicate, { timeout = 30_000 } = {})
 	await page.waitForFunction(predicate, { timeout, polling: 100 });
 }
 
+/**
+ * What the reader was actually TOLD, with the chrome around it taken off.
+ *
+ * `innerText` includes visually-hidden text — `.sr-only` is clipped, not
+ * `display: none` — and every assistant turn carries an `<h2 class="sr-only">
+ * ASPIRE AI</h2>`, a Copy / Simpler / Ask again row, and, when it cited
+ * anything, the sources panel. So a turn that said NOTHING read back as nine
+ * words of chrome: `suite.mjs`'s "empty answer" guard could never fire on any
+ * step, and the persona-similarity tool scored that chrome as agreement.
+ *
+ * Written out in each `page.evaluate` rather than shared, because the body of
+ * an evaluate runs in the page and cannot close over this module.
+ */
+const CHROME = ".sr-only, .answer-actions, details.sources, .follow-ups";
+
 /** Everything on screen, after the turn settled. */
 export async function readTranscript(page) {
-	return page.evaluate(() => {
-		const clean = (node) => (node?.innerText || "").trim();
+	return page.evaluate((chrome) => {
+		const clean = (node) => {
+			if (!node) return "";
+			const copy = node.cloneNode(true);
+			for (const junk of copy.querySelectorAll(chrome)) junk.remove();
+			return (copy.textContent || "").replace(/\s+/g, " ").trim();
+		};
 		const turns = [...document.querySelectorAll(".turn--user, .turn--assistant")];
 		return turns.map((turn) => ({
 			role: turn.classList.contains("turn--user") ? "user" : "assistant",
 			text: clean(turn.querySelector(".answer") || turn),
 			failure: clean(turn.querySelector(".failure")) || null,
 		}));
-	});
+	}, CHROME);
 }
 
 /** What the last answer rendered — used to prove a directive reached the reader. */
@@ -186,10 +206,18 @@ export async function readSurfaces(page) {
 				};
 			})(),
 			signupLink: !!document.querySelector('a[href^="/signup"]'),
+			// The prose, not the furniture around it. See CHROME above.
 			lastAnswer: (() => {
 				const all = [...document.querySelectorAll(".turn--assistant")];
 				const last = all[all.length - 1];
-				return last ? (last.innerText || "").trim() : "";
+				if (!last) return "";
+				const copy = (last.querySelector(".answer") || last).cloneNode(true);
+				for (const junk of copy.querySelectorAll(
+					".sr-only, .answer-actions, details.sources, .follow-ups",
+				)) {
+					junk.remove();
+				}
+				return (copy.textContent || "").replace(/\s+/g, " ").trim();
 			})(),
 		};
 	});

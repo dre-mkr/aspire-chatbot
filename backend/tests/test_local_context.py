@@ -453,7 +453,7 @@ class TestTheNameIsOneLine:
         card, or a card with no label, still fails here.
         """
         assert set(NAMES) == set(KNOWN)
-        assert display_name("everyone") == NAMES["everyone"]
+        assert display_name("guest") == NAMES["guest"]
 
     def test_the_key_is_not_the_label(self):
         """`stella` is a database id that happens to be a word."""

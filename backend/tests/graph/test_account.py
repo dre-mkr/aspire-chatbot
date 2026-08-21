@@ -139,29 +139,56 @@ def test_no_date_of_birth_is_the_youngest_band_whatever_is_minor_says():
 # test of any kind. It is the widest audience the service has.
 
 
-def test_a_visitor_who_picks_nothing_gets_the_most_restrictive_band():
-    """
-    The default was `aurora`, so an anonymous session ran as an adult.
+#: Bands that carry the word caps, the vocabulary ladder, the link strip and the
+#: minor game set. Anything outside this is the ungated adult row.
+MINOR_BANDS = ("5-8", "9-12", "13-15", "16-18")
 
-    No word caps, no vocabulary rules, links left in, and the adult game set --
-    for the one reader whose age is genuinely unknown. `/api/auth/anonymous`
-    already forced `stella` for the same visitor, and the two endpoints
-    disagreed; the frontend reads `session.persona` only for a registered
-    account, so the restrictive one was the one being ignored.
+
+def test_a_visitor_who_picks_nothing_gets_the_mixed_audience_voice():
+    """
+    This default has now moved twice, and both moves were for the same reason.
+
+    It was `aurora`, so an anonymous session ran as an adult: no word caps, no
+    vocabulary rules, links left in, and the adult game set -- for the one reader
+    whose age is genuinely unknown. That was corrected to `stella`.
+
+    But `stella` is the FIVE-TO-EIGHT voice. A signed-out visitor is just as
+    likely to be a parent, a teacher, or somebody opening the link cold to judge
+    it, and every one of them was being answered as a seven-year-old on their
+    first message.
+
+    `everyone` is the voice built for exactly this reader. See the next test for
+    why it is not a loosening.
     """
     claims = account.anonymous_claims()
 
-    assert claims.persona == "stella"
-    assert claims.age_band == account.YOUNGEST_BAND
+    assert claims.persona == "guest"
     assert claims.account_status == "prospect"
 
 
-def test_an_unknown_persona_falls_back_restrictively_too():
+def test_the_mixed_audience_default_is_still_gated_as_a_minor():
+    """The change of voice must not become a change of permissions.
+
+    This is the assertion that makes the previous test safe. `everyone` reads as
+    ordinary prose rather than as a five-year-old, but the reader behind it may
+    still be a child, so the band it resolves to has to be one that keeps the
+    caps, the ladder, the link strip and the minor game set.
+    """
+    claims = account.anonymous_claims()
+
+    assert claims.age_band in MINOR_BANDS, (
+        "the signed-out default has been given an adult band. A visitor whose "
+        "age is unknown must never get the ungated row."
+    )
+    assert claims.age_band == account._ANONYMOUS_BANDS["guest"]
+
+
+def test_an_unknown_persona_falls_back_to_the_default_too():
     """A junk `?persona=` must not be a way to widen the band."""
     for junk in ("", "   ", "wizard", "ADULT", None):
         claims = account.anonymous_claims(junk)
-        assert claims.persona == "stella", junk
-        assert claims.age_band == account.YOUNGEST_BAND, junk
+        assert claims.persona == "guest", junk
+        assert claims.age_band in MINOR_BANDS, junk
 
 
 @pytest.mark.parametrize(

@@ -1,6 +1,6 @@
-# ASPIRE word scramble — general bank, set 2 (the `everyone` persona)
+# ASPIRE word scramble — general bank, set 2 (the `guest` persona)
 #
-# A second bank for the reader `wordbank-everyone-01` was written for: someone
+# A second bank for the reader `wordbank-guest-01` was written for: someone
 # who has not said how old they are, so the words stay in the middle — nothing
 # an adult would find childish, nothing a twelve-year-old would find opaque.
 # It is an addition, not a replacement. A round serves a handful of a set's
@@ -29,7 +29,7 @@
 #               asserts that on the letters alone, so watch for a word hiding
 #               across a space.
 
-id: wordbank-everyone-02
+id: wordbank-guest-02
 game_type: word_scramble
 language: en
 title: More money words to unscramble
@@ -44,40 +44,40 @@ closing:
     mysterious.
 
 entries:
-  - id: wordbank-everyone-02-expense
+  - id: wordbank-guest-02-expense
     language: en
     word: EXPENSE
     scramble: PESENEX
     hint: a heading on a budget, and it points outward
     definition: money going out — food, transport, rent, school supplies
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-015, FIN-314)
 
-  - id: wordbank-everyone-02-credit
+  - id: wordbank-guest-02-credit
     language: en
     word: CREDIT
     scramble: RITCED
     hint: a word a lender uses, and it is never free
     definition: the ability to use money now and pay for it later, with interest on top
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-170, FIN-314)
 
-  - id: wordbank-everyone-02-debt
+  - id: wordbank-guest-02-debt
     language: en
     word: DEBT
     scramble: TBED
     hint: something you carry, not something you hold
     definition: money you owe, with a date to repay it and a price for the time you take
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-171, FIN-314)
 
-  - id: wordbank-everyone-02-currency
+  - id: wordbank-guest-02-currency
     language: en
     word: CURRENCY
     scramble: RUCYCNER
@@ -87,11 +87,11 @@ entries:
       Caribbean dollar, written EC$ and issued by the Eastern Caribbean Central
       Bank in Basseterre
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-004, FIN-031, FIN-033)
 
-  - id: wordbank-everyone-02-receipt
+  - id: wordbank-guest-02-receipt
     language: en
     word: RECEIPT
     scramble: PICEETR
@@ -101,11 +101,11 @@ entries:
       return, for a warranty, and for checking your bank statement against what
       you actually bought
     difficulty_band: core
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-167)
 
-  - id: wordbank-everyone-02-inflation
+  - id: wordbank-guest-02-inflation
     language: en
     word: INFLATION
     scramble: FLANITINO
@@ -114,11 +114,11 @@ entries:
       when prices climb over time, so the same EC$100 buys less than it did
       before, even though the number in your hand has not changed
     difficulty_band: advanced
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-018, FIN-020, FIN-314)
 
-  - id: wordbank-everyone-02-insurance
+  - id: wordbank-guest-02-insurance
     language: en
     word: INSURANCE
     scramble: RASINCUNE
@@ -127,6 +127,6 @@ entries:
       a regular payment made so somebody else carries the cost when something
       goes wrong — the reason a family checks its cover before hurricane season
     difficulty_band: advanced
-    persona_bands: [everyone]
+    persona_bands: [guest]
     volatility: stable
     source_document: ASPIRE knowledge base (FIN-047, FIN-081)

@@ -151,6 +151,22 @@ class ProgressDirective(_Directive):
 # ── citations ────────────────────────────────────────────────────────────────
 
 
+#: A knowledge-base row's id, as the model is told to write it inline: `[ASP-001]`.
+#:
+#: THE ONE PLACE this shape is written down. Three modules read it -- grounding
+#: decides which rows an answer cited, the figure gate takes markers off before
+#: it counts numbers, and the interceptor strips them from what the reader sees
+#: -- and they have to agree. When they did not, `[ASP-00A]` was the proof: the
+#: id is alphanumeric after the hyphen, two of the three patterns demanded
+#: digits, and the two rows defining what completing the programme means were
+#: declined as uncited on every question that reached them.
+#:
+#: The suffix is alphanumeric because corpus ids are the corpus's business.
+#: `ASP-001`, `FIN-4212`, `RES-007` and `ASP-00A` are all ids somebody has
+#: written; the pattern reads what is there rather than what is tidy.
+CITATION_ID = r"[A-Za-z]{2,8}-[A-Za-z0-9]{1,8}"
+
+
 class CitationRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -173,7 +189,10 @@ class CitationRef(BaseModel):
     # gate is applied to it explicitly, in `app.api.stream`, rather than being
     # inherited by accident.
     #: A validated https/http URL, or "" when the source has no public page.
-    url: str = Field(default="", max_length=2048)
+    #: Empty for programme material with no page, for a stored URL that will not
+    #: validate, and for a reader whose persona is shown no links at all --
+    #: `site` and `page` still name the source in all three.
+    source_url: str = Field(default="", max_length=2048)
     #: Whose source it is -- "ASPIRE", "Eastern Caribbean Central Bank".
     site: str = Field(default="", max_length=160)
     #: Which page of theirs -- "Frequently asked questions".

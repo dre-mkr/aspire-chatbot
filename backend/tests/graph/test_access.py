@@ -289,7 +289,7 @@ class TestEveryoneNeverWidens:
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_it_matches_the_bands_own_default_persona(self, band, status):
-        assert allowed_agents("everyone", band, status, user_id=USER) == allowed_agents(
+        assert allowed_agents("guest", band, status, user_id=USER) == allowed_agents(
             self.DEFAULT_FOR_BAND[band], band, status, user_id=USER
         )
 
@@ -297,21 +297,21 @@ class TestEveryoneNeverWidens:
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_it_is_never_denied_outright(self, band, status):
         """Unlike stella and orion, it has no band of its own to fall outside of."""
-        assert not is_denied(allowed_agents("everyone", band, status, user_id=USER))
+        assert not is_denied(allowed_agents("guest", band, status, user_id=USER))
 
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_it_never_reaches_registration(self, band, status):
         """Opening an application on a child's behalf stays Aurora's alone."""
         assert "register_agent" not in allowed_agents(
-            "everyone", band, status, user_id=USER
+            "guest", band, status, user_id=USER
         )
 
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_a_child_band_keeps_the_band_filtered_corpus(self, band, status):
         """Picking a general voice must not hand a nine-year-old the adult agent."""
-        agents = allowed_agents("everyone", band, status, user_id=USER)
+        agents = allowed_agents("guest", band, status, user_id=USER)
         if band in {"5-8", "9-12", "13-15"}:
             assert "qa_agent" not in agents
             assert "qa_agent_limited" in agents
@@ -337,6 +337,6 @@ class TestEveryoneNeverWidens:
         derive are checked: `aurora` at `5-8` is not a reachable state, and
         asserting over the full cross product tests arithmetic, not the product.
         """
-        theirs = set(allowed_agents("everyone", band, status, user_id=USER))
+        theirs = set(allowed_agents("guest", band, status, user_id=USER))
         row = set(allowed_agents(persona, band, status, user_id=USER))
         assert theirs <= row, f"everyone/{band} is not a subset of {persona}/{band}"
