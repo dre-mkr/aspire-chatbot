@@ -1,3 +1,4 @@
+import { ViewHeader } from "./ViewHeader";
 
 interface AboutViewProps {
 	onBack: () => void;
@@ -30,22 +31,14 @@ export function AboutView({ onBack }: AboutViewProps) {
 			</div>
 			
 			<div className="relative z-10 flex flex-col flex-1">
-			<header className="p-6">
-				<button type="button" onClick={onBack} className="flex items-center gap-2 text-[#482977] hover:text-[#c22f99] transition-colors font-semibold">
-					<i className="ph-bold ph-arrow-left"></i> Back to ASPIRE
-				</button>
-			</header>
+			<ViewHeader onBack={onBack} />
 
 			<main className="flex-1 w-full max-w-4xl mx-auto px-6 py-12">
 				<div className="text-center mb-16">
-					<div className="inline-block mb-6 relative group">
-					    <div className="absolute inset-0 bg-[#c22f99]/10 blur-2xl rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
-						<img 
-							src="/brand/aspire-wordmark.png" 
-							alt="ASPIRE Logo" 
-							className="w-48 h-auto mx-auto relative z-10 transition-transform duration-500 group-hover:scale-105"
-						/>
-					</div>
+					{/* The wordmark used to sit here, in the body, with alt text
+					    reading "ASPIRE Logo" -- which tells a screen reader the file
+					    is a logo, something the reader had already assumed. It is in
+					    the header now, once, named properly. */}
 					<h1 className="text-4xl md:text-6xl font-display font-medium text-[#1A103C] mb-6">
 						About <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#c22f99] to-[#482977]">ASPIRE</span>
 					</h1>

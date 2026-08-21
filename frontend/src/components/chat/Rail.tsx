@@ -47,6 +47,14 @@ interface RailProps {
 	onRegenerateTitle: (conversation: StoredConversation) => void;
 	/** Permanent, and confirmed in the row's own menu before it is called. */
 	onDeleteConversation: (conversation: StoredConversation) => void;
+	/**
+	 * Start a conversation from a rail item, rather than opening a page.
+	 *
+	 * Games, stories and the journey are all things the assistant can already
+	 * do; what was missing was a way in that did not require knowing the words.
+	 * `stageFirstTurn` is the same mechanism the landing cards use.
+	 */
+	onSeed?: (question: string) => void;
 }
 
 export function Rail({
@@ -60,6 +68,7 @@ export function Rail({
 	onRenameConversation,
 	onRegenerateTitle,
 	onDeleteConversation,
+	onSeed,
 }: RailProps) {
 	/** The list, subscribed here rather than passed in. */
 	const { session } = useSession();
@@ -193,7 +202,52 @@ export function Rail({
 
 			{/* Outside `rail__body`, so a long history cannot scroll it out of reach. */}
 			<div className="rail__help">
+				{/* Each of these asks a question rather than opening a page.
+				  *
+				  * The assistant already plays games, offers films and tracks a
+				  * journey; none of it had a door. A rail item that seeds the turn
+				  * lets the reader arrive at it without having to guess the phrase.
+				  *
+				  * Videos keeps its own panel: browsing a library is not a
+				  * conversation, and `/api/videos` is unfiltered so every persona
+				  * reaches it -- including the two the assistant will not offer a
+				  * film to unprompted.
+				  */}
 				<VideoLauncher />
+				{onSeed ? (
+					<>
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("Can you tell me a story?")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-book-open-text" />
+							</span>
+							<span className="rail__fold">Stories</span>
+						</button>
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("I'd like to play a game.")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-game-controller" />
+							</span>
+							<span className="rail__fold">Games</span>
+						</button>
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("How am I doing so far?")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-medal" />
+							</span>
+							<span className="rail__fold">My Journey</span>
+						</button>
+					</>
+				) : null}
 				<HelpLauncher />
 			</div>
 

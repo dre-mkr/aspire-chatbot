@@ -1,11 +1,8 @@
+import { ViewHeader } from "./ViewHeader";
 export function JourneyView({ onBack }: { onBack: () => void }) {
 	return (
 		<div className="flex flex-col min-h-screen bg-[#0B051D] text-white">
-			<header className="p-6">
-				<button type="button" onClick={onBack} className="flex items-center gap-2 text-white/70 hover:text-white transition-colors">
-					<i className="ph-bold ph-arrow-left"></i> Back to ASPIRE
-				</button>
-			</header>
+			<ViewHeader onBack={onBack} tone="dark" />
 			<main className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-2xl mx-auto">
 				<div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#fed141] to-amber-600 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(254,209,65,0.4)]">
 					<i className="ph-fill ph-medal text-5xl text-white"></i>

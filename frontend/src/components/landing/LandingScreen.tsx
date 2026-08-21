@@ -8,6 +8,7 @@ import { ParentsView } from './ParentsView';
 import { EducatorsView } from './EducatorsView';
 import { AboutView } from './AboutView';
 import { stageFirstTurn } from "#/lib/aspire/handoff";
+import type { PersonaId } from "#/lib/aspire/personas";
 
 /** What the reward is called, which is not settled.
  *
@@ -26,7 +27,27 @@ const COIN_LABEL = "Magic Coins";
 const coinBalance: number | null = null;
 
 type ViewState = 'landing' | 'chat' | 'history' | 'journey' | 'stories' | 'parents' | 'educators' | 'about';
-type PersonaId = 'skye' | 'kaleb' | 'zion' | 'imani' | 'azuri';
+/**
+ * The names on the guide picker, which are LABELS and not persona keys.
+ *
+ * This was called `PersonaId` and it shadowed the real one in
+ * `lib/aspire/personas.ts`, where the ids are `stella`, `orion`, `aurora`,
+ * `nova` and `guest`. Two incompatible definitions of the same idea, and the
+ * label version won on this page -- which is part of why the picker never did
+ * anything: nothing downstream understood the word "skye".
+ *
+ * Renamed to what it is, and mapped to the keys once, here.
+ */
+type GuideId = 'skye' | 'kaleb' | 'zion' | 'imani' | 'azuri';
+
+/** Label to key. `skye` and `kaleb` are one key; the band decides the voice. */
+const GUIDE_TO_PERSONA: Record<GuideId, PersonaId> = {
+	skye: 'stella',
+	kaleb: 'stella',
+	zion: 'orion',
+	imani: 'aurora',
+	azuri: 'nova',
+};
 
 interface LandingScreenProps {
 	onStartConversation?: (message: string) => void;
@@ -44,7 +65,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const navigate = useNavigate();
 	const [draft, setDraft] = useState("");
 	const [activeView, setActiveView] = useState<ViewState>('landing');
-	const [selectedPersona, setSelectedPersona] = useState<PersonaId | null>(null);
+	const [selectedPersona, setSelectedPersona] = useState<GuideId | null>(null);
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === "Enter" && draft.trim()) {
@@ -52,7 +73,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		}
 	};
 
-	const startConversation = (message: string) => {
+	const startConversation = (message: string, persona?: PersonaId | null) => {
 		if (onStartConversation) {
 			onStartConversation(message);
 		} else {
@@ -63,7 +84,17 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 				simple: false,
 				language: "en"
 			});
-			navigate({ to: "/chat/$chatId", params: { chatId: threadId } });
+			// The guide rides the address, which is where the chat reads it from
+			// (`validateAnswerSearch`). Until now `selectedPersona` was set by the
+			// dropdown and then dropped on the floor: choosing a guide on this page
+			// changed nothing at all about who answered.
+			const chosen =
+				persona ?? (selectedPersona ? GUIDE_TO_PERSONA[selectedPersona] : null);
+			navigate({
+				to: "/chat/$chatId",
+				params: { chatId: threadId },
+				...(chosen ? { search: { persona: chosen } } : {}),
+			});
 		}
 	};
 
@@ -83,8 +114,20 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		return <StoriesView onBack={() => setActiveView('landing')} />;
 	}
 
+	/*
+	 * The page owns its scroll, and that is a fix rather than a preference.
+	 *
+	 * `body` carries the chat shell's `overflow: hidden`, and `GuideChooser` --
+	 * which mounts inside `FirstRun`, on the chat page -- sets it again on a
+	 * first visit. Either way the landing inherited a `body` it could not
+	 * scroll, and the last 83px of it, which is the Saint Kitts and Nevis line,
+	 * could not be reached by hand.
+	 *
+	 * Owning the scroll makes this page independent of whatever the shell has
+	 * done to `body`. The artwork behind is `fixed`, so it still covers.
+	 */
 	return (
-		<div className="relative min-h-screen bg-white flex flex-col font-sans overflow-x-hidden selection:bg-[#c22f99]/20 text-[#1A103C]">
+		<div className="relative h-dvh overflow-y-auto overflow-x-hidden bg-white flex flex-col font-sans selection:bg-[#c22f99]/20 text-[#1A103C]">
 
 			{/* Scenic Background Layers */}
 			{/* The ground behind the artwork, and it is pale on purpose.
@@ -92,7 +135,17 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			  * It was `#1A103C`, the deep plum. Fully hidden while the image loads
 			  * fine -- and the moment it does not, that is near-black body text on
 			  * a near-black ground. A fallback should fail readable. */}
-			<div className="absolute inset-0 pointer-events-none z-0 overflow-hidden bg-[#F4F0FA]">
+			{/* `fixed`, not `absolute`.
+			  *
+			  * Absolutely positioned, this layer was only ever as tall as the page
+			  * element. On a large screen -- or any time the content came up short
+			  * of the window -- the browser painted `body` below it, and `body` is
+			  * the chat app's deep plum. A band of it sat under the footer.
+			  *
+			  * Fixed to the viewport, the artwork covers whatever the window is,
+			  * the plum can never show, and the scene holds still while the page
+			  * scrolls over it. */}
+			<div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#F4F0FA]">
 				<div 
 					className="absolute inset-0" 
 					style={{
@@ -115,9 +168,9 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</div>
 
 			{/* Elegant Header */}
-			<header className="relative z-10 w-full max-w-[90rem] mx-auto px-4 sm:px-8 py-4 flex items-center justify-between">
+			<header className="relative z-10 w-full max-w-[90rem] mx-auto px-4 sm:px-8 pt-8 pb-5 flex items-center justify-between">
 				<div className="flex items-center gap-8">
-					<Brandmark />
+					<Brandmark variant="header" />
 					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
 						<button type="button" onClick={() => setActiveView('stories')} className="text-[#c22f99] hover:text-[#8a1c6a] transition-colors font-bold cursor-pointer">Explore</button>
 						<button type="button" onClick={() => setActiveView('journey')} className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors cursor-pointer">Journey</button>
@@ -166,7 +219,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 									<i className="ph-duotone ph-user text-[#482977]/60 text-lg"></i>
 									<select 
 										value={selectedPersona || ""} 
-										onChange={(e) => setSelectedPersona(e.target.value as PersonaId)}
+										onChange={(e) => setSelectedPersona(e.target.value as GuideId)}
 										className="appearance-none bg-transparent border-none text-sm font-semibold text-[#482977] outline-none cursor-pointer hover:text-[#c22f99] transition-colors"
 									>
 										<option value="" className="bg-white">Guest</option>
@@ -326,7 +379,10 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 					</button>
 				</div>
 
-				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
+				{/* `pb-10`: this row sat flush against the footer, so the guides card
+				    and the Saint Kitts and Nevis line touched with nothing between
+				    them. A closing line deserves its own air. */}
+				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-10">
 					{/* Try something quick */}
 					<div className="lg:col-span-7">
 						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
@@ -368,23 +424,45 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
 							<i className="ph-bold ph-users text-blue-500"></i> Meet your guides
 						</h3>
-						<div className="bg-white/80 backdrop-blur-xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex gap-4 overflow-x-auto no-scrollbar shadow-sm">
+						{/* Buttons, not decoration.
+						  *
+						  * These were `div`s carrying `cursor-pointer` and no handler:
+						  * they looked clickable, did nothing, and no keyboard could
+						  * reach them at all. Each one now opens a conversation with
+						  * that guide answering.
+						  *
+						  * Skye and Kaleb are one persona key. `stella` is Skye at 5-8
+						  * and Kaleb at 9-12, and the band comes from the session, not
+						  * from the address -- so a signed-out reader picking Kaleb gets
+						  * `stella`, and the server decides which voice that is. The
+						  * alternative is asking a child their age on a landing page.
+						  *
+						  * `justify-center` so five circles sit balanced in the card
+						  * rather than crowding the left edge.
+						  */}
+						<div className="bg-white/80 backdrop-blur-xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex flex-wrap justify-center gap-4 shadow-sm">
 							{[
-								{ name: 'Skye', color: 'from-[#c22f99] to-pink-500', icon: 'ph-butterfly' },
-								{ name: 'Kaleb', color: 'from-blue-500 to-cyan-500', icon: 'ph-rocket' },
-								{ name: 'Zion', color: 'from-[#fed141] to-amber-500', icon: 'ph-headphones' },
-								{ name: 'Imani', color: 'from-[#482977] to-indigo-500', icon: 'ph-book-open' },
-								{ name: 'Azuri', color: 'from-emerald-500 to-teal-500', icon: 'ph-chalkboard-teacher' },
+								{ name: 'Skye', persona: 'stella' as PersonaId, who: 'ages 5 to 8', color: 'from-[#c22f99] to-pink-500', icon: 'ph-butterfly' },
+								{ name: 'Kaleb', persona: 'stella' as PersonaId, who: 'ages 9 to 12', color: 'from-blue-500 to-cyan-500', icon: 'ph-rocket' },
+								{ name: 'Zion', persona: 'orion' as PersonaId, who: 'ages 13 to 18', color: 'from-[#fed141] to-amber-500', icon: 'ph-headphones' },
+								{ name: 'Imani', persona: 'aurora' as PersonaId, who: 'parents and guardians', color: 'from-[#482977] to-indigo-500', icon: 'ph-book-open' },
+								{ name: 'Azuri', persona: 'nova' as PersonaId, who: 'teachers', color: 'from-emerald-500 to-teal-500', icon: 'ph-chalkboard-teacher' },
 							].map(guide => (
-								<div key={guide.name} className="flex flex-col items-center gap-2 flex-shrink-0 group">
-									<div className={`w-14 h-14 rounded-full bg-gradient-to-br ${guide.color} p-[2px] shadow-sm cursor-pointer group-hover:scale-110 transition-transform`}>
-										<div className="w-full h-full bg-[#1A103C] rounded-full border-[1.5px] border-[#1A103C] flex items-center justify-center relative overflow-hidden">
-											<div className={`absolute inset-0 bg-gradient-to-br ${guide.color} opacity-20`}></div>
-											<i className={`ph-duotone ${guide.icon} text-xl text-white drop-shadow-sm`}></i>
-										</div>
-									</div>
+								<button
+									key={guide.name}
+									type="button"
+									onClick={() => startConversation("Hi! What can you help me with?", guide.persona)}
+									aria-label={`Talk to ${guide.name}, for ${guide.who}`}
+									className="flex flex-col items-center gap-2 flex-shrink-0 group rounded-2xl p-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c22f99]"
+								>
+									<span className={`w-14 h-14 rounded-full bg-gradient-to-br ${guide.color} p-[2px] shadow-sm group-hover:scale-110 transition-transform block`}>
+										<span className="w-full h-full bg-[#1A103C] rounded-full border-[1.5px] border-[#1A103C] flex items-center justify-center relative overflow-hidden">
+											<span className={`absolute inset-0 bg-gradient-to-br ${guide.color} opacity-20`}></span>
+											<i className={`ph-duotone ${guide.icon} text-xl text-white drop-shadow-sm`} aria-hidden="true"></i>
+										</span>
+									</span>
 									<span className="text-[11px] font-bold text-[#1A103C]">{guide.name}</span>
-								</div>
+								</button>
 							))}
 						</div>
 					</div>

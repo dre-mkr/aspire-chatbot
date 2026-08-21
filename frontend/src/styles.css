@@ -7729,3 +7729,161 @@ a.source__site--link:hover .source__out {
 		display: none;
 	}
 }
+
+/* ── The empty state ──────────────────────────────────────────────────────
+ *
+ * A new thread used to render a bare transcript: a blank column and a text
+ * box. Nothing said what the assistant could do, and nothing said which of
+ * its six voices was about to answer.
+ *
+ * The orb is repeated here at size because it is the face -- and because it
+ * is the one place a reader sees the colour before it starts answering. It
+ * inherits its tint from `data-persona` on `.app` like every other orb.
+ */
+.welcome {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+	padding: 12px 0 28px;
+}
+
+.welcome__hero {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+}
+
+.welcome__orb {
+	--orb-size: 56px;
+	flex: none;
+}
+
+.welcome__greeting {
+	font-family: var(--font-display, inherit);
+	font-size: clamp(1.5rem, 3.2vw, 2rem);
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	margin: 0;
+	text-wrap: balance;
+}
+
+.welcome__sub {
+	margin: 4px 0 0;
+	color: var(--ink-soft, #4a5561);
+	font-size: 1rem;
+}
+
+.welcome__cards {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	/* Two up on a laptop, one up on a phone. `auto-fit` rather than a media
+	   query so it also behaves in the narrow column left by an open rail. */
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 12px;
+}
+
+.welcome__card {
+	width: 100%;
+	height: 100%;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto auto;
+	column-gap: 12px;
+	row-gap: 2px;
+	align-items: start;
+	text-align: left;
+	padding: 14px 16px;
+	/* 44px is the WCAG floor and this is a children's product; the padding and
+	   two lines of content clear it comfortably, but it is stated rather than
+	   assumed. */
+	min-height: 44px;
+	border: 1px solid var(--line, #d3dbe3);
+	border-radius: 14px;
+	background: var(--surface, #fff);
+	cursor: pointer;
+	transition:
+		border-color 160ms ease,
+		transform 160ms ease,
+		box-shadow 160ms ease;
+}
+
+.welcome__card:hover {
+	border-color: var(--orb-mid, #c22f99);
+	transform: translateY(-1px);
+	box-shadow: 0 8px 20px -12px rgb(53 29 90 / 0.4);
+}
+
+.welcome__card:focus-visible {
+	outline: 2px solid var(--orb-mid, #c22f99);
+	outline-offset: 2px;
+}
+
+.welcome__card > i {
+	grid-row: 1 / span 2;
+	font-size: 1.5rem;
+	/* Takes the persona's colour, so the cards belong to whoever is answering. */
+	color: var(--orb-low, #6a55a0);
+	line-height: 1;
+}
+
+.welcome__card-title {
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.welcome__card-blurb {
+	color: var(--ink-soft, #4a5561);
+	font-size: 0.9rem;
+	line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.welcome__card {
+		transition: none;
+	}
+	.welcome__card:hover {
+		transform: none;
+	}
+}
+
+/* ── The island, behind the conversation ──────────────────────────────────
+ *
+ * The same artwork the landing opens with, carried through to the chat so the
+ * two surfaces feel like one place rather than two products.
+ *
+ * FAINT ON PURPOSE, AND THIS IS THE ONE PLACE THAT MATTERS. A landing page is
+ * looked at; a transcript is READ, at length, by a five-year-old. So the scene
+ * sits at 12% under a near-opaque wash rather than the 22-88% ramp the landing
+ * uses -- present enough to recognise, nowhere near enough to compete with a
+ * sentence. Body text keeps the full contrast it had.
+ *
+ * `fixed`, so it does not scroll with the transcript: a moving mountain behind
+ * moving text is nausea, not atmosphere.
+ */
+.app[data-phase="chat"] .atmosphere::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	background:
+		linear-gradient(
+			to bottom,
+			rgb(255 255 255 / 0.93) 0%,
+			rgb(255 255 255 / 0.9) 45%,
+			rgb(255 255 255 / 0.93) 100%
+		),
+		image-set(
+			url("/images/hero-bg.webp") type("image/webp"),
+			url("/images/hero-bg.jpg") type("image/jpeg")
+		)
+		center center / cover no-repeat;
+	opacity: 0.12;
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app[data-phase="chat"] .atmosphere::before {
+		transition: none;
+	}
+}

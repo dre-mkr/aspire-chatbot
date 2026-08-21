@@ -112,11 +112,29 @@ export function GuideChooser({
 	}, [onSkip]);
 
 	// The page behind must not scroll under an open chooser.
+	//
+	// STATELESS, and it has to be. Two earlier shapes both leaked, and a leaked
+	// lock is not cosmetic: `body` stays `overflow: hidden` for the rest of the
+	// session, the landing page cannot be scrolled by hand, and 128px of it --
+	// the whole footer -- becomes unreachable.
+	//
+	// Saving and restoring the previous value fails when two choosers overlap:
+	// the second captures the "hidden" the first just set and hands it back on
+	// the way out. A counter fails too, more quietly -- React invokes effects
+	// twice in development and HMR resets module state underneath it, so the
+	// count desyncs from reality and never returns to zero.
+	//
+	// Presence in the DOM is the one thing that cannot desync. Released on the
+	// next frame, because at cleanup time this chooser's own portal may not be
+	// gone yet.
 	useEffect(() => {
-		const { overflow } = document.body.style;
 		document.body.style.overflow = "hidden";
 		return () => {
-			document.body.style.overflow = overflow;
+			requestAnimationFrame(() => {
+				if (!document.querySelector(".guide-scrim")) {
+					document.body.style.removeProperty("overflow");
+				}
+			});
 		};
 	}, []);
 

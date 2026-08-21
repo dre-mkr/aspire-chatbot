@@ -1,3 +1,4 @@
+import { ViewHeader } from "./ViewHeader";
 
 interface EducatorsViewProps {
 	onBack: () => void;
@@ -30,11 +31,7 @@ export function EducatorsView({ onBack }: EducatorsViewProps) {
 			</div>
 			
 			<div className="relative z-10 flex flex-col flex-1">
-			<header className="p-6">
-				<button type="button" onClick={onBack} className="flex items-center gap-2 text-[#482977] hover:text-[#c22f99] transition-colors font-semibold">
-					<i className="ph-bold ph-arrow-left"></i> Back to ASPIRE
-				</button>
-			</header>
+			<ViewHeader onBack={onBack} />
 
 			<main className="flex-1 w-full max-w-4xl mx-auto px-6 py-12">
 				<div className="mb-12">

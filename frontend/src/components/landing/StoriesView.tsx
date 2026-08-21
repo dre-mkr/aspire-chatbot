@@ -1,11 +1,12 @@
-
+import { ViewHeader } from "./ViewHeader";
 export function StoriesView({ onBack }: { onBack: () => void }) {
   return (
     <div className="absolute inset-0 z-50 bg-white/95 backdrop-blur-xl overflow-y-auto pt-8 px-4 pb-24 md:px-8">
       <div className="max-w-5xl mx-auto">
-        <button type="button" onClick={onBack} className="flex items-center gap-2 text-plum hover:text-magenta transition-colors font-semibold mb-8">
-          <i className="ph-bold ph-arrow-left"></i> Back to Ecosystem
-        </button>
+        {/* "Back to Ecosystem" was the wording here, which is a word from a
+            product deck rather than anything a reader recognises. Every other
+            surface says "Back to ASPIRE"; so does this one now. */}
+        <ViewHeader onBack={onBack} />
         <div className="flex items-center gap-4 mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#c22f99] to-[#8a1c6a] flex items-center justify-center text-white shadow-lg">
             <i className="ph-duotone ph-book-open-text text-4xl"></i>

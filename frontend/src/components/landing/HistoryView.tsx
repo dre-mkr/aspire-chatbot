@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ViewHeader } from "./ViewHeader";
 import { useNavigate } from "@tanstack/react-router";
 import { conversationsQuery } from "#/lib/aspire/queries";
 import { groupByRecency } from "#/lib/aspire/history";
@@ -28,11 +29,9 @@ export function HistoryView({
 	
 	return (
 		<div className="flex flex-col min-h-screen bg-[#0B051D] text-white">
-			<header className="p-6 border-b border-white/10">
-				<button type="button" onClick={onBack} className="flex items-center gap-2 text-white/70 hover:text-white transition-colors">
-					<i className="ph-bold ph-arrow-left"></i> Back to ASPIRE
-				</button>
-			</header>
+			<div className="border-b border-white/10">
+				<ViewHeader onBack={onBack} tone="dark" />
+			</div>
 			<main className="flex-1 flex flex-col p-8 max-w-4xl mx-auto w-full">
 				<h1 className="text-4xl font-display font-medium text-white mb-2">Chat History</h1>
 				<p className="text-white/60 mb-12">Review your past conversations and learning modules.</p>

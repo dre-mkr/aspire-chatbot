@@ -36,6 +36,7 @@ import {
 import type { AnswerSearch } from "#/lib/aspire/search";
 import { ensureSession } from "#/lib/aspire/session";
 import { useSession } from "#/lib/aspire/use-session";
+import { ChatWelcome } from "./ChatWelcome";
 import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
 import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
@@ -693,6 +694,7 @@ export function ChatScreen() {
 							regenerateTitle(conversation.threadId)
 						}
 						onDeleteConversation={handleDeleteConversation}
+						onSeed={ask}
 					/>
 
 					{drawerModal ? (
@@ -751,6 +753,19 @@ export function ChatScreen() {
 								}}
 							>
 								<div className="thread__inner">
+									{/* Before anybody has said anything, the room says hello.
+									  *
+									  * A new thread rendered a bare transcript: a blank
+									  * column and a text box, with no indication of what the
+									  * assistant could do or which of its six voices was
+									  * about to answer. */}
+									{messages.length === 0 && !streaming && !isThinking ? (
+										<ChatWelcome
+											persona={persona}
+											ageBand={identity?.ageBand}
+											onAsk={ask}
+										/>
+									) : null}
 									<section aria-label="Conversation">
 										<Transcript
 											messages={messages}
