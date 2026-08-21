@@ -463,3 +463,81 @@ class TestTheSeed:
 
         monkeypatch.setattr(db_module, "database_enabled", lambda: False)
         assert await seed.seed_curriculum(curriculum) == 0
+
+
+class TestARequiredConceptMustBeTaught:
+    """The check that would have caught the L4/L5 draft, written as the failure.
+
+    Mastery is evidence and evidence comes from a lesson's check questions, so a
+    concept nothing teaches can never be mastered -- and everything downstream
+    of it is unreachable forever, silently, with the module still validating.
+    """
+
+    def _curriculum(self, concepts, taught: str):
+        from app.curriculum.schema import Concept, Curriculum, Lesson, Module
+
+        return Curriculum([
+            Module(
+                id="mod_probe",
+                title="M",
+                order=1,
+                band_min="5-8",
+                concepts=[Concept(**c) for c in concepts],
+                lessons=[
+                    Lesson(
+                        id="l1",
+                        module_id="mod_probe",
+                        concept_id=taught,
+                        order=1,
+                        objective="x",
+                        teach_points={"5-8": ["a"]},
+                        examples={"5-8": ["b"]},
+                        check_questions=[
+                            {"id": "q1", "prompt": {"5-8": "?"},
+                             "options": ["a", "b"], "answer": 0}
+                        ],
+                    )
+                ],
+            )
+        ])
+
+    def test_a_required_concept_with_no_lesson_is_refused(self):
+        with pytest.raises(ValueError, match="no lesson teaches it"):
+            self._curriculum(
+                [
+                    {"id": "ghost", "name": "G", "band_min": "5-8"},
+                    {"id": "real", "name": "R", "band_min": "5-8",
+                     "prerequisites": ["ghost"]},
+                ],
+                taught="real",
+            )
+
+    def test_the_message_names_who_is_blocked_by_it(self):
+        """An error that says only "ghost has no lesson" leaves the reader to
+        work out what it costs. The list of dependants is the cost."""
+        with pytest.raises(ValueError, match=r"required by \['real'\]"):
+            self._curriculum(
+                [
+                    {"id": "ghost", "name": "G", "band_min": "5-8"},
+                    {"id": "real", "name": "R", "band_min": "5-8",
+                     "prerequisites": ["ghost"]},
+                ],
+                taught="real",
+            )
+
+    def test_an_untaught_concept_nothing_depends_on_is_still_legal(self):
+        """A vocabulary node that locks no path is not this bug, and refusing
+        it would be a lint that costs more than it catches."""
+        self._curriculum(
+            [
+                {"id": "spare", "name": "S", "band_min": "5-8"},
+                {"id": "real", "name": "R", "band_min": "5-8"},
+            ],
+            taught="real",
+        )
+
+    def test_the_shipping_module_passes_it(self):
+        """The regression guard. If this fails, module one has a locked branch."""
+        from app.curriculum.schema import load_all
+
+        load_all(refresh=True)

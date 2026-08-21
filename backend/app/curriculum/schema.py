@@ -236,6 +236,53 @@ class Curriculum:
             lesson.id: lesson for module in self.modules for lesson in module.lessons
         }
         self.validate_prerequisites()
+        self.validate_every_concept_is_taught()
+
+    def validate_every_concept_is_taught(self) -> None:
+        """A required concept with no lesson can never be mastered, and locks the graph.
+
+        THE BUG THIS EXISTS FOR was caught in review rather than by a test,
+        which is the whole argument for the check.
+
+        A draft of the L4/L5 patch added `scarcity` as a concept node so that
+        `need` could depend on it -- the client's own material for the youngest
+        band teaches scarcity first, and it is the *why* behind needs-versus-
+        wants -- and authored no lesson for it. Mastery is evidence, evidence
+        comes from a lesson's check questions, so:
+
+            scarcity  no lesson      -> never mastered
+            need      needs scarcity -> never opens
+            budget    needs need     -> never opens
+
+        Half of module one, closed to every learner in every band, from one
+        missing lesson and no error message anywhere.
+
+        `validate_prerequisites` could not have caught it: every prerequisite
+        named a concept that genuinely existed. The gap runs the other way -- a
+        concept that exists, is required, and is never taught -- which is why
+        this is a second check rather than another clause in the first.
+
+        An untaught concept is legal when NOTHING requires it. A vocabulary node
+        used for retrieval and depended on by nobody locks no path, so it is not
+        this bug and is not refused here.
+        """
+        taught = {lesson.concept_id for module in self.modules for lesson in module.lessons}
+        required: dict[str, list[str]] = {}
+        for concept in self.concepts.values():
+            for prerequisite in concept.prerequisites:
+                required.setdefault(prerequisite, []).append(concept.id)
+
+        orphaned = sorted(cid for cid in required if cid not in taught)
+        if orphaned:
+            detail = "; ".join(
+                f"{cid!r} is required by {sorted(required[cid])} and no lesson teaches it"
+                for cid in orphaned
+            )
+            raise ValueError(
+                f"{detail}. A concept with no lesson can never be mastered, so "
+                "everything downstream of it is unreachable. Author the lesson, "
+                "or remove the prerequisite."
+            )
 
     def validate_prerequisites(self) -> None:
         """Every prerequisite exists and is not above the band that needs it."""
