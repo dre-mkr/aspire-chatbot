@@ -7918,3 +7918,57 @@ a.source__site--link:hover .source__out {
 		display: none;
 	}
 }
+
+/* ── The stars, over the chat's island ────────────────────────────────────
+ *
+ * Same idea as the landing's brandmark, carried through so the two surfaces
+ * feel like one place. Rendered on `.atmosphere::after` rather than as
+ * elements, because the transcript should not gain three nodes it has no use
+ * for and no screen reader should meet them.
+ *
+ * SLOWER AND FEWER THAN THE LANDING. A hero is looked at for a moment; this
+ * sits behind a conversation a child may read for ten minutes, and motion that
+ * charms once becomes something you cannot stop noticing. Two drifting points
+ * at low opacity, on a long cycle.
+ */
+@keyframes chatStarDrift {
+	0% {
+		transform: translate3d(0, -8vh, 0) rotate(0deg);
+		opacity: 0;
+	}
+	14% {
+		opacity: 0.5;
+	}
+	78% {
+		opacity: 0.32;
+	}
+	100% {
+		transform: translate3d(2vw, 96vh, 0) rotate(200deg);
+		opacity: 0;
+	}
+}
+
+.app[data-phase="chat"] .atmosphere::after {
+	content: "";
+	position: fixed;
+	top: 0;
+	left: 14%;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+	background: var(--gold, #fed141);
+	box-shadow:
+		46vw 0 0 -2px var(--gold, #fed141),
+		78vw 0 0 -1px var(--gold, #fed141);
+	filter: drop-shadow(0 0 6px rgb(254 209 65 / 0.55));
+	opacity: 0;
+	pointer-events: none;
+	animation: chatStarDrift 19s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app[data-phase="chat"] .atmosphere::after {
+		animation: none;
+		display: none;
+	}
+}

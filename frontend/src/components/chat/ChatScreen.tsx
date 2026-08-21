@@ -79,6 +79,7 @@ export function ChatScreen() {
 		simpleMode,
 		toggleSimpleMode,
 		persona,
+		band,
 		setPersona,
 		lang,
 		setLanguageInUrl,
@@ -653,7 +654,7 @@ export function ChatScreen() {
 		   widget-preview route and nowhere else — so every reader, teachers
 		   included, got the five-year-old's configuration by fallback. Derived
 		   from the guide they chose; see `bandForPersona`. */
-		<AgeBandProvider band={bandForPersona(persona)}>
+		<AgeBandProvider band={band ?? identity?.ageBand ?? bandForPersona(persona)}>
 			<div
 				className="app"
 				data-phase="chat"
@@ -662,7 +663,7 @@ export function ChatScreen() {
 				   reach a decorative sphere. Falls back to `guest`, which is the
 				   voice that answers before it knows who is reading. */
 				data-persona={persona || "guest"}
-				data-band={identity?.ageBand || undefined}
+				data-band={band ?? identity?.ageBand ?? undefined}
 				data-rail={railClosed ? "collapsed" : "expanded"}
 			>
 				<div className="atmosphere" aria-hidden="true">
@@ -762,7 +763,7 @@ export function ChatScreen() {
 									{messages.length === 0 && !streaming && !isThinking ? (
 										<ChatWelcome
 											persona={persona}
-											ageBand={identity?.ageBand}
+											ageBand={band ?? identity?.ageBand}
 											onAsk={ask}
 										/>
 									) : null}
@@ -884,6 +885,7 @@ export function ChatScreen() {
 								simpleMode={simpleMode}
 								onToggleSimpleMode={toggleSimpleMode}
 								persona={persona}
+								band={band}
 								onPersonaChange={setPersona}
 								draft={draft}
 								onDraftChange={setDraft}

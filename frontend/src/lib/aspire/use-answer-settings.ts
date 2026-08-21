@@ -22,6 +22,8 @@ export function useAnswerSettings() {
 	const accountPersona =
 		session?.accountType === "registered" ? asPersonaId(session.persona) : null;
 	const persona = search.persona ?? accountPersona ?? null;
+	/** Set only when a guide was picked by name; otherwise the session decides. */
+	const band = search.band ?? null;
 
 	const simpleMode = search.simple === true;
 	const toggleSimpleMode = useCallback(() => {
@@ -38,12 +40,15 @@ export function useAnswerSettings() {
 
 	// `replace`, like the toggle above: picking a persona adjusts the view, not the history.
 	const setPersona = useCallback(
-		(next: PersonaId | null) => {
+		(next: PersonaId | null, band?: AnswerSearch["band"]) => {
 			void navigate({
 				to: ".",
 				search: (previous: AnswerSearch): AnswerSearch => ({
 					...previous,
 					persona: next ?? undefined,
+					// Cleared rather than carried: a band belonging to the guide
+					// just left would otherwise follow the reader to the next one.
+					band: next ? band : undefined,
 				}),
 				replace: true,
 			});
@@ -88,6 +93,7 @@ export function useAnswerSettings() {
 		simpleMode,
 		toggleSimpleMode,
 		persona,
+		band,
 		setPersona,
 		lang: search.lang,
 		setLanguageInUrl,
