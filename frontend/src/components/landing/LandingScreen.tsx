@@ -87,17 +87,22 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		<div className="relative min-h-screen bg-white flex flex-col font-sans overflow-x-hidden selection:bg-[#c22f99]/20 text-[#1A103C]">
 
 			{/* Scenic Background Layers */}
-			<div className="absolute inset-0 pointer-events-none z-0 overflow-hidden bg-[#1A103C]">
+			{/* The ground behind the artwork, and it is pale on purpose.
+			  *
+			  * It was `#1A103C`, the deep plum. Fully hidden while the image loads
+			  * fine -- and the moment it does not, that is near-black body text on
+			  * a near-black ground. A fallback should fail readable. */}
+			<div className="absolute inset-0 pointer-events-none z-0 overflow-hidden bg-[#F4F0FA]">
 				<div 
 					className="absolute inset-0" 
 					style={{
 						background: `
 							linear-gradient(
 								to bottom,
-								rgba(255,255,255,0.3) 0%,
-								rgba(255,255,255,0.7) 40%,
-								rgba(255,255,255,0.95) 75%,
-								#ffffff 100%
+								rgba(255,255,255,0.22) 0%,
+								rgba(255,255,255,0.55) 38%,
+								rgba(255,255,255,0.78) 68%,
+								rgba(255,255,255,0.88) 100%
 							),
 							image-set(
 								url('/images/hero-bg.webp') type('image/webp'),
@@ -194,7 +199,13 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 						</div>
 					</div>
 					
-					{/* Floating Gamification Widget */}
+					{/* Floating progress widget, and only when there is progress.
+					  *
+					  * With the invented level and XP gone this rendered as a white box
+					  * containing one cheerful line and nothing else -- worse than the
+					  * fabricated version, because at least that looked deliberate.
+					  * It returns the moment there is a real balance to put in it. */}
+					{coinBalance !== null && (
 					<button 
 						type="button"
 						className="hidden lg:flex text-left absolute top-0 right-0 lg:translate-x-12 xl:translate-x-24 bg-white/90 backdrop-blur-2xl border border-[#482977]/20 rounded-2xl p-4 flex-col gap-1 shadow-[0_20px_50px_rgba(72,41,119,0.15)] animate-float-slow z-20 hover:scale-105 transition-transform cursor-pointer group w-64" 
@@ -222,6 +233,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							</div>
 						)}
 					</button>
+					)}
 				</div>
 
 				{/* Cards Grid - Restored to Deep Brand Colors */}
@@ -292,10 +304,14 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							<div>
 								<h3 className="text-xl font-display font-semibold text-white mb-1">My Journey</h3>
 								<p className="text-[#fed141] font-medium text-xs mb-2 drop-shadow-md">Your progress path</p>
-								<div className="flex gap-3 text-[10px] font-medium text-white/70">
-									<div className="flex flex-col"><span className="text-[#fed141] text-sm leading-none font-bold">3</span> Badges</div>
-									<div className="flex flex-col"><span className="text-white text-sm leading-none font-bold">7</span> Lessons</div>
-								</div>
+								{/* "3 Badges" and "7 Lessons" were here, hardcoded, and shown to
+								  * every visitor including the ones who had never opened a
+								  * lesson. Same defect as the footer statistics: a per-reader
+								  * number that is the same for every reader is not a number.
+								  * The card is a way in, so it says what is behind it. */}
+								<p className="text-[10px] font-medium text-white/70">
+									Badges and lessons, once you begin.
+								</p>
 							</div>
 							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
 								<i className="ph-bold ph-caret-right text-xs"></i>
