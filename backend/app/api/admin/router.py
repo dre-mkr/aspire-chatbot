@@ -604,5 +604,8 @@ async def learning_health(
             "widget_drop_rate": learning.WIDGET_GATE_FAILED_MAX,
             "resolution_none_rate": learning.RESOLUTION_NONE_MAX,
             "zero_prose_turns": 0,
+            # Not a rate. Anything above zero is servable; zero is the tutor
+            # switched off without anybody having switched it off.
+            "concepts_loaded": 1,
         },
     }

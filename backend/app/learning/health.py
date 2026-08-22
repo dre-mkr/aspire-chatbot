@@ -196,6 +196,20 @@ class Health:
     misconception_rate: float = 0.0
     #: Mastery points gained across the window.
     mastery_gained: int = 0
+    #: How many concepts the tutor has to teach from, right now.
+    #:
+    #: NOT a rate, and not windowed: it is the current state of the store, and
+    #: it belongs here because zero is the condition that silently disables the
+    #: tutor. `learn/graph._entry` gates the tutor's ENTIRE claim on this count,
+    #: so an empty store skips every claim, drops the turn to `phase = "placing"`
+    #: and answers a specific question with mastery placement.
+    #:
+    #: Observed on production, 22 Aug: a nine-year-old asked how the interest on
+    #: EC$500 works and was asked back what money kept for later is called. The
+    #: reply looked deliberate. Nothing on this surface said otherwise --
+    #: `resolution_none_rate` would have climbed, but it reads as the tutor
+    #: choosing badly rather than as the tutor having nothing to choose from.
+    concepts_loaded: int = 0
     breaches: list[str] = field(default_factory=list)
 
     @property
@@ -283,6 +297,30 @@ async def snapshot(hours: int = 24) -> Health:
         # No minimum turn count. One is a regression.
         health.breaches.append(
             f"{health.zero_prose_turns} turn(s) emitted NO PROSE -- this is a P0"
+        )
+
+    # Read last, and never allowed to take the surface down with it: an
+    # unreadable store is a reason to report zero, not to fail the endpoint an
+    # operator opened BECAUSE something is wrong.
+    try:
+        from app.learning.concepts import get_store
+
+        health.concepts_loaded = len(get_store())
+    except Exception:
+        logger.warning("Could not size the concept store.", exc_info=True)
+        health.concepts_loaded = 0
+
+    if not health.concepts_loaded:
+        # No minimum turn count here either, and no rate. Zero concepts is not a
+        # degradation that shows up in a percentage -- it is the tutor being
+        # unable to claim any turn at all, and every lesson request falling
+        # through to mastery placement. A reader asking a specific question gets
+        # a check question back, and it reads as a deliberate choice.
+        health.breaches.append(
+            "the concept store is EMPTY -- the tutor cannot claim a turn, so "
+            "every lesson request falls through to placement and is answered "
+            "with a check question the reader did not ask for. Seed the "
+            "concepts and confirm `get_store().reload()` returns a non-zero count"
         )
 
     return health
