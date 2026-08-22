@@ -289,6 +289,26 @@ CONTINUATION_FLAGS: tuple[str, ...] = ("widget_interaction", "game_result")
 CONTINUATION_FALLBACKS: tuple[str, ...] = TEACHING_AGENTS
 
 
+def _is_a_sum(state: AspireState) -> bool:
+    """Whether this turn is a self-contained sum, judged by the QA predicate.
+
+    Imported lazily and behind a guard: routing must never fail because the QA
+    package could not be imported, and a router outage is not a product outage.
+    """
+    try:
+        from app.agents.qa.nodes import is_self_contained_sum
+
+        question = _latest_user_text(state)
+        return is_self_contained_sum(question, question)
+    except Exception:  # pragma: no cover - defensive
+        logger.warning(
+            "Could not test session %s for a self-contained sum; routing normally.",
+            state.get("session_id"),
+            exc_info=True,
+        )
+        return False
+
+
 def _continues_an_agent(state: AspireState, allowed: list[str]) -> str | None:
     """The agent this continuation belongs to, or None if it is not one."""
     flags = state.get("safety_flags") or {}
@@ -340,6 +360,41 @@ def make_classify(invoke=None):
                     },
                 },
             }
+
+        # ── a sum the reader set up goes to the agent that can do sums ──
+        #
+        # Deterministic, and ahead of the model, because the model gets this
+        # one wrong in a way no prompt wording reliably fixes. A money word
+        # problem -- "a shop sells notebooks at 3 for EC$12" -- reads as money,
+        # `learn_agent`'s card says to take anything about a mechanism, and
+        # `apply_stickiness` exempts moves INTO teaching from the confidence
+        # threshold. So the tutor wins at any confidence, and then answers a
+        # sum with a curriculum check question, which is the deflection this
+        # gate exists to stop. Measured on the 22 Aug run: five of five word
+        # problems routed to `learn_agent`, none answered.
+        #
+        # The QA agent is the one that can serve these -- `ground_check` has a
+        # bypass for exactly this shape -- so the sum is sent there.
+        if _is_a_sum(state):
+            for agent in ("qa_agent", "qa_agent_limited", "qa_agent_public"):
+                if agent in allowed:
+                    logger.info(
+                        "Session %s asked a self-contained sum; routing to %s "
+                        "rather than letting the tutor claim it.",
+                        state.get("session_id"),
+                        agent,
+                    )
+                    return {
+                        "active_agent": agent,
+                        "safety_flags": {
+                            **(state.get("safety_flags") or {}),
+                            "route": {
+                                "agent": agent,
+                                "confidence": 1.0,
+                                "reason": "a sum the reader set up",
+                            },
+                        },
+                    }
 
         if len(allowed) == 1:
             # No decision to make, and therefore no model call to pay for.

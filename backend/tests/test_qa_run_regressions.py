@@ -112,6 +112,92 @@ class TestWideningDidNotBreakTheGuards:
         assert "register_agent" not in granted
 
 
+class TestASumIsRoutedToTheAgentThatCanDoIt:
+    """Widening the rows created a second way to lose the same question.
+
+    With `learn_agent` reachable, the classifier hands it money word problems --
+    its card says to take anything about a mechanism, and `apply_stickiness`
+    exempts moves INTO teaching from the confidence threshold, so it wins at any
+    confidence. It then answers a sum with a curriculum check question.
+
+    Measured on the 22 Aug run, after the access fix and before this one: five
+    of five word problems routed to `learn_agent`, none answered. "A shop sells
+    notebooks at 3 for EC$12" was met with "You move EC$25 into your account
+    instead of spending it this week. What is that?"
+    """
+
+    @staticmethod
+    def _route(question, allowed):
+        import asyncio
+
+        from langchain_core.messages import HumanMessage
+
+        from app.graph.nodes.classify import make_classify
+
+        async def never_called(system, user):  # pragma: no cover
+            raise AssertionError("the router was consulted for a plain sum")
+
+        state = {
+            "messages": [HumanMessage(content=question)],
+            "allowed_agents": allowed,
+            "session_id": "s",
+            "safety_flags": {},
+        }
+        return asyncio.run(make_classify(never_called)(state))
+
+    SUMS = [
+        "A shop sells notebooks at 3 for EC$12. How much do 7 notebooks cost?",
+        "A bus leaves at 07:40 and the trip takes 95 minutes. What time does it arrive?",
+        "EC$500 grows by 2% simple interest a year. What is it worth after 3 years?",
+    ]
+
+    @pytest.mark.parametrize("question", SUMS)
+    def test_a_sum_goes_to_qa_not_the_tutor(self, question):
+        update = self._route(
+            question, ["qa_agent", "learn_agent", "learning_preview", "escalate_agent"]
+        )
+        assert update["active_agent"] == "qa_agent"
+
+    @pytest.mark.parametrize("question", SUMS)
+    def test_a_child_gets_their_own_band_filtered_qa_agent(self, question):
+        update = self._route(
+            question, ["qa_agent_limited", "learn_agent", "escalate_agent"]
+        )
+        assert update["active_agent"] == "qa_agent_limited"
+
+    @pytest.mark.parametrize("question", SUMS)
+    def test_a_signed_out_visitor_gets_the_public_one(self, question):
+        update = self._route(
+            question,
+            ["qa_agent_public", "learning_sample", "register_agent_step1"],
+        )
+        assert update["active_agent"] == "qa_agent_public"
+
+    def test_the_shortcut_never_fires_for_a_teaching_question(self):
+        """It must not swallow the turns the access fix exists to enable."""
+        import asyncio
+
+        from langchain_core.messages import HumanMessage
+
+        from app.graph.nodes.classify import make_classify
+
+        called = {"yes": False}
+
+        async def invoke(system, user):
+            called["yes"] = True
+            return '{"agent": "learn_agent", "confidence": 0.9, "reason": "teach"}'
+
+        state = {
+            "messages": [HumanMessage(content="Why does starting to save early matter?")],
+            "allowed_agents": ["qa_agent", "learn_agent", "escalate_agent"],
+            "session_id": "s",
+            "safety_flags": {},
+        }
+        update = asyncio.run(make_classify(invoke)(state))
+        assert called["yes"], "the router must still decide ordinary turns"
+        assert update["active_agent"] == "learn_agent"
+
+
 # ── 2. arithmetic was declined for want of a corpus row ──────────────────────
 
 
