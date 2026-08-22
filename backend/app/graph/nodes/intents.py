@@ -153,7 +153,16 @@ _STORY: tuple[re.Pattern[str], ...] = tuple(
 _WATCH: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (
-        r"\b(?:watch|play|show|see) (?:me |us )?(?:the |that |this |a |an )?(?:aspire )?(?:video|story|film|cartoon)\b",
+        # `(?:\w+ ){0,2}?` is the subject a reader names BEFORE the noun --
+        # "watch the scarcity video", "show me the saving story". Without it the
+        # noun had to follow the article immediately, so naming what you wanted
+        # was the one phrasing that did not reach a player: `requested()`
+        # resolved it correctly and never ran, because this gate said no first.
+        # Lazy and bounded at two, so it cannot swallow a whole sentence.
+        r"\b(?:watch|play|show|see) (?:me |us )?(?:the |that |this |a |an )?(?:\w+ ){0,2}?(?:aspire )?(?:video|story|film|cartoon)\b",
+        # Asking whether one exists is asking for it. `_is_a_command` is a length
+        # check, not a question test, so these were only ever missing vocabulary.
+        r"\b(?:do you have|have you got|are there|is there|got) (?:any |a |an |the )?(?:\w+ ){0,2}?(?:aspire )?(?:video|story|film|cartoon)s?\b",
         r"\b(?:yes|yeah|sure|ok|okay)[, ]+(?:please )?(?:watch|show|play)\b",
         r"\bvideo,? (?:please|yes)\b",
         r"\b(?:ver|mira|muestra|pon) (?:el |un )?(?:video|cuento)\b",
