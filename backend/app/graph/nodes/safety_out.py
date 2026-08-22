@@ -244,6 +244,37 @@ def quick_replies_ok(replies: list[str]) -> bool:
     return all(0 < word_count(reply) <= QUICK_REPLY_MAX_WORDS for reply in replies)
 
 
+def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[str]]:
+    """Split chips into those this band may be offered, and those it may not.
+
+    THE LADDER STOPPED AT THE PROSE. `quick_replies_ok` measures how many chips
+    there are and how long each one is, and that is all it has ever done -- the
+    vocabulary gate ran over the answer and never over the options underneath
+    it. So a nine-year-old on Kaleb was offered a tappable "I think a loan",
+    with `loan` on the enforced 9-12 ban list. Observed on production, 22 Aug,
+    asking how interest on EC$500 works.
+
+    That is the exact failure the ladder exists to prevent, arriving by the one
+    route nothing was watching. It is also silent: the chip is well-formed, the
+    count is right, the build is green.
+
+    DROPPED WHOLE rather than stripped. `safety_out` blanks a banned term inside
+    prose because a sentence with a hole still carries the rest of its meaning.
+    A three-word chip does not -- "I think a" is not an option anybody can tap,
+    and offering it is worse than offering one fewer. If dropping takes the set
+    below the minimum, `quick_replies_ok` fails and the existing fallback runs,
+    which is the behaviour already written for chips that do not survive.
+    """
+    kept: list[str] = []
+    dropped: list[str] = []
+    for reply in replies:
+        if vocab.check(reply, band):
+            dropped.append(reply)
+        else:
+            kept.append(reply)
+    return kept, dropped
+
+
 QUICK_REPLY_INSTRUCTION = (
     f"End with {QUICK_REPLY_MIN} to {QUICK_REPLY_MAX} tappable options. Each "
     f"must be at most {QUICK_REPLY_MAX_WORDS} words. Put them on their own "
@@ -386,7 +417,18 @@ def make_safety_out(reprompt: Reprompt | None = None):
         locale = state.get("locale", "en")
         original = text_of(last)
         replies = list(state.get("quick_replies") or [])
+        # Before anything measures them: a chip carrying a term this band may not
+        # hear is not a chip that got through, it is a chip that was never checked.
+        replies, banned_chips = chips_within_band(replies, band)
         report: dict[str, Any] = {}
+        if banned_chips:
+            report["quick_replies_banned"] = banned_chips
+            logger.warning(
+                "dropped %d chip(s) carrying terms banned at %s: %s",
+                len(banned_chips),
+                band,
+                banned_chips,
+            )
 
         # Widgets out, before anything measures or rewrites.
         text, widgets = sentinel.split(original)
