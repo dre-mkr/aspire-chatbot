@@ -8,7 +8,7 @@ import { ParentsView } from './ParentsView';
 import { EducatorsView } from './EducatorsView';
 import { AboutView } from './AboutView';
 import { stageFirstTurn } from "#/lib/aspire/handoff";
-import type { PersonaId } from "#/lib/aspire/personas";
+import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 
 /** What the reward is called, which is not settled.
  *
@@ -49,6 +49,22 @@ const GUIDE_TO_PERSONA: Record<GuideId, PersonaId> = {
 	azuri: 'nova',
 };
 
+/**
+ * Label to band, for the two labels a persona key cannot tell apart.
+ *
+ * Only `skye` and `kaleb` need a row. The other three are the only guide on
+ * their key, so the server's own default for that persona is already right and
+ * naming a band here would be three more values to keep in step for nothing.
+ *
+ * Without this, tapping Kaleb sent `?persona=stella` and no band, the server
+ * fell back to `stella`'s default of `5-8`, and the reader who asked for Kaleb
+ * was answered by Skye -- with Skye's name on the composer chip.
+ */
+const GUIDE_TO_BAND: Partial<Record<GuideId, AgeBand>> = {
+	skye: '5-8',
+	kaleb: '9-12',
+};
+
 interface LandingScreenProps {
 	onStartConversation?: (message: string) => void;
 }
@@ -73,7 +89,11 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		}
 	};
 
-	const startConversation = (message: string, persona?: PersonaId | null) => {
+	const startConversation = (
+		message: string,
+		persona?: PersonaId | null,
+		band?: AgeBand | null,
+	) => {
 		if (onStartConversation) {
 			onStartConversation(message);
 		} else {
@@ -90,10 +110,22 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			// changed nothing at all about who answered.
 			const chosen =
 				persona ?? (selectedPersona ? GUIDE_TO_PERSONA[selectedPersona] : null);
+			// The band rides along for the same reason the persona does, and it is
+			// not optional for `stella`: Skye and Kaleb share that key, so the
+			// persona alone cannot say which of them was tapped.
+			const chosenBand =
+				band ?? (selectedPersona ? GUIDE_TO_BAND[selectedPersona] : null);
 			navigate({
 				to: "/chat/$chatId",
 				params: { chatId: threadId },
-				...(chosen ? { search: { persona: chosen } } : {}),
+				...(chosen
+					? {
+							search: {
+								persona: chosen,
+								...(chosenBand ? { band: chosenBand } : {}),
+							},
+						}
+					: {}),
 			});
 		}
 	};
@@ -442,16 +474,16 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 						  */}
 						<div className="bg-white/80 backdrop-blur-xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex flex-wrap justify-center gap-4 shadow-sm">
 							{[
-								{ name: 'Skye', persona: 'stella' as PersonaId, who: 'ages 5 to 8', color: 'from-[#c22f99] to-pink-500', icon: 'ph-butterfly' },
-								{ name: 'Kaleb', persona: 'stella' as PersonaId, who: 'ages 9 to 12', color: 'from-blue-500 to-cyan-500', icon: 'ph-rocket' },
-								{ name: 'Zion', persona: 'orion' as PersonaId, who: 'ages 13 to 18', color: 'from-[#fed141] to-amber-500', icon: 'ph-headphones' },
-								{ name: 'Imani', persona: 'aurora' as PersonaId, who: 'parents and guardians', color: 'from-[#482977] to-indigo-500', icon: 'ph-book-open' },
-								{ name: 'Azuri', persona: 'nova' as PersonaId, who: 'teachers', color: 'from-emerald-500 to-teal-500', icon: 'ph-chalkboard-teacher' },
+								{ name: 'Skye', persona: 'stella' as PersonaId, band: '5-8' as AgeBand, who: 'ages 5 to 8', color: 'from-[#c22f99] to-pink-500', icon: 'ph-butterfly' },
+								{ name: 'Kaleb', persona: 'stella' as PersonaId, band: '9-12' as AgeBand, who: 'ages 9 to 12', color: 'from-blue-500 to-cyan-500', icon: 'ph-rocket' },
+								{ name: 'Zion', persona: 'orion' as PersonaId, band: null, who: 'ages 13 to 18', color: 'from-[#fed141] to-amber-500', icon: 'ph-headphones' },
+								{ name: 'Imani', persona: 'aurora' as PersonaId, band: null, who: 'parents and guardians', color: 'from-[#482977] to-indigo-500', icon: 'ph-book-open' },
+								{ name: 'Azuri', persona: 'nova' as PersonaId, band: null, who: 'teachers', color: 'from-emerald-500 to-teal-500', icon: 'ph-chalkboard-teacher' },
 							].map(guide => (
 								<button
 									key={guide.name}
 									type="button"
-									onClick={() => startConversation("Hi! What can you help me with?", guide.persona)}
+									onClick={() => startConversation("Hi! What can you help me with?", guide.persona, guide.band)}
 									aria-label={`Talk to ${guide.name}, for ${guide.who}`}
 									className="flex flex-col items-center gap-2 flex-shrink-0 group rounded-2xl p-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c22f99]"
 								>
