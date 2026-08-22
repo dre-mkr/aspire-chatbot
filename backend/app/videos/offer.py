@@ -17,7 +17,7 @@ import logging
 from typing import Any
 
 from app.domain import Language, Persona
-from app.videos.catalog import relevant_to
+from app.videos.catalog import chip_for, relevant_to
 
 logger = logging.getLogger(__name__)
 
@@ -73,4 +73,7 @@ def offer_for(state: Any, question: str) -> tuple[str, str] | None:
     # not listening -- which is the one thing the brief asks this not to be.
     if video.id in set(state.get("videos_offered") or ()):
         return None
-    return video.id, f"Watch the ASPIRE video about {video.topic.lower()}"
+    # In the reader's language. The chip's text is also what gets SENT when it
+    # is tapped, so an English chip in a French conversation both reads as an
+    # afterthought and -- if the wording drifts from `_WATCH` -- opens nothing.
+    return video.id, chip_for(video, Language(locale))

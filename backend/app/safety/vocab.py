@@ -25,12 +25,52 @@ class VocabViolation:
 # Applies at every band, adult included.
 
 _GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
-    "guaranteed return": ("guaranteed return", "guaranteed returns"),
-    "get rich": ("get rich", "get-rich", "getting rich"),
-    "risk-free": ("risk-free", "risk free", "riskfree"),
-    "crypto": ("crypto", "cryptocurrency", "cryptocurrencies", "bitcoin"),
-    "day trading": ("day trading", "day-trade", "day trade"),
-    "guaranteed profit": ("guaranteed profit", "guaranteed profits"),
+    "guaranteed return": (
+        "guaranteed return", "guaranteed returns",
+        # es
+        "rendimiento garantizado", "rendimientos garantizados",
+        "retorno garantizado", "retornos garantizados",
+        # fr
+        "rendement garanti", "rendements garantis",
+        "retour garanti", "retours garantis",
+    ),
+    "get rich": (
+        "get rich", "get-rich", "getting rich",
+        # es
+        "hacerse rico", "volverse rico", "hacerte rico",
+        # fr
+        "devenir riche", "s'enrichir", "senrichir",
+    ),
+    "risk-free": (
+        "risk-free", "risk free", "riskfree",
+        # es
+        "sin riesgo", "libre de riesgo", "sin ningún riesgo",
+        # fr
+        "sans risque", "sans aucun risque",
+    ),
+    "crypto": (
+        "crypto", "cryptocurrency", "cryptocurrencies", "bitcoin",
+        # es
+        "cripto", "criptomoneda", "criptomonedas",
+        # fr
+        "cryptomonnaie", "cryptomonnaies", "crypto-monnaie", "crypto-monnaies",
+    ),
+    "day trading": (
+        "day trading", "day-trade", "day trade",
+        # es
+        "trading intradiario", "operar intradía",
+        # fr
+        "trading intrajournalier", "day-trading",
+    ),
+    "guaranteed profit": (
+        "guaranteed profit", "guaranteed profits",
+        # es
+        "ganancia garantizada", "ganancias garantizadas",
+        "beneficio garantizado", "beneficios garantizados",
+        # fr
+        "profit garanti", "profits garantis",
+        "bénéfice garanti", "bénéfices garantis",
+    ),
 }
 
 
@@ -53,37 +93,102 @@ _ALLOW: Final[dict[str, tuple[str, ...]]] = {
     "adult": (),
 }
 
-#: Banned terms per band, with every variant written out.
+#: Banned terms per band, with every variant written out -- IN ALL THREE LOCALES.
+#:
+#: The key stays English because it is an identifier: it is what `explain()` puts
+#: in a reprompt, what the tests assert on, and what the persona cards list. Only
+#: the VARIANTS are multilingual.
+#:
+#: Why they have to be. `check()` runs on the finished reply in `safety_out`,
+#: whatever language it is in, and these patterns are what it matches against.
+#: With English variants alone the gate was a no-op the moment the model answered
+#: in Spanish or French -- "un interés cada año" and "un intérêt chaque année"
+#: both reached a five-year-old untouched, while the English sentence saying the
+#: same thing was stripped. The word caps were never affected; they count words
+#: in any language. The ladder was.
+#:
+#: Adding a language means adding variants here, and nowhere else.
 _BAN: Final[dict[str, dict[str, tuple[str, ...]]]] = {
     "5-8": {
-        "interest": ("interest",),
-        "compound": ("compound", "compounds", "compounded", "compounding"),
-        "investment": ("investment", "investments", "invest", "investing", "investor"),
-        "inflation": ("inflation", "inflationary"),
-        "dividend": ("dividend", "dividends"),
-        "credit": ("credit", "credits"),
-        "loan": ("loan", "loans"),
-        "percent": ("percent", "percents", "percentage", "percentages", "%"),
-        "portfolio": ("portfolio", "portfolios"),
+        "interest": ("interest", "interés", "intereses", "intérêt", "intérêts"),
+        "compound": (
+            "compound", "compounds", "compounded", "compounding",
+            "compuesto", "compuestos", "capitalización", "capitalizado",
+            "composé", "composés", "capitalisation", "capitalisé",
+        ),
+        "investment": (
+            "investment", "investments", "invest", "investing", "investor",
+            "inversión", "inversiones", "invertir", "invierte", "invertido",
+            "inversionista",
+            "investissement", "investissements", "investir", "investit",
+            "investi", "investisseur",
+        ),
+        "inflation": (
+            "inflation", "inflationary", "inflación", "inflacionario",
+            "inflationniste",
+        ),
+        "dividend": (
+            "dividend", "dividends", "dividendo", "dividendos",
+            "dividende", "dividendes",
+        ),
+        "credit": ("credit", "credits", "crédito", "créditos", "crédit", "crédits"),
+        "loan": (
+            "loan", "loans", "préstamo", "préstamos",
+            "prêt", "prêts", "emprunt", "emprunts",
+        ),
+        "percent": (
+            "percent", "percents", "percentage", "percentages", "%",
+            "por ciento", "porcentaje", "porcentajes",
+            "pour cent", "pourcent", "pourcentage", "pourcentages",
+        ),
+        "portfolio": (
+            "portfolio", "portfolios", "portafolio", "portafolios",
+            "portefeuille", "portefeuilles",
+        ),
     },
     "9-12": {
-        "compound": ("compound", "compounds", "compounded", "compounding"),
-        "inflation": ("inflation", "inflationary"),
-        "dividend": ("dividend", "dividends"),
-        "portfolio": ("portfolio", "portfolios"),
-        "credit score": ("credit score", "credit scores", "credit rating"),
-        "loan": ("loan", "loans"),
+        "compound": (
+            "compound", "compounds", "compounded", "compounding",
+            "compuesto", "compuestos", "capitalización", "capitalizado",
+            "composé", "composés", "capitalisation", "capitalisé",
+        ),
+        "inflation": (
+            "inflation", "inflationary", "inflación", "inflacionario",
+            "inflationniste",
+        ),
+        "dividend": (
+            "dividend", "dividends", "dividendo", "dividendos",
+            "dividende", "dividendes",
+        ),
+        "portfolio": (
+            "portfolio", "portfolios", "portafolio", "portafolios",
+            "portefeuille", "portefeuilles",
+        ),
+        "credit score": (
+            "credit score", "credit scores", "credit rating",
+            "puntaje de crédito", "calificación crediticia", "historial crediticio",
+            "cote de crédit", "score de crédit",
+        ),
+        "loan": (
+            "loan", "loans", "préstamo", "préstamos",
+            "prêt", "prêts", "emprunt", "emprunts",
+        ),
     },
     "13-15": {
-        "derivative": ("derivative", "derivatives"),
-        "leverage": ("leverage", "leveraged", "leveraging"),
+        "derivative": (
+            "derivative", "derivatives", "derivado", "derivados",
+            "dérivé", "dérivés",
+        ),
+        "leverage": (
+            "leverage", "leveraged", "leveraging",
+            "apalancamiento", "apalancado", "apalancar",
+            "effet de levier", "effets de levier",
+        ),
         "amortisation": (
-            "amortisation",
-            "amortization",
-            "amortise",
-            "amortize",
-            "amortised",
-            "amortized",
+            "amortisation", "amortization", "amortise", "amortize",
+            "amortised", "amortized",
+            "amortización", "amortizar", "amortizado",
+            "amortissement", "amortir", "amorti",
         ),
     },
     "16-18": {},
