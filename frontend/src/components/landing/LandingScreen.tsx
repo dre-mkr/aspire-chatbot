@@ -230,7 +230,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</div>
 
 			{/* Elegant Header */}
-			<header className="relative z-10 w-full max-w-[104rem] mx-auto px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
+			<header className="landing-head relative z-10 w-full max-w-[104rem] mx-auto px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
 				<div className="flex items-center gap-8">
 					<Brandmark variant="header" />
 					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
@@ -293,7 +293,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			{/* Main Content */}
 			<main className="relative z-10 flex-1 w-full max-w-[104rem] mx-auto px-4 sm:px-8 flex flex-col justify-center">
 				{/* Hero Section */}
-				<div className="max-w-4xl mb-5 relative z-10">
+				<div className="max-w-4xl mb-5 relative z-10 landing-hero">
 					<h1 className="text-5xl md:text-6xl lg:text-[4.75rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
 						Where will your
 						<br />
@@ -450,7 +450,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 				</div>
 
 				{/* Cards Grid - Restored to Deep Brand Colors */}
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5 relative z-10">
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5 relative z-10 landing-cards">
 					{/* Ask ASPIRE Card */}
 					<button
 						type="button"
@@ -589,7 +589,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 				{/* `pb-10`: this row sat flush against the footer, so the guides card
 				    and the Saint Kitts and Nevis line touched with nothing between
 				    them. A closing line deserves its own air. */}
-				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-4">
+				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-4 landing-lower">
 					{/* Try something quick */}
 					<div className="lg:col-span-7">
 						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
@@ -738,21 +738,19 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 					  * in a 900px viewport. The row was `justify-between` with one
 					  * child, so this costs width that was already empty, not height.
 					  */}
-					<div className="flex flex-col gap-0.5 text-right text-[11px] leading-snug text-[#482977]/70">
+					<div className="flex flex-col gap-0.5 text-right text-[10.5px] leading-tight text-[#482977]/70">
 						<div className="font-semibold text-[#1A103C]">
-							A programme of the Government of St Kitts & Nevis
+							A programme of the Government of St Kitts &amp; Nevis &middot;
+							Ministry of Social Development and Gender Affairs
 						</div>
 						<div>
-							Ministry of Social Development and Gender Affairs &middot;{" "}
 							<a
 								className="underline underline-offset-2 hover:text-[#c22f99]"
 								href="tel:+18694671275"
 							>
 								(869) 467-1275
-							</a>
-						</div>
-						<div>
-							ASPIRE team &middot;{" "}
+							</a>{" "}
+							&middot;{" "}
 							<a
 								className="underline underline-offset-2 hover:text-[#c22f99]"
 								href="tel:+18696675566"
@@ -765,11 +763,9 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								href="mailto:aspire@gov.kn"
 							>
 								aspire@gov.kn
-							</a>
-						</div>
-						<div>
-							The Cable Office, Cayon Street, Basseterre &middot; Mon&ndash;Fri
-							9:00&nbsp;AM&ndash;3:00&nbsp;PM
+							</a>{" "}
+							&middot; The Cable Office, Cayon Street, Basseterre &middot;
+							Mon&ndash;Fri 9&ndash;3
 						</div>
 					</div>
 				</div>

@@ -8637,3 +8637,44 @@ a.source__site--link:hover .source__out {
 .app[data-rail="collapsed"] .rail-guide__picker {
 	display: none;
 }
+
+/* ── The landing, when the window is short ────────────────────────────────
+ *
+ * The page is designed to sit in one viewport with the footer in it, and at a
+ * comfortable height it has room to breathe. It stopped fitting once the
+ * footer gained the ministry line and the guide row gained real faces --
+ * 980px of content in a 900px window, with the footer 80px below the fold.
+ *
+ * Trimming the spacing outright fixed 900 and made every taller screen look
+ * cramped for no reason. So the generous spacing is the default and the trim
+ * is conditional, which is the pattern this file already uses for the rail at
+ * `max-height: 820px`.
+ *
+ * The measurements this is set from, at 1440x900: header 131, main 757,
+ * footer 92 -- 980 against 900. These rules recover the 80.
+ */
+@media (max-height: 940px) {
+	.landing-head {
+		padding-top: 0.75rem;
+		padding-bottom: 0.5rem;
+	}
+	.landing-hero,
+	.landing-cards {
+		margin-bottom: 0.75rem;
+	}
+	.landing-lower {
+		padding-bottom: 0.25rem;
+	}
+	.guide-selector--compact {
+		padding: 10px 24px 12px;
+	}
+	.guide-selector--compact .guide-selector__heading {
+		margin-bottom: 8px;
+	}
+	.guide-selector--compact .guide-card__pill {
+		margin-bottom: 5px;
+	}
+	.guide-selector--compact .guide-card__name {
+		margin-top: 5px;
+	}
+}
