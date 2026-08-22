@@ -8,10 +8,9 @@ import {
 	useState,
 } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
-import type { PersonaId } from "#/lib/aspire/personas";
+import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
-import type { AgeBand } from "#/lib/aspire/personas";
 import { PersonaPicker } from "./PersonaPicker";
 import { VoiceListening, VoiceTranscribing } from "./Voice";
 import type { VoiceSettingsProps } from "./VoiceSettings";
@@ -245,7 +244,11 @@ export function Composer({
 				) : (
 					<div className="composer__tools">
 						{/* First in the row: it is the widest-reaching control here, reading level included. */}
-						<PersonaPicker persona={persona} band={band} onChange={onPersonaChange} />
+						<PersonaPicker
+							persona={persona}
+							band={band}
+							onChange={onPersonaChange}
+						/>
 
 						{/* Voice settings live here, not beside the mic. */}
 						{voice.available ? (
@@ -310,7 +313,9 @@ export function Composer({
 								>
 									<SendIcon />
 									<span className="sr-only">
-										{live ? "Send message" : "Starting up. Send is not ready yet."}
+										{live
+											? "Send message"
+											: "Starting up. Send is not ready yet."}
 									</span>
 								</button>
 							)}

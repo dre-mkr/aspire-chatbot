@@ -1,7 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronDownIcon, PersonIcon } from "#/components/icons";
-import { type AgeBand, GUIDES, type PersonaId, guideFor } from "#/lib/aspire/personas";
+import {
+	type AgeBand,
+	GUIDES,
+	guideFor,
+	type PersonaId,
+} from "#/lib/aspire/personas";
 
 /** Who the assistant is talking to, chosen from the composer. */
 export function PersonaPicker({
@@ -171,7 +176,9 @@ export function PersonaPicker({
 									onClick={() => choose(option.persona, option.band)}
 								>
 									<span className="persona__tick" aria-hidden="true">
-										{selected?.guideId === option.guideId ? <CheckIcon /> : null}
+										{selected?.guideId === option.guideId ? (
+											<CheckIcon />
+										) : null}
 									</span>
 									<span className="persona__text">
 										<span className="persona__label">
@@ -184,7 +191,6 @@ export function PersonaPicker({
 									</span>
 								</button>
 							))}
-
 						</div>,
 						document.body,
 					)

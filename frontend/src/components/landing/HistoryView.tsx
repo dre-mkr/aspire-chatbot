@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { ViewHeader } from "./ViewHeader";
 import { useNavigate } from "@tanstack/react-router";
-import { conversationsQuery } from "#/lib/aspire/queries";
 import { groupByRecency } from "#/lib/aspire/history";
+import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
+import { ViewHeader } from "./ViewHeader";
 
 export function HistoryView({
 	onBack,
@@ -26,28 +26,36 @@ export function HistoryView({
 		onSelectChat
 			? onSelectChat(threadId)
 			: navigate({ to: "/chat/$chatId", params: { chatId: threadId } });
-	
+
 	return (
 		<div className="flex flex-col min-h-screen bg-[#0B051D] text-white">
 			<div className="border-b border-white/10">
 				<ViewHeader onBack={onBack} tone="dark" />
 			</div>
 			<main className="flex-1 flex flex-col p-8 max-w-4xl mx-auto w-full">
-				<h1 className="text-4xl font-display font-medium text-white mb-2">Chat History</h1>
-				<p className="text-white/60 mb-12">Review your past conversations and learning modules.</p>
-				
+				<h1 className="text-4xl font-display font-medium text-white mb-2">
+					Chat History
+				</h1>
+				<p className="text-white/60 mb-12">
+					Review your past conversations and learning modules.
+				</p>
+
 				{!groups || groups.length === 0 ? (
 					<div className="text-center py-12 bg-white/5 rounded-3xl border border-white/10">
 						<i className="ph-duotone ph-chat-circle text-4xl text-white/20 mb-4"></i>
-						<p className="text-white/50">You haven't started any conversations yet.</p>
+						<p className="text-white/50">
+							You haven't started any conversations yet.
+						</p>
 					</div>
 				) : (
 					<div className="flex flex-col gap-8">
-						{groups.map(group => (
+						{groups.map((group) => (
 							<div key={group.label}>
-								<h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-4">{group.label}</h2>
+								<h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-4">
+									{group.label}
+								</h2>
 								<div className="flex flex-col gap-3">
-									{group.items.map(chat => (
+									{group.items.map((chat) => (
 										<button
 											type="button"
 											key={chat.threadId}
@@ -58,7 +66,9 @@ export function HistoryView({
 												<i className="ph-duotone ph-chat-text text-xl"></i>
 											</div>
 											<div className="flex-1 overflow-hidden">
-												<h3 className="font-medium text-white truncate">{chat.title || "Untitled Conversation"}</h3>
+												<h3 className="font-medium text-white truncate">
+													{chat.title || "Untitled Conversation"}
+												</h3>
 												<p className="text-xs text-white/50 truncate">
 													{new Date(chat.updatedAt).toLocaleDateString()}
 												</p>
