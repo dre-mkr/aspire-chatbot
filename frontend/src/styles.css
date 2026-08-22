@@ -7913,10 +7913,13 @@ a.source__site--link:hover .source__out {
 	padding: 12px 0 28px;
 }
 
+/* Top-left, and the mark sits at the TOP of the text rather than centred
+   against it: the block is three lines now -- greeting, tagline, question --
+   and a mark floating beside the middle one reads as decoration. */
 .welcome__hero {
 	display: flex;
-	align-items: center;
-	gap: 18px;
+	align-items: flex-start;
+	gap: 16px;
 }
 
 .welcome__orb {
@@ -8676,5 +8679,59 @@ a.source__site--link:hover .source__out {
 	}
 	.guide-selector--compact .guide-card__name {
 		margin-top: 5px;
+	}
+}
+
+/* ── The empty thread's welcome ───────────────────────────────────────────
+ *
+ * This is the first thing in the chat now that choosing a guide no longer
+ * stages a question. It is the same sentence the landing hero opens with, one
+ * surface later, so it is set in the same display face -- a reader arriving
+ * from "Where will your money take you!" should recognise the voice.
+ */
+.welcome__mark {
+	width: 40px;
+	height: 40px;
+	flex: none;
+	border-radius: 12px;
+	object-fit: cover;
+	box-shadow: 0 4px 12px rgb(72 41 119 / 0.22);
+}
+
+.welcome__greeting {
+	font-family: var(--font-display);
+	font-weight: 500;
+	font-size: clamp(1.65rem, 3.4vw, 2.4rem);
+	line-height: 1.08;
+	letter-spacing: -0.015em;
+	color: var(--ink);
+	margin: 0;
+}
+
+/* Smaller than the greeting and quieter than the question under it: this line
+   is the promise, not the prompt. */
+.welcome__tagline {
+	font-size: 0.82rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	color: var(--magenta);
+	margin: 0.3rem 0 0;
+}
+
+.welcome__sub {
+	margin: 0.55rem 0 0;
+}
+
+/* The two verbs the reader is actually being offered. Italic rather than bold
+   so they read as emphasis in a sentence, not as links. */
+.welcome__sub em {
+	font-style: italic;
+	color: var(--plum);
+	font-weight: 600;
+}
+
+@media (max-width: 640px) {
+	.welcome__greeting {
+		font-size: 1.5rem;
 	}
 }

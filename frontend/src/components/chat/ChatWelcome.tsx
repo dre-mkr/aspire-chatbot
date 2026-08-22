@@ -33,8 +33,6 @@
  * surface further in.
  */
 
-import { displayName } from "#/lib/aspire/persona-name";
-
 export interface WelcomeCard {
 	/** What the reader taps. */
 	title: string;
@@ -170,6 +168,32 @@ export function cardsFor(
 	return YOUNG;
 }
 
+/**
+ * How the reader is addressed on the empty thread.
+ *
+ * "future builder" is the client's line and it is written for a child. Skye,
+ * Kaleb and Zion get it. Imani is a parent with four minutes and Azuri is a
+ * teacher deciding whether to use this with a class -- calling either of them a
+ * future builder reads as a product that has not noticed who is talking, which
+ * is the exact failure the six voices exist to avoid.
+ */
+function greetingFor(
+	persona: string | null | undefined,
+	band: string | null | undefined,
+): { line: string; emoji: string } {
+	const key = (persona ?? "").trim().toLowerCase();
+	if (key === "aurora") {
+		return { line: "Hi there — glad you came.", emoji: "\u{1F44B}" };
+	}
+	if (key === "nova") {
+		return { line: "Hi there — have a look around.", emoji: "\u{1F44B}" };
+	}
+	// stella, kaleb, orion and guest: the child and teen voices, and the one
+	// that has not been told who is reading.
+	void band;
+	return { line: "Hi there, future builder!", emoji: "\u{1F680}" };
+}
+
 export function ChatWelcome({
 	persona,
 	ageBand,
@@ -181,17 +205,48 @@ export function ChatWelcome({
 	onAsk: (question: string) => void;
 	onOpenVideos?: () => void;
 }) {
-	const name = displayName(persona, ageBand);
 	const cards = cardsFor(persona);
+	const greeting = greetingFor(persona, ageBand);
 
 	return (
 		<div className="welcome">
 			<div className="welcome__hero">
-				{/* The same face the assistant answers with, at rest. */}
-				<div className="orb welcome__orb" aria-hidden="true" />
+				{/* THE MARK, NOT THE GUIDE'S FACE.
+				 *
+				 * The guide's face is already on every answer below and on the
+				 * composer chip. Repeating it a third time in the same viewport
+				 * says nothing new -- and this block is the moment the reader
+				 * meets ASPIRE, not the moment they meet Skye. The A does that
+				 * job; the guide introduces themselves in their own first reply.
+				 */}
+				<img
+					className="welcome__mark"
+					src="/brand/aspire-mark.png"
+					alt=""
+					width={40}
+					height={40}
+					aria-hidden="true"
+				/>
 				<div>
-					<h2 className="welcome__greeting">Hi — I&rsquo;m {name}.</h2>
-					<p className="welcome__sub">What would you like to explore today?</p>
+					{/* Set in the display face the landing hero uses, because this is
+					 * the same sentence one surface later -- a reader who arrives
+					 * here from "Where will your money take you!" should recognise
+					 * the voice.
+					 *
+					 * The greeting is BAND-AWARE. "future builder" is written for a
+					 * child; it would read as faintly ridiculous to a teacher
+					 * evaluating the material or a parent with four minutes, so the
+					 * adult voices get an address of their own. */}
+					<h2 className="welcome__greeting">
+						{greeting.line} <span aria-hidden="true">{greeting.emoji}</span>
+					</h2>
+					<p className="welcome__tagline">
+						Ask. Play. Explore. Build your money future.
+					</p>
+					<p className="welcome__sub">
+						Welcome to ASPIRE AI. What would you like to <em>explore</em> or{" "}
+						<em>learn</em> today?
+					</p>
 				</div>
 			</div>
 
