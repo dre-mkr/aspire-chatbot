@@ -60,6 +60,7 @@ export async function streamAspire(
 		message,
 		threadId,
 		persona,
+		band,
 		language = "en",
 		simpleMode,
 		interaction,
@@ -76,7 +77,7 @@ export async function streamAspire(
 
 	let session: Awaited<ReturnType<typeof graphSession>>;
 	try {
-		session = await graphSession(thread, { locale: language, persona });
+		session = await graphSession(thread, { locale: language, persona, band });
 	} catch {
 		throw new AspireError(
 			"The assistant could not be reached. Please try again.",

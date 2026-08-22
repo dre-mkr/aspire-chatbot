@@ -49,9 +49,14 @@ export function EducatorsView({ onBack }: EducatorsViewProps) {
 							<div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-6">
 								<i className="ph-duotone ph-books text-2xl"></i>
 							</div>
-							<h3 className="text-2xl font-bold mb-4 text-[#1A103C]">The ECCB Financial Curriculum</h3>
+							<h3 className="text-2xl font-bold mb-4 text-[#1A103C]">The ASPIRE AI Financial Curriculum</h3>
 							<p className="text-[#482977]/80 leading-relaxed mb-4">
-								Educators are integral to delivering the financial literacy component of the ASPIRE Programme. Developed in collaboration with the Eastern Caribbean Central Bank (ECCB), this curriculum introduces students to key concepts that will shape their financial futures.
+								Educators are at the heart of ASPIRE&rsquo;s financial literacy
+								programme. Developed by the ASPIRE AI team in collaboration with
+								the Eastern Caribbean Central Bank, the curriculum introduces
+								students to the ideas that will shape their financial futures
+								&mdash; and gives every learner a guide who meets them at their
+								own age.
 							</p>
 							<div className="flex flex-wrap gap-2 mt-4">
 								<span className="bg-[#482977]/5 text-[#482977] px-3 py-1 rounded-full text-sm font-semibold">Budgeting</span>

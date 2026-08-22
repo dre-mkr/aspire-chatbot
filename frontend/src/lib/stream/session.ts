@@ -35,12 +35,20 @@ const held = new Map<string, GraphSession>();
 /** In-flight mints, so twelve chips tapped quickly mint one token, not twelve. */
 const minting = new Map<string, Promise<GraphSession>>();
 
-/** One cache entry per (thread, persona asked for, language asked for). */
+/** One cache entry per (thread, persona asked for, band asked for, language asked for).
+ *
+ * BAND IS PART OF THE KEY BECAUSE SKYE AND KALEB SHARE ONE. They are both
+ * `stella` and are told apart by band alone, so a key without it hands the two
+ * of them the same cached token -- and switching between them would change the
+ * face and the URL while every turn kept running as whoever was minted first.
+ * That is the exact bug this cache was rekeyed to fix for persona and locale;
+ * band is the third axis that has to travel with them.
+ */
 function keyFor(
 	threadId: string,
-	options: { locale?: string; persona?: string | null },
+	options: { locale?: string; persona?: string | null; band?: string | null },
 ): string {
-	return `${threadId}|${options.persona ?? ""}|${options.locale ?? ""}`;
+	return `${threadId}|${options.persona ?? ""}|${options.band ?? ""}|${options.locale ?? ""}`;
 }
 
 export function forget(threadId: string): void {
@@ -76,7 +84,13 @@ export function onPersonaRefused(
 /** The token for this thread, minting one if there is not one already. */
 export async function graphSession(
 	threadId: string,
-	options: { locale?: string; persona?: string | null; deviceId?: string } = {},
+	options: {
+		locale?: string;
+		persona?: string | null;
+		/** Honoured only inside the persona's own cards. See `anonymous_claims`. */
+		band?: string | null;
+		deviceId?: string;
+	} = {},
 ): Promise<GraphSession> {
 	const key = keyFor(threadId, options);
 
@@ -101,7 +115,12 @@ export async function graphSession(
 
 async function mint(
 	threadId: string,
-	options: { locale?: string; persona?: string | null; deviceId?: string },
+	options: {
+		locale?: string;
+		persona?: string | null;
+		band?: string | null;
+		deviceId?: string;
+	},
 ): Promise<GraphSession> {
 	const response = await fetch(`${API_URL}/v2/session`, {
 		method: "POST",
@@ -111,6 +130,9 @@ async function mint(
 			locale: options.locale ?? "en",
 			device_id: options.deviceId ?? "browser",
 			...(options.persona ? { persona: options.persona } : {}),
+			// Only sent when asked for. Absent means the server's own default for
+			// the persona, which is how every older client keeps behaving.
+			...(options.band ? { age_band: options.band } : {}),
 		}),
 	});
 

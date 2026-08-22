@@ -126,6 +126,11 @@ export function ChatScreen() {
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
 		persona,
+		// The band travels with the persona, because for `stella` it IS the
+		// persona as far as the reader is concerned: Skye at 5-8, Kaleb at 9-12.
+		// It was already in the URL and already driving the orb's colour; the
+		// turn itself was the one place it never reached.
+		band,
 		// Titles follow the interface language, read at call time since voice is built below.
 		getLanguage: () => voice.language,
 		getAutoLanguage: () => voice.autoLanguage,
