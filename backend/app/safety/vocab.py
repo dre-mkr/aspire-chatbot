@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Final
 
@@ -196,9 +197,39 @@ _BAN: Final[dict[str, dict[str, tuple[str, ...]]]] = {
 }
 
 
+def strip_accents(text: str) -> str:
+    """`interés` and `interes` are the same word to this gate.
+
+    ACCENTS ARE OPTIONAL IN PRACTICE AND THE GATE CANNOT BE. A model writing
+    quickly drops them, a phone keyboard without a Spanish layout drops them, a
+    voice transcript drops them, and a reader typing fast drops them. Before
+    this, every one of those cases walked a banned word past a five-year-old:
+
+        "un interés cada año"  -> caught
+        "un interes cada ano"  -> CLEAN, and the child reads it
+
+    Decomposes and discards the combining marks, so the fold is one rule rather
+    than a table of pairs -- it covers French circumflexes and cedillas, Spanish
+    tildes and diaereses, and anything a fourth language brings, without being
+    told about them. `ñ` folds to `n`, which is right HERE: this gate compares
+    against a fixed list of banned forms, and no pair on it is told apart by
+    that mark alone.
+    """
+    return "".join(
+        ch
+        for ch in unicodedata.normalize("NFD", text)
+        if not unicodedata.combining(ch)
+    )
+
+
 def _compile(variants: tuple[str, ...]) -> re.Pattern[str]:
-    """A whole-word, case-insensitive alternation over one term's variants."""
-    ordered = sorted(variants, key=len, reverse=True)
+    """A whole-word, case-insensitive alternation over one term's variants.
+
+    Compiled over the ACCENT-FOLDED forms, and `check` folds the text it scans
+    the same way, so the two always meet. Folding one side only is worse than
+    folding neither: it looks like coverage and silently has none.
+    """
+    ordered = sorted({strip_accents(v) for v in variants}, key=len, reverse=True)
     parts = []
     for variant in ordered:
         escaped = re.escape(variant)
@@ -272,13 +303,18 @@ def check(text: str, band: str) -> list[VocabViolation]:
         return []
 
     patterns = _PATTERNS.get(band, _PATTERNS["adult"])
+    # Scanned folded, REPORTED against the original. `strip_accents` removes
+    # combining marks without changing how many characters precede any given
+    # letter, so the offsets a caller uses to blank a word still land on it --
+    # and `matched` shows what the reader actually wrote, accents and all.
+    folded = strip_accents(text)
     violations: list[VocabViolation] = []
     for term, pattern in patterns.items():
-        for match in pattern.finditer(text):
+        for match in pattern.finditer(folded):
             violations.append(
                 VocabViolation(
                     term=term,
-                    matched=match.group(0),
+                    matched=text[match.start() : match.end()],
                     start=match.start(),
                     end=match.end(),
                 )

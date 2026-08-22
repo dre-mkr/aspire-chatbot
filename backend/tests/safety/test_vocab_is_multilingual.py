@@ -143,3 +143,70 @@ class TestTheKeysStayEnglish:
             "a locale was added to Language. Add its variants to vocab._BAN and "
             "vocab._GENERAL_BAN, then widen this test."
         )
+
+class TestAccentsAreOptionalButTheGateIsNot:
+    """`interes` and `interés` are the same word to a child.
+
+    The trilingual ladder shipped accent-SENSITIVE, which meant it covered the
+    careful spelling and nothing else:
+
+        "un interés cada año"  -> caught
+        "un interes cada ano"  -> clean, and the child reads it
+
+    A model writing quickly drops accents. So does a phone with no Spanish
+    layout, a voice transcript, and anyone typing fast. Every one of those
+    walked a banned word straight past the gate, which is worse than the
+    English-only ladder it replaced -- because it looked covered.
+
+    Caught by the ASPIRE native-language kit, whose own `es.yaml` normalises
+    "sin tildes" before matching for exactly this reason.
+    """
+
+    @pytest.mark.parametrize(
+        ("band", "term", "text"),
+        [
+            ("5-8", "interest", "El banco te paga un interes cada ano."),
+            ("5-8", "interest", "La banque te verse un interet chaque annee."),
+            ("5-8", "investment", "Es una inversion del gobierno."),
+            ("5-8", "investment", "C est un investissement."),
+            ("9-12", "compound", "Se llama interes compuesto."),
+            ("9-12", "loan", "Es como un prestamo del banco."),
+            ("13-15", "leverage", "Eso se hace con apalancamiento."),
+        ],
+    )
+    def test_the_unaccented_spelling_is_caught_too(self, band, term, text):
+        assert term in {v.term for v in vocab.check(text, band)}, (
+            f"{text!r} passed the {band} gate. Accents are optional in "
+            f"practice and this gate is not."
+        )
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Es un juego muy interesante.",
+            "C est une histoire interessante.",
+            "Necesitas guardar tu dinero.",
+            "Il faut comprendre l argent.",
+            "La tienda del centro comercial.",
+        ],
+    )
+    def test_folding_did_not_widen_the_net(self, text):
+        """The other half. `interesante` shares five letters with the banned
+        term and is a word a six-year-old uses; stripping it mid-sentence is
+        how a gate gets switched off by the next person who trips over it."""
+        found = vocab.check(text, "5-8")
+        assert not found, f"{text!r} flagged for {[v.term for v in found]}"
+
+    def test_the_violation_reports_what_was_actually_written(self):
+        """The gate matches folded; the caller blanks the original. If these
+        drifted apart the blanking would land on the wrong characters."""
+        found = vocab.check("El banco paga interés hoy.", "5-8")
+        assert [v.term for v in found] == ["interest"]
+        assert found[0].matched == "interés"
+
+    @pytest.mark.parametrize(
+        "word", ["interés", "año", "français", "École", "naïve", "sécurité"]
+    )
+    def test_folding_preserves_length_so_offsets_stay_true(self, word):
+        assert len(vocab.strip_accents(word)) == len(word)
+
