@@ -1,4 +1,25 @@
-"""One card per persona and age band, shared by every agent that speaks to a reader."""
+"""One card per persona and age band, shared by every agent that speaks to a reader.
+
+EVERY FILE IN THIS DIRECTORY IS NAMED FOR A PERSONA **KEY**, NEVER FOR THE NAME
+A READER SEES. `aurora.adult.md` is not a file about somebody of that name; it
+is the card the `aurora` key loads, and the label the reader is shown is looked
+up separately in `names.py`.
+
+The names are deliberately not repeated here. `names.py` is the one place they
+live, and a second copy in a comment is a second thing to forget on the day one
+of them changes.
+
+`stella` is the proof that the two cannot be merged: it is ONE key with TWO
+labels -- a different name at 5-8 and at 9-12 -- so a directory named for labels
+would need two files for one access row, one session token and one matrix entry.
+
+And the note goes here, in Python, rather than in the directory itself. Every
+`.md` file beside this one IS a card: the card tests glob `*.md` and assert that
+each result carries a CARE block, a refusal heading and a contact route, so a
+README added for the sake of a passing reader fails them. Putting the note
+inside a card is worse -- it would be prose the model reads, and a retired label
+in it is a thing the cards are linted for.
+"""
 
 from __future__ import annotations
 

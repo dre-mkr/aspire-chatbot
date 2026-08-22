@@ -219,86 +219,6 @@ def for_persona(persona: Persona | None) -> tuple[Video, ...]:
     return tuple(video for video in _VIDEOS if persona in video.personas)
 
 
-#: Words a REQUEST is made of, which are not what the request is about.
-#:
-#: "I want to watch a video about saving" is a request whose subject is one
-#: word long. Every other word in it is scaffolding -- and two of them,
-#: `want` and `share`, are supporting terms in the catalog above. Scored
-#: naively, "I want to watch a video" asks for the scarcity film on the
-#: strength of `want` alone, which is how a reader asking for anything at all
-#: gets handed one particular thing. Strip the grammar, then score what is
-#: left.
-_REQUEST_NOISE: Final[frozenset[str]] = frozenset(
-    {
-        # English scaffolding
-        "watch", "watching", "play", "show", "see", "view", "me", "us", "my",
-        "the", "that", "this", "a", "an", "some", "any", "one", "another",
-        "aspire", "video", "videos", "story", "stories", "film", "films",
-        "movie", "cartoon", "clip", "please", "yes", "yeah", "sure", "ok",
-        "okay", "want", "wants", "would", "like", "love", "can", "could",
-        "may", "i", "we", "you", "to", "for", "about", "on", "of", "have",
-        "has", "get", "got", "give", "let", "us", "with", "and", "or", "do",
-        "does", "is", "are", "there", "here", "what", "which", "got",
-        # Spanish
-        "ver", "mira", "mirar", "muestra", "mostrar", "pon", "poner", "quiero",
-        "puedo", "por", "favor", "el", "la", "un", "una", "cuento", "sobre",
-        # French
-        "voir", "montre", "montrer", "regarder", "regarde", "veux", "peux",
-        "sil", "plait", "le", "les", "une", "histoire", "sur",
-    }
-)
-
-
-def requested(
-    text: str,
-    *,
-    language: Language = Language.EN,
-) -> tuple[Video, ...]:
-    """The videos an EXPLICIT request is asking for. Possibly none, possibly all.
-
-    Deliberately NOT filtered by persona, and that is the point of it.
-
-    `for_persona` governs what is pushed at a reader who did not ask -- an
-    adult mid-way through an eligibility question is not the audience for an
-    animated children's story, and appending one to her answer reads as not
-    listening. None of that reasoning survives her typing "show me the video".
-    A reader who ASKS has told us they are the audience, and a government
-    service that answers "not for you" to a parent asking to see the material
-    her child is being taught has no defensible reason for it.
-
-    It matters most for the reader least able to say so. The videos are the one
-    thing in this product that is not text; a parent who reads with difficulty
-    is exactly who needs them and exactly who will not find the Videos panel
-    unaided.
-
-    Returns, in descending order of fit:
-
-    * one video, when the request names a subject
-    * every video, when it does not -- "show me a video" is a request for the
-      library, and the caller offers the choice rather than guessing at it
-    * nothing, outside English, because both files are English and offering a
-      Spanish reader an English cartoon is worse than not offering
-    """
-    if language is not Language.EN:
-        return ()
-
-    index = _term_index()
-    scores: dict[str, int] = {}
-    for word in _WORD.findall(_fold(text or "")):
-        if word in _REQUEST_NOISE:
-            continue
-        for video_id, is_strong in index.get(word, ()):
-            scores[video_id] = scores.get(video_id, 0) + (2 if is_strong else 1)
-
-    if not scores:
-        # A request with no subject in it. They asked for a video; give them
-        # the shelf rather than a guess at which one they meant.
-        return _VIDEOS
-    ranked = sorted(scores, key=lambda vid: (-scores[vid], vid))
-    top = scores[ranked[0]]
-    return tuple(_BY_ID[vid] for vid in ranked if scores[vid] == top)
-
-
 def relevant_to(
     text: str,
     *,
@@ -357,3 +277,74 @@ def relevant_to(
     if len(ranked) > 1 and score(winner) == score(ranked[1]):
         return None
     return _BY_ID[winner]
+
+
+#: The words a person uses to ASK, stripped before the topic is read.
+#:
+#: Found by a test, and it is the trap this whole function walks into otherwise:
+#: "I want to watch a video" contains `want`, which is a supporting term for the
+#: scarcity film, so a reader who named no subject at all was handed a story
+#: about needs and wants -- matched on the grammar of their request rather than
+#: on anything they said. Every phrase here is scaffolding, never subject.
+#:
+#: `want` is removed only in `want to`, because "the needs and wants video" is a
+#: reader naming the topic and the same four letters have to survive that.
+_REQUEST_NOISE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:"
+    r"i|we|you|me|us|the|a|an|some|please|do|does|got|have|has|any|"
+    r"is|are|there|can|could|may|would|"
+    r"wants? to|d? ?like to|"
+    r"watch|watching|play|playing|show|see|view|open|start|"
+    r"videos?|films?|cartoons?|"
+    r"ver|mira|muestra|pon|quiero|voir|montre|regarder|veux"
+    r")\b"
+)
+
+
+def requested(
+    text: str,
+    *,
+    language: Language = Language.EN,
+) -> tuple[Video, ...]:
+    """The videos an EXPLICIT request is asking for. Possibly none, possibly all.
+
+    A different question from `relevant_to`, with a deliberately different bar,
+    and the distinction is the whole of this fix.
+
+    `relevant_to` decides whether to VOLUNTEER a video after answering something
+    else. Its bar is high in both directions because the cost of being wrong is
+    an assistant that interrupts: two keyword hits, and a clear winner, or
+    nothing.
+
+    This function runs only once the reader has said, in words, that they want a
+    video. The cost of being wrong has inverted. Refusing to name one because
+    they typed a single keyword is the failure now, and a tie is not a reason to
+    give them nothing -- it is a reason to show them both and let them pick.
+
+    So: one hit is enough, ties are kept rather than discarded, and the caller
+    decides what to do with a list of zero, one or many.
+
+    **Not filtered by persona.** `for_persona` gates what a reader may be
+    OFFERED, on the correct reasoning that a guardian asking about eligibility
+    is not the audience for an animated story. Somebody who has typed "show me
+    a video" is not being offered anything -- they are browsing, and browsing
+    has never been filtered. The teacher asking for the Captain Careful film is
+    the client's own best demo of this product, and the offer filter would have
+    refused it.
+    """
+    if language is not Language.EN:
+        return ()
+
+    index = _term_index()
+    subject = _REQUEST_NOISE.sub(" ", _fold(text or ""))
+    hits: dict[str, int] = {}
+    for word in _WORD.findall(subject):
+        for video_id, is_strong in index.get(word, ()):
+            hits[video_id] = hits.get(video_id, 0) + (2 if is_strong else 1)
+
+    if not hits:
+        return ()
+    best = max(hits.values())
+    # Everything at the top score. One winner plays; a tie is offered as a
+    # choice, which is a better answer than the silence a tie produces above.
+    return tuple(video for video in _VIDEOS if hits.get(video.id, 0) == best)

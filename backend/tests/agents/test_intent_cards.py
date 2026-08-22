@@ -640,3 +640,76 @@ class TestEveryCardIntentBypassesTheResponseCache:
 
         ordinary = TurnRecord(thread_id="t", question="q", reply="ASPIRE is a programme.")
         assert cacheable(ordinary)
+
+
+class TestASeventeenYearOldIsNotSentToFetchAParent:
+    """Two of the seven traced readers, and the traces walked past it.
+
+    Every minor band collapsed into one `child` audience whose copy says "ask
+    your parent or guardian". Correct for Nathan at seven. Wrong for Jayden at
+    seventeen and Shanice at fourteen, against a rule already in the corpus:
+
+        ASP-049  "From age 12, an ASPIRE participant can also register for
+                  their own account at aspire.gov.kn or at a branch."
+        ASP-050  the same, in the reader's own words.
+    """
+
+    def test_the_teen_bands_are_told_the_published_rule(self):
+        from app.graph.nodes.cards import _REGISTRATION_HELP, _audience
+
+        for band in ("13-15", "16-18"):
+            audience = _audience("orion", band, "how do I sign up")
+            assert audience == "young_person", band
+            text = _REGISTRATION_HELP[audience]["en"].lower()
+            assert "from age 12" in text, f"{band} is still not told the rule"
+            assert "aspire.gov.kn" in text
+
+    def test_the_oldest_minors_were_the_worst_served(self):
+        """`orion` is not `stella` and `16-18` was not in the band list, so a
+        seventeen-year-old fell through to `unaccompanied` and was told to
+        "create a guardian account" -- advice for an adult applying on somebody
+        else's behalf, handed to a child applying for themselves."""
+        from app.graph.nodes.cards import _REGISTRATION_HELP, _audience
+
+        audience = _audience("orion", "16-18", "how do I sign up")
+        assert audience != "unaccompanied"
+        assert "guardian account" not in _REGISTRATION_HELP[audience]["en"]
+
+    def test_it_stays_honest_about_what_this_assistant_does(self):
+        """ASP-049's second half matters as much as its first. "You can register
+        yourself" alone sends a fourteen-year-old round a loop."""
+        from app.graph.nodes.cards import _REGISTRATION_HELP
+
+        assert "parent or guardian" in _REGISTRATION_HELP["young_person"]["en"].lower()
+
+    def test_applying_for_a_child_is_a_guardian_question_at_any_age(self):
+        """A sixteen-year-old can be a parent, and Ivorine Hodge at 63 is
+        raising her granddaughter with no custody paperwork. Both need the
+        guardian route, and neither is identified by their band."""
+        from app.graph.nodes.cards import _audience
+
+        for message in (
+            "i want to register my daughter",
+            "is for my granddaughter. I'm not she mother",
+            "can I sign up my son",
+        ):
+            assert _audience("orion", "16-18", message) == "unaccompanied", message
+
+    def test_the_youngest_are_settled_before_the_message_is_read(self):
+        """Order is the safety property. A nine-year-old typing "register my
+        child" is copying a phrase, not raising one -- and reading intent out of
+        a child's prose to widen what they are told is the mistake
+        `_ANONYMOUS_DEFAULT` was moved twice to avoid."""
+        from app.graph.nodes.cards import _audience
+
+        for band in ("5-8", "9-12"):
+            assert _audience("stella", band, "i want to register my child") == "child"
+
+    def test_every_audience_has_copy_and_chips_in_every_locale(self):
+        """A new audience with a missing locale is a KeyError in front of a reader."""
+        from app.graph.nodes.cards import _REGISTRATION_CHIPS, _REGISTRATION_HELP
+
+        assert set(_REGISTRATION_HELP) == set(_REGISTRATION_CHIPS)
+        for audience, copy in _REGISTRATION_HELP.items():
+            assert set(copy) == {"en", "es", "fr"}, audience
+            assert set(_REGISTRATION_CHIPS[audience]) == {"en", "es", "fr"}, audience

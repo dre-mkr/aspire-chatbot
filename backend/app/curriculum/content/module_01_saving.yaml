@@ -41,15 +41,32 @@ concepts:
     prerequisites: [save]
     vocabulary: [goal, save, wait, money]
 
+  # `scarcity` BELONGS HERE AND IS DELIBERATELY NOT HERE YET.
+  #
+  # The pedagogy is not in dispute: the client's own material for the youngest
+  # band teaches scarcity FIRST, before needs and wants, because it is the *why*
+  # behind "needs come first". Without it that is a rule to memorise; with it, a
+  # conclusion a child reaches. We even have the video -- `captain-careful
+  # -scarcity` is Lesson 1 of that same material.
+  #
+  # What cannot ship is the node WITHOUT the lesson. Mastery is evidence and
+  # evidence comes from a lesson's check questions, so a concept nothing teaches
+  # can never be mastered -- and if `need` depends on it, `need` never opens, and
+  # `budget` depends on `need`. Two of the five lessons, closed to every learner
+  # in every band, with nothing raising a word.
+  #
+  # Add it back WITH its lesson at order 1, authored from that material rather
+  # than invented, and repoint `need` to [scarcity, spend] in the same commit.
+
   - id: need
     name: Needs and wants
-    band_min: "9-12"
+    band_min: "5-8"
     prerequisites: [spend]
     vocabulary: [need, want, spend, money]
 
   - id: budget
     name: Making a plan for your money
-    band_min: "9-12"
+    band_min: "5-8"
     prerequisites: [need, goal]
     vocabulary: [budget, save, spend, need, want, goal]
 
@@ -208,7 +225,13 @@ lessons:
         prompt:
           "5-8": "Your goal costs ten coins. You put in one coin every week. How many weeks?"
           "9-12": "A goal costs EC$100 and you keep EC$10 a week. How many weeks?"
-          "13-15": "A goal costs EC$450 and you keep EC$25 a week. Roughly how many weeks?"
+          # WAS EC$450 at EC$25, whose answer is 18 -- and the key said "Ten".
+          # The third hint rung admitted it in the same breath: "EC$450 at EC$25
+          # a week is eighteen, so ten is the closest of these." The lesson
+          # taught a fourteen-year-old to divide, then marked the division wrong.
+          # Joseph Lin checks arithmetic; so does a judge with a rubric.
+          # EC$250 at EC$25 is exactly ten, which is what the options already say.
+          "13-15": "A goal costs EC$250 and you keep EC$25 a week. How many weeks?"
         options: ["Ten", "Two", "One hundred"]
         answer: 0
         hints:
@@ -222,8 +245,11 @@ lessons:
             - "It is ten. EC$100 divided by EC$10 a week is ten weeks."
           "13-15":
             - "Close. Divide the goal by what you keep each week."
-            - "It is one of these two: ten, or one hundred?"
-            - "It is about ten weeks -- EC$450 at EC$25 a week is eighteen, so ten is the closest of these."
+            # Rung 2 named options 0 and 2 while `narrow_options` renders 0 and 1,
+            # so the reader was told to choose between two things and shown a
+            # different two.
+            - "It is one of these two: ten, or two?"
+            - "It is ten. EC$250 divided by EC$25 a week is ten weeks exactly."
 
       - id: q2_name_a_goal
         prompt:
@@ -240,6 +266,10 @@ lessons:
     order: 4
     objective: The learner can sort ordinary purchases into needs and wants, and sees that the line is a judgement rather than a rule.
     teach_points:
+      "5-8":
+        - "A need is something you must have to live. Food. Water. Clothes. A home."
+        - "A want is something you would like. A toy. A treat."
+        - "Wanting things is fine. But needs come first."
       "9-12":
         - "A need is something you have to have. A want is something you would like."
         - "Needs come first when the money is short -- that is the only rule here."
@@ -248,7 +278,15 @@ lessons:
         - "Needs are non-negotiable: food, school fees, transport to get there."
         - "Wants are everything else, and wanting things is not a character flaw."
         - "The line moves with circumstances. Shoes are a need; a particular brand of shoes is a want."
+      "16-18":
+        - "Once you are earning, the needs list gets longer and quieter: transport, phone credit for work, your share at home."
+        - "A want you have planned for is not a failure of discipline. An unplanned need is what actually breaks a month."
+        - "Sort your own spending honestly once, on paper. Most people find one thing they had filed on the wrong side."
     examples:
+      "5-8":
+        - "Water is a need. A snow cone is a want."
+        - "School shoes are a need. A toy is a want."
+        - "When there is not enough for everybody, we share, and needs go first."
       "9-12":
         - "School shoes are a need. A third pair in your favourite colour is a want."
         - "Lunch is a need. Patties every single day is a want."
@@ -257,15 +295,25 @@ lessons:
         - "A school bag is a need. The one everyone has this year is a want."
         - "Data for your schoolwork is a need. Data for six hours of video is a want."
         - "A Carnival costume is a want -- and a want you have saved for is a perfectly good reason to spend."
+      "16-18":
+        - "Bus fare to a job interview is a need. The shoes you would prefer to wear to it are a want."
+        - "Your share of the light bill at home is a need, and it is the one people forget to plan for."
+        - "CFBC registration is a need in September. It stops being negotiable the week before."
     suggested_widget_kind: sort_buckets
     check_questions:
       - id: q1_sort
         prompt:
+          "5-8": "Food to eat -- need or want?"
           "9-12": "Lunch at school -- need or want?"
           "13-15": "Transport to get to school -- need or want?"
+          "16-18": "Your share of the light bill at home -- need or want?"
         options: [Need, Want]
         answer: 0
         hints:
+          "5-8":
+            - "Could you live without it?"
+            - "One of these two. What happens if you have none?"
+            - "It is a need. You must eat every day."
           "9-12":
             - "Think about what happens to your day if you do not have it."
             - "One of these two. Could you get through the school day without it?"
@@ -274,6 +322,65 @@ lessons:
             - "Ask what stops happening without it."
             - "One of these two. Which one means you cannot attend?"
             - "It is a need -- without it you do not get to school at all."
+          "16-18":
+            - "Ask who else it affects, not just you."
+            - "One of these two. What happens in the house if nobody pays it?"
+            - "It is a need. A shared bill is still a bill, and it is the one most often left out of a plan."
+
+      - id: q2_the_line_moves
+        prompt:
+          "5-8": "Tell Skye one need and one want of your own."
+          "9-12": "Name one thing that could be a need OR a want, depending."
+          "13-15": "Give me something that sits in between, and say what would push it either way."
+          "16-18": "Name one thing you have filed on the wrong side, and say why."
+        graded: false
+        accept: [shoes, phone, data, bag, food, transport, bus, uniform, lunch, depends, sometimes, because]
+
+    guide:
+      educator:
+        "5-8":
+          timing_minutes: 35
+          materials: ["Two labelled buckets or hoops", "Ten picture cards of everyday items"]
+          misconceptions:
+            - wrong: "They sort by what costs more, so an expensive toy becomes a need."
+              say: "A dear want is still a want. Could you live without it?"
+            - wrong: "They call everything a need, because they want all of it."
+              say: "Show me what happens if it disappears. Do you stop, or do you carry on?"
+          extension: "Ask them to find one need and one want in their own school bag."
+        "9-12":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They treat the line as fixed and argue about the in-between ones."
+              say: "You are both right. Say what would move it."
+            - wrong: "They assume a need must be boring."
+              say: "Nothing about a need says it cannot be enjoyable. Try again."
+          extension: "Give them the taxi example and ask them to argue both sides."
+        "13-15":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They judge each other's wants, and the sorting turns moral."
+              say: "We are sorting, not judging. Wanting things is not a fault."
+            - wrong: "They forget that circumstances move the line."
+              say: "Same item, different household. Does the answer change?"
+          extension: "Ask them to sort one week of their own spending and count the in-betweens."
+      guardian:
+        "5-8":
+          doing: "Telling apart what we must have and what we would like."
+          do_together: "At the shop, hold up two things and ask which one we could not go home without."
+          ask_them: "Which one is a need? How do you know?"
+          got_it_sounds_like: "They give a reason, not just a word. Food, because we have to eat."
+        "9-12":
+          doing: "Sorting ordinary spending into needs and wants, including the ones in between."
+          do_together: "On the way home, ask which two things in the bag were needs and which were not."
+          ask_them: "Was the bus fare a need today, or could we have walked?"
+          got_it_sounds_like: "They notice something sits in between, and can say what would move it."
+        "13-15":
+          doing: "Working out that the needs-and-wants line moves with circumstances."
+          do_together: "Ask them to name one thing that is a need for us and a want for somebody else."
+          ask_them: "What would have to change for that to move sides?"
+          got_it_sounds_like: "They argue it both ways without deciding somebody is wrong."
 
   # ── 5. A simple plan ────────────────────────────────────────────────────
   - id: l05_a_simple_plan
@@ -282,6 +389,10 @@ lessons:
     order: 5
     objective: The learner can split an amount of money into keeping, spending and sharing, and explain their split.
     teach_points:
+      "5-8":
+        - "A plan says where your money goes before you get it."
+        - "Keep some. Spend some. Share some."
+        - "Money can run out. So needs come first."
       "9-12":
         - "A plan for your money says where each part goes before it arrives."
         - "One easy plan: keep some, spend some, share some."
@@ -290,34 +401,116 @@ lessons:
         - "Decide the split on payday, not at the till. The order is what makes it hold."
         - "Keep first: move the saving out before the spending money is in front of you."
         - "Review it when your money changes, not every week -- a plan you rewrite constantly is not a plan."
+      "16-18":
+        - "A plan is what turns an amount into a month. Without one, the money decides."
+        - "Keep first, then the fixed things you owe, then what is left is genuinely yours."
+        - "Money here is seasonal. Plan the thin months in the good ones, not in September."
     examples:
+      "5-8":
+        - "You have three coins. One to keep, one to spend, one to share."
+        - "Grandma gives you six dollars at Christmas. Two to keep, three to spend, one for your brother."
       "9-12":
         - "You get EC$10 for helping out. EC$4 kept, EC$5 spent, EC$1 shared with your little sister."
         - "Christmas money is EC$50. Half kept for the bicycle, half for gifts."
       "13-15":
         - "EC$200 from a Saturday job: EC$80 to the account, EC$100 to spend, EC$20 towards a gift for your mother."
         - "You earn more in December than in February -- keep the same percentage, not the same amount."
-    suggested_widget_kind: allocator
+      "16-18":
+        - "EC$900 in a good month and EC$400 in a quiet one. Plan on the EC$400 and treat the rest as a good month."
+        - "Sugar Mas work pays in January. School costs land in September. The plan is what carries one to the other."
+    # `proportion`, not `allocator`: this lesson is now open from 5-8 and
+    # BAND_KINDS["5-8"] does not permit an allocator. Three tins is a
+    # proportion; the allocator is the same idea with a control a
+    # five-year-old cannot drive. (l02 has the same mismatch and is left
+    # alone here -- it is pre-existing and not this patch's to change.)
+    suggested_widget_kind: proportion
     check_questions:
       - id: q1_when_to_decide
         prompt:
+          # WAS "You have three coins. Your plan says keep one. How many can you
+          # spend?" -- a counting question, sharing the options of a WHEN
+          # question. A five-year-old was shown three timing chips and a hint
+          # ladder ending "Two. One kept, two to use", which is not on screen.
+          # `options` is one list for every band, so the 5-8 prompt has to ask
+          # what the options answer.
+          "5-8": "When do you put your keeping coin in the tin?"
           "9-12": "When is the best time to decide how much to keep?"
           "13-15": "When should the split be decided?"
+          "16-18": "In a month you know will be thin, what gets decided first?"
         options: ["Before you spend any", "At the shop", "At the end of the week"]
         answer: 0
         hints:
+          "5-8":
+            - "Think about which coin moves first."
+            - "It is one of these two: before you spend, or at the shop?"
+            - "Before you spend any. The tin coin goes in first. Then you spend the rest."
           "9-12":
             - "Think about what is left at the end of a week when you did not decide first."
             - "It is one of these two: before you spend, or at the shop?"
             - "Before you spend any! It is much easier to keep money you have not already got in your hand."
           "13-15":
             - "Think about which order actually leaves something to save."
-            - "One of these two: before, or at the end of the week?"
+            # WAS "before, or at the end of the week?" -- options 0 and 2, while
+            # `narrow_options` renders 0 and 1. The reader was told to choose
+            # between two things and shown a different two.
+            - "One of these two: before you spend, or at the shop?"
             - "Before. Keeping first is the whole method -- what is left at the end of a week is usually nothing."
+          "16-18":
+            - "Which decision, made late, costs you the most?"
+            - "One of these two: before anything moves, or at the shop?"
+            - "Before. In a thin month the plan is the only thing standing between you and the till."
 
       - id: q2_explain_plan
         prompt:
+          "5-8": "Tell Skye your plan for three coins. Where does each one go?"
           "9-12": "Tell me your own plan for EC$10. Where would each part go?"
           "13-15": "Describe your own split, and say why."
+          "16-18": "Give me your split for a thin month and a good one, and say what changes."
         graded: false
         accept: [keep, save, spend, share, account, gift, goal, half, some]
+
+    guide:
+      educator:
+        "5-8":
+          timing_minutes: 35
+          materials: ["Three labelled tins or cups -- keep, spend, share", "Play coins"]
+          misconceptions:
+            - wrong: "They split evenly because even feels fair."
+              say: "Fair is not the same as planned. What are you keeping it FOR?"
+            - wrong: "They choose what to buy first, then see what is left to keep."
+              say: "You picked the spending first. Try it the other way round."
+          extension: "Give them six coins instead of three and ask them to explain the change."
+        "9-12":
+          timing_minutes: 30
+          materials: ["Play money in EC$1 and EC$5"]
+          misconceptions:
+            - wrong: "They decide the split at the shop rather than before."
+              say: "Notice when you decided. What was left by then?"
+            - wrong: "They think there is one correct split and look for it."
+              say: "There is not one. Defend yours instead."
+          extension: "Ask them to redo the split for EC$50 and say which parts did not simply scale."
+        "13-15":
+          timing_minutes: 30
+          materials: []
+          misconceptions:
+            - wrong: "They keep the same amount when the income changes, not the same share."
+              say: "December and February are not the same month. What should have moved?"
+            - wrong: "They rewrite the plan every week and call it flexibility."
+              say: "A plan you rewrite constantly is not a plan. What would make you change it?"
+          extension: "Ask for a plan that survives a month with no work in it."
+      guardian:
+        "5-8":
+          doing: "Splitting money three ways -- keep, spend, share -- and saying why."
+          do_together: "Give them three coins and three places to put them. Do not correct it until after."
+          ask_them: "Which one did you keep, and what is it for?"
+          got_it_sounds_like: "They name a reason for the kept coin, not just a number."
+        "9-12":
+          doing: "Deciding where money goes before it arrives, instead of at the shop."
+          do_together: "Next time they get money, ask them to say the split out loud before you go anywhere."
+          ask_them: "What did you decide to keep, and what for?"
+          got_it_sounds_like: "They name an amount AND a reason, and they decided it before leaving the house."
+        "13-15":
+          doing: "Keeping first, and holding a plan when the money changes."
+          do_together: "Ask what their split would be on EC$200, then on EC$60, and listen for what moved."
+          ask_them: "When your money drops, do you keep the same amount or the same share?"
+          got_it_sounds_like: "They say share, and they can explain why the amount is the wrong thing to hold."

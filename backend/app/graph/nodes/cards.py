@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from langchain_core.messages import AIMessage
 
 from app.agents.escalation.contract import EscalationReason
 from app.graph.nodes.intents import (
+    asks_for_a_video,
     is_complaint,
     named_game,
     wants_account,
@@ -26,7 +28,8 @@ from app.schemas.directives import (
     VideoDirective,
     directive_payload,
 )
-from app.videos import by_id, requested
+from app.videos import by_id
+from app.videos.catalog import all_videos, requested
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +39,66 @@ _CARD_LOCALES = frozenset({"en", "es", "fr"})
 #: Either of these means the caller has somewhere to register.
 _REGISTRATION_AGENTS = frozenset({"register_agent", "register_agent_step1"})
 
+#: The bands that may be told they can register their own account.
+#:
+#: Published, and in the corpus twice. ASP-049: "From age 12, an ASPIRE
+#: participant can also register for their own account at aspire.gov.kn or at a
+#: branch." ASP-050 says the same in the reader's own words.
+_SELF_REGISTERING_BANDS = ("13-15", "16-18")
+
+#: A child named in the third person. "Register my daughter" is a different
+#: question from "register me", and a band cannot tell them apart.
+_FOR_ANOTHER = re.compile(
+    r"\b(?:my|our|the|she|he)\s+"
+    r"(?:son|daughter|child|children|kid|kids|boy|girl|grandson|granddaughter|"
+    r"grandchild|grandchildren|niece|nephew|godson|goddaughter|godchild)\b"
+    r"|\bfor (?:him|her|them|the child|the children)\b",
+    re.IGNORECASE,
+)
+
+
 #: Who is reading, for the purpose of answering "I want to register".
-def _audience(persona: str, age_band: str) -> str:
-    """`child`, `educator`, or `unaccompanied`."""
+def _audience(persona: str, age_band: str, message: str = "") -> str:
+    """`child`, `young_person`, `educator`, or `unaccompanied`.
+
+    `young_person` is new, because the old three-way split told a
+    seventeen-year-old to go and fetch a parent.
+
+    Every minor band collapsed into `child`, whose copy says "ask your parent or
+    guardian to sign in with their own ASPIRE account". Right for a
+    seven-year-old. Wrong for a fourteen- or seventeen-year-old, against the
+    programme's own published rule -- a participant may register their own
+    account from age 12, at aspire.gov.kn or at a branch.
+
+    The assistant was answering a question about the PROGRAMME with a fact about
+    the ASSISTANT. Both true, not the same answer. Jayden Prentice, seventeen,
+    does his own paperwork and his mother's; "ask a parent" is not merely
+    unhelpful in that house, it is wrong with a published rule behind it.
+
+    The oldest minors were worst served of all: `orion` is not `stella` and
+    `16-18` was not in the band list, so a seventeen-year-old fell through to
+    `unaccompanied` and was told to "create a guardian account" -- advice for an
+    adult applying on somebody else's behalf, handed to a child applying for
+    themselves.
+
+    ORDER IS THE SAFETY PROPERTY. The youngest bands are settled before a single
+    word of the message is read. A nine-year-old typing "register my child" is
+    copying a phrase or testing the bot, not raising one, and reading intent out
+    of a child's prose to widen what they are told is the mistake
+    `_ANONYMOUS_DEFAULT` was moved twice to avoid.
+    """
     if persona == "nova":
         return "educator"
-    if persona == "stella" or age_band in ("5-8", "9-12", "13-15"):
+    if persona == "stella" or age_band in ("5-8", "9-12"):
         return "child"
+    # Above that, applying on somebody else's behalf is a guardian's question
+    # whatever the reader's own age. A sixteen-year-old can be a parent -- an
+    # existing test says so -- and a grandmother raising a grandchild must not be
+    # answered as though she were the applicant.
+    if _FOR_ANOTHER.search(message or ""):
+        return "unaccompanied"
+    if age_band in _SELF_REGISTERING_BANDS:
+        return "young_person"
     return "unaccompanied"
 
 
@@ -63,6 +119,30 @@ _REGISTRATION_HELP: dict[str, dict[str, str]] = {
             "Une demande ASPIRE est remplie par un parent ou tuteur. Demande-lui "
             "de se connecter avec son propre compte ASPIRE et de la commencer "
             "là, ou d'aller sur aspire.gov.kn ou dans une agence."
+        ),
+    },
+    #: 13-15 and 16-18: old enough to register themselves under the published
+    #: rule, and told so -- while staying honest that THIS assistant takes the
+    #: application from a guardian. Saying only the first half would send a
+    #: fourteen-year-old round a loop.
+    "young_person": {
+        "en": (
+            "You can register your own ASPIRE account from age 12 -- at "
+            "aspire.gov.kn, or at any branch. An application through this "
+            "assistant is completed by a parent or guardian, so if you would "
+            "rather do it here, ask yours to start it from their own account."
+        ),
+        "es": (
+            "Puedes registrar tu propia cuenta de ASPIRE desde los 12 años, en "
+            "aspire.gov.kn o en cualquier sucursal. Una solicitud hecha con este "
+            "asistente la completa un padre, madre o tutor, así que si prefieres "
+            "hacerla aquí, pídele que la empiece desde su propia cuenta."
+        ),
+        "fr": (
+            "Tu peux créer ton propre compte ASPIRE à partir de 12 ans, sur "
+            "aspire.gov.kn ou dans une agence. Une demande faite avec cet "
+            "assistant est remplie par un parent ou tuteur, donc si tu préfères "
+            "la faire ici, demande-lui de la commencer depuis son compte."
         ),
     },
     "unaccompanied": {
@@ -113,6 +193,11 @@ _REGISTRATION_CHIPS: dict[str, dict[str, list[str]]] = {
         "en": ["Who registers a child?", "What documents are needed?"],
         "es": ["¿Quién registra?", "¿Qué documentos?"],
         "fr": ["Qui inscrit l'enfant ?", "Quels documents ?"],
+    },
+    "young_person": {
+        "en": ["Register at a branch", "What documents are needed?"],
+        "es": ["Registrarme en una sucursal", "¿Qué documentos?"],
+        "fr": ["M'inscrire en agence", "Quels documents ?"],
     },
     "unaccompanied": {
         "en": ["Create a guardian account", "What documents are needed?"],
@@ -286,20 +371,16 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     }
 
 
-#: What the reader is asked when they request "a video" without saying which.
-#:
-#: Titles come from the catalog, never from the model, for the same reason the
-#: catalog is server-owned at all: a name invented here is a promise of
-#: something that does not exist.
-_VIDEO_WHICH: dict[str, str] = {
-    "en": "We have two. Which one?",
-    "es": "Tenemos dos. ¿Cuál quieres?",
-    "fr": "Nous en avons deux. Laquelle ?",
+#: What to say when somebody asks for a video and names no subject.
+_VIDEO_MENU: dict[str, str] = {
+    "en": "Here are the ASPIRE videos. Which one would you like?",
+    "es": "Estos son los videos de ASPIRE. ¿Cuál te gustaría ver?",
+    "fr": "Voici les vidéos ASPIRE. Laquelle veux-tu regarder ?",
 }
 
 
 def _play(state: AspireState, video: Any) -> dict[str, Any]:
-    """The turn that opens the player. One place, so both routes match."""
+    """The turn that opens the player. One place, three callers."""
     return {
         "offered_video": None,
         "active_agent": _holding_agent(state),
@@ -317,81 +398,84 @@ def _play(state: AspireState, video: Any) -> dict[str, Any]:
     }
 
 
+def _video_choice(state: AspireState, videos: tuple[Any, ...]) -> dict[str, Any]:
+    """Ask which one, with a chip per video.
+
+    The chips are the same sentence `offer_for` builds, and that is not a
+    coincidence -- a chip is also what gets SENT when it is tapped, so it has to
+    come back through `asks_for_a_video` and resolve to exactly one video. Naming
+    the topic does both: it is under the command-length ceiling and it carries
+    the keyword that settles the next turn.
+    """
+    locale = str(state.get("locale") or "en")
+    if locale not in _VIDEO_MENU:
+        locale = "en"
+    return {
+        "offered_video": None,
+        "active_agent": _holding_agent(state),
+        "messages": [AIMessage(content=_VIDEO_MENU[locale])],
+        "quick_replies": [
+            f"Watch the ASPIRE video about {video.topic.lower()}" for video in videos
+        ],
+        "safety_flags": {"card": "video_menu"},
+    }
+
+
 def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
-    """Play a video: the one just offered, or the one just asked for.
+    """Play a video: the one offered last turn, or the one they just asked for.
 
-    TWO routes reach a player, and until now only the first existed.
+    Both halves are here because they are one decision, and splitting them is
+    how the second half came to be missing.
 
-    **Accepting an offer.** Three things have to be true, and the last is the
-    one that matters: an offer was actually made, this message accepts it, and
-    the id still names something in the catalog. That last check is why the
-    catalog is server-owned -- an id reaching here from a stale checkpoint, or
-    from a client that made one up, resolves to nothing and the turn carries on
-    as an ordinary question.
+    **Accepting an offer.** Three things have to be true: an offer was made, this
+    message accepts it, and the id still names something in the catalog. That
+    last check is why the catalog is server-owned -- an id reaching here from a
+    stale checkpoint, or from a client that made one up, resolves to nothing and
+    the turn carries on as an ordinary question.
 
-    The offer is cleared either way. A reader who says yes gets the video once;
-    a reader who asks something else has moved on, and a "yes" three turns later
-    should not reach back and open a player.
+    **Asking outright**, which until now had no path at all. `_open_video` could
+    only ever say yes to a question the assistant had asked first, so a reader
+    typing "Do you have videos?" fell through this node, through the router, and
+    into whichever agent held the session -- which, mid-lesson, is the tutor,
+    which graded it as a wrong answer to the question on screen and spent a hint
+    on it. That is a real transcript: six requests, one video, and the one that
+    worked contained the word "scarcity", so it was matched on the TOPIC by the
+    volunteering path in `safety_out` rather than on the request by anything.
 
-    **Asking outright.** `_WATCH` has always matched "show me the video" -- its
-    own comment says "accepting an offer, or asking for one outright" -- but
-    with no standing offer this function returned None and the request fell
-    through to the model, which cannot open a player. That is the measured
-    defect: a reader asked six times and got one video, on the single turn an
-    offer happened to be standing.
-
-    The request route is NOT filtered by persona. `for_persona` decides what is
-    pushed at someone who did not ask; it has nothing to say about someone who
-    did. In practice that is the difference between a parent who reads with
-    difficulty being able to reach the only non-text thing here, and not.
+    Being a card is the fix, not a detail of it. `_after_cards` routes a card
+    straight to `safety_out`, so a turn answered here never reaches `classify`
+    and never meets `apply_stickiness` -- and the tutor is never asked to grade
+    a request for a video as an answer about coins.
     """
     offered = state.get("offered_video")
-    asking = wants_video(message)
 
-    if offered:
-        if not asking:
-            # They asked something else. The offer has expired.
-            return {"offered_video": None}
+    if offered and wants_video(message):
         video = by_id(str(offered))
-        if video is None:
-            logger.info("offered video %r is no longer in the catalog", offered)
-            return {"offered_video": None}
-        return _play(state, video)
+        if video is not None:
+            # Unless they have named a DIFFERENT one. "Show me the saving video"
+            # accepts an offer by the letter of `wants_video`, and playing the
+            # scarcity film because that is what was on the table is the same
+            # not-listening this whole node exists to stop.
+            asked = requested(message)
+            if len(asked) == 1 and asked[0].id != video.id:
+                return _play(state, asked[0])
+            return _play(state, video)
+        logger.info("offered video %r is no longer in the catalog", offered)
+        # Fall through: the offer is dead, but they may still be asking.
 
-    if not asking:
-        return None
+    if not asks_for_a_video(message):
+        # They asked something else. Any offer has expired -- a "yes" three
+        # turns later must not reach back and open a player.
+        return {"offered_video": None} if offered else None
 
-    # Local, and from `app.domain`: this module also imports an unrelated
-    # `Language` from `app.eligibility.models` further down, and the two are
-    # not the same enum.
-    from app.domain import Language
-
-    locale = str(state.get("locale") or "en")
-    try:
-        language = Language(locale)
-    except ValueError:
-        language = Language.EN
-    matches = requested(message, language=language)
-
-    if not matches:
-        # Outside English there is nothing to play. Let the turn be answered
-        # normally rather than apologising for a library they cannot use.
-        return None
+    matches = requested(message)
     if len(matches) == 1:
         return _play(state, matches[0])
-
-    # They asked for "a video" without saying which. Offering the choice is
-    # the only honest move; picking one for them is a guess wearing an answer's
-    # clothes. Their reply names a subject and comes straight back here.
-    titles = [video.title for video in matches]
-    return {
-        "active_agent": _holding_agent(state),
-        "messages": [
-            AIMessage(content=_VIDEO_WHICH.get(locale, _VIDEO_WHICH["en"]))
-        ],
-        "quick_replies": titles,
-        "safety_flags": {"card": "video_choice"},
-    }
+    # None named, or a tie. Both are the same answer: show what there is rather
+    # than the silence a tie used to produce. `relevant_to` returns None in both
+    # cases, correctly, because it is deciding whether to interrupt -- and that
+    # is exactly why this path does not use it.
+    return _video_choice(state, matches or all_videos())
 
 
 def _asked_for_a_person(message: str) -> dict[str, Any] | None:
@@ -418,7 +502,7 @@ def _open_signup(state: AspireState, message: str) -> dict[str, Any] | None:
 
     persona = str(state.get("persona") or "")
     age_band = str(state.get("age_band") or "")
-    audience = _audience(persona, age_band)
+    audience = _audience(persona, age_band, message)
 
     locale = str(state.get("locale") or "en")
     if locale not in _SIGNUP_INTRO:
@@ -467,7 +551,7 @@ def _registration_help(state: AspireState, message: str) -> dict[str, Any] | Non
 
     persona = str(state.get("persona") or "")
     age_band = str(state.get("age_band") or "")
-    audience = _audience(persona, age_band)
+    audience = _audience(persona, age_band, message)
 
     locale = str(state.get("locale") or "en")
     if locale not in _REGISTRATION_HELP[audience]:

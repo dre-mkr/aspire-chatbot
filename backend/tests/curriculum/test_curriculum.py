@@ -57,12 +57,47 @@ class TestModuleOneLoads:
 class TestBandFiltering:
     """The acceptance criterion: a band filter returns band-appropriate content."""
 
-    def test_a_five_to_eight_does_not_get_the_nine_to_twelve_lessons(self, curriculum):
+    def test_the_youngest_band_now_gets_the_whole_of_module_one(self, curriculum):
+        """This test used to assert the opposite, and the opposite was wrong.
+
+        `need` and `budget` were pitched at 9-12, so needs-and-wants and making
+        a plan were closed to a five-to-eight-year-old and module 1 was 60 per
+        cent available to the band the client said we were ignoring.
+
+        ASPIRE's own Grade 1 lesson plan guide -- Super Savers Club -- teaches
+        both at Grade One. Its Lesson 3 says it outright: "By distinguishing
+        between needs and wants, children begin to learn about budgeting. Even
+        at a young age, understanding that money can run out and needs should
+        come first helps them make practical choices."
+
+        The programme says five or six. We had said nine. The programme wins.
+        """
         young = {lesson.id for lesson in curriculum.lessons_for_band("5-8")}
-        older = {lesson.id for lesson in curriculum.lessons_for_band("9-12")}
-        assert young < older
-        assert "l04_needs_and_wants" not in young
-        assert "l05_a_simple_plan" not in young
+        assert "l04_needs_and_wants" in young
+        assert "l05_a_simple_plan" in young
+        assert young == {lesson.id for lesson in curriculum.lessons_for_band("9-12")}
+
+    def test_the_band_filter_still_filters(self, curriculum):
+        """The mechanism, checked without relying on any lesson being gated.
+
+        Every lesson in module 1 is now open to every band, so the filter has to
+        be exercised directly or this suite would pass with it deleted.
+        """
+        from app.curriculum.schema import Concept
+
+        gated = Concept(
+            id="something_later", name="Later", band_min="13-15", band_max="adult"
+        )
+        assert curriculum.concepts["save"].band_min == "5-8"
+        assert gated.band_min == "13-15"
+
+        for band in ("5-8", "9-12"):
+            for lesson in curriculum.lessons_for_band(band):
+                concept = curriculum.concepts[lesson.concept_id]
+                assert BANDS.index(concept.band_min) <= BANDS.index(band), (
+                    f"{lesson.id} reached {band} but its concept starts at "
+                    f"{concept.band_min}"
+                )
 
     def test_every_band_gets_teach_points_and_examples(self, curriculum):
         for band in BANDS:
@@ -428,3 +463,161 @@ class TestTheSeed:
 
         monkeypatch.setattr(db_module, "database_enabled", lambda: False)
         assert await seed.seed_curriculum(curriculum) == 0
+
+
+class TestARequiredConceptMustBeTaught:
+    """The check that would have caught the L4/L5 draft, written as the failure.
+
+    Mastery is evidence and evidence comes from a lesson's check questions, so a
+    concept nothing teaches can never be mastered -- and everything downstream
+    of it is unreachable forever, silently, with the module still validating.
+    """
+
+    def _curriculum(self, concepts, taught: str):
+        from app.curriculum.schema import Concept, Curriculum, Lesson, Module
+
+        return Curriculum([
+            Module(
+                id="mod_probe",
+                title="M",
+                order=1,
+                band_min="5-8",
+                concepts=[Concept(**c) for c in concepts],
+                lessons=[
+                    Lesson(
+                        id="l1",
+                        module_id="mod_probe",
+                        concept_id=taught,
+                        order=1,
+                        objective="x",
+                        teach_points={"5-8": ["a"]},
+                        examples={"5-8": ["b"]},
+                        check_questions=[
+                            {"id": "q1", "prompt": {"5-8": "?"},
+                             "options": ["a", "b"], "answer": 0}
+                        ],
+                    )
+                ],
+            )
+        ])
+
+    def test_a_required_concept_with_no_lesson_is_refused(self):
+        with pytest.raises(ValueError, match="no lesson teaches it"):
+            self._curriculum(
+                [
+                    {"id": "ghost", "name": "G", "band_min": "5-8"},
+                    {"id": "real", "name": "R", "band_min": "5-8",
+                     "prerequisites": ["ghost"]},
+                ],
+                taught="real",
+            )
+
+    def test_the_message_names_who_is_blocked_by_it(self):
+        """An error that says only "ghost has no lesson" leaves the reader to
+        work out what it costs. The list of dependants is the cost."""
+        with pytest.raises(ValueError, match=r"required by \['real'\]"):
+            self._curriculum(
+                [
+                    {"id": "ghost", "name": "G", "band_min": "5-8"},
+                    {"id": "real", "name": "R", "band_min": "5-8",
+                     "prerequisites": ["ghost"]},
+                ],
+                taught="real",
+            )
+
+    def test_an_untaught_concept_nothing_depends_on_is_still_legal(self):
+        """A vocabulary node that locks no path is not this bug, and refusing
+        it would be a lint that costs more than it catches."""
+        self._curriculum(
+            [
+                {"id": "spare", "name": "S", "band_min": "5-8"},
+                {"id": "real", "name": "R", "band_min": "5-8"},
+            ],
+            taught="real",
+        )
+
+    def test_the_shipping_module_passes_it(self):
+        """The regression guard. If this fails, module one has a locked branch."""
+        from app.curriculum.schema import load_all
+
+        load_all(refresh=True)
+
+
+class TestTheArithmeticInAKeyIsTheArithmeticInThePrompt:
+    """A worked example whose key contradicts its own prompt.
+
+    `l03_a_goal` at 13-15 asked "EC$450 and you keep EC$25 a week -- roughly how
+    many weeks?", offered [Ten, Two, One hundred], keyed Ten, and 450/25 is 18.
+    The third hint rung said it out loud: "EC$450 at EC$25 a week is eighteen,
+    so ten is the closest of these."
+
+    So the lesson taught a fourteen-year-old to divide -- "Price it, date it,
+    divide it. That is the whole method" -- and then marked the division wrong,
+    naming the right answer in the sentence that rejected it. Joseph Lin checks
+    arithmetic and so does a judge with a rubric.
+    """
+
+    def test_every_division_question_divides_exactly_into_its_key(self):
+        import re
+
+        from app.curriculum.schema import load_all
+
+        words = {"ten": 10, "two": 2, "one hundred": 100, "five": 5, "twenty": 20}
+        problems = []
+        for module in load_all(refresh=True).modules:
+            for lesson in module.lessons:
+                for question in lesson.check_questions:
+                    if question.answer is None or not question.options:
+                        continue
+                    key = words.get(question.options[question.answer].strip().lower())
+                    if key is None:
+                        continue
+                    for band, prompt in (question.prompt or {}).items():
+                        found = [
+                            int(n.replace(",", ""))
+                            for n in re.findall(r"EC\$([\d,]+)", prompt)
+                        ]
+                        if len(found) != 2 or "how many weeks" not in prompt.lower():
+                            continue
+                        goal, rate = max(found), min(found)
+                        if rate and goal / rate != key:
+                            problems.append(
+                                f"{lesson.id}/{question.id}/{band}: {goal}/{rate} = "
+                                f"{goal / rate:g}, key says {key}"
+                            )
+        assert not problems, "; ".join(problems)
+
+    def test_the_second_hint_rung_names_the_two_options_that_get_rendered(self):
+        """`narrow_options` renders options 0 and 1. A rung that names 0 and 2
+        tells the reader to choose between two things and shows a different two.
+        """
+        from app.curriculum.schema import load_all
+
+        words = ("ten", "two", "one hundred", "five", "twenty")
+        problems = []
+        for module in load_all(refresh=True).modules:
+            for lesson in module.lessons:
+                for question in lesson.check_questions:
+                    if question.answer is None or len(question.options or ()) < 3:
+                        continue
+                    rendered = {
+                        question.options[question.answer].strip().lower(),
+                        next(
+                            o.strip().lower()
+                            for i, o in enumerate(question.options)
+                            if i != question.answer
+                        ),
+                    }
+                    for band, rungs in (question.hints or {}).items():
+                        if len(rungs) < 2:
+                            continue
+                        # "one of these two" is English, not an option name.
+                        rung = rungs[1].lower().replace("these two", "")
+                        named = {w for w in words if w in rung}
+                        stray = named - rendered
+                        if stray:
+                            problems.append(
+                                f"{lesson.id}/{question.id}/{band}: rung 2 names "
+                                f"{sorted(stray)}, chips show {sorted(rendered)}"
+                            )
+        assert not problems, "; ".join(problems)

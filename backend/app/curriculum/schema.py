@@ -97,6 +97,44 @@ class CheckQuestion(_Node):
         return self
 
 
+class Misconception(_Node):
+    """What learners get wrong, and the sentence to say when they do."""
+
+    wrong: str = Field(max_length=200)
+    say: str = Field(max_length=200)
+
+
+class EducatorGuide(_Node):
+    """One lesson, rendered for somebody who will teach it."""
+
+    timing_minutes: int = Field(ge=5, le=120)
+    materials: list[str] = Field(default_factory=list)
+    misconceptions: list[Misconception] = Field(default_factory=list)
+    extension: str = Field(default="", max_length=240)
+
+
+class GuardianGuide(_Node):
+    """One lesson, rendered for somebody who will do it alongside a child."""
+
+    doing: str = Field(max_length=200)
+    do_together: str = Field(max_length=300)
+    ask_them: str = Field(max_length=200)
+    got_it_sounds_like: str = Field(max_length=200)
+
+
+class Guide(_Node):
+    """The adult renderings of a lesson.
+
+    BOTH MAPS ARE KEYED BY THE BAND OF THE CHILD, not of the reader. A guardian
+    and an educator both read at `adult`; what changes is the age of the learner
+    they are asking about. Pass the child's band to `for_band`, never the
+    reader's, or every lookup resolves to nothing.
+    """
+
+    educator: dict[str, EducatorGuide] = Field(default_factory=dict)
+    guardian: dict[str, GuardianGuide] = Field(default_factory=dict)
+
+
 class Lesson(_Node):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
     module_id: str
@@ -109,6 +147,28 @@ class Lesson(_Node):
     examples: dict[str, list[str]]
     check_questions: list[CheckQuestion] = Field(min_length=1)
     suggested_widget_kind: str | None = None
+    #: Band-keyed by the CHILD's band. See `Guide`.
+    guide: Guide = Field(default_factory=Guide)
+
+    @field_validator("guide")
+    @classmethod
+    def _guide_bands_are_real(cls, value: "Guide") -> "Guide":
+        for name, mapping in (("educator", value.educator), ("guardian", value.guardian)):
+            unknown = set(mapping) - set(BANDS)
+            if unknown:
+                raise ValueError(f"guide.{name}: unknown age band(s): {sorted(unknown)}")
+        return value
+
+    def educator_guide(self, child_band: str) -> "EducatorGuide | None":
+        """The teaching notes for a class at this band."""
+        return for_band(self.educator_map(), child_band)
+
+    def guardian_guide(self, child_band: str) -> "GuardianGuide | None":
+        """What to say to the adult of a child at this band."""
+        return for_band(self.guide.guardian, child_band)
+
+    def educator_map(self) -> dict[str, "EducatorGuide"]:
+        return self.guide.educator
 
     @field_validator("teach_points", "examples")
     @classmethod
@@ -176,6 +236,53 @@ class Curriculum:
             lesson.id: lesson for module in self.modules for lesson in module.lessons
         }
         self.validate_prerequisites()
+        self.validate_every_concept_is_taught()
+
+    def validate_every_concept_is_taught(self) -> None:
+        """A required concept with no lesson can never be mastered, and locks the graph.
+
+        THE BUG THIS EXISTS FOR was caught in review rather than by a test,
+        which is the whole argument for the check.
+
+        A draft of the L4/L5 patch added `scarcity` as a concept node so that
+        `need` could depend on it -- the client's own material for the youngest
+        band teaches scarcity first, and it is the *why* behind needs-versus-
+        wants -- and authored no lesson for it. Mastery is evidence, evidence
+        comes from a lesson's check questions, so:
+
+            scarcity  no lesson      -> never mastered
+            need      needs scarcity -> never opens
+            budget    needs need     -> never opens
+
+        Half of module one, closed to every learner in every band, from one
+        missing lesson and no error message anywhere.
+
+        `validate_prerequisites` could not have caught it: every prerequisite
+        named a concept that genuinely existed. The gap runs the other way -- a
+        concept that exists, is required, and is never taught -- which is why
+        this is a second check rather than another clause in the first.
+
+        An untaught concept is legal when NOTHING requires it. A vocabulary node
+        used for retrieval and depended on by nobody locks no path, so it is not
+        this bug and is not refused here.
+        """
+        taught = {lesson.concept_id for module in self.modules for lesson in module.lessons}
+        required: dict[str, list[str]] = {}
+        for concept in self.concepts.values():
+            for prerequisite in concept.prerequisites:
+                required.setdefault(prerequisite, []).append(concept.id)
+
+        orphaned = sorted(cid for cid in required if cid not in taught)
+        if orphaned:
+            detail = "; ".join(
+                f"{cid!r} is required by {sorted(required[cid])} and no lesson teaches it"
+                for cid in orphaned
+            )
+            raise ValueError(
+                f"{detail}. A concept with no lesson can never be mastered, so "
+                "everything downstream of it is unreachable. Author the lesson, "
+                "or remove the prerequisite."
+            )
 
     def validate_prerequisites(self) -> None:
         """Every prerequisite exists and is not above the band that needs it."""
