@@ -161,6 +161,37 @@ _WATCH: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
+#: "Do you have videos?" -- asking for one outright, with nothing on the table.
+#:
+#: A separate list from `_WATCH`, and the separation is deliberate. `_WATCH` is
+#: narrow because it decides whether an offer already on screen is being
+#: accepted, and a false positive there opens a player on top of whatever the
+#: reader was actually agreeing to. This list decides whether somebody is ASKING,
+#: which is a thing they only ever do on purpose, so it can afford to be generous.
+#:
+#: The noun is required and it is always a video noun. "Tell me a story" belongs
+#: to `_STORY` and the story flow writes prose; only `video`, `film` and
+#: `cartoon` reach the catalog. A reader who says "story" gets a story written
+#: for them, which is what they asked for and what the flow was built to do.
+_ASKS_FOR_VIDEO: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        # "do you have any videos", "are there videos", "is there a video"
+        r"\b(?:do you have|got|are there|is there|have you got|any)\b[^.?!]{0,20}\b(?:video|videos|film|films|cartoon|cartoons)\b",
+        # "i want to watch a video", "can i watch a video", "let me see a video"
+        r"\b(?:want|like|can i|could i|let me|lemme|i'd like)\b[^.?!]{0,20}\b(?:video|film|cartoon)\b",
+        # "show me the videos", "play a video", "watch a video"
+        r"\b(?:watch|play|show|see|open|start)\b[^.?!]{0,20}\b(?:video|videos|film|films|cartoon|cartoons)\b",
+        # "videos", "video please", "a video" -- the whole message, nothing else.
+        r"^(?:a |the |some )?(?:video|videos|film|cartoon)(?:,? please)?[.!?]*$",
+        # Spanish and French, same three shapes collapsed.
+        r"\b(?:ver|mira|muestra|pon|quiero)\b[^.?!]{0,20}\b(?:video|videos)\b",
+        r"^(?:un |el |los )?videos?(?:,? por favor)?[.!?]*$",
+        r"\b(?:voir|montre|regarder|je veux)\b[^.?!]{0,20}\b(?:video|videos|film)\b",
+        r"^(?:une |la |le |les )?videos?(?:,? s'il vous plait)?[.!?]*$",
+    )
+)
+
 #: Which game a message names, if it names one.
 _NAMED_GAME: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(?:word )?scramble\b|\bunscramble\b|\bletras\b"), "scramble"),
@@ -383,6 +414,28 @@ def wants_video(message: str) -> bool:
     if not _is_a_command(folded):
         return False
     return any(pattern.search(folded) for pattern in _WATCH)
+
+
+def asks_for_a_video(message: str) -> bool:
+    """Whether this message is ASKING for a video, rather than accepting one.
+
+    The bug this exists for, in the reader's own words: "Do you have videos?",
+    "I want to watch a video", "Video". Six requests in one conversation, one
+    video played, and the one that worked contained the word "scarcity" -- the
+    TOPIC. Nothing in the system was looking for the request itself.
+
+    `wants_video` is not that check and was never meant to be. It answers "is
+    this a yes to the offer on screen", which is a narrower question with a
+    worse failure mode, and it is right to stay narrow.
+    """
+    folded = fold(message)
+    if not _is_a_command(folded):
+        return False
+    # A story request is a story request. The story flow writes prose, which is
+    # what "tell me a story" asks for; only a video noun reaches the catalog.
+    if any(pattern.search(folded) for pattern in _STORY):
+        return False
+    return any(pattern.search(folded) for pattern in _ASKS_FOR_VIDEO)
 
 
 def named_game(message: str) -> str | None:
