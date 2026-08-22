@@ -189,7 +189,14 @@ body {
 	margin: 0;
 	font-family: var(--font-sans);
 	color: var(--ink);
-	background: var(--plum-deep);
+	/* White, not plum.
+	 *
+	 * Both surfaces are full-bleed -- the landing root is `h-dvh` and `.app` is
+	 * `height: 100dvh` -- so this is never the page, only what sits behind it.
+	 * The two moments it does show are the ones that matter: the flash before
+	 * first paint, and the rubber-band when someone overscrolls on iOS. Deep
+	 * purple behind a white app makes both read as a glitch. */
+	background: #ffffff;
 	line-height: 1.6;
 }
 
@@ -8011,4 +8018,285 @@ a.source__site--link:hover .source__out {
    inside a dialog, where it forces the panel taller than the scrim. */
 .journey-panel__surface > * {
 	min-height: 0;
+}
+
+/* ── Meet your guides ──────────────────────────────────────────────────────
+ *
+ * Five audience-specific ways in, not five profile pictures. The order --
+ * audience pill, then face, then name -- is the component: the pill answers
+ * "which one is mine?" before the reader has to know who Skye or Azuri is.
+ *
+ * Sizes come from `--guide-avatar` so the same markup serves the designed
+ * treatment and the smaller one the landing's single-viewport rule allows.
+ * Nothing else is scaled by hand.
+ */
+.guide-selector {
+	--guide-avatar: 230px;
+	--guide-gap: 36px;
+	width: 100%;
+	background: rgb(255 255 255 / 0.94);
+	border: 1px solid rgb(87 57 137 / 0.12);
+	border-radius: 38px;
+	box-shadow: 0 18px 48px rgb(52 32 86 / 0.1);
+	padding: 42px 60px 54px;
+}
+
+.guide-selector--compact {
+	--guide-avatar: 78px;
+	--guide-gap: 14px;
+	border-radius: 24px;
+	padding: 16px 24px 18px;
+}
+
+.guide-selector__heading {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	font-size: 38px;
+	font-weight: 700;
+	color: #1a103c;
+	margin: 0 0 48px;
+}
+.guide-selector__heading-icon {
+	color: #3b82f6;
+	font-size: 42px;
+	display: inline-flex;
+}
+.guide-selector--compact .guide-selector__heading {
+	font-size: 17px;
+	gap: 10px;
+	margin: 0 0 12px;
+}
+.guide-selector--compact .guide-selector__heading-icon {
+	font-size: 19px;
+}
+
+.guide-selector__grid {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: var(--guide-gap);
+	align-items: start;
+}
+
+/* A button, not an image with a handler: keyboard-reachable and announced as
+   an action, which matters more here than anywhere else given who uses it. */
+.guide-card {
+	border: 0;
+	background: transparent;
+	padding: 0;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	position: relative;
+	transition:
+		transform 180ms ease,
+		opacity 180ms ease;
+}
+.guide-card:hover {
+	transform: translateY(-6px);
+}
+.guide-card:focus-visible {
+	outline: 3px solid var(--guide-color);
+	outline-offset: 8px;
+	border-radius: 20px;
+}
+
+.guide-card__pill {
+	padding: 8px 18px;
+	border-radius: 11px;
+	font-size: 14px;
+	line-height: 1;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	margin-bottom: 18px;
+	white-space: nowrap;
+	background: var(--guide-pill-bg);
+	color: var(--guide-pill-fg);
+}
+/* The two long labels -- "Parents & guardians", "Teachers & educators" -- are
+   what set the column width, and `nowrap` let them force the grid 208px wider
+   than the space it has. They wrap here instead of being shortened: the label
+   is the thing that tells a reader the row is for them, and "Parents" is not
+   the same promise as "Parents & guardians". */
+.guide-selector--compact .guide-card__pill {
+	font-size: 8.5px;
+	padding: 3px 7px;
+	border-radius: 6px;
+	margin-bottom: 7px;
+	white-space: normal;
+	max-width: 100%;
+	line-height: 1.25;
+	min-height: 2lh;
+	display: flex;
+	align-items: center;
+	text-align: center;
+}
+
+.guide-card__avatar {
+	width: var(--guide-avatar);
+	height: var(--guide-avatar);
+	border-radius: 50%;
+	overflow: hidden;
+	background: #fff;
+	border: 4px solid var(--guide-color);
+	box-shadow:
+		0 10px 28px rgb(35 21 72 / 0.1),
+		0 0 0 5px rgb(255 255 255 / 0.8);
+	transition:
+		box-shadow 180ms ease,
+		border-width 180ms ease;
+}
+.guide-selector--compact .guide-card__avatar {
+	border-width: 3px;
+	box-shadow:
+		0 6px 16px rgb(35 21 72 / 0.12),
+		0 0 0 3px rgb(255 255 255 / 0.85);
+}
+.guide-card__avatar img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center top;
+	display: block;
+}
+.guide-card:hover .guide-card__avatar {
+	box-shadow:
+		0 16px 38px rgb(35 21 72 / 0.15),
+		0 0 0 6px color-mix(in srgb, var(--guide-color) 12%, white);
+}
+
+.guide-card__name {
+	margin-top: 16px;
+	font-size: 25px;
+	line-height: 1.1;
+	font-weight: 750;
+	color: #1a103c;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+.guide-selector--compact .guide-card__name {
+	margin-top: 8px;
+	font-size: 14px;
+	gap: 5px;
+}
+.guide-card__check {
+	color: var(--guide-color);
+	font-size: 0.8em;
+}
+
+/* Chosen: the ring thickens and the others step back. The card itself does not
+   change, so the row does not reflow under the reader's cursor. */
+.guide-card[aria-pressed="true"] .guide-card__avatar {
+	border-width: 6px;
+	box-shadow:
+		0 14px 36px rgb(35 21 72 / 0.16),
+		0 0 0 7px color-mix(in srgb, var(--guide-color) 15%, white);
+}
+.guide-selector--compact .guide-card[aria-pressed="true"] .guide-card__avatar {
+	border-width: 4px;
+}
+.guide-selector:has(.guide-card[aria-pressed="true"])
+	.guide-card:not([aria-pressed="true"]) {
+	opacity: 0.88;
+}
+
+/* One line on what changes, on hover and focus only. Five permanent
+   paragraphs turn a two-second row into one that has to be studied. */
+.guide-card__hint {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%) translateY(-4px);
+	width: max-content;
+	max-width: 15rem;
+	padding: 8px 12px;
+	border-radius: 10px;
+	background: #1a103c;
+	color: #fff;
+	font-size: 12.5px;
+	line-height: 1.35;
+	font-weight: 500;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 150ms ease,
+		transform 150ms ease;
+	z-index: 3;
+}
+.guide-card__hint[data-visible="true"] {
+	opacity: 1;
+	transform: translateX(-50%) translateY(0);
+}
+
+.guide-selector__skip {
+	margin: 28px 0 0;
+	text-align: center;
+}
+.guide-selector__skip button {
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	font-size: 15px;
+	color: #6b6383;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.guide-selector__skip button:hover {
+	color: #c22f99;
+}
+.guide-selector--compact .guide-selector__skip {
+	margin-top: 10px;
+}
+.guide-selector--compact .guide-selector__skip button {
+	font-size: 12px;
+}
+
+/* Below the point five columns stop being readable, the row scrolls and the
+   next guide is deliberately half-visible, so swiping is discoverable without
+   an affordance drawn on top of the artwork. */
+@media (max-width: 900px) {
+	.guide-selector {
+		--guide-avatar: 148px;
+		padding: 28px 20px 32px;
+	}
+	.guide-selector__heading {
+		font-size: 26px;
+		margin-bottom: 24px;
+	}
+	.guide-selector__grid {
+		display: flex;
+		overflow-x: auto;
+		gap: 20px;
+		scroll-snap-type: x mandatory;
+		padding-bottom: 14px;
+		margin-inline: -20px;
+		padding-inline: 20px;
+	}
+	.guide-card {
+		flex: 0 0 170px;
+		scroll-snap-align: center;
+	}
+	.guide-card__name {
+		font-size: 19px;
+	}
+	/* A tooltip anchored under a horizontally scrolling row lands off-screen
+	   as often as not, and there is no hover on a touch screen to open it. */
+	.guide-card__hint {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.guide-card,
+	.guide-card__avatar,
+	.guide-card__hint {
+		transition: none;
+	}
+	.guide-card:hover {
+		transform: none;
+	}
 }

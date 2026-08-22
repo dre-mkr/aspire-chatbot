@@ -6,6 +6,7 @@ import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
 import { EducatorsView } from "./EducatorsView";
+import { GuideSelector } from "./GuideSelector";
 import { HistoryView } from "./HistoryView";
 import { JourneyView } from "./JourneyView";
 import { ParentsView } from "./ParentsView";
@@ -613,103 +614,31 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 						</div>
 					</div>
 
-					{/* Meet your guides */}
+					{/* Meet your guides.
+					  *
+					  * Was five 56px icon circles with a phosphor glyph each -- a
+					  * butterfly for Skye, a rocket for Kaleb. Illustrated guides exist
+					  * now, so the face does the work the glyph was standing in for, and
+					  * the audience pill above it answers "which one is mine?" before the
+					  * reader has to know who any of them are.
+					  *
+					  * `compact` rather than the designed `hero` size: this page holds
+					  * itself to one viewport with no scroll, and the row it replaces was
+					  * 124px tall with nothing spare. See `.guide-selector--compact`.
+					  */}
 					<div className="lg:col-span-5">
-						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
-							<i className="ph-bold ph-users text-blue-500"></i> Meet your
-							guides
-						</h3>
-						{/* Buttons, not decoration.
-						 *
-						 * These were `div`s carrying `cursor-pointer` and no handler:
-						 * they looked clickable, did nothing, and no keyboard could
-						 * reach them at all. Each one now opens a conversation with
-						 * that guide answering.
-						 *
-						 * Skye and Kaleb are separate keys now. `stella` is Skye at 5-8
-						 * and `kaleb` is his own persona at 9-12, so the address carries
-						 * both and a signed-out reader picking Kaleb gets
-						 * `stella`, and the server decides which voice that is. The
-						 * alternative is asking a child their age on a landing page.
-						 *
-						 * `justify-center` so five circles sit balanced in the card
-						 * rather than crowding the left edge.
-						 */}
-						<div className="bg-white/80 backdrop-blur-xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex flex-wrap justify-center gap-4 shadow-sm">
-							{[
-								{
-									name: "Skye",
-									persona: "stella" as PersonaId,
-									band: "5-8" as AgeBand,
-									who: "ages 5 to 8",
-									color: "from-[#c22f99] to-pink-500",
-									icon: "ph-butterfly",
-								},
-								{
-									name: "Kaleb",
-									persona: "kaleb" as PersonaId,
-									band: "9-12" as AgeBand,
-									who: "ages 9 to 12",
-									color: "from-blue-500 to-cyan-500",
-									icon: "ph-rocket",
-								},
-								{
-									name: "Zion",
-									persona: "orion" as PersonaId,
-									band: null,
-									who: "ages 13 to 18",
-									color: "from-[#fed141] to-amber-500",
-									icon: "ph-headphones",
-								},
-								{
-									name: "Imani",
-									persona: "aurora" as PersonaId,
-									band: null,
-									who: "parents and guardians",
-									color: "from-[#482977] to-indigo-500",
-									icon: "ph-book-open",
-								},
-								{
-									name: "Azuri",
-									persona: "nova" as PersonaId,
-									band: null,
-									who: "teachers",
-									color: "from-emerald-500 to-teal-500",
-									icon: "ph-chalkboard-teacher",
-								},
-							].map((guide) => (
-								<button
-									key={guide.name}
-									type="button"
-									onClick={() =>
-										startConversation(
-											"Hi! What can you help me with?",
-											guide.persona,
-											guide.band,
-										)
-									}
-									aria-label={`Talk to ${guide.name}, for ${guide.who}`}
-									className="flex flex-col items-center gap-2 flex-shrink-0 group rounded-2xl p-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c22f99]"
-								>
-									<span
-										className={`w-14 h-14 rounded-full bg-gradient-to-br ${guide.color} p-[2px] shadow-sm group-hover:scale-110 transition-transform block`}
-									>
-										<span className="w-full h-full bg-[#1A103C] rounded-full border-[1.5px] border-[#1A103C] flex items-center justify-center relative overflow-hidden">
-											<span
-												className={`absolute inset-0 bg-gradient-to-br ${guide.color} opacity-20`}
-											></span>
-											<i
-												className={`ph-duotone ${guide.icon} text-xl text-white drop-shadow-sm`}
-												aria-hidden="true"
-											></i>
-										</span>
-									</span>
-									<span className="text-[11px] font-bold text-[#1A103C]">
-										{guide.name}
-									</span>
-								</button>
-							))}
-						</div>
+						<GuideSelector
+							size="compact"
+							selected={selectedPersona}
+							onChoose={(choice) => {
+								setSelectedPersona(choice.guideId as GuideId);
+								startConversation(
+									"Hi! What can you help me with?",
+									choice.persona,
+									choice.band ?? null,
+								);
+							}}
+						/>
 					</div>
 				</div>
 			</main>
