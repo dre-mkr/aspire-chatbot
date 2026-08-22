@@ -70,12 +70,15 @@ def test_account_holders_may_start(persona):
 
 
 @pytest.mark.parametrize("persona", ["aurora", "nova"])
-def test_parents_and_newcomers_are_declined_with_a_reason(persona):
+def test_a_guardian_or_teacher_may_now_start_one(persona):
+    """`not_available_for_persona` used to fire for these two.
+
+    The restraint moved into the cards, where it can distinguish "do not raise
+    this unprompted" from "you may not have this at all". The tool no longer
+    refuses.
+    """
     payload = tools_module.start_game.invoke({}, config=cfg(persona))
-    assert payload["ok"] is False
-    assert payload["reason"] == "not_available_for_persona"
-    # The agent needs something to say, not just a flag.
-    assert payload["detail"]
+    assert payload["ok"] is True, payload
 
 
 def test_an_unknown_persona_is_allowed_rather_than_locked_out():

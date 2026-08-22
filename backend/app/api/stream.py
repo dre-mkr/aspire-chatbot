@@ -864,6 +864,11 @@ async def mint_session(request: Request) -> dict[str, Any]:
         locale = "en"
 
     requested = body.get("persona")
+    # Bounded by the persona's own cards -- see `anonymous_claims`. `stella` owns
+    # `5-8` and `9-12`, so this is how an anonymous reader who chose Kaleb is
+    # answered as Kaleb rather than as Skye. A band the persona has no card for
+    # is not honoured, so nothing here can reach another persona's material.
+    requested_band = body.get("age_band")
     # An anonymous account is a place to keep a visitor's chats until they sign up,
     # not a proof of who they are. Reading it as an identity derived `aurora/adult`
     # from its empty date of birth, which handed a signed-out visitor the guardian
@@ -873,6 +878,7 @@ async def mint_session(request: Request) -> dict[str, Any]:
     claims = await claims_for(
         str(principal.user_id) if proven else None,
         requested_persona=str(requested) if requested else None,
+        requested_band=str(requested_band) if requested_band else None,
     )
     if claims.persona_request_refused:
         # Worth a log line: a client repeatedly asking to widen is either a bug or a probe.

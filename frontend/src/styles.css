@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "@phosphor-icons/web/bold";
+@import "@phosphor-icons/web/fill";
+@import "@phosphor-icons/web/duotone";
 
 /* ── Webfonts, self-hosted ── */
 
@@ -140,6 +143,39 @@
 	--reading-width: 660px;
 }
 
+@keyframes slideUpFade {
+	0% {
+		opacity: 0;
+		transform: translateY(20px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes subtleFall {
+	0% {
+		transform: translateY(-20vh) rotate(0deg);
+		opacity: 0;
+	}
+	10% {
+		opacity: 1;
+	}
+	90% {
+		opacity: 1;
+	}
+	100% {
+		transform: translateY(120vh) rotate(360deg);
+		opacity: 0;
+	}
+}
+
+.coin-fall {
+	animation: subtleFall linear infinite;
+	top: -20vh;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -153,7 +189,14 @@ body {
 	margin: 0;
 	font-family: var(--font-sans);
 	color: var(--ink);
-	background: var(--plum-deep);
+	/* White, not plum.
+	 *
+	 * Both surfaces are full-bleed -- the landing root is `h-dvh` and `.app` is
+	 * `height: 100dvh` -- so this is never the page, only what sits behind it.
+	 * The two moments it does show are the ones that matter: the flash before
+	 * first paint, and the rubber-band when someone overscrolls on iOS. Deep
+	 * purple behind a white app makes both read as a glitch. */
+	background: #ffffff;
 	line-height: 1.6;
 }
 
@@ -185,16 +228,7 @@ body {
 	display: flex;
 	height: 100dvh;
 	overflow: hidden;
-	background: linear-gradient(
-		180deg,
-		#33165c 0%,
-		#482977 17%,
-		#6b3a9c 36%,
-		#ab3199 53%,
-		#e0a0d0 67%,
-		#faeff6 80%,
-		#ffffff 92%
-	);
+	background: #ffffff;
 
 	/* Phase-driven geometry. */
 	--rail-w: 0px;
@@ -404,7 +438,10 @@ body {
 	display: grid;
 	flex: 1;
 	min-width: 0;
-	height: 40px;
+	/* Room for the lockup, which is the mark AND the words under it. The
+	   wordmark that was here was 15px tall -- legible as a shape, unreadable as
+	   a sentence, and the sentence is what says what ASPIRE stands for. */
+	height: 58px;
 	overflow: hidden;
 }
 
@@ -458,7 +495,11 @@ body {
 }
 
 .rail__wordmark {
-	height: 15px;
+	/* 1200x350, so 52px tall is about 178px wide -- inside the 190px the header
+	   leaves beside the collapse button. The expansion is baked into the
+	   artwork rather than set as live text, so height is the only lever on
+	   whether it can be read. */
+	height: 52px;
 	width: auto;
 	/* Never squashed by the shrinking header -- it fades, it does not compress. */
 	flex-shrink: 0;
@@ -970,7 +1011,8 @@ body {
 	flex-direction: column;
 	flex: 1;
 	min-width: 0;
-	background: var(--panel-bg);
+	background: rgba(255, 255, 255, 0.74);
+	backdrop-filter: blur(10px);
 	transition: background var(--morph);
 }
 
@@ -1247,26 +1289,248 @@ body {
 .orb {
 	position: relative;
 	flex-shrink: 0;
-	width: var(--orb-size, 30px);
-	height: var(--orb-size, 30px);
+	/* 30px was sized for a gradient ball, where the whole thing read at a
+	 * glance. A face needs more: at 30px Skye and Kaleb are two dark smudges
+	 * and the guide the reader chose is not recognisable beside their answer.
+	 * The places that want a smaller one set `--orb-size` themselves. */
+	width: var(--orb-size, 44px);
+	height: var(--orb-size, 44px);
 }
 
+/* ── The orb is the assistant's face, and there are five of them ──────────
+ *
+ * One sphere answered for every voice: a five-year-old with Skye, a teenager
+ * with Zion, a parent with Imani and a teacher with Azuri all met the same
+ * magenta ball. The landing page gives each guide its own colour under "Meet
+ * your guides" and then throws that away at the moment the reader actually
+ * meets them.
+ *
+ * The tint is driven by `data-persona` on `.app`, so nothing is drilled through
+ * the transcript -- one attribute at the root and the cascade does the rest.
+ *
+ * SIX FACES, FIVE KEYS. `stella` carries two voices -- Skye at 5-8 and Kaleb at
+ * 9-12 -- so persona alone is not enough, and `bandForPersona` answers "5-8" for
+ * both. The band now rides the session (`SessionResponse.age_band`, which the
+ * server already computed and simply never returned), so the two are told apart
+ * on `data-band` and a twelve-year-old stops being shown the five-year-old's face.
+ */
+:root,
+.app {
+	--orb-spec: #ffffff;
+	--orb-tint: #f0c8e6;
+	--orb-mid: var(--magenta-light);
+	--orb-low: var(--plum-light);
+	--orb-deep: var(--plum-deep);
+}
+
+/* Skye -- 5 to 8. The warmest of the six, and the softest. */
+.app[data-persona="stella"] {
+	--orb-tint: #ffd9c2;
+	--orb-mid: #f9a072;
+	--orb-low: #c85f36;
+	--orb-deep: #6d2c17;
+}
+
+/* Kaleb -- 9 to 12. His own key now, so his own selector: the dry older cousin
+   is not the gentle one, and a twelve-year-old notices first. The old
+   `[data-persona="stella"][data-band="9-12"]` is kept beside it so a session
+   minted before the split still shows his face rather than reverting to
+   Skye's -- the client mirror of the server's `_SPLIT` seam. */
+.app[data-persona="kaleb"],
+.app[data-persona="stella"][data-band="9-12"] {
+	--orb-tint: #ffd4ef;
+	--orb-mid: #e879c9;
+	--orb-low: #a63b8f;
+	--orb-deep: #5d1c50;
+}
+
+/* Zion -- 13 to 18. Cooler, because this reader leaves when it is talked down to. */
+.app[data-persona="orion"] {
+	--orb-tint: #d3e0fb;
+	--orb-mid: #6f9cf5;
+	--orb-low: #3554b8;
+	--orb-deep: #1b2a63;
+}
+
+/* Imani -- parents and guardians. */
+.app[data-persona="aurora"] {
+	--orb-tint: #fbd7dc;
+	--orb-mid: #f0768a;
+	--orb-low: #b8394f;
+	--orb-deep: #66192c;
+}
+
+/* Azuri -- teachers. A colleague's colour, not a child's. */
+.app[data-persona="nova"] {
+	--orb-tint: #cbeee6;
+	--orb-mid: #4fbda7;
+	--orb-low: #1f7f70;
+	--orb-deep: #0e4139;
+}
+
+/* Each guide's own face and ring, keyed off the one attribute at the root.
+ *
+ * `guest` is deliberately absent: it keeps the sphere, because it is the voice
+ * that has not been told who is reading and there is no face for that.
+ */
+.app[data-persona="stella"] {
+	--orb-face: image-set(
+		url("/guides/skye.webp") type("image/webp"),
+		url("/guides/skye.png") type("image/png")
+	);
+	--guide-ring: #c22f99;
+	--orb-depth: 0 0 0 0 transparent;
+}
+.app[data-persona="kaleb"],
+/* A session minted before the split still says `stella` at 9-12. Same seam as
+   the server's `_SPLIT`, so an old token shows Kaleb rather than reverting. */
+.app[data-persona="stella"][data-band="9-12"] {
+	--orb-face: image-set(
+		url("/guides/kaleb.webp") type("image/webp"),
+		url("/guides/kaleb.png") type("image/png")
+	);
+	--guide-ring: #3b82f6;
+	--orb-depth: 0 0 0 0 transparent;
+}
+.app[data-persona="orion"] {
+	--orb-face: image-set(
+		url("/guides/zion.webp") type("image/webp"),
+		url("/guides/zion.png") type("image/png")
+	);
+	--guide-ring: #f4b000;
+	--orb-depth: 0 0 0 0 transparent;
+}
+.app[data-persona="aurora"] {
+	--orb-face: image-set(
+		url("/guides/imani.webp") type("image/webp"),
+		url("/guides/imani.png") type("image/png")
+	);
+	--guide-ring: #5c3aae;
+	--orb-depth: 0 0 0 0 transparent;
+}
+.app[data-persona="nova"] {
+	--orb-face: image-set(
+		url("/guides/azuri.webp") type("image/webp"),
+		url("/guides/azuri.png") type("image/png")
+	);
+	--guide-ring: #0dae93;
+	--orb-depth: 0 0 0 0 transparent;
+}
+
+/* Thinking keeps the sphere -- a portrait that pulses is unsettling.
+ *
+ * MUTED KEEPS THE FACE, and an earlier version of this got it wrong. Dropping
+ * it there was reasoned as "a greyed-out face reads as the person being
+ * disabled" -- but `.orb--muted` is the FAILED TURN, and a failed turn is
+ * exactly when a reader most needs to see who they were talking to. Losing the
+ * face there also meant that on any setup where turns cannot complete, the
+ * guide never appeared at all.
+ *
+ * Written with `[data-persona]` to match the specificity of the rules above;
+ * as `.orb--thinking` alone it loses to `.app[data-persona="nova"] .orb`.
+ */
+.app[data-persona] .orb--thinking {
+	--orb-face: none;
+	--guide-ring: transparent;
+}
+
+/* Declared on `.app` rather than on `.orb` so anything inside the app can use
+   the guide's face -- the composer chip does. Set on `.orb` it was invisible to
+   every element that was not one. */
+
+/* Guest keeps the sphere and gets a star.
+ *
+ * The other five are recognised by a face; Guest has none, because it is the
+ * voice that has not been told who is reading. A bare purple ball beside an
+ * answer reads as an avatar that failed to load, so it carries a mark of its
+ * own instead -- ASPIRE's gold, the same one in the wordmark.
+ *
+ * `::before` rather than an <svg> in the markup: every orb in the app is a bare
+ * `<div className="orb">`, and adding a child to all of them to serve one
+ * persona would put the star in the transcript, the welcome, the voice
+ * indicator and the picker whether it belonged there or not.
+ */
+.app[data-persona="guest"] .orb::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FED141'%3E%3Cpath d='M12 2.6l2.6 6.06 6.57.54-4.99 4.32 1.5 6.42L12 16.6l-5.68 3.34 1.5-6.42-4.99-4.32 6.57-.54L12 2.6z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: center;
+	/* Proportional, so it holds at 20px in the composer and 56px in the welcome. */
+	background-size: 52% 52%;
+	filter: drop-shadow(0 1px 1.5px rgb(53 29 90 / 0.45));
+	pointer-events: none;
+}
+
+/* No star on a turn that failed or one still thinking -- it is the guide's
+   mark, and neither of those states is the guide speaking. */
+.app[data-persona="guest"] .orb--muted::before,
+.app[data-persona="guest"] .orb--thinking::before {
+	content: none;
+}
+
+/* Guest -- answers before it knows who is reading, and looks like it. */
+.app[data-persona="guest"] {
+	--orb-tint: #e2dcf0;
+	--orb-mid: #9b86c4;
+	--orb-low: #63509a;
+	--orb-deep: #33255c;
+}
+
+/* THE GUIDE'S FACE, WITH THE SPHERE UNDERNEATH IT.
+ *
+ * Two layers, and the order is the point. `--orb-face` is the illustrated
+ * guide; the radial gradient beneath is what shows while that image is still
+ * arriving, and what shows permanently for `guest`, which has no face because
+ * it is the voice that has not been told who is reading.
+ *
+ * So the gradient is not dead weight -- it is the fallback, and it is already
+ * tinted per persona, which means the placeholder is the right colour before
+ * the photograph lands rather than a grey hole.
+ *
+ * The ring is `--guide-ring`, the same five colours the landing row uses under
+ * "Meet your guides". A reader who chose Kaleb by his blue circle should meet
+ * that same blue circle at the top of his first answer.
+ */
 .orb::after {
 	content: "";
 	position: absolute;
 	inset: 0;
 	border-radius: 999px;
-	background: radial-gradient(
-		circle at 33% 26%,
-		#ffffff 0%,
-		#f0c8e6 12%,
-		var(--magenta-light) 38%,
-		var(--plum-light) 72%,
-		var(--plum-deep) 100%
-	);
+	background-image: var(--orb-face, none),
+		radial-gradient(
+			circle at 33% 26%,
+			var(--orb-spec) 0%,
+			var(--orb-tint) 12%,
+			var(--orb-mid) 38%,
+			var(--orb-low) 72%,
+			var(--orb-deep) 100%
+		);
+	background-size: cover, auto;
+	/* `top` rather than `center`: these are portraits, and a circle cropped from
+	   the middle of one takes the chin and loses the eyes. */
+	background-position: center top, center;
+	background-repeat: no-repeat, no-repeat;
+	/* `--orb-depth` is the sphere's own inner shading, and it is the thing that
+	 * was making the guides look washed out: a deep purple inset at 50% over a
+	 * photograph is an overlay, not lighting. It stays for the sphere -- Guest,
+	 * and the moment before a face has loaded -- and every persona with a face
+	 * turns it off. */
 	box-shadow:
-		inset 0 -3px 7px rgb(53 29 90 / 0.5),
+		inset 0 0 0 1.5px var(--guide-ring, transparent),
+		var(--orb-depth, inset 0 -3px 7px rgb(53 29 90 / 0.5)),
 		0 4px 12px rgb(72 41 119 / 0.25);
+	/* The colour is identity, so it should not snap when the reader switches guide. */
+	transition: background 320ms ease;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+	.orb::after {
+		transition: none;
+	}
 }
 
 .orb--thinking {
@@ -2283,9 +2547,22 @@ body {
 	margin-top: 2px;
 }
 
+/* Desaturated and dimmed rather than blanked: the turn failed, the guide did
+   not stop existing. `background` shorthand would drop the face layers, so this
+   only touches what it means to. */
 .orb--muted::after {
-	background: var(--wash-18);
 	animation: none;
+	/* Enough to read as "this turn did not land", not so much that the guide
+	   stops being recognisable. */
+	filter: grayscale(0.25) opacity(0.88);
+}
+
+/* Nothing to desaturate without a face -- `guest` and the thinking state fall
+   back to the flat wash this rule always applied. */
+.app[data-persona="guest"] .orb--muted::after,
+.orb--thinking.orb--muted::after {
+	background: var(--wash-18);
+	filter: none;
 }
 
 /* The evidence chip and the action row, held in reserve. */
@@ -2438,7 +2715,7 @@ body {
 .composer-slot {
 	display: flex;
 	justify-content: center;
-	padding: 4px 24px 0;
+	padding: 4px 24px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .composer {
@@ -4404,7 +4681,7 @@ body {
 	}
 
 	.composer-slot {
-		padding: 4px 12px 0;
+		padding: 4px 12px calc(8px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.follow-ups {
@@ -5487,6 +5764,23 @@ body {
 	overflow-wrap: anywhere;
 }
 
+.account__setting {
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--hairline);
+	margin-bottom: 4px;
+}
+.account__toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.8125rem;
+	color: var(--ink);
+	cursor: pointer;
+}
+.account__toggle input[type="checkbox"] {
+	cursor: pointer;
+	accent-color: var(--color-magenta);
+}
 .account__item {
 	display: flex;
 	align-items: center;
@@ -6847,13 +7141,18 @@ body {
 .app::before {
 	content: "";
 	position: absolute;
-	inset: -20%;
+	inset: 0;
 	z-index: 0;
 	background:
-		radial-gradient(48% 42% at 22% 18%, rgb(194 47 153 / 0.34), transparent 62%),
-		radial-gradient(46% 46% at 78% 34%, rgb(107 66 161 / 0.36), transparent 64%);
-	will-change: transform;
-	animation: brand-wash 46s ease-in-out infinite;
+		linear-gradient(
+			to bottom,
+			rgba(255, 255, 255, 0.12) 0%,
+			rgba(255, 255, 255, 0.58) 38%,
+			rgba(255, 255, 255, 0.92) 72%,
+			#ffffff 100%
+		),
+		url('/images/aspire-world-bg.png') center top / cover no-repeat;
+	filter: saturate(0.85) brightness(1.12);
 	pointer-events: none;
 }
 
@@ -7527,5 +7826,855 @@ a.source__site--link:hover .source__out {
 @media (forced-colors: active) {
 	a.source__site--link {
 		text-decoration: underline;
+	}
+}
+
+.frame[data-care="true"] {
+	border: 2px solid theme('colors.red.500');
+	box-shadow: 0 0 20px theme('colors.red.500/0.2') inset;
+}
+.frame[data-care="true"] .composer textarea {
+	background-color: theme('colors.red.50');
+	color: theme('colors.red.900');
+}
+.frame[data-care="true"] .composer textarea::placeholder {
+	color: theme('colors.red.400');
+}
+
+
+/* ── Brandmark: the falling stars ─────────────────────────────────────────
+ *
+ * These lived in an inline `<style>` block inside Brandmark.tsx. Moved here
+ * because a rule in a component's own <style> tag cannot be reached by the
+ * `prefers-reduced-motion` blocks in this file -- so the one animation on the
+ * page that never stops was the one animation nobody could turn off.
+ *
+ * `infinite` on a children's service needs an opt-out. It has one now.
+ */
+@keyframes fallAndFade {
+	0% {
+		transform: translateY(-10px) rotate(0deg) scale(0.9);
+		opacity: 0;
+	}
+	10% {
+		opacity: 0.9;
+	}
+	70% {
+		opacity: 0.7;
+	}
+	100% {
+		transform: translateY(150px) rotate(180deg) scale(0.6);
+		opacity: 0;
+	}
+}
+
+.falling-star {
+	animation: fallAndFade 4s ease-in-out infinite;
+}
+
+.falling-star-1 {
+	animation-delay: 0s;
+	left: 25%;
+}
+
+.falling-star-2 {
+	animation-delay: 1.2s;
+	left: 55%;
+}
+
+.falling-star-3 {
+	animation-delay: 2.8s;
+	left: 85%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* Hidden rather than paused. A star frozen mid-fall reads as a rendering
+	 * fault; the wordmark is the brand and it stands on its own. */
+	.falling-star {
+		animation: none;
+		display: none;
+	}
+}
+
+/* ── The empty state ──────────────────────────────────────────────────────
+ *
+ * A new thread used to render a bare transcript: a blank column and a text
+ * box. Nothing said what the assistant could do, and nothing said which of
+ * its six voices was about to answer.
+ *
+ * The orb is repeated here at size because it is the face -- and because it
+ * is the one place a reader sees the colour before it starts answering. It
+ * inherits its tint from `data-persona` on `.app` like every other orb.
+ */
+.welcome {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+	padding: 12px 0 28px;
+}
+
+.welcome__hero {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+}
+
+.welcome__orb {
+	--orb-size: 56px;
+	flex: none;
+}
+
+.welcome__greeting {
+	font-family: var(--font-display, inherit);
+	font-size: clamp(1.5rem, 3.2vw, 2rem);
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	margin: 0;
+	text-wrap: balance;
+}
+
+.welcome__sub {
+	margin: 4px 0 0;
+	color: var(--ink-soft, #4a5561);
+	font-size: 1rem;
+}
+
+.welcome__cards {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	/* Two up on a laptop, one up on a phone. `auto-fit` rather than a media
+	   query so it also behaves in the narrow column left by an open rail. */
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 12px;
+}
+
+.welcome__card {
+	width: 100%;
+	height: 100%;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto auto;
+	column-gap: 12px;
+	row-gap: 2px;
+	align-items: start;
+	text-align: left;
+	padding: 14px 16px;
+	/* 44px is the WCAG floor and this is a children's product; the padding and
+	   two lines of content clear it comfortably, but it is stated rather than
+	   assumed. */
+	min-height: 44px;
+	border: 1px solid var(--line, #d3dbe3);
+	border-radius: 14px;
+	background: var(--surface, #fff);
+	cursor: pointer;
+	transition:
+		border-color 160ms ease,
+		transform 160ms ease,
+		box-shadow 160ms ease;
+}
+
+.welcome__card:hover {
+	border-color: var(--orb-mid, #c22f99);
+	transform: translateY(-1px);
+	box-shadow: 0 8px 20px -12px rgb(53 29 90 / 0.4);
+}
+
+.welcome__card:focus-visible {
+	outline: 2px solid var(--orb-mid, #c22f99);
+	outline-offset: 2px;
+}
+
+.welcome__card > i {
+	grid-row: 1 / span 2;
+	font-size: 1.5rem;
+	/* Takes the persona's colour, so the cards belong to whoever is answering. */
+	color: var(--orb-low, #6a55a0);
+	line-height: 1;
+}
+
+.welcome__card-title {
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.welcome__card-blurb {
+	color: var(--ink-soft, #4a5561);
+	font-size: 0.9rem;
+	line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.welcome__card {
+		transition: none;
+	}
+	.welcome__card:hover {
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app[data-phase="chat"] .atmosphere::before {
+		transition: none;
+	}
+}
+
+/* The header lockup is roughly two thirds the hero's size, so the fall is too.
+ * At the hero's 150px a star clears the mark and lands in the navigation. */
+@keyframes fallAndFadeCompact {
+	0% {
+		transform: translateY(-6px) rotate(0deg) scale(0.9);
+		opacity: 0;
+	}
+	12% {
+		opacity: 0.85;
+	}
+	70% {
+		opacity: 0.6;
+	}
+	100% {
+		transform: translateY(58px) rotate(180deg) scale(0.6);
+		opacity: 0;
+	}
+}
+
+.brandmark--header .falling-star {
+	animation-name: fallAndFadeCompact;
+	animation-duration: 4.6s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.brandmark--header .falling-star {
+		animation: none;
+		display: none;
+	}
+}
+
+/* ── The stars, over the chat's island ────────────────────────────────────
+ *
+ * Same idea as the landing's brandmark, carried through so the two surfaces
+ * feel like one place. Rendered on `.atmosphere::after` rather than as
+ * elements, because the transcript should not gain three nodes it has no use
+ * for and no screen reader should meet them.
+ *
+ * SLOWER AND FEWER THAN THE LANDING. A hero is looked at for a moment; this
+ * sits behind a conversation a child may read for ten minutes, and motion that
+ * charms once becomes something you cannot stop noticing. Two drifting points
+ * at low opacity, on a long cycle.
+ */
+@keyframes chatStarDrift {
+	0% {
+		transform: translate3d(0, -8vh, 0) rotate(0deg);
+		opacity: 0;
+	}
+	14% {
+		opacity: 0.5;
+	}
+	78% {
+		opacity: 0.32;
+	}
+	100% {
+		transform: translate3d(2vw, 96vh, 0) rotate(200deg);
+		opacity: 0;
+	}
+}
+
+.app[data-phase="chat"] .atmosphere::after {
+	content: "";
+	position: fixed;
+	top: 0;
+	left: 14%;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+	background: var(--gold, #fed141);
+	box-shadow:
+		46vw 0 0 -2px var(--gold, #fed141),
+		78vw 0 0 -1px var(--gold, #fed141);
+	filter: drop-shadow(0 0 6px rgb(254 209 65 / 0.55));
+	opacity: 0;
+	pointer-events: none;
+	animation: chatStarDrift 19s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app[data-phase="chat"] .atmosphere::after {
+		animation: none;
+		display: none;
+	}
+}
+
+/* ── The island, on the chat canvas ───────────────────────────────────────
+ *
+ * On `.workspace`, not on `.atmosphere`. In chat phase `.frame` covers all but
+ * a 16px margin -- this file says so at the `.atmosphere span` rule -- so
+ * anything painted on the atmosphere is painting into a strip nobody sees.
+ * Three earlier attempts died there while the opacity was being blamed.
+ *
+ * `backdrop-filter` on this element blurs what is BEHIND it, not its own
+ * background, so the scene stays sharp and the content over it is untouched.
+ *
+ * The veils are shaped rather than flat: a radial that protects the reading
+ * column on the left, and a vertical fade that opens the top for atmosphere
+ * and closes the bottom into a working surface. The mountain sits top-right,
+ * where no sentence goes, so that is where the scene is allowed to be seen.
+ *
+ * VERIFY AT 1440px OR WIDER. Below about 900 the rail opens as an overlay and
+ * blurs the content behind it, which looks like a bug in this and is not.
+ */
+.app[data-phase="chat"] .workspace {
+	background:
+		radial-gradient(
+			circle at 24% 42%,
+			rgb(255 255 255 / 0.92) 0%,
+			rgb(255 255 255 / 0.8) 22%,
+			rgb(255 255 255 / 0.46) 48%,
+			rgb(255 255 255 / 0.1) 70%,
+			transparent 84%
+		),
+		linear-gradient(
+			to bottom,
+			rgb(255 255 255 / 0.06) 0%,
+			rgb(255 255 255 / 0.2) 34%,
+			rgb(255 255 255 / 0.52) 68%,
+			rgb(255 255 255 / 0.78) 100%
+		),
+		image-set(
+			url("/images/hero-bg.webp") type("image/webp"),
+			url("/images/hero-bg.jpg") type("image/jpeg")
+		)
+		right top / cover no-repeat;
+}
+
+/* The composer is the smallest type and the control everyone uses, so it keeps
+ * a surface of its own rather than whatever the scene is doing behind it. */
+.app[data-phase="chat"] .composer {
+	background: rgb(255 255 255 / 0.94);
+}
+
+/* ── The journey, opened from the rail ────────────────────────────────────
+ *
+ * `JourneyView` is its own full-height dark surface with its own header, so
+ * unlike the video library it is not wrapped in `.help__panel` -- it only
+ * needs somewhere to sit above the scrim and a ceiling on how wide it gets.
+ */
+.view-panel__surface,
+.journey-panel__surface {
+	position: relative;
+	z-index: 1;
+	width: min(56rem, 100%);
+	max-height: 92dvh;
+	overflow-y: auto;
+	border-radius: 18px;
+	box-shadow: 0 24px 60px rgb(11 5 29 / 0.45);
+}
+
+/* `min-h-screen` on the view itself is right on a page of its own and wrong
+   inside a dialog, where it forces the panel taller than the scrim. */
+.view-panel__surface > *,
+.journey-panel__surface > * {
+	min-height: 0;
+}
+
+/* ── Meet your guides ──────────────────────────────────────────────────────
+ *
+ * Five audience-specific ways in, not five profile pictures. The order --
+ * audience pill, then face, then name -- is the component: the pill answers
+ * "which one is mine?" before the reader has to know who Skye or Azuri is.
+ *
+ * Sizes come from `--guide-avatar` so the same markup serves the designed
+ * treatment and the smaller one the landing's single-viewport rule allows.
+ * Nothing else is scaled by hand.
+ */
+.guide-selector {
+	--guide-avatar: 230px;
+	--guide-gap: 36px;
+	width: 100%;
+	background: rgb(255 255 255 / 0.94);
+	border: 1px solid rgb(87 57 137 / 0.12);
+	border-radius: 38px;
+	box-shadow: 0 18px 48px rgb(52 32 86 / 0.1);
+	padding: 42px 60px 54px;
+}
+
+.guide-selector--compact {
+	--guide-avatar: 66px;
+	--guide-gap: 14px;
+	border-radius: 24px;
+	padding: 14px 24px 16px;
+}
+
+.guide-selector__heading {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	font-size: 38px;
+	font-weight: 700;
+	color: #1a103c;
+	margin: 0 0 48px;
+}
+.guide-selector__heading-icon {
+	color: #3b82f6;
+	font-size: 42px;
+	display: inline-flex;
+}
+.guide-selector--compact .guide-selector__heading {
+	font-size: 16px;
+	gap: 9px;
+	margin: 0 0 11px;
+}
+.guide-selector--compact .guide-selector__heading-icon {
+	font-size: 19px;
+}
+
+.guide-selector__grid {
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: var(--guide-gap);
+	align-items: start;
+}
+
+/* A button, not an image with a handler: keyboard-reachable and announced as
+   an action, which matters more here than anywhere else given who uses it. */
+.guide-card {
+	border: 0;
+	background: transparent;
+	padding: 0;
+	cursor: pointer;
+	/* A grid item defaults to `min-width: auto`, which means it refuses to
+	 * shrink below its widest unbreakable word -- "guardians", "educators".
+	 * So `repeat(5, 1fr)` was not actually dividing the row five ways: the two
+	 * long pills set a floor and the grid quietly overflowed its container.
+	 * With this the columns honour `1fr` and the pill wraps instead. */
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	position: relative;
+	transition:
+		transform 180ms ease,
+		opacity 180ms ease;
+}
+.guide-card:hover {
+	transform: translateY(-6px);
+}
+.guide-card:focus-visible {
+	outline: 3px solid var(--guide-color);
+	outline-offset: 8px;
+	border-radius: 20px;
+}
+
+.guide-card__pill {
+	padding: 8px 18px;
+	border-radius: 11px;
+	font-size: 14px;
+	line-height: 1;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	margin-bottom: 18px;
+	white-space: nowrap;
+	background: var(--guide-pill-bg);
+	color: var(--guide-pill-fg);
+}
+/* The two long labels -- "Parents & guardians", "Teachers & educators" -- are
+   what set the column width, and `nowrap` let them force the grid 208px wider
+   than the space it has. They wrap here instead of being shortened: the label
+   is the thing that tells a reader the row is for them, and "Parents" is not
+   the same promise as "Parents & guardians". */
+.guide-selector--compact .guide-card__pill {
+	font-size: 8.5px;
+	padding: 3px 7px;
+	border-radius: 6px;
+	margin-bottom: 7px;
+	white-space: normal;
+	max-width: 100%;
+	line-height: 1.25;
+	min-height: 2lh;
+	display: flex;
+	align-items: center;
+	text-align: center;
+}
+
+.guide-card__avatar {
+	/* Capped, not fixed. At a narrow desktop the column gets smaller than
+	 * `--guide-avatar` and a rigid circle then sticks out of its own card --
+	 * two pixels of grid overflow at 1024, which is exactly the kind of "slight
+	 * overflow" that is hard to point at. `aspect-ratio` keeps it round while
+	 * the width follows the column. */
+	width: min(var(--guide-avatar), 100%);
+	aspect-ratio: 1;
+	height: auto;
+	border-radius: 50%;
+	overflow: hidden;
+	background: #fff;
+	border: 4px solid var(--guide-color);
+	box-shadow:
+		0 10px 28px rgb(35 21 72 / 0.1),
+		0 0 0 5px rgb(255 255 255 / 0.8);
+	transition:
+		box-shadow 180ms ease,
+		border-width 180ms ease;
+}
+.guide-selector--compact .guide-card__avatar {
+	border-width: 3px;
+	box-shadow:
+		0 6px 16px rgb(35 21 72 / 0.12),
+		0 0 0 3px rgb(255 255 255 / 0.85);
+}
+.guide-card__avatar img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center top;
+	display: block;
+}
+.guide-card:hover .guide-card__avatar {
+	box-shadow:
+		0 16px 38px rgb(35 21 72 / 0.15),
+		0 0 0 6px color-mix(in srgb, var(--guide-color) 12%, white);
+}
+
+.guide-card__name {
+	margin-top: 16px;
+	font-size: 25px;
+	line-height: 1.1;
+	font-weight: 750;
+	color: #1a103c;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+.guide-selector--compact .guide-card__name {
+	margin-top: 7px;
+	font-size: 13px;
+	gap: 5px;
+}
+.guide-card__check {
+	color: var(--guide-color);
+	font-size: 0.8em;
+}
+
+/* Chosen: the ring thickens and the others step back. The card itself does not
+   change, so the row does not reflow under the reader's cursor. */
+.guide-card[aria-pressed="true"] .guide-card__avatar {
+	border-width: 6px;
+	box-shadow:
+		0 14px 36px rgb(35 21 72 / 0.16),
+		0 0 0 7px color-mix(in srgb, var(--guide-color) 15%, white);
+}
+.guide-selector--compact .guide-card[aria-pressed="true"] .guide-card__avatar {
+	border-width: 4px;
+}
+.guide-selector:has(.guide-card[aria-pressed="true"])
+	.guide-card:not([aria-pressed="true"]) {
+	opacity: 0.88;
+}
+
+/* One line on what changes, on hover and focus only. Five permanent
+   paragraphs turn a two-second row into one that has to be studied. */
+/* Absolutely positioned, so it is out of flow -- but it still counts toward an
+   ancestor's scroll width, and at `width: max-content` it was reporting the row
+   as wider than it draws. Capped to the card so it can never be the reason the
+   page scrolls sideways. */
+.guide-card__hint {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%) translateY(-4px);
+	/* `display: none` until shown, not just `opacity: 0`.
+	 *
+	 * An absolutely positioned box is out of flow but still counts toward an
+	 * ancestor's scroll width, and a 240px hint centred in an 83px card reported
+	 * the row as 79px wider than it draws. Hidden this way it contributes
+	 * nothing. The cost is the fade, which a tooltip can do without. */
+	display: none;
+	width: max-content;
+	max-width: min(15rem, 46vw);
+	padding: 8px 12px;
+	border-radius: 10px;
+	background: #1a103c;
+	color: #fff;
+	font-size: 12.5px;
+	line-height: 1.35;
+	font-weight: 500;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 150ms ease,
+		transform 150ms ease;
+	z-index: 3;
+}
+.guide-card__hint[data-visible="true"] {
+	display: block;
+	opacity: 1;
+	transform: translateX(-50%) translateY(0);
+}
+
+.guide-selector__skip {
+	margin: 28px 0 0;
+	text-align: center;
+}
+.guide-selector__skip button {
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	font-size: 15px;
+	color: #6b6383;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.guide-selector__skip button:hover {
+	color: #c22f99;
+}
+.guide-selector--compact .guide-selector__skip {
+	margin-top: 10px;
+}
+.guide-selector--compact .guide-selector__skip button {
+	font-size: 12px;
+}
+
+/* Below the point five columns stop being readable, the row scrolls and the
+   next guide is deliberately half-visible, so swiping is discoverable without
+   an affordance drawn on top of the artwork. */
+@media (max-width: 900px) {
+	.guide-selector {
+		--guide-avatar: 148px;
+		padding: 28px 20px 32px;
+	}
+	.guide-selector__heading {
+		font-size: 26px;
+		margin-bottom: 24px;
+	}
+	.guide-selector__grid {
+		display: flex;
+		overflow-x: auto;
+		gap: 20px;
+		scroll-snap-type: x mandatory;
+		padding-bottom: 14px;
+		margin-inline: -20px;
+		padding-inline: 20px;
+	}
+	.guide-card {
+		flex: 0 0 170px;
+		scroll-snap-align: center;
+	}
+	.guide-card__name {
+		font-size: 19px;
+	}
+	/* A tooltip anchored under a horizontally scrolling row lands off-screen
+	   as often as not, and there is no hover on a touch screen to open it. */
+	.guide-card__hint {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.guide-card,
+	.guide-card__avatar,
+	.guide-card__hint {
+		transition: none;
+	}
+	.guide-card:hover {
+		transform: none;
+	}
+}
+
+/* The guide's face in the composer chip.
+ *
+ * Same `--orb-face` cascade as the transcript orb, so it follows `data-persona`
+ * at the root and there is no second list of images to keep in step. Square-ish
+ * and small, so it reads as an identity marker beside the name rather than as a
+ * second avatar competing with the one in the transcript.
+ */
+.persona__face {
+	width: 18px;
+	height: 18px;
+	border-radius: 999px;
+	flex: none;
+	background-image: var(--orb-face, none);
+	background-size: cover;
+	background-position: center top;
+	background-repeat: no-repeat;
+	box-shadow: inset 0 0 0 1.5px var(--guide-ring, transparent);
+}
+
+/* ── History, folded past five ────────────────────────────────────────────
+ *
+ * Every conversation rendered pushed the nav below it -- Videos, Stories,
+ * Learn, Games, the two audience pages -- further out of reach with every
+ * question asked. A reader who uses the product properly loses the rest of it.
+ */
+.rail__history-toggle {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	width: 100%;
+	margin-top: 4px;
+	padding: 7px 10px;
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
+	cursor: pointer;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--ink-soft, rgb(72 41 119 / 0.7));
+	text-align: left;
+}
+.rail__history-toggle:hover {
+	background: var(--wash-8, rgb(72 41 119 / 0.06));
+	color: var(--ink);
+}
+
+/* ── The guide at the foot of the rail ────────────────────────────────────
+ *
+ * Face, name, audience, and the picker. Signed-in only.
+ *
+ * THE FIRST VERSION BROKE THE RAIL, and the cause was one line above this
+ * block: `.rail__foot` is a flex ROW. The card was added as a sibling of the
+ * account control, so the two sat side by side and the card was squeezed to
+ * 22px -- which is why "Skye" wrapped one letter per line straight through the
+ * sign-in text. It was never about the collapsed state.
+ *
+ * The foot stacks when it holds a guide card, and keeps its row otherwise, so
+ * the signed-out rail is untouched.
+ */
+.rail__foot:has(.rail-guide) {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+}
+
+.rail-guide {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 10px;
+	margin-bottom: 8px;
+	border-radius: 14px;
+	background: rgb(255 255 255 / 0.72);
+	border: 1px solid rgb(72 41 119 / 0.12);
+	/* The card may never be wider than the rail that holds it. Without this it
+	   sizes to its longest label and pushes the picker past the edge. */
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+.rail-guide__face {
+	width: 34px;
+	height: 34px;
+	flex: none;
+	border-radius: 999px;
+	background-image: var(--orb-face, none);
+	background-size: cover;
+	background-position: center top;
+	background-repeat: no-repeat;
+	box-shadow: inset 0 0 0 2px var(--guide-ring, transparent);
+}
+
+.rail-guide__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	line-height: 1.25;
+}
+
+.rail-guide__name {
+	font-size: 13.5px;
+	font-weight: 700;
+	color: var(--ink);
+	line-height: 1.25;
+}
+
+/* SMALLER THAN THE NAME, and smaller again for the two that run long.
+ * "Parents & guardians" and "Teachers & educators" are roughly twice the
+ * length of "Ages 5-8", and at one size the longest label decided the width of
+ * the card -- which is what pushed the picker out of the rail. Sized down and
+ * allowed to wrap, they fit beside the chevron instead of displacing it. */
+.rail-guide__audience {
+	font-size: 11.5px;
+	font-weight: 500;
+	color: rgb(72 41 119 / 0.72);
+}
+.app[data-persona="aurora"] .rail-guide__audience,
+.app[data-persona="nova"] .rail-guide__audience {
+	font-size: 10px;
+	letter-spacing: -0.01em;
+}
+
+.rail-guide__note {
+	font-size: 11px;
+	color: rgb(72 41 119 / 0.66);
+}
+
+/* Only the chevron shows: the trigger's own label would repeat the name
+   printed beside it. */
+.rail-guide__picker {
+	margin-left: auto;
+	flex: none;
+	align-self: center;
+}
+.rail-guide__picker .persona__name,
+.rail-guide__picker .persona__face {
+	display: none;
+}
+.rail-guide__picker .persona__trigger {
+	padding: 4px 5px;
+}
+
+/* Collapsed: the face, centred, and nothing that needs width. */
+.app[data-rail="collapsed"] .rail-guide {
+	justify-content: center;
+	padding: 8px 0;
+	gap: 0;
+	background: transparent;
+	border-color: transparent;
+}
+.app[data-rail="collapsed"] .rail-guide__text,
+.app[data-rail="collapsed"] .rail-guide__picker {
+	display: none;
+}
+
+/* ── The landing, when the window is short ────────────────────────────────
+ *
+ * The page is designed to sit in one viewport with the footer in it, and at a
+ * comfortable height it has room to breathe. It stopped fitting once the
+ * footer gained the ministry line and the guide row gained real faces --
+ * 980px of content in a 900px window, with the footer 80px below the fold.
+ *
+ * Trimming the spacing outright fixed 900 and made every taller screen look
+ * cramped for no reason. So the generous spacing is the default and the trim
+ * is conditional, which is the pattern this file already uses for the rail at
+ * `max-height: 820px`.
+ *
+ * The measurements this is set from, at 1440x900: header 131, main 757,
+ * footer 92 -- 980 against 900. These rules recover the 80.
+ */
+@media (max-height: 940px) {
+	.landing-head {
+		padding-top: 0.75rem;
+		padding-bottom: 0.5rem;
+	}
+	.landing-hero,
+	.landing-cards {
+		margin-bottom: 0.75rem;
+	}
+	.landing-lower {
+		padding-bottom: 0.25rem;
+	}
+	.guide-selector--compact {
+		padding: 10px 24px 12px;
+	}
+	.guide-selector--compact .guide-selector__heading {
+		margin-bottom: 8px;
+	}
+	.guide-selector--compact .guide-card__pill {
+		margin-bottom: 5px;
+	}
+	.guide-selector--compact .guide-card__name {
+		margin-top: 5px;
 	}
 }

@@ -17,6 +17,7 @@
 		"e2e": "node e2e/run.mjs"
 	},
 	"dependencies": {
+		"@phosphor-icons/web": "^2.1.2",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tanstack/react-devtools": "^0.10.9",
 		"@tanstack/react-query": "^5.101.4",

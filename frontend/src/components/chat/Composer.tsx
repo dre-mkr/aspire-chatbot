@@ -8,7 +8,7 @@ import {
 	useState,
 } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
-import type { PersonaId } from "#/lib/aspire/personas";
+import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { PersonaPicker } from "./PersonaPicker";
@@ -33,7 +33,8 @@ interface ComposerProps {
 	onToggleSimpleMode: () => void;
 	/** Who the assistant is answering for. Null means nobody has said. */
 	persona: PersonaId | null;
-	onPersonaChange: (next: PersonaId | null) => void;
+	band?: AgeBand | null;
+	onPersonaChange: (next: PersonaId | null, band?: AgeBand) => void;
 	/** Draft is lifted so a transcript can land in it for review before sending. */
 	draft: string;
 	onDraftChange: (value: string) => void;
@@ -72,6 +73,7 @@ export function Composer({
 	simpleMode,
 	onToggleSimpleMode,
 	persona,
+	band,
 	onPersonaChange,
 	draft,
 	onDraftChange,
@@ -242,7 +244,11 @@ export function Composer({
 				) : (
 					<div className="composer__tools">
 						{/* First in the row: it is the widest-reaching control here, reading level included. */}
-						<PersonaPicker persona={persona} onChange={onPersonaChange} />
+						<PersonaPicker
+							persona={persona}
+							band={band}
+							onChange={onPersonaChange}
+						/>
 
 						{/* Voice settings live here, not beside the mic. */}
 						{voice.available ? (

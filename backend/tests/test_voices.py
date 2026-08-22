@@ -60,7 +60,7 @@ NO_FIGURES = (("stella", "5-8"), ("guest", "13-15"))
 #: Every band above the youngest. An exclamation mark on a fact reads to these
 #: readers as either a sales pitch or a small child.
 NO_EXCLAMATION = (
-    ("stella", "9-12"), ("orion", "13-15"), ("orion", "16-18"),
+    ("kaleb", "9-12"), ("orion", "13-15"), ("orion", "16-18"),
     ("aurora", "adult"), ("nova", "adult"), ("guest", "13-15"),
 )
 
@@ -223,7 +223,7 @@ class TestTheTwoChildVoicesAreTwoPeople:
         assert "Skye" in card and "Kaleb" not in card
 
     def test_the_older_child_band_is_kaleb(self):
-        card = persona_card("stella", "9-12")
+        card = persona_card("kaleb", "9-12")
         assert "Kaleb" in card, (
             "a twelve-year-old is being introduced to the five-year-old's voice. "
             "That is the one-way door: they do not complain, they leave."
@@ -231,7 +231,7 @@ class TestTheTwoChildVoicesAreTwoPeople:
         assert "Skye" not in card
 
     def test_the_older_child_band_starts_at_the_older_end(self):
-        assert "older end" in persona_card("stella", "9-12").lower(), (
+        assert "older end" in persona_card("kaleb", "9-12").lower(), (
             "without this instruction the 9-12 card reads as a softened 5-8 "
             "card, and the top of that band is a secondary-school reader."
         )
@@ -245,7 +245,13 @@ class TestTheTwoChildVoicesAreTwoPeople:
         moment both bands are pinned, because renaming `NAMES["stella"]` then
         changes no card at all.
         """
-        assert set(BY_BAND) == {("stella", "9-12")}
+        # EMPTY NOW, AND THAT IS THE ASSERTION. Kaleb was the only entry, and
+        # being a band label rather than a key was exactly what this split
+        # fixed: `BY_BAND` cannot reach access, the games, the token or the
+        # anonymous default, so a reader who chose Kaleb was a `stella` reader
+        # everywhere except the greeting. The mechanism stays for a future
+        # genuine two-voice persona; nothing uses it today.
+        assert set(BY_BAND) == set()
         assert display_name("stella", "5-8") == NAMES["stella"]
 
 
@@ -296,7 +302,7 @@ class TestTheNames:
     def test_the_band_only_matters_where_it_is_declared(self):
         assert display_name("stella") == NAMES["stella"]
         assert display_name("stella", "5-8") == "Skye"
-        assert display_name("stella", "9-12") == "Kaleb"
+        assert display_name("kaleb", "9-12") == "Kaleb"
 
     def test_an_unknown_key_does_not_raise_at_a_reader(self):
         assert display_name("nobody") == ""

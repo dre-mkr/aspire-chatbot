@@ -42,7 +42,7 @@ from app.safety import vocab
 #: The six band cards: `(persona, band)`, and the file each must live in.
 BAND_CARDS: dict[tuple[str, str], str] = {
     ("stella", "5-8"): "stella.5-8.md",
-    ("stella", "9-12"): "stella.9-12.md",
+    ("kaleb", "9-12"): "kaleb.9-12.md",
     ("orion", "13-15"): "orion.13-15.md",
     ("orion", "16-18"): "orion.16-18.md",
     ("aurora", "adult"): "aurora.adult.md",
@@ -272,7 +272,7 @@ class TestTheVocabularyLadder:
 
     def test_the_9_12_card_shows_the_split_and_a_sourced_worked_example(self):
         """Kaleb is the first rung that gets arithmetic, and only at a sourced rate."""
-        card = _read(_DIR / BAND_CARDS[("stella", "9-12")])
+        card = _read(_DIR / BAND_CARDS[("kaleb", "9-12")])
         assert "EC$500 savings / EC$500 investment" in card
         assert "compounded twice a\n    year" in card
         assert "SOURCED rate" in card
@@ -304,7 +304,7 @@ class TestTheVocabularyLadder:
 
     def test_the_withdrawal_answer_does_not_move_between_bands(self):
         """One sourced rule, one answer, every band. Said on the card, not hoped for."""
-        for persona, band in (("stella", "9-12"), ("orion", "13-15"), ("orion", "16-18")):
+        for persona, band in (("kaleb", "9-12"), ("orion", "13-15"), ("orion", "16-18")):
             card = _read(_DIR / BAND_CARDS[(persona, band)])
             assert "NEVER answer the withdrawal question differently" in card
 
@@ -337,15 +337,32 @@ class TestTheCardsAskForMoreThanTheOutboundGateAllows:
     pins the overlap so that decision is visible in the suite rather than
     discovered in a transcript, and it fails the moment either side changes --
     which is the point.
+
+    ONE OF THE TWO IS NOW SETTLED. At 5-8 the card yielded: it teaches that
+    money left alone gets bigger and does not name the thing, because a
+    five-year-old does not need the noun and cannot check the number behind it.
+    The gate was always right there and the card was asking for a reply the gate
+    would then take apart.
+
+    THE 9-12 ONE IS STILL OPEN, deliberately. `compound` is a harder call than
+    `interest`: a twelve-year-old in Form 1 is taught this at school, the card
+    is built around using real words correctly and defining them once in
+    passing, and lifting the term is arguably the right answer rather than the
+    lazy one. That is a decision for the ASPIRE team, not for whoever next
+    reads this file.
     """
 
-    def test_the_5_8_card_names_a_word_the_5_8_gate_still_strips(self):
+    def test_the_5_8_card_no_longer_names_the_word_its_gate_strips(self):
+        """Settled: the card yielded, and the gate is unchanged behind it."""
         card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
-        assert "what interest is" in card
+        assert "what interest is" not in card
+        # The idea survives; only the noun is gone.
+        assert "money left alone gets bigger" in card
+        # And the gate still holds, which is what made the card wrong, not weak.
         assert [v.term for v in vocab.check("what interest is", "5-8")] == ["interest"]
 
     def test_the_9_12_card_asks_for_arithmetic_the_9_12_gate_still_strips(self):
-        card = _read(_DIR / BAND_CARDS[("stella", "9-12")])
+        card = _read(_DIR / BAND_CARDS[("kaleb", "9-12")])
         assert "compounded twice a" in card
         assert [v.term for v in vocab.check("compounded twice a year", "9-12")] == [
             "compound"
@@ -401,19 +418,21 @@ class TestTheNameIsOneLine:
         assert NAMES["stella"] in persona_card("stella", "5-8")
         assert PLACEHOLDER not in persona_card("stella", "5-8")
 
-    def test_the_band_label_wins_over_the_persona_label(self):
-        """`stella` is one key and two voices, so it is one key and two names.
+    def test_each_child_card_carries_its_own_name(self):
+        """Two keys, two cards, two names, and neither leaks into the other.
 
         Skye is a gentle helper for a child who cannot yet read a rate; Kaleb is
         a dry older cousin who names the EC$500 split and shows the workings.
-        Handing the older card the younger name is the same mismatch the band
-        split exists to end, one layer up.
+        Handing the older card the younger name was the mismatch readers noticed
+        first, and it survived the card split because the NAME still came from
+        `stella`. Kaleb having a key of his own is what finally ends it: the
+        label now travels with the card because they are the same persona.
         """
-        kaleb = BAND_NAMES[("stella", "9-12")]
+        skye, kaleb = NAMES["stella"], NAMES["kaleb"]
         younger = persona_card("stella", "5-8")
-        older = persona_card("stella", "9-12")
-        assert NAMES["stella"] in younger and kaleb not in younger
-        assert kaleb in older and NAMES["stella"] not in older
+        older = persona_card("kaleb", "9-12")
+        assert skye in younger and kaleb not in younger
+        assert kaleb in older and skye not in older
 
     def test_a_rename_touches_one_line_and_no_card(self, monkeypatch):
         from app.prompting.personas import _card_text
@@ -425,14 +444,20 @@ class TestTheNameIsOneLine:
         assert "Cora" in card and before not in card
 
     def test_a_band_rename_touches_one_line_and_no_card(self, monkeypatch):
-        """A per-band label is one line in the same file, on the same terms."""
+        """A per-band label is one line in the same file, on the same terms.
+
+        `BY_BAND` is empty since Kaleb took a key of his own, so this adds the
+        entry it tests. The mechanism is still the right one for a persona that
+        genuinely carries two voices, and a mechanism with no rows is exactly
+        the kind that rots unnoticed -- so it stays under test with a synthetic
+        row rather than being deleted along with its last real user.
+        """
         from app.prompting.personas import _card_text
 
-        before = BAND_NAMES[("stella", "9-12")]
-        monkeypatch.setitem(BAND_NAMES, ("stella", "9-12"), "Renard")
+        monkeypatch.setitem(BAND_NAMES, ("kaleb", "9-12"), "Renard")
         _card_text.cache_clear()
-        card = persona_card("stella", "9-12")
-        assert "Renard" in card and before not in card
+        card = persona_card("kaleb", "9-12")
+        assert "Renard" in card and NAMES["kaleb"] not in card
 
     def test_a_band_with_no_label_of_its_own_falls_back_to_the_persona(self):
         """Only the pairs that differ are listed; every other pair falls through."""
@@ -505,4 +530,4 @@ class TestTheLoaderPicksTheMostSpecificCard:
 
     def test_a_twelve_year_old_is_not_answered_as_a_six_year_old(self):
         """The finding this whole change exists for."""
-        assert persona_card("stella", "9-12") != persona_card("stella", "5-8")
+        assert persona_card("kaleb", "9-12") != persona_card("stella", "5-8")

@@ -131,6 +131,10 @@ class StartBody(ThreadBody):
     game_type: str = Field(default="word_scramble", max_length=64)
     language: str = Field(default="en", max_length=8)
     persona: str | None = Field(default=None, max_length=32)
+    #: Optional. Absent means every item the persona may see, which is how this
+    #: endpoint behaved before the age dimension existed and how any client that
+    #: does not send it keeps behaving.
+    age_band: str | None = Field(default=None, max_length=16)
 
 
 class SubmitBody(ThreadBody):

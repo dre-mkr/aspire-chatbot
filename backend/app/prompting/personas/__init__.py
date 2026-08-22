@@ -73,6 +73,31 @@ def _youngest_card(persona: str) -> Path | None:
 
 
 @lru_cache(maxsize=64)
+def bands_with_cards(persona: str) -> frozenset[str]:
+    """The bands this persona has a card of its own for, in `AGE_BANDS` order.
+
+    THE FILES ON DISK ARE THE AUTHORITY, and that is the whole safety argument.
+    `stella` has `stella.5-8.md` and `stella.9-12.md`, so it owns those two
+    bands and no others; `orion` owns `13-15` and `16-18`; `aurora` and `nova`
+    own `adult`; `guest` has only an undifferentiated card, so it owns nothing
+    band-specific and every request against it falls back.
+
+    This exists so a caller may ask for a band WITHOUT that request being able
+    to widen anything. A persona can only ever resolve to material written for
+    it, because a band it has no card for is not in this set -- the request does
+    not get refused into somebody else's card, it simply is not honoured. There
+    is no configuration to keep in step and no list to forget to update: add a
+    card and the band exists, delete one and it stops.
+
+    Empty for a persona with no band cards at all, which callers must read as
+    "this persona does not take a band" rather than as an error.
+    """
+    return frozenset(
+        band for band in AGE_BANDS if (_DIR / f"{persona}.{band}.md").is_file()
+    )
+
+
+@lru_cache(maxsize=64)
 def _card_text(persona: str, band: str) -> str:
     """The most specific card on disk for this persona and band.
 

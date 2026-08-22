@@ -1,489 +1,772 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AccountControl } from "#/components/auth/AccountControl";
-import { Composer } from "#/components/chat/Composer";
-import { FirstRun } from "#/components/chat/FirstRun";
-import { Rail } from "#/components/chat/Rail";
-import { VoiceConsent, VoiceNote } from "#/components/chat/Voice";
-import { CloseIcon, MenuIcon } from "#/components/icons";
-import { Brandmark } from "#/components/landing/Brandmark";
-import { GuideChooser } from "#/components/onboarding/GuideChooser";
-import { newThreadId } from "#/lib/aspire/conversations";
-import { clearEligibilityResult } from "#/lib/aspire/eligibility";
-import { downloadTranscript } from "#/lib/aspire/export";
-import { guideAsked, rememberGuideAsked } from "#/lib/aspire/guide-choice";
-import {
-	readLandingDraft,
-	stageFirstTurn,
-	stashLandingDraft,
-} from "#/lib/aspire/handoff";
-import { type StoredConversation, titleFor } from "#/lib/aspire/history";
-import { starterPrompts } from "#/lib/aspire/knowledge";
-import { upsertConversation } from "#/lib/aspire/queries";
-import type { AnswerSearch } from "#/lib/aspire/search";
-import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
-import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
-import { useConversationList } from "#/lib/aspire/use-conversation-list";
-import { useVoice } from "#/lib/aspire/use-voice";
+import { useNavigate } from "@tanstack/react-router";
+import type React from "react";
+import { useState } from "react";
+import { stageFirstTurn } from "#/lib/aspire/handoff";
+import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
+import { AboutView } from "./AboutView";
+import { Brandmark } from "./Brandmark";
+import { EducatorsView } from "./EducatorsView";
+import { GuideSelector } from "./GuideSelector";
+import { HistoryView } from "./HistoryView";
+import { JourneyView } from "./JourneyView";
+import { ParentsView } from "./ParentsView";
+import { StoriesView } from "./StoriesView";
+
+/** What the reward is called, which is not settled.
+ *
+ * "Magic Coins" here, "Hero Bucks" and "Super Saver Bucks" on the Grade 1
+ * classroom chart. Three names for one thing is how a child ends up believing
+ * they are three things. Named once, in one place, so the decision is one edit
+ * when it is made.
+ */
+const COIN_LABEL = "Magic Coins";
+
+/** The reader's balance, or null when there is nobody signed in to have one.
+ *
+ * Null on purpose. It was `142` -- a literal, shown to every visitor, including
+ * the ones who had never earned a coin.
+ */
+const coinBalance: number | null = null;
+
+type ViewState =
+	| "landing"
+	| "chat"
+	| "history"
+	| "journey"
+	| "stories"
+	| "parents"
+	| "educators"
+	| "about";
+/**
+ * The names on the guide picker, which are LABELS and not persona keys.
+ *
+ * This was called `PersonaId` and it shadowed the real one in
+ * `lib/aspire/personas.ts`, where the ids are `stella`, `orion`, `aurora`,
+ * `nova` and `guest`. Two incompatible definitions of the same idea, and the
+ * label version won on this page -- which is part of why the picker never did
+ * anything: nothing downstream understood the word "skye".
+ *
+ * Renamed to what it is, and mapped to the keys once, here.
+ */
+type GuideId = "skye" | "kaleb" | "zion" | "imani" | "azuri";
+
+/** Label to key. `skye` and `kaleb` are one key; the band decides the voice. */
+const GUIDE_TO_PERSONA: Record<GuideId, PersonaId> = {
+	skye: "stella",
+	kaleb: "kaleb",
+	zion: "orion",
+	imani: "aurora",
+	azuri: "nova",
+};
 
 /**
- * The empty state, and nothing else. It has no transcript, no games, and no
- * eligibility card, because it can never have a conversation to put them in.
+ * Label to band, for the two labels a persona key cannot tell apart.
  *
- * Sending is a handoff rather than a send: the id is minted here, the rail row
- * is committed here, and the question is left for the chat page to ask. That
- * is what keeps this page free of the streaming machinery.
+ * Only `skye` and `kaleb` need a row. The other three are the only guide on
+ * their key, so the server's own default for that persona is already right and
+ * naming a band here would be three more values to keep in step for nothing.
+ *
+ * Without this, tapping Kaleb sent `?persona=stella` and no band, the server
+ * fell back to `stella`'s default of `5-8`, and the reader who asked for Kaleb
+ * was answered by Skye -- with Skye's name on the composer chip.
  */
-export function LandingScreen() {
+/** The colour each guide is remembered by. Same five as "Meet your guides". */
+const GUIDE_RING: Record<string, string> = {
+	skye: "#C22F99",
+	kaleb: "#3B82F6",
+	zion: "#F4B000",
+	imani: "#5C3AAE",
+	azuri: "#0DAE93",
+};
+
+const GUIDE_TO_BAND: Partial<Record<GuideId, AgeBand>> = {
+	skye: "5-8",
+	kaleb: "9-12",
+};
+
+interface LandingScreenProps {
+	onStartConversation?: (message: string) => void;
+}
+
+export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const navigate = useNavigate();
-	const router = useRouter();
-	const queryClient = useQueryClient();
-
-	/** The three answer settings, read from the address. */
-	const {
-		simpleMode,
-		toggleSimpleMode,
-		persona,
-		setPersona,
-		lang,
-		setLanguageInUrl,
-		personaNotice,
-		dismissPersonaNotice,
-	} = useAnswerSettings();
-
-	/**
-	 * Who is reading, asked once per browser before the first question.
-	 *
-	 * Only when nothing has answered it already: a persona in the address or
-	 * derived from a signed-in account IS the answer, and asking again would be
-	 * asking someone to repeat themselves.
-	 *
-	 * Gated on the opening having finished. The two used to open together and
-	 * sit on top of each other — two dialogs, two focus traps, and on a phone
-	 * one panel visibly behind the other.
-	 */
-	const [introDone, setIntroDone] = useState(false);
-	const finishIntro = useCallback(() => setIntroDone(true), []);
-
-	/**
-	 * Whether this browser has never been put the question.
-	 *
-	 * After mount, never during render: there is no `localStorage` in SSR, and
-	 * reading it while rendering would mismatch the server's HTML.
-	 */
-	const [unasked, setUnasked] = useState(false);
-	useEffect(() => {
-		setUnasked(!guideAsked());
-	}, []);
-
-	const [guideDismissed, setGuideDismissed] = useState(false);
-	const askGuide = introDone && unasked && !guideDismissed && persona === null;
-
-	// Declared below, used here: the chooser opens on arrival, so there is no
-	// trigger to give focus back to. Left alone it lands on `<body>` and Tab
-	// restarts at the top of the page; the box they came to type in is better.
-	const focusComposerRef = useRef<() => void>(() => {});
-
-	const closeGuide = useCallback(() => {
-		rememberGuideAsked();
-		setGuideDismissed(true);
-		focusComposerRef.current();
-	}, []);
-
-	/** The rail's list and its row actions. No conversation is open here. */
-	const { renameChat, regenerateTitle, deleteChat } = useConversationList();
-
-	const [drawerOpen, setDrawerOpen] = useState(false);
-
-	// Lifted so a transcript can land here for the user to check before sending.
 	const [draft, setDraft] = useState("");
+	const [activeView, setActiveView] = useState<ViewState>("landing");
+	const [selectedPersona, setSelectedPersona] = useState<GuideId | null>(null);
+	/** The chosen guide's row, for the face beside the name. Null means Guest. */
+	const selected = selectedPersona
+		? (GUIDES.find((g) => g.guideId === selectedPersona) ?? null)
+		: null;
 
-	// Restored in an effect, never in the initialiser: the server renders an
-	// empty box, and a different first client render would fail to hydrate.
-	//
-	// Anything ALREADY in the box wins. Both routes are full-document SSR, so
-	// the composer is painted and focusable before React attaches, and this
-	// effect used to overwrite whatever had been typed in that window with the
-	// stashed draft -- usually nothing. The e2e harness documents the symptom
-	// from the outside and works around it by retrying up to four times
-	// (`e2e/lib/turn.mjs`), which is the shape of a defect nobody had located.
-	//
-	// A partial fix, honestly: this recovers the value only if React's
-	// hydration left it in place. When React has already reconciled the
-	// controlled `value` to empty, there is nothing here to read and the
-	// behaviour is exactly what it was -- so this cannot make anything worse,
-	// but it is not the whole of T3.4 either.
-	useEffect(() => {
-		const field = document.getElementById("aspire-composer");
-		const typed = field instanceof HTMLTextAreaElement ? field.value : "";
-		setDraft(typed || readLandingDraft());
-	}, []);
-	useEffect(() => {
-		stashLandingDraft(draft);
-	}, [draft]);
-
-	const voice = useVoice({
-		onTranscript: setDraft,
-		threadId: null,
-		language: lang,
-		persona,
-		onLanguageChange: setLanguageInUrl,
-	});
-
-	/** Bumped whenever the composer should take the cursor. */
-	const [focusSignal, setFocusSignal] = useState(1);
-	const focusComposer = useCallback(() => setFocusSignal((n) => n + 1), []);
-	focusComposerRef.current = focusComposer;
-
-	// Nothing here writes a chat's name, so the tab goes back to the product's.
-	useEffect(() => {
-		if (typeof document === "undefined") return;
-		document.title = DEFAULT_DOCUMENT_TITLE;
-	}, []);
-
-	/**
-	 * Warms the conversation screen once this one is idle.
-	 *
-	 * Splitting the two pages took the transcript, the directives and the whole
-	 * widget set out of this page's download — but it also moved them onto the
-	 * far side of the send button, which is the worst moment to be fetching
-	 * anything. Asking for the chunk on idle keeps both: nothing extra in the
-	 * first paint's way, and nothing left to fetch by the time a question is
-	 * ready. Only the component, never the loader: there is no conversation to
-	 * load yet.
-	 */
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		const warm = () => {
-			const route = router.routesById["/chat/$chatId"];
-			if (route) void router.loadRouteChunk(route);
-		};
-		// `requestIdleCallback` is still missing on older Safari.
-		const idle = window.requestIdleCallback;
-		if (idle) {
-			const handle = idle(warm, { timeout: 2500 });
-			return () => window.cancelIdleCallback?.(handle);
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Enter" && draft.trim()) {
+			startConversation(draft);
 		}
-		const timer = setTimeout(warm, 1200);
-		return () => clearTimeout(timer);
-	}, [router]);
+	};
 
-	/**
-	 * One press is one conversation, however fast it is repeated. Never
-	 * cleared: this page is on its way out, and a second staged turn would
-	 * replace the first under a different id, leaving the chat page that is
-	 * already navigating to look for a question that is no longer there.
-	 */
-	const handingOff = useRef(false);
-
-	/**
-	 * Opens a conversation and leaves its first question for the chat page.
-	 * Both the composer and the starter chips arrive here.
-	 */
-	const startConversation = useCallback(
-		(raw: string) => {
-			const text = raw.trim();
-			if (!text || handingOff.current) return;
-			handingOff.current = true;
-
-			voice.stopPlayback();
-
-			const threadId = newThreadId();
-			// Committed now, not when the answer settles: this is the rail's row.
-			upsertConversation(queryClient, {
-				threadId,
-				title: titleFor(text),
-				updatedAt: Date.now(),
-				messages: [{ role: "user", text }],
-			});
+	const startConversation = (
+		message: string,
+		persona?: PersonaId | null,
+		band?: AgeBand | null,
+	) => {
+		if (onStartConversation) {
+			onStartConversation(message);
+		} else {
+			const threadId = crypto.randomUUID();
 			stageFirstTurn({
 				threadId,
-				question: text,
-				simple: simpleMode,
-				// Captured here, where it is right: see `PendingTurn.language`.
-				language: voice.language,
+				question: message,
+				simple: false,
+				language: "en",
 			});
-			// The question has left, so it is not also a draft to come back to.
-			stashLandingDraft("");
-
-			void navigate({
+			// The guide rides the address, which is where the chat reads it from
+			// (`validateAnswerSearch`). Until now `selectedPersona` was set by the
+			// dropdown and then dropped on the floor: choosing a guide on this page
+			// changed nothing at all about who answered.
+			const chosen =
+				persona ?? (selectedPersona ? GUIDE_TO_PERSONA[selectedPersona] : null);
+			// The band rides along for the same reason the persona does, and it is
+			// Still sent though Kaleb has his own key: it pins the band for a
+			// persona that could otherwise take the server's default, and it is
+			// what the old `stella` sessions are read back through.
+			const chosenBand =
+				band ?? (selectedPersona ? GUIDE_TO_BAND[selectedPersona] : null);
+			navigate({
 				to: "/chat/$chatId",
 				params: { chatId: threadId },
-				// Carried, not dropped.
-				search: (previous: AnswerSearch) => previous,
-				replace: true,
-				viewTransition: true,
+				...(chosen
+					? {
+							search: {
+								persona: chosen,
+								...(chosenBand ? { band: chosenBand } : {}),
+							},
+						}
+					: {}),
 			});
-		},
-		[navigate, queryClient, simpleMode, voice.language, voice.stopPlayback],
-	);
+		}
+	};
 
-	// Captured on open, not in the effect: by then the workspace is inert and focus has moved.
-	const railTrigger = useRef<HTMLElement | null>(null);
+	if (activeView === "history") {
+		return (
+			<HistoryView
+				onBack={() => setActiveView("landing")}
+				onSelectChat={(id) =>
+					navigate({ to: "/chat/$chatId", params: { chatId: id } })
+				}
+			/>
+		);
+	}
 
-	const openDrawer = useCallback(() => {
-		railTrigger.current = document.activeElement as HTMLElement | null;
-		setDrawerOpen(true);
-	}, []);
+	if (activeView === "journey") {
+		return <JourneyView onBack={() => setActiveView("landing")} />;
+	}
 
-	// Trap focus and Escape, or Tab walks straight out of the drawer into the page behind it.
-	useEffect(() => {
-		if (!drawerOpen) return;
+	if (activeView === "parents")
+		return <ParentsView onBack={() => setActiveView("landing")} />;
+	if (activeView === "educators")
+		return <EducatorsView onBack={() => setActiveView("landing")} />;
+	if (activeView === "about")
+		return <AboutView onBack={() => setActiveView("landing")} />;
 
-		// `:not([inert])`, because the first button in the rail is `.rail__mark`
-		// — the A that toggles it — and that one is inert exactly when the drawer
-		// is open. Focusing it did nothing, so opening the drawer dropped focus
-		// on `<body>` and Tab restarted at the top of the page behind it.
-		document
-			.getElementById("aspire-rail")
-			?.querySelector<HTMLElement>("button:not([inert])")
-			?.focus();
+	if (activeView === "stories") {
+		return <StoriesView onBack={() => setActiveView("landing")} />;
+	}
 
-		const close = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setDrawerOpen(false);
-		};
-		window.addEventListener("keydown", close);
-		return () => {
-			window.removeEventListener("keydown", close);
-			const trigger = railTrigger.current;
-			railTrigger.current = null;
-			if (trigger?.isConnected) trigger.focus();
-		};
-	}, [drawerOpen]);
-
-	const handleOpenPast = useCallback(
-		(conversation: StoredConversation) => {
-			setDrawerOpen(false);
-			void navigate({
-				to: "/chat/$chatId",
-				params: { chatId: conversation.threadId },
-				search: (previous: AnswerSearch): AnswerSearch => ({
-					// "Explain it simply" belongs to the reader, so it survives moving between conversations.
-					...previous,
-					// Language does not.
-					...(conversation.language ? { lang: conversation.language } : {}),
-				}),
-				viewTransition: true,
-			});
-		},
-		[navigate],
-	);
-
-	/** This page is the new chat, so the press is a no-op with a cursor. */
-	const startNewChat = useCallback(() => {
-		setDrawerOpen(false);
-		focusComposer();
-	}, [focusComposer]);
-
-	/** Cmd/Ctrl+Shift+O — the same binding both reference products use. */
-	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => {
-			if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
-			if (event.code !== "KeyO") return;
-			event.preventDefault();
-			startNewChat();
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [startNewChat]);
-
-	const handleDeleteConversation = useCallback(
-		(conversation: StoredConversation) => {
-			clearEligibilityResult(conversation.threadId);
-			deleteChat(conversation.threadId);
-		},
-		[deleteChat],
-	);
-
-	const handleSaveConversation = useCallback(
-		(conversation: StoredConversation) => {
-			downloadTranscript(
-				conversation.messages,
-				// The conversation's own language when it is known, the interface language otherwise.
-				conversation.language ?? voice.language,
-			);
-		},
-		[voice.language],
-	);
-
+	/*
+	 * The page owns its scroll, and that is a fix rather than a preference.
+	 *
+	 * `body` carries the chat shell's `overflow: hidden`, and `GuideChooser` --
+	 * which mounts inside `FirstRun`, on the chat page -- sets it again on a
+	 * first visit. Either way the landing inherited a `body` it could not
+	 * scroll, and the last 83px of it, which is the Saint Kitts and Nevis line,
+	 * could not be reached by hand.
+	 *
+	 * Owning the scroll makes this page independent of whatever the shell has
+	 * done to `body`. The artwork behind is `fixed`, so it still covers.
+	 */
 	return (
-		<div
-			className="app"
-			data-phase="landing"
-			data-rail={drawerOpen ? "expanded" : "collapsed"}
-		>
-			{askGuide ? (
-				<GuideChooser
-					onChoose={(next) => {
-						// `null` is the general option, which is also what
-						// `setPersona` takes to mean "no band".
-						setPersona(next);
-						closeGuide();
+		<div className="relative h-dvh overflow-y-auto overflow-x-hidden bg-white flex flex-col font-sans selection:bg-[#c22f99]/20 text-[#1A103C]">
+			{/* Scenic Background Layers */}
+			{/* The ground behind the artwork, and it is pale on purpose.
+			 *
+			 * It was `#1A103C`, the deep plum. Fully hidden while the image loads
+			 * fine -- and the moment it does not, that is near-black body text on
+			 * a near-black ground. A fallback should fail readable. */}
+			{/* `fixed`, not `absolute`.
+			 *
+			 * Absolutely positioned, this layer was only ever as tall as the page
+			 * element. On a large screen -- or any time the content came up short
+			 * of the window -- the browser painted `body` below it, and `body` is
+			 * the chat app's deep plum. A band of it sat under the footer.
+			 *
+			 * Fixed to the viewport, the artwork covers whatever the window is,
+			 * the plum can never show, and the scene holds still while the page
+			 * scrolls over it. */}
+			<div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#F4F0FA]">
+				<div
+					className="absolute inset-0"
+					style={{
+						background: `
+							linear-gradient(
+								to bottom,
+								rgba(255,255,255,0.22) 0%,
+								rgba(255,255,255,0.55) 38%,
+								rgba(255,255,255,0.78) 68%,
+								rgba(255,255,255,0.88) 100%
+							),
+							image-set(
+								url('/images/hero-bg.webp') type('image/webp'),
+								url('/images/hero-bg.jpg') type('image/jpeg')
+							) center center / cover no-repeat
+						`,
+						filter: "saturate(1.0) brightness(1.0)",
 					}}
-					onSkip={closeGuide}
-				/>
-			) : null}
-
-			<div className="atmosphere" aria-hidden="true">
-				<span />
-				<span />
-				<span />
-				<span />
+				></div>
 			</div>
 
-			{/* First visit only: a short opening, and then the chooser above.
-			    Renders nothing at all for a returning reader. */}
-			<FirstRun onDone={finishIntro} />
-
-			<div className="frame">
-				{/* A drawer at every width here, never a column: there is nothing to sit beside. */}
-				<Rail
-					collapsed={!drawerOpen}
-					unreachable={!drawerOpen}
-					activeThreadId={null}
-					onToggle={() => setDrawerOpen((open) => !open)}
-					onNewChat={startNewChat}
-					onOpenPast={handleOpenPast}
-					onSaveConversation={handleSaveConversation}
-					onRenameConversation={(conversation, title) =>
-						renameChat(conversation.threadId, title)
-					}
-					onRegenerateTitle={(conversation) =>
-						regenerateTitle(conversation.threadId)
-					}
-					onDeleteConversation={handleDeleteConversation}
-				/>
-
-				{drawerOpen ? (
+			{/* Elegant Header */}
+			<header className="landing-head relative z-10 w-full px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
+				<div className="flex items-center gap-8">
+					<Brandmark variant="header" />
+					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
+						<button
+							type="button"
+							onClick={() => setActiveView("stories")}
+							className="text-[#c22f99] hover:text-[#8a1c6a] transition-colors font-bold cursor-pointer"
+						>
+							Explore
+						</button>
+						<button
+							type="button"
+							onClick={() => setActiveView("journey")}
+							className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors cursor-pointer"
+						>
+							Journey
+						</button>
+						<button
+							type="button"
+							onClick={() => setActiveView("parents")}
+							className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors font-bold cursor-pointer"
+						>
+							For Parents
+						</button>
+						<button
+							type="button"
+							onClick={() => setActiveView("educators")}
+							className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors font-bold cursor-pointer"
+						>
+							For Educators
+						</button>
+						<button
+							type="button"
+							onClick={() => setActiveView("about")}
+							className="text-[#1A103C]/70 hover:text-[#1A103C] transition-colors font-bold cursor-pointer"
+						>
+							About ASPIRE
+						</button>
+					</nav>
+				</div>
+				<div className="flex items-center gap-4">
 					<button
 						type="button"
-						className="rail-scrim"
-						onClick={() => setDrawerOpen(false)}
+						onClick={() => navigate({ to: "/signin" })}
+						className="hidden sm:block text-sm font-semibold text-[#1A103C]/70 hover:text-[#1A103C] transition-colors px-4 py-2 cursor-pointer"
 					>
-						<span className="sr-only">Close conversations</span>
+						Sign in
 					</button>
-				) : null}
-
-				<main className="workspace" inert={drawerOpen || undefined}>
-					{/* The way to the input without walking the whole page. */}
-					<a href="#aspire-composer" className="skip-link">
-						Skip to the message box
-					</a>
-
-					{/* There is no bar up here to hold it, so it stands on its own.
-
-					    Not gated on having a history any more. The rail carries
-					    "How to use ASPIRE AI", and gating this button meant the one
-					    reader most likely to want it -- somebody here for the first
-					    time, with nothing in their history -- was the only reader
-					    who could not reach it. The empty history has had its own
-					    written state all along, so opening onto it was always an
-					    intended destination. */}
 					<button
 						type="button"
-						className="rail-open"
-						onClick={openDrawer}
-						aria-controls="aspire-rail"
-						aria-expanded={drawerOpen}
+						onClick={() => setActiveView("history")}
+						aria-label="View learning history"
+						className="w-10 h-10 rounded-full border border-[#482977]/20 flex items-center justify-center text-[#482977] bg-white hover:bg-[#F8E7F0] hover:text-[#c22f99] hover:border-[#c22f99]/30 transition-all shadow-sm cursor-pointer"
 					>
-						<MenuIcon />
-						<span className="sr-only">Open menu and conversations</span>
+						<i className="ph-duotone ph-magic-wand text-lg"></i>
 					</button>
+				</div>
+			</header>
 
-					{/* The way into an account, whenever the sidebar is not there to carry it. */}
-					{/* `inert` as well as the CSS, because they cover different people. */}
-					<div
-						className="account-slot"
-						data-shown={!drawerOpen || undefined}
-						inert={drawerOpen || undefined}
-					>
-						<AccountControl variant="corner" />
-					</div>
+			{/* Main Content */}
+			<main className="relative z-10 flex-1 w-full px-4 sm:px-8 flex flex-col justify-center">
+				{/* Hero Section */}
+				<div className="max-w-4xl mb-5 relative z-10 landing-hero">
+					<h1 className="text-5xl md:text-6xl lg:text-[4.75rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
+						Where will your
+						<br />
+						money{" "}
+						<span className="italic text-transparent bg-clip-text bg-gradient-to-r from-[#c22f99] via-[#482977] to-[#1A103C] pr-2">
+							take you!
+						</span>
+					</h1>
+					<p className="text-lg md:text-xl text-[#482977] font-medium mb-4 tracking-wide">
+						Ask. Play. Explore. Build your money future.
+					</p>
 
-					<div className="stage">
-						<div className="thread">
-							<div className="thread__inner">
-								<div className="hero">
-									<Brandmark />
-									<h1 className="hero__title">
-										What do you want to learn about money today?
-									</h1>
-									<p className="hero__sub">
-										Ask me about investing, your ASPIRE modules, or the
-										programme itself.
-									</p>
-								</div>
-							</div>
-						</div>
-
-						{voice.phase === "consent" ? (
-							<div className="voice-slot">
-								<VoiceConsent onAllow={voice.allowMic} onDeny={voice.denyMic} />
-							</div>
-						) : null}
-
-						{voice.note ? (
-							<div className="voice-slot">
-								<VoiceNote
-									note={voice.note}
-									onAction={voice.runNoteAction}
-									onDismiss={voice.dismissNote}
-								/>
-							</div>
-						) : null}
-
-						{/* Sits in the voice-note slot, directly above the picker that caused it. */}
-						{personaNotice ? (
-							<div className="voice-slot">
-								<output className="voice-note" data-tone="warn">
-									<span className="voice-note__text">{personaNotice}</span>
-									<button
-										type="button"
-										className="icon-btn icon-btn--sm"
-										onClick={dismissPersonaNotice}
-									>
-										<CloseIcon />
-										<span className="sr-only">Dismiss</span>
-									</button>
-								</output>
-							</div>
-						) : null}
-
-						<Composer
-							onSend={startConversation}
-							busy={false}
-							onStop={() => {}}
-							simpleMode={simpleMode}
-							onToggleSimpleMode={toggleSimpleMode}
-							persona={persona}
-							onPersonaChange={setPersona}
-							draft={draft}
-							onDraftChange={setDraft}
-							focusSignal={focusSignal}
-							voice={voice}
+					{/* Search / Ask Input */}
+					<div className="relative bg-white/80 backdrop-blur-2xl border border-[#482977]/20 rounded-[1.5rem] p-4 flex flex-col shadow-[0_15px_40px_rgba(72,41,119,0.1)] ring-1 ring-white hover:ring-[#c22f99]/20 transition-all duration-500 max-w-2xl">
+						<input
+							type="text"
+							value={draft}
+							onChange={(e) => setDraft(e.target.value)}
+							onKeyDown={handleKeyDown}
+							placeholder="Ask me anything about money or ASPIRE..."
+							className="bg-transparent text-lg text-[#1A103C] placeholder-[#1A103C]/40 focus:outline-none py-2 px-2 w-full mb-3 font-medium"
 						/>
 
-						<div className="starters">
-							<div className="starters__row">
-								{starterPrompts.map((prompt) => (
-									<button
-										key={prompt}
-										type="button"
-										className="starter"
-										onClick={() => startConversation(prompt)}
+						<div className="flex items-end justify-between border-t border-[#482977]/10 pt-3 px-1">
+							<div className="flex flex-col">
+								<span className="text-[9px] font-bold uppercase tracking-wider text-[#482977]/60 mb-1 ml-[28px]">
+									Choose your guide
+								</span>
+								{/* THE OPTIONS WERE THE WRONG IDS, and the dropdown quietly
+								 * chose nobody for four of the five guides.
+								 *
+								 * It was populated from `PERSONAS`, whose ids are persona
+								 * KEYS -- `stella`, `orion`, `aurora`, `nova` -- and the
+								 * result was stored as a `GuideId`, which is `skye`, `zion`,
+								 * `imani`, `azuri`. Only `kaleb` spells the same in both, so
+								 * only Kaleb worked: every other choice put a key into
+								 * `GUIDE_TO_PERSONA`, missed, and started the conversation
+								 * with no persona at all. An `as GuideId` cast was holding
+								 * the two apart.
+								 *
+								 * Driven from `GUIDES` now, which carries the guide id, the
+								 * persona key and the band together -- and which the row
+								 * below already uses, so the two controls on this page
+								 * cannot disagree about who Skye is.
+								 *
+								 * Guest also appeared twice: once as the empty option and
+								 * again from `PERSONAS`, which gained a `guest` row when it
+								 * gained Kaleb. `GUIDES` is filtered to the five, so the
+								 * empty option is the only Guest.
+								 */}
+								<div className="flex items-center gap-2">
+									{selected ? (
+										<span
+											className="w-7 h-7 rounded-full bg-cover bg-top shrink-0 ring-2"
+											style={
+												{
+													backgroundImage: `image-set(url("/guides/${selected.guideId}.webp") type("image/webp"), url("/guides/${selected.guideId}.png") type("image/png"))`,
+													// The ring the guide is remembered by, the same
+													// five the row below uses.
+													"--tw-ring-color": GUIDE_RING[selected.guideId],
+												} as React.CSSProperties
+											}
+											aria-hidden="true"
+										/>
+									) : (
+										<i className="ph-duotone ph-user text-[#482977]/60 text-lg"></i>
+									)}
+									<select
+										value={selectedPersona || ""}
+										onChange={(e) =>
+											setSelectedPersona(
+												(e.target.value || null) as GuideId | null,
+											)
+										}
+										className="appearance-none bg-transparent border-none text-sm font-semibold text-[#482977] outline-none cursor-pointer hover:text-[#c22f99] transition-colors"
 									>
-										{prompt}
-									</button>
-								))}
+										<option value="" className="bg-white">
+											Guest
+										</option>
+										{GUIDES.filter((g) => g.guideId !== "guest").map((g) => (
+											<option
+												key={g.guideId}
+												value={g.guideId}
+												className="bg-white text-[#1A103C]"
+											>
+												{g.name} &middot; {g.audience}
+											</option>
+										))}
+									</select>
+									<i className="ph-bold ph-caret-down text-[#482977]/40 text-xs -ml-1"></i>
+								</div>
+							</div>
+
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									aria-label="Voice input"
+									className="w-10 h-10 rounded-full flex items-center justify-center transition-colors bg-[#F8E7F0]/50 text-[#c22f99] hover:bg-[#F8E7F0] ring-1 ring-[#c22f99]/20 cursor-pointer"
+								>
+									<i className="ph-bold ph-microphone text-lg"></i>
+								</button>
+								<button
+									type="button"
+									onClick={() => startConversation(draft)}
+									disabled={!draft.trim()}
+									aria-label="Send message"
+									className="w-10 h-10 rounded-full bg-gradient-to-r from-[#c22f99] to-[#8a1c6a] flex items-center justify-center text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_4px_15px_rgba(194,47,153,0.4)] transition-all cursor-pointer"
+								>
+									<i className="ph-bold ph-paper-plane-right text-base"></i>
+								</button>
 							</div>
 						</div>
 					</div>
 
-					{/* One text node: as two, the flex gap made "can" and "make" run together when copied. */}
-					<p className="disclaimer">ASPIRE AI can make mistakes.</p>
-				</main>
-			</div>
+					{/* Floating progress widget, and only when there is progress.
+					 *
+					 * With the invented level and XP gone this rendered as a white box
+					 * containing one cheerful line and nothing else -- worse than the
+					 * fabricated version, because at least that looked deliberate.
+					 * It returns the moment there is a real balance to put in it. */}
+					{coinBalance !== null && (
+						<button
+							type="button"
+							className="hidden lg:flex text-left absolute top-0 right-0 lg:translate-x-12 xl:translate-x-24 bg-white/90 backdrop-blur-2xl border border-[#482977]/20 rounded-2xl p-4 flex-col gap-1 shadow-[0_20px_50px_rgba(72,41,119,0.15)] animate-float-slow z-20 hover:scale-105 transition-transform cursor-pointer group w-64"
+							onClick={() => setActiveView("journey")}
+						>
+							<div className="text-[#1A103C] text-sm font-bold mb-1">
+								You're on your way!
+							</div>
+							{/* The progress bar and "720 / 1,000 XP" were literals, and a bar
+							 * was the wrong shape for the number anyway: a balance is earned
+							 * AND SPENT, so spending would run it backwards and read as a
+							 * punishment for using what you earned. A bar only ever goes up.
+							 *
+							 * So this is one figure, not a bar. The honest source is the
+							 * cumulative earned total; it is not wired here because the
+							 * landing page is answered before anyone has signed in.
+							 * `coinBalance` stays null until there is a session to read,
+							 * and the row simply does not render.
+							 */}
+							{coinBalance !== null && (
+								<div className="flex items-center gap-2 border-t border-[#482977]/10 pt-2 mt-1 w-full">
+									{/* amber-700, not #fed141: the brand gold is 1.46:1 on white and fails AA.
+									 * It stays gold on the dark cards, where it measures 12:1. */}
+									<i className="ph-fill ph-coin text-[#b45309] text-sm drop-shadow-sm"></i>
+									<span className="text-xs text-[#482977] font-bold">
+										{COIN_LABEL}
+									</span>
+									<span className="text-xs text-[#1A103C] font-black ml-auto">
+										{coinBalance}
+									</span>
+								</div>
+							)}
+						</button>
+					)}
+				</div>
+
+				{/* Cards Grid - Restored to Deep Brand Colors */}
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5 relative z-10 landing-cards">
+					{/* Ask ASPIRE Card */}
+					<button
+						type="button"
+						onClick={() =>
+							startConversation(
+								"Hello ASPIRE, I am ready to explore the financial and learning ecosystem in St. Kitts and Nevis.",
+							)
+						}
+						className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(194,47,153,0.3)] hover:border-[#c22f99] flex flex-row items-center justify-between h-32 cursor-pointer"
+					>
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<div className="flex items-center gap-2 mb-1">
+									<h3 className="text-xl font-display font-semibold text-white">
+										Ask ASPIRE
+									</h3>
+									<span className="bg-[#c22f99] text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+										New
+									</span>
+								</div>
+								<p className="text-[#c22f99] font-medium text-xs mb-1 drop-shadow-md">
+									Your AI Guide
+								</p>
+								<p className="text-white/70 text-xs leading-snug line-clamp-2">
+									Get smart answers to your money questions.
+								</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#c22f99]/20 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end">
+							<i className="ph-duotone ph-robot text-[4rem] text-white/90 group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-500 drop-shadow-[0_0_20px_rgba(194,47,153,0.6)]"></i>
+						</div>
+					</button>
+
+					{/* Play Card */}
+					<button
+						type="button"
+						onClick={() =>
+							startConversation(
+								"Start the ASPIRE savings challenge to help me manage my 1,000 XCD youth grant.",
+							)
+						}
+						className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(59,130,246,0.3)] hover:border-[#3b82f6] flex flex-row items-center justify-between h-32 cursor-pointer"
+					>
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<h3 className="text-xl font-display font-semibold text-white mb-1">
+									Play
+								</h3>
+								<p className="text-[#3b82f6] font-medium text-xs mb-1 drop-shadow-md">
+									Today's Challenge
+								</p>
+								<p className="text-white/70 text-xs leading-snug line-clamp-2">
+									Learn by doing. Earn coins and level up!
+								</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#3b82f6]/20 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end items-center">
+							<i className="ph-duotone ph-game-controller text-[4rem] text-blue-300 group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-500 drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"></i>
+							<i className="ph-fill ph-coin text-2xl text-[#fed141] absolute -bottom-1 -left-2 animate-bounce drop-shadow-lg"></i>
+						</div>
+					</button>
+
+					{/* Explore Card */}
+					<button
+						type="button"
+						onClick={() => setActiveView("stories")}
+						className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(244,63,94,0.3)] hover:border-[#f43f5e] flex flex-row items-center justify-between h-32 cursor-pointer"
+					>
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<h3 className="text-xl font-display font-semibold text-white mb-1">
+									Explore
+								</h3>
+								<p className="text-[#f43f5e] font-medium text-xs mb-1 drop-shadow-md">
+									Miracle Mountain
+								</p>
+								<p className="text-white/70 text-xs leading-snug line-clamp-2">
+									Listen to a story or watch an adventure.
+								</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#f43f5e]/20 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end">
+							<i className="ph-duotone ph-play-circle text-[4rem] text-rose-300 group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.6)]"></i>
+							<i className="ph-fill ph-sparkle text-xl text-[#fed141] absolute top-0 right-0 animate-pulse drop-shadow-lg"></i>
+						</div>
+					</button>
+
+					{/* My Journey Card */}
+					<button
+						type="button"
+						onClick={() => setActiveView("journey")}
+						className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#231548] to-[#100727] shadow-xl border border-[#482977]/50 p-5 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(254,209,65,0.3)] hover:border-[#fed141] flex flex-row items-center justify-between h-32 cursor-pointer"
+					>
+						<div className="flex flex-col justify-between h-full z-10 w-[60%]">
+							<div>
+								<h3 className="text-xl font-display font-semibold text-white mb-1">
+									My Journey
+								</h3>
+								<p className="text-[#fed141] font-medium text-xs mb-2 drop-shadow-md">
+									Your progress path
+								</p>
+								{/* "3 Badges" and "7 Lessons" were here, hardcoded, and shown to
+								 * every visitor including the ones who had never opened a
+								 * lesson. Same defect as the footer statistics: a per-reader
+								 * number that is the same for every reader is not a number.
+								 * The card is a way in, so it says what is behind it. */}
+								<p className="text-[10px] font-medium text-white/70">
+									Badges and lessons, once you begin.
+								</p>
+							</div>
+							<div className="mt-2 w-7 h-7 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors text-white">
+								<i className="ph-bold ph-caret-right text-xs"></i>
+							</div>
+						</div>
+						<div className="absolute right-0 top-0 bottom-0 w-[40%] bg-gradient-to-l from-[#fed141]/10 to-transparent"></div>
+						<div className="relative z-10 w-[40%] flex justify-end items-center">
+							<div className="w-[4rem] h-[4rem] rounded-full border-[4px] border-[#1A103C] border-t-[#fed141] border-r-[#fed141] flex items-center justify-center relative group-hover:rotate-45 transition-transform duration-700 shadow-lg bg-[#231548]">
+								<i className="ph-fill ph-star text-[2rem] text-[#fed141] group-hover:-rotate-45 transition-transform duration-700 drop-shadow-[0_0_15px_rgba(254,209,65,0.6)]"></i>
+							</div>
+						</div>
+					</button>
+				</div>
+
+				{/* `pb-10`: this row sat flush against the footer, so the guides card
+				    and the Saint Kitts and Nevis line touched with nothing between
+				    them. A closing line deserves its own air. */}
+				<div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-4 landing-lower">
+					{/* Try something quick */}
+					<div className="lg:col-span-7">
+						<h3 className="text-base font-semibold text-[#1A103C] mb-3 flex items-center gap-2">
+							<i className="ph-bold ph-lightning text-[#c22f99]"></i> Try
+							something quick
+						</h3>
+						<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+							<button
+								type="button"
+								onClick={() =>
+									startConversation(
+										"What exactly is the ASPIRE program in St. Kitts and Nevis?",
+									)
+								}
+								className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#c22f99]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer"
+							>
+								<div className="w-12 h-12 rounded-2xl bg-fuchsia-50 flex items-center justify-center text-[#c22f99]">
+									<i className="ph-duotone ph-graduation-cap text-2xl"></i>
+								</div>
+								<div className="text-left mt-1">
+									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">
+										What is ASPIRE?
+									</div>
+									<div className="text-[10px] font-medium text-[#482977]/70 leading-tight">
+										Learn the basics
+									</div>
+								</div>
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									startConversation("How can you get the Grant Money?")
+								}
+								className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#fed141]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer"
+							>
+								<div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500">
+									<i className="ph-duotone ph-coins text-2xl"></i>
+								</div>
+								<div className="text-left mt-1">
+									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">
+										Grant Money
+									</div>
+									<div className="text-[10px] font-medium text-[#482977]/70 leading-tight">
+										Learn about the ASPIRE grant
+									</div>
+								</div>
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									startConversation(
+										"Help me build wealth in St. Kitts and Nevis.",
+									)
+								}
+								className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#482977]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer"
+							>
+								<div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-[#482977]">
+									<i className="ph-duotone ph-chart-line-up text-2xl"></i>
+								</div>
+								<div className="text-left mt-1">
+									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">
+										SKN Wealth Builder
+									</div>
+									<div className="text-[10px] font-medium text-[#482977]/70 leading-tight">
+										Build your future
+									</div>
+								</div>
+							</button>
+						</div>
+					</div>
+
+					{/* Meet your guides.
+					 *
+					 * Was five 56px icon circles with a phosphor glyph each -- a
+					 * butterfly for Skye, a rocket for Kaleb. Illustrated guides exist
+					 * now, so the face does the work the glyph was standing in for, and
+					 * the audience pill above it answers "which one is mine?" before the
+					 * reader has to know who any of them are.
+					 *
+					 * `compact` rather than the designed `hero` size: this page holds
+					 * itself to one viewport with no scroll, and the row it replaces was
+					 * 124px tall with nothing spare. See `.guide-selector--compact`.
+					 */}
+					<div className="lg:col-span-5">
+						<GuideSelector
+							size="compact"
+							selected={selectedPersona}
+							onChoose={(choice) => {
+								setSelectedPersona(choice.guideId as GuideId);
+								startConversation(
+									"Hi! What can you help me with?",
+									choice.persona,
+									choice.band ?? null,
+								);
+							}}
+						/>
+					</div>
+				</div>
+			</main>
+
+			{/* Institutional Footer */}
+			<footer className="relative z-10 w-full border-t border-[#482977]/10 bg-white/90 backdrop-blur-xl mt-auto">
+				<div className="w-full px-4 sm:px-8 py-3 flex flex-wrap gap-6 items-center justify-between">
+					{/* THREE STATISTICS WERE HERE, AND NONE OF THEM WERE TRUE.
+					 *
+					 * "4,200+ young learners", "18,745 lessons completed" and
+					 * "2.1M+ Magic Coins earned" were literals written during a
+					 * design pass. On a Government of St Kitts and Nevis service
+					 * those are published claims about programme adoption, and
+					 * anyone may quote them back.
+					 *
+					 * Deleted rather than zeroed: a placeholder number is still a
+					 * number a reader believes. The band is left in place so real
+					 * counts can be dropped in when there is an endpoint to serve
+					 * them.
+					 */}
+
+					<div className="flex items-center gap-4">
+						<div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center">
+							<i className="ph-duotone ph-heart text-xl text-rose-500"></i>
+						</div>
+						<div>
+							<div className="text-sm text-[#482977]/70 font-semibold">
+								For a stronger Saint Kitts & Nevis
+							</div>
+							<div className="text-[#1A103C] font-bold">
+								Our future. Our choice. 🇰🇳
+							</div>
+						</div>
+					</div>
+
+					{/* WHO RUNS THIS, AND HOW TO REACH A PERSON.
+					 *
+					 * The footer carried a tagline and nothing else -- no owning
+					 * body, no contact, no way off the bot. On a Government of St
+					 * Kitts and Nevis service that is the one thing a footer cannot
+					 * leave out, and it matters most for the reader the assistant
+					 * has just declined to answer.
+					 *
+					 * Every value here is the one the backend already publishes --
+					 * `config.aspire_contact_*` and the Ministry line the persona
+					 * cards give verbatim. Nothing is typed in fresh: an invented
+					 * government phone number is worse than no phone number.
+					 *
+					 * Kept to the same single row so the page still measures 900px
+					 * in a 900px viewport. The row was `justify-between` with one
+					 * child, so this costs width that was already empty, not height.
+					 */}
+					<div className="flex flex-col gap-0.5 text-right text-[10.5px] leading-tight text-[#482977]/70">
+						<div className="font-semibold text-[#1A103C]">
+							A programme of the Government of St Kitts &amp; Nevis &middot;
+							Ministry of Social Development and Gender Affairs
+						</div>
+						<div>
+							<a
+								className="underline underline-offset-2 hover:text-[#c22f99]"
+								href="tel:+18694671275"
+							>
+								(869) 467-1275
+							</a>{" "}
+							&middot;{" "}
+							<a
+								className="underline underline-offset-2 hover:text-[#c22f99]"
+								href="tel:+18696675566"
+							>
+								+1 (869) 667-5566
+							</a>{" "}
+							&middot;{" "}
+							<a
+								className="underline underline-offset-2 hover:text-[#c22f99]"
+								href="mailto:aspire@gov.kn"
+							>
+								aspire@gov.kn
+							</a>{" "}
+							&middot; The Cable Office, Cayon Street, Basseterre &middot;
+							Mon&ndash;Fri 9&ndash;3
+						</div>
+					</div>
+				</div>
+			</footer>
 		</div>
 	);
 }

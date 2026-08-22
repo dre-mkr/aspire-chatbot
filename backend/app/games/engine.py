@@ -71,6 +71,22 @@ class NoContentAvailable(GameError):
     reason = "no_set_for_language"
 
 
+#: Whose bank a persona is served from when it has none of its own.
+#:
+#: Guardians and teachers have no authored sets. Until they do, they are served
+#: the 13-18 material, which is the closest thing to an adult register already
+#: written. Delete an entry here the day its own seeds land.
+_CONTENT_BANK: dict[Persona, Persona] = {
+    # Kaleb reads from Stella's bank because that is where his items already
+    # are: every seed entry written for a 9-12 reader lists `stella` in its
+    # `persona_bands`, from when he was one. Rewriting those lists is an
+    # editorial pass on the seeds, not part of giving him a key.
+    Persona.KALEB: Persona.STELLA,
+    Persona.AURORA: Persona.ORION,
+    Persona.NOVA: Persona.ORION,
+}
+
+
 class PersonaNotEligible(GameError):
     reason = "not_available_for_persona"
 
@@ -206,13 +222,34 @@ class GameEngine:
         self._store.delete(session.session_id)
         return summary
 
-    def _servable(self, entries: tuple[Entry, ...], persona: Persona | None) -> list[Entry]:
-        """Items this player may be served, right now."""
+    def _servable(
+        self,
+        entries: tuple[Entry, ...],
+        persona: Persona | None,
+        age_band: str | None = None,
+    ) -> list[Entry]:
+        """Items this player may be served, right now.
+
+        Two dimensions, and they answer different questions. `persona_bands`
+        says whose voice an item was written for; `age_bands` says how old the
+        reader has to be. They used to be the same question because each child
+        persona covered one age -- until `orion` had to serve 13-15 and 16-18
+        from one bank, and an item pitched at a sixteen-year-old had no way to
+        say so.
+
+        An item with no `age_bands` serves every band, so a bank that has not
+        been through an editorial pass behaves exactly as it did before.
+        """
         today = self._today or date.today()
         return [
             entry
             for entry in entries
             if (persona is None or persona in entry.persona_bands)
+            and (
+                age_band is None
+                or not entry.age_bands
+                or age_band in entry.age_bands
+            )
             and entry.servable_on(today, review_days=self._settings.volatile_review_days)
         ]
 
@@ -242,12 +279,31 @@ class GameEngine:
         game_type: str = "word_scramble",
         language: Language = Language.EN,
         persona: Persona | None = None,
+        age_band: str | None = None,
     ) -> StartResult:
         # Games are a learning activity for account holders.
         if persona is not None and persona not in PLAYING_PERSONAS:
             raise PersonaNotEligible(
                 f"Games are for account holders; {persona.value} is not one."
             )
+
+        # Which bank this player is served from, which is not always their own.
+        #
+        # `aurora` and `nova` have no seed files -- the banks on disk are
+        # stella, orion and guest -- so opening games to them without this
+        # traded one refusal for another: `PersonaNotEligible` became
+        # `NoContentAvailable`, and a control that throws is a control that
+        # cannot ship.
+        #
+        # They borrow the 13-18 bank rather than the youngest: it is the set
+        # that names the EC$500 split and works at a sourced rate, which is the
+        # material a parent or a teacher would expect to be shown. It is a
+        # stand-in and it is meant to be replaced -- author `*-aurora-*.yaml`
+        # and `*-nova-*.yaml` and this mapping stops applying to them.
+        #
+        # The session still records the reader's OWN persona, so nothing
+        # downstream starts believing a teacher is a teenager.
+        content_persona = _CONTENT_BANK.get(persona, persona)
 
         if self._store.get(session_id) is not None:
             raise GameAlreadyRunning("A game is already running here.")
@@ -277,13 +333,13 @@ class GameEngine:
         game_set = None
         servable: list[Entry] = []
         for candidate in sets:
-            items = self._servable(candidate.entries, persona)
+            items = self._servable(candidate.entries, content_persona, age_band)
             if not items:
                 continue
             if game_set is None:
                 game_set = candidate
             servable.extend(items)
-            if persona is None:
+            if content_persona is None:
                 break
 
         if game_set is None:

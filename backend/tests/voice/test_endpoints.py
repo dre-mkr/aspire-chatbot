@@ -335,6 +335,7 @@ def test_config_reports_personas_languages_and_limits(client, settings):
     assert body["enabled"] is True
     assert {p["persona"] for p in body["personas"]} == {
         "stella",
+        "kaleb",
         "orion",
         "aurora",
         "nova",

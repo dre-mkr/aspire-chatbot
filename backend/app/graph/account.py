@@ -61,7 +61,14 @@ def band_for(born: date | None, *, is_minor: bool, today: date | None = None) ->
 #: The persona each band gets unless a narrower one is asked for.
 DEFAULT_PERSONA: dict[str, str] = {
     "5-8": "stella",
-    "9-12": "stella",
+    # `kaleb`, not `stella`. This line is the signed-in half of the split and it
+    # is easy to miss: `_ANONYMOUS_BANDS` covers a visitor, but a reader with an
+    # account gets their band from their date of birth and their persona from
+    # here. Left as `stella`, a ten-year-old with an account resolved to a
+    # persona whose 9-12 card no longer exists, so `_card_text` fell through to
+    # `stella.5-8.md` -- Skye's card and Skye's name for a reader who is Kaleb's.
+    # Nothing failed; it just quietly served the younger voice.
+    "9-12": "kaleb",
     "13-15": "orion",
     "16-18": "orion",
     "adult": "aurora",
@@ -153,6 +160,9 @@ _STATUS_FROM_APPLICATION: dict[str, str] = {
 #: The reading band each persona implies for an ANONYMOUS session.
 _ANONYMOUS_BANDS: dict[str, str] = {
     "stella": YOUNGEST_BAND,
+    # His own row, which is the whole point of the split: choosing Kaleb now
+    # resolves to 9-12 by itself, with no band request needed to get there.
+    "kaleb": "9-12",
     "orion": "13-15",
     "aurora": "adult",
     "nova": "adult",
@@ -191,24 +201,54 @@ _ANONYMOUS_BANDS: dict[str, str] = {
 _ANONYMOUS_DEFAULT = "guest"
 
 
-def anonymous_claims(requested_persona: str | None = None) -> DerivedClaims:
-    """The claims for a caller with no account. Persona sets voice and band only."""
+def anonymous_claims(
+    requested_persona: str | None = None, requested_band: str | None = None
+) -> DerivedClaims:
+    """The claims for a caller with no account. Persona sets voice and band only.
+
+    `requested_band` is honoured ONLY INSIDE THE PERSONA'S OWN CARDS, and that
+    constraint is what makes it safe rather than a policy written down beside
+    it. `bands_with_cards` reads the files on disk: `stella` has a card for
+    `5-8` and one for `9-12`, so a request for either resolves and a request for
+    anything else falls back to `_ANONYMOUS_BANDS`. `orion`'s two rungs behave
+    the same way. A persona cannot be talked into a band it has no card for,
+    so this is structurally incapable of over-widening -- there is no reachable
+    input that lands a reader in another persona's material.
+
+    Kaleb is why it exists. He and Skye share the `stella` key and are told
+    apart by band alone, so with one band per persona every anonymous reader who
+    chose Kaleb was answered in Skye's 5-8 voice. The picker offered a name the
+    server could not deliver.
+    """
     persona = normalise_persona(requested_persona)
     if persona not in _ANONYMOUS_BANDS:
         persona = _ANONYMOUS_DEFAULT
-    return DerivedClaims(
-        persona=persona,
-        age_band=_ANONYMOUS_BANDS[persona],
-        account_status="prospect",
-    )
+
+    band = _ANONYMOUS_BANDS[persona]
+    if requested_band is not None:
+        from app.prompting.personas import bands_with_cards
+
+        asked = requested_band.strip()
+        if asked in bands_with_cards(persona):
+            band = asked
+
+    return DerivedClaims(persona=persona, age_band=band, account_status="prospect")
 
 
 async def claims_for(
-    user_id: str | None, *, requested_persona: str | None = None
+    user_id: str | None,
+    *,
+    requested_persona: str | None = None,
+    requested_band: str | None = None,
 ) -> DerivedClaims:
-    """Read the account and derive its claims."""
+    """Read the account and derive its claims.
+
+    `requested_band` applies to anonymous callers only. A signed-in reader's
+    band comes from their date of birth, which is the real answer; letting a
+    request override it would be the widening this deliberately is not.
+    """
     if not user_id:
-        return anonymous_claims(requested_persona)
+        return anonymous_claims(requested_persona, requested_band)
 
     from app.db import database_enabled
 

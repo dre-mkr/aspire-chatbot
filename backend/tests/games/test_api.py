@@ -164,13 +164,19 @@ def test_starting_twice_is_409(client):
 
 
 @pytest.mark.parametrize("persona", ["aurora", "nova"])
-def test_a_non_holder_is_403(client, persona):
+def test_a_guardian_or_teacher_gets_a_game_rather_than_a_403(client, persona):
+    """This returned 403 `not_available_for_persona`, which is what made a
+    "play a game" control unshippable: it threw for two of the six voices.
+
+    They are served the 13-18 bank, because they have none of their own -- see
+    `_CONTENT_BANK`. Restraint about *offering* now lives in the persona cards,
+    where it can say "do not raise this unprompted" instead of "never".
+    """
     response = client.post(
         "/api/games/start", json={"thread_id": THREAD, "persona": persona}
     )
-    assert response.status_code == 403
-    assert response.json()["detail"]["reason"] == "not_available_for_persona"
-    assert response.json()["detail"]["message"]
+    assert response.status_code == 200, response.text
+    assert response.json()["game"] is not None
 
 
 def test_an_unauthored_language_is_422(client):

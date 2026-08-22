@@ -18,18 +18,30 @@ import {
 	RetryIcon,
 	TrashIcon,
 } from "#/components/icons";
+import { EducatorsView } from "#/components/landing/EducatorsView";
+import { JourneyView } from "#/components/landing/JourneyView";
+import { ParentsView } from "#/components/landing/ParentsView";
 import {
 	displayTitle,
 	groupByRecency,
 	type StoredConversation,
 } from "#/lib/aspire/history";
+import { type AgeBand, guideFor, type PersonaId } from "#/lib/aspire/personas";
 import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 import { HelpLauncher } from "./HelpPanel";
+import { PersonaPicker } from "./PersonaPicker";
 import { VideoLauncher } from "./VideoPanel";
+import { ViewLauncher } from "./ViewLauncher";
 
 interface RailProps {
+	/** The guide answering, so the foot can say who it is. */
+	persona?: PersonaId | null;
+	/** Which voice of that guide, where the key carries more than one. */
+	band?: AgeBand | null;
+	/** Switching guide from the rail, the same handler the composer uses. */
+	onPersonaChange?: (next: PersonaId | null, band?: AgeBand) => void;
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
 	collapsed: boolean;
 	/** Off-screen entirely: zero width on the landing screen, or a closed drawer. */
@@ -47,6 +59,14 @@ interface RailProps {
 	onRegenerateTitle: (conversation: StoredConversation) => void;
 	/** Permanent, and confirmed in the row's own menu before it is called. */
 	onDeleteConversation: (conversation: StoredConversation) => void;
+	/**
+	 * Start a conversation from a rail item, rather than opening a page.
+	 *
+	 * Games, stories and the journey are all things the assistant can already
+	 * do; what was missing was a way in that did not require knowing the words.
+	 * `stageFirstTurn` is the same mechanism the landing cards use.
+	 */
+	onSeed?: (question: string) => void;
 }
 
 export function Rail({
@@ -60,14 +80,55 @@ export function Rail({
 	onRenameConversation,
 	onRegenerateTitle,
 	onDeleteConversation,
+	onSeed,
+	persona,
+	band,
+	onPersonaChange,
 }: RailProps) {
 	/** The list, subscribed here rather than passed in. */
 	const { session } = useSession();
+	/** The card is for people with an account: it is theirs to change and keep. */
+	const signedIn = session?.accountType === "registered";
 	const conversations = useQuery(conversationsQuery(session?.userId ?? "anon"));
+	/** Shown before the list folds. Five is what fits without crowding the nav. */
+	const HISTORY_SHOWN = 5;
+	const [historyExpanded, setHistoryExpanded] = useState(false);
+
 	const history = useMemo(
 		() => groupByRecency(conversations.data ?? []),
 		[conversations.data],
 	);
+
+	/**
+	 * The groups as shown, truncated to `HISTORY_SHOWN` unless expanded.
+	 *
+	 * Counted across groups rather than within them, because the reader sees one
+	 * list -- five items total, not five under each heading. A group that loses
+	 * every item is dropped rather than left as a bare date with nothing under it.
+	 *
+	 * The active thread is always kept, wherever it falls: hiding the
+	 * conversation somebody is currently reading is the one omission they would
+	 * notice at once.
+	 */
+	const { visibleHistory, hiddenCount } = useMemo(() => {
+		const total = history.reduce((n, group) => n + group.items.length, 0);
+		if (historyExpanded || total <= HISTORY_SHOWN) {
+			return { visibleHistory: history, hiddenCount: 0 };
+		}
+		let budget = HISTORY_SHOWN;
+		const groups = [];
+		for (const group of history) {
+			const items = group.items.filter((c) => {
+				if (c.threadId === activeThreadId) return true;
+				if (budget <= 0) return false;
+				budget -= 1;
+				return true;
+			});
+			if (items.length > 0) groups.push({ ...group, items });
+		}
+		const shown = groups.reduce((n, group) => n + group.items.length, 0);
+		return { visibleHistory: groups, hiddenCount: total - shown };
+	}, [history, historyExpanded, activeThreadId]);
 
 	// Anything folded away has to leave the tab order too, or focus lands on controls nobody can see.
 	const folded = collapsed || undefined;
@@ -97,14 +158,23 @@ export function Rail({
 					</button>
 
 					{/* Opacity does not remove a node from the a11y tree, so the hidden state is stated. */}
-					<img
-						className="rail__wordmark"
-						src="/brand/aspire-wordmark.png"
-						alt="ASPIRE"
-						width={190}
-						height={48}
-						aria-hidden={collapsed || undefined}
-					/>
+					{/* The lockup, not the bare wordmark. `aspire-wordmark.png` is the
+					    letterforms alone; this is the mark with the expansion under it
+					    -- "Achieving Success through Personal Investment, Resources and
+					    Education" -- which is the thing a reader meeting the programme
+					    for the first time actually needs. The landing page has carried
+					    it since the logo was supplied; the chat was still on the old
+					    asset. */}
+					<picture aria-hidden={collapsed || undefined}>
+						<source srcSet="/brand/aspire-lockup.webp" type="image/webp" />
+						<img
+							className="rail__wordmark"
+							src="/brand/aspire-lockup.png"
+							alt="ASPIRE"
+							width={1200}
+							height={350}
+						/>
+					</picture>
 				</div>
 
 				<button
@@ -170,35 +240,161 @@ export function Rail({
 							</p>
 						)
 					) : (
-						history.map((group) => (
-							<section key={group.label} aria-label={group.label}>
-								<p className="rail__group-title">{group.label}</p>
-								{group.items.map((conversation) => (
-									<HistoryRow
-										key={conversation.threadId}
-										conversation={conversation}
-										active={conversation.threadId === activeThreadId}
-										onOpen={onOpenPast}
-										onSave={onSaveConversation}
-										onRename={onRenameConversation}
-										onRegenerate={onRegenerateTitle}
-										onDelete={onDeleteConversation}
+						<>
+							{/* FOLDED PAST FIVE, and the count is the point of the control.
+							 *
+							 * Every conversation rendered meant the nav below -- Videos,
+							 * Stories, Learn, Games, the two audience pages -- was pushed
+							 * further out of reach with every question asked. A reader who
+							 * uses this product properly loses the rest of it.
+							 *
+							 * The active conversation is always kept, wherever it sits in
+							 * the list: folding away the thread the reader is currently in
+							 * would be the one omission they would notice immediately.
+							 *
+							 * Grouping survives the fold. `groupByRecency` returns Today,
+							 * Yesterday and so on, and a truncated list that drops its
+							 * headings reads as a different, shorter history rather than
+							 * as the top of a longer one. */}
+							{visibleHistory.map((group) => (
+								<section key={group.label} aria-label={group.label}>
+									<p className="rail__group-title">{group.label}</p>
+									{group.items.map((conversation) => (
+										<HistoryRow
+											key={conversation.threadId}
+											conversation={conversation}
+											active={conversation.threadId === activeThreadId}
+											onOpen={onOpenPast}
+											onSave={onSaveConversation}
+											onRename={onRenameConversation}
+											onRegenerate={onRegenerateTitle}
+											onDelete={onDeleteConversation}
+										/>
+									))}
+								</section>
+							))}
+							{hiddenCount > 0 || historyExpanded ? (
+								<button
+									type="button"
+									className="rail__history-toggle"
+									aria-expanded={historyExpanded}
+									onClick={() => setHistoryExpanded((was) => !was)}
+								>
+									<i
+										className={`ph-bold ${historyExpanded ? "ph-caret-up" : "ph-caret-down"}`}
+										aria-hidden="true"
 									/>
-								))}
-							</section>
-						))
+									{historyExpanded ? "Show fewer" : `Show ${hiddenCount} more`}
+								</button>
+							) : null}
+						</>
 					)}
 				</nav>
 			</div>
 
 			{/* Outside `rail__body`, so a long history cannot scroll it out of reach. */}
 			<div className="rail__help">
+				{/* Each of these asks a question rather than opening a page.
+				 *
+				 * The assistant already plays games, offers films and tracks a
+				 * journey; none of it had a door. A rail item that seeds the turn
+				 * lets the reader arrive at it without having to guess the phrase.
+				 *
+				 * Videos keeps its own panel: browsing a library is not a
+				 * conversation, and `/api/videos` is unfiltered so every persona
+				 * reaches it -- including the two the assistant will not offer a
+				 * film to unprompted.
+				 */}
 				<VideoLauncher />
+				{onSeed ? (
+					<>
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("Can you tell me a story?")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-book-open-text" />
+							</span>
+							<span className="rail__fold">Stories</span>
+						</button>
+						{/* Lessons are the point of the product and had no door at all.
+						    "teach me about ..." is the phrase the tutor answers to --
+						    see `tests/learning/test_learn.py` -- so the seed says it. */}
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("Teach me about saving.")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-graduation-cap" />
+							</span>
+							<span className="rail__fold">Learn</span>
+						</button>
+						<button
+							type="button"
+							className="btn-help btn-seed"
+							onClick={() => onSeed("I'd like to play a game.")}
+						>
+							<span className="btn-help__glyph" aria-hidden="true">
+								<i className="ph-duotone ph-game-controller" />
+							</span>
+							<span className="rail__fold">Games</span>
+						</button>
+						{/* These three open the landing page's own section views in
+						    place. None of them is a route -- `LandingScreen` renders
+						    them behind local state -- so from inside a conversation
+						    they were written, reachable from the landing, and
+						    unreachable from where most readers actually are.
+
+						    Parents and Educators sit last before How to use because
+						    they are the two an adult goes looking for, and an adult
+						    scans to the bottom of a rail. A child does not go looking
+						    for "For Educators" at all. */}
+						<ViewLauncher
+							label="My Journey"
+							icon="ph-duotone ph-medal"
+							dialogLabel="Your financial journey"
+							triggerClassName="btn-journey"
+						>
+							{(close) => (
+								<JourneyView onBack={close} backLabel="Back to chat" />
+							)}
+						</ViewLauncher>
+						<ViewLauncher
+							label="For Parents & Guardians"
+							icon="ph-duotone ph-users-three"
+							ariaLabel="For parents and guardians"
+							dialogLabel="For parents and guardians"
+							triggerClassName="btn-parents"
+						>
+							{(close) => (
+								<ParentsView onBack={close} backLabel="Back to chat" />
+							)}
+						</ViewLauncher>
+						<ViewLauncher
+							label="For Educators"
+							icon="ph-duotone ph-chalkboard-teacher"
+							dialogLabel="For teachers and educators"
+							triggerClassName="btn-educators"
+						>
+							{(close) => (
+								<EducatorsView onBack={close} backLabel="Back to chat" />
+							)}
+						</ViewLauncher>
+					</>
+				) : null}
 				<HelpLauncher />
 			</div>
 
 			{/* One block, two states: an invitation signed out, the avatar and name signed in. */}
 			<div className="rail__foot">
+				{/* Signed in only, as asked. A signed-out reader gets the sign-in
+				    prompt below and nothing above it; two blocks in a foot that is
+				    already the narrowest part of the app is one too many. */}
+				{signedIn && persona ? (
+					<GuideCard persona={persona} band={band} onChange={onPersonaChange} />
+				) : null}
 				<AccountControl variant="rail" />
 			</div>
 		</aside>
@@ -460,6 +656,51 @@ function HistoryRow({
 						</>
 					)}
 				</div>
+			) : null}
+		</div>
+	);
+}
+
+/**
+ * The guide at the foot of the rail: face, name, audience, and a way to switch.
+ *
+ * AN EARLIER VERSION OF THIS BROKE THE RAIL, and the reason is worth keeping:
+ * `.rail__foot` is a flex ROW. Adding the card as a sibling of the account
+ * control put the two side by side, the card was squeezed to 22px, and "Skye"
+ * wrapped one letter per line straight through the sign-in text underneath.
+ *
+ * The fix is in the stylesheet -- the foot stacks when it holds a card -- which
+ * is why this component looks unremarkable. Nothing here needed to change.
+ */
+function GuideCard({
+	persona,
+	band,
+	onChange,
+}: {
+	persona: PersonaId | null;
+	band?: AgeBand | null;
+	onChange?: (next: PersonaId | null, band?: AgeBand) => void;
+}) {
+	const guide = guideFor(persona, band ?? undefined);
+	if (!guide) return null;
+
+	return (
+		<div className="rail-guide">
+			<span className="rail-guide__face" aria-hidden="true" />
+			<span className="rail-guide__text">
+				<span className="rail-guide__name">
+					{guide.name}
+					<span className="rail-guide__audience">
+						{" "}
+						&middot; {guide.audience}
+					</span>
+				</span>
+				<span className="rail-guide__note">Your ASPIRE guide</span>
+			</span>
+			{onChange ? (
+				<span className="rail-guide__picker">
+					<PersonaPicker persona={persona} band={band} onChange={onChange} />
+				</span>
 			) : null}
 		</div>
 	);
