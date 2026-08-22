@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { engineGameType } from "#/lib/aspire/game-kinds";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
 	useCallback,
@@ -18,6 +17,7 @@ import {
 	loadEligibilityResult,
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
+import { engineGameType } from "#/lib/aspire/game-kinds";
 import { type GameState, startGame } from "#/lib/aspire/games";
 import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
 import {
