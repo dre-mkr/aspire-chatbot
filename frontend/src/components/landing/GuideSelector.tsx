@@ -149,7 +149,9 @@ export function GuideSelector({
 								})
 							}
 							onMouseEnter={() => setHovered(id)}
-							onMouseLeave={() => setHovered((was) => (was === id ? null : was))}
+							onMouseLeave={() =>
+								setHovered((was) => (was === id ? null : was))
+							}
 							onFocus={() => setHovered(id)}
 							onBlur={() => setHovered((was) => (was === id ? null : was))}
 						>

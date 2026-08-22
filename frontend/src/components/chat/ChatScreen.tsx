@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { engineGameType } from "#/lib/aspire/game-kinds";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
 	useCallback,
@@ -18,6 +17,7 @@ import {
 	loadEligibilityResult,
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
+import { engineGameType } from "#/lib/aspire/game-kinds";
 import { type GameState, startGame } from "#/lib/aspire/games";
 import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
 import {
@@ -35,15 +35,15 @@ import {
 } from "#/lib/aspire/queries";
 import type { AnswerSearch } from "#/lib/aspire/search";
 import { ensureSession } from "#/lib/aspire/session";
-import { useSession } from "#/lib/aspire/use-session";
-import { ChatWelcome } from "./ChatWelcome";
 import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
 import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
+import { useSession } from "#/lib/aspire/use-session";
 import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { AgeBandProvider, bandForPersona } from "./AgeBandProvider";
 import { ChatTitleBar } from "./ChatTitleBar";
+import { ChatWelcome } from "./ChatWelcome";
 import { Composer } from "./Composer";
 import { FirstRun } from "./FirstRun";
 import { Rail } from "./Rail";
@@ -659,7 +659,9 @@ export function ChatScreen() {
 		   widget-preview route and nowhere else — so every reader, teachers
 		   included, got the five-year-old's configuration by fallback. Derived
 		   from the guide they chose; see `bandForPersona`. */
-		<AgeBandProvider band={band ?? identity?.ageBand ?? bandForPersona(persona)}>
+		<AgeBandProvider
+			band={band ?? identity?.ageBand ?? bandForPersona(persona)}
+		>
 			<div
 				className="app"
 				data-phase="chat"
@@ -763,11 +765,11 @@ export function ChatScreen() {
 							>
 								<div className="thread__inner">
 									{/* Before anybody has said anything, the room says hello.
-									  *
-									  * A new thread rendered a bare transcript: a blank
-									  * column and a text box, with no indication of what the
-									  * assistant could do or which of its six voices was
-									  * about to answer. */}
+									 *
+									 * A new thread rendered a bare transcript: a blank
+									 * column and a text box, with no indication of what the
+									 * assistant could do or which of its six voices was
+									 * about to answer. */}
 									{messages.length === 0 && !streaming && !isThinking ? (
 										<ChatWelcome
 											persona={persona}

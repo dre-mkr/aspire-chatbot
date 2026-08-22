@@ -2,11 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useState } from "react";
 import { stageFirstTurn } from "#/lib/aspire/handoff";
-import {
-	type AgeBand,
-	GUIDES,
-	type PersonaId,
-} from "#/lib/aspire/personas";
+import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
 import { EducatorsView } from "./EducatorsView";
@@ -91,7 +87,6 @@ const GUIDE_TO_BAND: Partial<Record<GuideId, AgeBand>> = {
 interface LandingScreenProps {
 	onStartConversation?: (message: string) => void;
 }
-
 
 export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const navigate = useNavigate();
@@ -323,37 +318,39 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 									Choose your guide
 								</span>
 								{/* THE OPTIONS WERE THE WRONG IDS, and the dropdown quietly
-								  * chose nobody for four of the five guides.
-								  *
-								  * It was populated from `PERSONAS`, whose ids are persona
-								  * KEYS -- `stella`, `orion`, `aurora`, `nova` -- and the
-								  * result was stored as a `GuideId`, which is `skye`, `zion`,
-								  * `imani`, `azuri`. Only `kaleb` spells the same in both, so
-								  * only Kaleb worked: every other choice put a key into
-								  * `GUIDE_TO_PERSONA`, missed, and started the conversation
-								  * with no persona at all. An `as GuideId` cast was holding
-								  * the two apart.
-								  *
-								  * Driven from `GUIDES` now, which carries the guide id, the
-								  * persona key and the band together -- and which the row
-								  * below already uses, so the two controls on this page
-								  * cannot disagree about who Skye is.
-								  *
-								  * Guest also appeared twice: once as the empty option and
-								  * again from `PERSONAS`, which gained a `guest` row when it
-								  * gained Kaleb. `GUIDES` is filtered to the five, so the
-								  * empty option is the only Guest.
-								  */}
+								 * chose nobody for four of the five guides.
+								 *
+								 * It was populated from `PERSONAS`, whose ids are persona
+								 * KEYS -- `stella`, `orion`, `aurora`, `nova` -- and the
+								 * result was stored as a `GuideId`, which is `skye`, `zion`,
+								 * `imani`, `azuri`. Only `kaleb` spells the same in both, so
+								 * only Kaleb worked: every other choice put a key into
+								 * `GUIDE_TO_PERSONA`, missed, and started the conversation
+								 * with no persona at all. An `as GuideId` cast was holding
+								 * the two apart.
+								 *
+								 * Driven from `GUIDES` now, which carries the guide id, the
+								 * persona key and the band together -- and which the row
+								 * below already uses, so the two controls on this page
+								 * cannot disagree about who Skye is.
+								 *
+								 * Guest also appeared twice: once as the empty option and
+								 * again from `PERSONAS`, which gained a `guest` row when it
+								 * gained Kaleb. `GUIDES` is filtered to the five, so the
+								 * empty option is the only Guest.
+								 */}
 								<div className="flex items-center gap-2">
 									{selected ? (
 										<span
 											className="w-7 h-7 rounded-full bg-cover bg-top shrink-0 ring-2"
-											style={{
-												backgroundImage: `image-set(url("/guides/${selected.guideId}.webp") type("image/webp"), url("/guides/${selected.guideId}.png") type("image/png"))`,
-												// The ring the guide is remembered by, the same
-												// five the row below uses.
-												"--tw-ring-color": GUIDE_RING[selected.guideId],
-											} as React.CSSProperties}
+											style={
+												{
+													backgroundImage: `image-set(url("/guides/${selected.guideId}.webp") type("image/webp"), url("/guides/${selected.guideId}.png") type("image/png"))`,
+													// The ring the guide is remembered by, the same
+													// five the row below uses.
+													"--tw-ring-color": GUIDE_RING[selected.guideId],
+												} as React.CSSProperties
+											}
 											aria-hidden="true"
 										/>
 									) : (
@@ -662,17 +659,17 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 					</div>
 
 					{/* Meet your guides.
-					  *
-					  * Was five 56px icon circles with a phosphor glyph each -- a
-					  * butterfly for Skye, a rocket for Kaleb. Illustrated guides exist
-					  * now, so the face does the work the glyph was standing in for, and
-					  * the audience pill above it answers "which one is mine?" before the
-					  * reader has to know who any of them are.
-					  *
-					  * `compact` rather than the designed `hero` size: this page holds
-					  * itself to one viewport with no scroll, and the row it replaces was
-					  * 124px tall with nothing spare. See `.guide-selector--compact`.
-					  */}
+					 *
+					 * Was five 56px icon circles with a phosphor glyph each -- a
+					 * butterfly for Skye, a rocket for Kaleb. Illustrated guides exist
+					 * now, so the face does the work the glyph was standing in for, and
+					 * the audience pill above it answers "which one is mine?" before the
+					 * reader has to know who any of them are.
+					 *
+					 * `compact` rather than the designed `hero` size: this page holds
+					 * itself to one viewport with no scroll, and the row it replaces was
+					 * 124px tall with nothing spare. See `.guide-selector--compact`.
+					 */}
 					<div className="lg:col-span-5">
 						<GuideSelector
 							size="compact"
@@ -722,22 +719,22 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 					</div>
 
 					{/* WHO RUNS THIS, AND HOW TO REACH A PERSON.
-					  *
-					  * The footer carried a tagline and nothing else -- no owning
-					  * body, no contact, no way off the bot. On a Government of St
-					  * Kitts and Nevis service that is the one thing a footer cannot
-					  * leave out, and it matters most for the reader the assistant
-					  * has just declined to answer.
-					  *
-					  * Every value here is the one the backend already publishes --
-					  * `config.aspire_contact_*` and the Ministry line the persona
-					  * cards give verbatim. Nothing is typed in fresh: an invented
-					  * government phone number is worse than no phone number.
-					  *
-					  * Kept to the same single row so the page still measures 900px
-					  * in a 900px viewport. The row was `justify-between` with one
-					  * child, so this costs width that was already empty, not height.
-					  */}
+					 *
+					 * The footer carried a tagline and nothing else -- no owning
+					 * body, no contact, no way off the bot. On a Government of St
+					 * Kitts and Nevis service that is the one thing a footer cannot
+					 * leave out, and it matters most for the reader the assistant
+					 * has just declined to answer.
+					 *
+					 * Every value here is the one the backend already publishes --
+					 * `config.aspire_contact_*` and the Ministry line the persona
+					 * cards give verbatim. Nothing is typed in fresh: an invented
+					 * government phone number is worse than no phone number.
+					 *
+					 * Kept to the same single row so the page still measures 900px
+					 * in a 900px viewport. The row was `justify-between` with one
+					 * child, so this costs width that was already empty, not height.
+					 */}
 					<div className="flex flex-col gap-0.5 text-right text-[10.5px] leading-tight text-[#482977]/70">
 						<div className="font-semibold text-[#1A103C]">
 							A programme of the Government of St Kitts &amp; Nevis &middot;

@@ -56,7 +56,8 @@ function originOf(source: Source): SourceOrigin | null {
 }
 
 /** Analytics parameters, which identify the click rather than the page. */
-const TRACKING = /^(?:utm_|_hs|pk_|mtm_)|^(?:fbclid|gclid|igshid|mc_cid|mc_eid|msclkid|ref|ref_src|yclid)$/i;
+const TRACKING =
+	/^(?:utm_|_hs|pk_|mtm_)|^(?:fbclid|gclid|igshid|mc_cid|mc_eid|msclkid|ref|ref_src|yclid)$/i;
 
 /**
  * What makes two links the same page.

@@ -43,4 +43,3 @@ export function blockIsClosed(
 ): boolean {
 	return ended || index < blocks.length - 1;
 }
-

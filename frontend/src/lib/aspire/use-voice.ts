@@ -467,7 +467,22 @@ export function useVoice({
 				setPausedId(id);
 			}
 		},
-		[language, pausedId, playingId, showNote, speed, stopPlayback, threadId],
+		// `persona` belongs here: it is passed to the speech call, so without it
+		// `play` closes over whoever was selected when this callback was last
+		// built. Switching guide and pressing Play then speaks in the previous
+		// guide's voice -- which matters more now that each guide has a face and a
+		// voice of their own, and a child would hear the mismatch before anyone
+		// reading the code would.
+		[
+			language,
+			pausedId,
+			persona,
+			playingId,
+			showNote,
+			speed,
+			stopPlayback,
+			threadId,
+		],
 	);
 
 	// A speed change applies to what is already playing, not just the next answer.

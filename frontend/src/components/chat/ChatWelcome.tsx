@@ -159,7 +159,9 @@ const EDUCATOR: ReadonlyArray<WelcomeCard> = [
 	},
 ];
 
-export function cardsFor(persona: string | null | undefined): ReadonlyArray<WelcomeCard> {
+export function cardsFor(
+	persona: string | null | undefined,
+): ReadonlyArray<WelcomeCard> {
 	const key = (persona ?? "").trim().toLowerCase();
 	if (key === "aurora") return GUARDIAN;
 	if (key === "nova") return EDUCATOR;

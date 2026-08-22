@@ -75,7 +75,6 @@ export function personaById(id: PersonaId | null): Persona | null {
 	return id ? (BY_ID.get(id) ?? null) : null;
 }
 
-
 /**
  * The six guides a reader actually meets, which is not the same as the five keys.
  *

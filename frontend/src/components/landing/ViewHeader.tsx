@@ -42,12 +42,12 @@ export function ViewHeader({
 	return (
 		<header className="p-6 flex items-center justify-between gap-4 flex-wrap">
 			{/* The mark never travels without what it stands for.
-			  *
-			  * ASPIRE is an acronym, and a wordmark on its own is four syllables
-			  * of nothing to a reader meeting the programme for the first time --
-			  * which, on a page reached from a shared link, is most of them. The
-			  * landing hero has always carried the expansion underneath; every
-			  * section page does now too. */}
+			 *
+			 * ASPIRE is an acronym, and a wordmark on its own is four syllables
+			 * of nothing to a reader meeting the programme for the first time --
+			 * which, on a page reached from a shared link, is most of them. The
+			 * landing hero has always carried the expansion underneath; every
+			 * section page does now too. */}
 			<button
 				type="button"
 				onClick={onBack}

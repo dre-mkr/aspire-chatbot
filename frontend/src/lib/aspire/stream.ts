@@ -1,7 +1,6 @@
 /** The chat transport. */
 
 import { streamTurn } from "../stream/client";
-import { displayNameFor, promptKindFor } from "./game-kinds";
 import { forget, graphSession } from "../stream/session";
 import type {
 	CitationsDirective,
@@ -21,6 +20,7 @@ import {
 	type StartedEligibility,
 	type StartedGame,
 } from "./api";
+import { displayNameFor, promptKindFor } from "./game-kinds";
 
 /** Directive types the transcript renders through its own card row, not inline. */
 const CARD_TYPES = new Set(["game", "eligibility"]);

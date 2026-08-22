@@ -140,15 +140,15 @@ export function PersonaPicker({
 				}
 			>
 				{/* The guide's face, not a generic person glyph.
-				  *
-				  * This control is the reader's only standing reminder of who is
-				  * answering, and it showed the same outline for all six. The
-				  * `persona__face` span is painted by the same `--orb-face` cascade
-				  * the transcript orb uses, so it follows `data-persona` at the root
-				  * and there is nothing to keep in step here.
-				  *
-				  * `guest` has no face and falls back to the glyph, which is right:
-				  * it is the voice that has not been told who is reading. */}
+				 *
+				 * This control is the reader's only standing reminder of who is
+				 * answering, and it showed the same outline for all six. The
+				 * `persona__face` span is painted by the same `--orb-face` cascade
+				 * the transcript orb uses, so it follows `data-persona` at the root
+				 * and there is nothing to keep in step here.
+				 *
+				 * `guest` has no face and falls back to the glyph, which is right:
+				 * it is the voice that has not been told who is reading. */}
 				{current ? (
 					<span className="persona__face" aria-hidden="true" />
 				) : (

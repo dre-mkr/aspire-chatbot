@@ -23,7 +23,8 @@ const COPY = {
 	title: "Word scramble",
 	// "Warm-up set" named the one set that used to exist. The bank is tiered by
 	// persona now, so the count is the only honest half of that subtitle.
-	sub: (total: number) => `${total} ${total === 1 ? "word" : "words"} to unscramble`,
+	sub: (total: number) =>
+		`${total} ${total === 1 ? "word" : "words"} to unscramble`,
 	leave: "Leave game",
 	close: "Close",
 	lead: "Unscramble these letters.",
