@@ -45,7 +45,36 @@ jobs:
       - name: Verify golden ids still exist
         run: uv run python -m evals.run --verify-ids
 
+      # THIS GATE HAS BEEN RED SINCE IT WAS ADDED, and everything below is why.
+      #
+      # Every one of the last 93 runs failed in about twenty seconds -- on main
+      # and on pull requests alike -- with `Process completed with exit code 1`
+      # and a second annotation saying `evals-retrieval.json` was never written.
+      # Reproduced locally: `app.ingest` raises
+      # `openai.OpenAIError: Missing credentials` immediately, because
+      # `secrets.OPENAI_API_KEY` is not set on this repository. Nothing here has
+      # ever measured retrieval quality.
+      #
+      # A gate that is always red is worse than no gate. PR #16 was merged with
+      # these three annotations showing, because by then they were furniture --
+      # which is exactly what the `verify` gate did before PR #15 unblocked it.
+      #
+      # So: without a key, the job says so and stands down. With one, nothing
+      # about the measurement changes.
+      - name: Is there a key to embed with?
+        id: key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Retrieval quality was NOT measured::OPENAI_API_KEY is not set, so the vector store could not be built and the retrieval eval did not run. This job is green because it had nothing to measure, NOT because retrieval is healthy. Set the secret to restore the gate."
+          fi
+
       - name: Build the vector store
+        if: steps.key.outputs.present == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMBEDDINGS_PROVIDER: openai
@@ -55,14 +84,17 @@ jobs:
       # Baseline 2026-08-03: hit_rate 1.00, MRR 0.947 at k=4 (60 cases).
       # 0.95 leaves headroom for corpus churn without hiding a real regression.
       - name: Retrieval quality
+        if: steps.key.outputs.present == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMBEDDINGS_PROVIDER: openai
           EMBEDDINGS_MODEL: text-embedding-3-large
         run: uv run python -m evals.run --retrieval --fail-under 0.95 --json evals-retrieval.json
 
+      # Only when there is something to upload. `if: always()` was raising a
+      # second annotation on every run for a file the step above never wrote.
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.key.outputs.present == 'true'
         with:
           name: eval-retrieval
           path: backend/evals-retrieval.json
