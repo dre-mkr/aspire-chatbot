@@ -673,6 +673,58 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							</div>
 						</div>
 					</div>
+
+					{/* WHO RUNS THIS, AND HOW TO REACH A PERSON.
+					  *
+					  * The footer carried a tagline and nothing else -- no owning
+					  * body, no contact, no way off the bot. On a Government of St
+					  * Kitts and Nevis service that is the one thing a footer cannot
+					  * leave out, and it matters most for the reader the assistant
+					  * has just declined to answer.
+					  *
+					  * Every value here is the one the backend already publishes --
+					  * `config.aspire_contact_*` and the Ministry line the persona
+					  * cards give verbatim. Nothing is typed in fresh: an invented
+					  * government phone number is worse than no phone number.
+					  *
+					  * Kept to the same single row so the page still measures 900px
+					  * in a 900px viewport. The row was `justify-between` with one
+					  * child, so this costs width that was already empty, not height.
+					  */}
+					<div className="flex flex-col gap-0.5 text-right text-[11px] leading-snug text-[#482977]/70">
+						<div className="font-semibold text-[#1A103C]">
+							A programme of the Government of St Kitts & Nevis
+						</div>
+						<div>
+							Ministry of Social Development and Gender Affairs &middot;{" "}
+							<a
+								className="underline underline-offset-2 hover:text-[#c22f99]"
+								href="tel:+18694671275"
+							>
+								(869) 467-1275
+							</a>
+						</div>
+						<div>
+							ASPIRE team &middot;{" "}
+							<a
+								className="underline underline-offset-2 hover:text-[#c22f99]"
+								href="tel:+18696675566"
+							>
+								+1 (869) 667-5566
+							</a>{" "}
+							&middot;{" "}
+							<a
+								className="underline underline-offset-2 hover:text-[#c22f99]"
+								href="mailto:aspire@gov.kn"
+							>
+								aspire@gov.kn
+							</a>
+						</div>
+						<div>
+							The Cable Office, Cayon Street, Basseterre &middot; Mon&ndash;Fri
+							9:00&nbsp;AM&ndash;3:00&nbsp;PM
+						</div>
+					</div>
 				</div>
 			</footer>
 		</div>
