@@ -218,11 +218,11 @@ function HelpContent() {
 
 			<Section title="Listening and speaking" glyph={<MicIcon />}>
 				<p>
-					Press the <strong>microphone</strong> to talk instead of typing.
-					Press <strong>Play</strong> under any answer to hear it read aloud.
-					The sliders button opens voice settings, where you can have every
-					answer read out automatically, change the reading speed, and switch
-					between English, Spanish and French.
+					Press the <strong>microphone</strong> to talk instead of typing. Press{" "}
+					<strong>Play</strong> under any answer to hear it read aloud. The
+					sliders button opens voice settings, where you can have every answer
+					read out automatically, change the reading speed, and switch between
+					English, Spanish and French.
 				</p>
 				<p className="help__note">
 					Each persona has its own voice, and the youngest one reads more

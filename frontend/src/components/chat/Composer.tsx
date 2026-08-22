@@ -307,7 +307,9 @@ export function Composer({
 								>
 									<SendIcon />
 									<span className="sr-only">
-										{live ? "Send message" : "Starting up. Send is not ready yet."}
+										{live
+											? "Send message"
+											: "Starting up. Send is not ready yet."}
 									</span>
 								</button>
 							)}

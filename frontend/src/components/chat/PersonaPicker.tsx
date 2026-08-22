@@ -177,7 +177,6 @@ export function PersonaPicker({
 									</span>
 								</button>
 							))}
-
 						</div>,
 						document.body,
 					)
