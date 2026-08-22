@@ -26,14 +26,22 @@ import {
 	groupByRecency,
 	type StoredConversation,
 } from "#/lib/aspire/history";
+import { type AgeBand, guideFor, type PersonaId } from "#/lib/aspire/personas";
 import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 import { HelpLauncher } from "./HelpPanel";
+import { PersonaPicker } from "./PersonaPicker";
 import { VideoLauncher } from "./VideoPanel";
 import { ViewLauncher } from "./ViewLauncher";
 
 interface RailProps {
+	/** The guide answering, so the rail can say so. */
+	persona?: PersonaId | null;
+	/** Which voice of that guide, where the key carries more than one. */
+	band?: AgeBand | null;
+	/** Switching guide from the rail, same handler the composer picker uses. */
+	onPersonaChange?: (next: PersonaId | null, band?: AgeBand) => void;
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
 	collapsed: boolean;
 	/** Off-screen entirely: zero width on the landing screen, or a closed drawer. */
@@ -73,14 +81,52 @@ export function Rail({
 	onRegenerateTitle,
 	onDeleteConversation,
 	onSeed,
+	persona,
+	band,
+	onPersonaChange,
 }: RailProps) {
 	/** The list, subscribed here rather than passed in. */
 	const { session } = useSession();
 	const conversations = useQuery(conversationsQuery(session?.userId ?? "anon"));
+	/** Shown before the list folds. Five is what fits without crowding the nav. */
+	const HISTORY_SHOWN = 5;
+	const [historyExpanded, setHistoryExpanded] = useState(false);
+
 	const history = useMemo(
 		() => groupByRecency(conversations.data ?? []),
 		[conversations.data],
 	);
+
+	/**
+	 * The groups as shown, truncated to `HISTORY_SHOWN` unless expanded.
+	 *
+	 * Counted across groups rather than within them, because the reader sees one
+	 * list -- five items total, not five under each heading. A group that loses
+	 * every item is dropped rather than left as a bare date with nothing under it.
+	 *
+	 * The active thread is always kept, wherever it falls: hiding the
+	 * conversation somebody is currently reading is the one omission they would
+	 * notice at once.
+	 */
+	const { visibleHistory, hiddenCount } = useMemo(() => {
+		const total = history.reduce((n, group) => n + group.items.length, 0);
+		if (historyExpanded || total <= HISTORY_SHOWN) {
+			return { visibleHistory: history, hiddenCount: 0 };
+		}
+		let budget = HISTORY_SHOWN;
+		const groups = [];
+		for (const group of history) {
+			const items = group.items.filter((c) => {
+				if (c.threadId === activeThreadId) return true;
+				if (budget <= 0) return false;
+				budget -= 1;
+				return true;
+			});
+			if (items.length > 0) groups.push({ ...group, items });
+		}
+		const shown = groups.reduce((n, group) => n + group.items.length, 0);
+		return { visibleHistory: groups, hiddenCount: total - shown };
+	}, [history, historyExpanded, activeThreadId]);
 
 	// Anything folded away has to leave the tab order too, or focus lands on controls nobody can see.
 	const folded = collapsed || undefined;
@@ -183,23 +229,54 @@ export function Rail({
 							</p>
 						)
 					) : (
-						history.map((group) => (
-							<section key={group.label} aria-label={group.label}>
-								<p className="rail__group-title">{group.label}</p>
-								{group.items.map((conversation) => (
-									<HistoryRow
-										key={conversation.threadId}
-										conversation={conversation}
-										active={conversation.threadId === activeThreadId}
-										onOpen={onOpenPast}
-										onSave={onSaveConversation}
-										onRename={onRenameConversation}
-										onRegenerate={onRegenerateTitle}
-										onDelete={onDeleteConversation}
+						<>
+							{/* FOLDED PAST FIVE, and the count is the point of the control.
+							 *
+							 * Every conversation rendered meant the nav below -- Videos,
+							 * Stories, Learn, Games, the two audience pages -- was pushed
+							 * further out of reach with every question asked. A reader who
+							 * uses this product properly loses the rest of it.
+							 *
+							 * The active conversation is always kept, wherever it sits in
+							 * the list: folding away the thread the reader is currently in
+							 * would be the one omission they would notice immediately.
+							 *
+							 * Grouping survives the fold. `groupByRecency` returns Today,
+							 * Yesterday and so on, and a truncated list that drops its
+							 * headings reads as a different, shorter history rather than
+							 * as the top of a longer one. */}
+							{visibleHistory.map((group) => (
+								<section key={group.label} aria-label={group.label}>
+									<p className="rail__group-title">{group.label}</p>
+									{group.items.map((conversation) => (
+										<HistoryRow
+											key={conversation.threadId}
+											conversation={conversation}
+											active={conversation.threadId === activeThreadId}
+											onOpen={onOpenPast}
+											onSave={onSaveConversation}
+											onRename={onRenameConversation}
+											onRegenerate={onRegenerateTitle}
+											onDelete={onDeleteConversation}
+										/>
+									))}
+								</section>
+							))}
+							{hiddenCount > 0 || historyExpanded ? (
+								<button
+									type="button"
+									className="rail__history-toggle"
+									aria-expanded={historyExpanded}
+									onClick={() => setHistoryExpanded((was) => !was)}
+								>
+									<i
+										className={`ph-bold ${historyExpanded ? "ph-caret-up" : "ph-caret-down"}`}
+										aria-hidden="true"
 									/>
-								))}
-							</section>
-						))
+									{historyExpanded ? "Show fewer" : `Show ${hiddenCount} more`}
+								</button>
+							) : null}
+						</>
 					)}
 				</nav>
 			</div>
@@ -301,6 +378,21 @@ export function Rail({
 
 			{/* One block, two states: an invitation signed out, the avatar and name signed in. */}
 			<div className="rail__foot">
+				{/* WHO IS ANSWERING, above who is signed in. Two different questions,
+				 * and the rail only ever answered the second.
+				 *
+				 * A reader picked Skye by her face on the landing page and then had
+				 * nothing in the rail saying they were still with her -- the only
+				 * standing reminder was a name in the composer chip, at the far
+				 * corner of the screen from where they chose.
+				 *
+				 * Shown whenever a guide is set rather than only when signed in.
+				 * Most readers here never sign in -- an account is for keeping
+				 * chats, not for asking a question -- and hiding the guide from
+				 * them would hide it from nearly everyone. */}
+				{persona ? (
+					<GuideCard persona={persona} band={band} onChange={onPersonaChange} />
+				) : null}
 				<AccountControl variant="rail" />
 			</div>
 		</aside>
@@ -562,6 +654,53 @@ function HistoryRow({
 						</>
 					)}
 				</div>
+			) : null}
+		</div>
+	);
+}
+
+/**
+ * The guide, at the foot of the rail: face, name, who they are for.
+ *
+ * The rail's foot answered "who am I signed in as" and never "who is answering
+ * me". Those are different questions, and for most readers here only the second
+ * has an answer -- an account is for keeping chats, not for asking a question.
+ *
+ * It is a picker, not a label. A reader looking at "Skye - Ages 5-8" and
+ * realising it is wrong for them should be able to fix it where they noticed,
+ * rather than hunting the composer at the opposite corner. `PersonaPicker` is
+ * reused whole rather than restyled: two guide switchers that open different
+ * menus would be worse than one that looks slightly less like the mockup.
+ */
+function GuideCard({
+	persona,
+	band,
+	onChange,
+}: {
+	persona: PersonaId | null;
+	band?: AgeBand | null;
+	onChange?: (next: PersonaId | null, band?: AgeBand) => void;
+}) {
+	const guide = guideFor(persona, band ?? undefined);
+	if (!guide) return null;
+
+	return (
+		<div className="rail-guide">
+			<span className="rail-guide__face" aria-hidden="true" />
+			<span className="rail-guide__text rail__fold">
+				<span className="rail-guide__name">
+					{guide.name}
+					<span className="rail-guide__audience">
+						{" "}
+						&middot; {guide.audience}
+					</span>
+				</span>
+				<span className="rail-guide__note">Your ASPIRE guide</span>
+			</span>
+			{onChange ? (
+				<span className="rail-guide__picker rail__fold">
+					<PersonaPicker persona={persona} band={band} onChange={onChange} />
+				</span>
 			) : null}
 		</div>
 	);
