@@ -23,10 +23,20 @@ import { ASPIRE_EXPANSION } from "./Brandmark";
 export function ViewHeader({
 	onBack,
 	tone = "light",
+	backLabel = "Back to ASPIRE",
 }: {
 	onBack: () => void;
 	/** Journey, History and Stories sit on the deep plum; the rest on white. */
 	tone?: "light" | "dark";
+	/**
+	 * What the way out is called.
+	 *
+	 * "Back to ASPIRE" is right on a section page, where back really is the
+	 * landing. Inside a dialog opened from the rail it is a lie in two
+	 * directions: the reader never left ASPIRE, and the button closes a panel
+	 * rather than navigating anywhere.
+	 */
+	backLabel?: string;
 }) {
 	const dark = tone === "dark";
 	return (
@@ -71,7 +81,7 @@ export function ViewHeader({
 						: "text-[#482977] hover:text-[#c22f99]"
 				}`}
 			>
-				<i className="ph-bold ph-arrow-left" aria-hidden="true" /> Back to ASPIRE
+				<i className="ph-bold ph-arrow-left" aria-hidden="true" /> {backLabel}
 			</button>
 		</header>
 	);

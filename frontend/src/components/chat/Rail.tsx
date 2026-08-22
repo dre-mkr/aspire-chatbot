@@ -27,6 +27,7 @@ import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 import { HelpLauncher } from "./HelpPanel";
+import { JourneyLauncher } from "./JourneyLauncher";
 import { VideoLauncher } from "./VideoPanel";
 
 interface RailProps {
@@ -249,16 +250,12 @@ export function Rail({
 							</span>
 							<span className="rail__fold">Games</span>
 						</button>
-						<button
-							type="button"
-							className="btn-help btn-seed"
-							onClick={() => onSeed("How am I doing so far?")}
-						>
-							<span className="btn-help__glyph" aria-hidden="true">
-								<i className="ph-duotone ph-medal" />
-							</span>
-							<span className="rail__fold">My Journey</span>
-						</button>
+						{/* Opens the journey rather than asking about it. The seed
+						    "How am I doing so far?" is a fine turn and it is not what
+						    the label promises -- and `JourneyView` was reachable from
+						    the landing page alone, so from inside a conversation the
+						    page existed and had no door. */}
+						<JourneyLauncher />
 					</>
 				) : null}
 				<HelpLauncher />

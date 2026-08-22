@@ -1,8 +1,15 @@
 import { ViewHeader } from "./ViewHeader";
-export function JourneyView({ onBack }: { onBack: () => void }) {
+export function JourneyView({
+	onBack,
+	backLabel,
+}: {
+	onBack: () => void;
+	/** Set by the rail's launcher, which closes a panel rather than navigating. */
+	backLabel?: string;
+}) {
 	return (
 		<div className="flex flex-col min-h-screen bg-[#0B051D] text-white">
-			<ViewHeader onBack={onBack} tone="dark" />
+			<ViewHeader onBack={onBack} tone="dark" backLabel={backLabel} />
 			<main className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-2xl mx-auto">
 				<div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#fed141] to-amber-600 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(254,209,65,0.4)]">
 					<i className="ph-fill ph-medal text-5xl text-white"></i>

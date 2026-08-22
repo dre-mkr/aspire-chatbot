@@ -7990,3 +7990,25 @@ a.source__site--link:hover .source__out {
 .app[data-phase="chat"] .composer {
 	background: rgb(255 255 255 / 0.94);
 }
+
+/* ── The journey, opened from the rail ────────────────────────────────────
+ *
+ * `JourneyView` is its own full-height dark surface with its own header, so
+ * unlike the video library it is not wrapped in `.help__panel` -- it only
+ * needs somewhere to sit above the scrim and a ceiling on how wide it gets.
+ */
+.journey-panel__surface {
+	position: relative;
+	z-index: 1;
+	width: min(56rem, 100%);
+	max-height: 92dvh;
+	overflow-y: auto;
+	border-radius: 18px;
+	box-shadow: 0 24px 60px rgb(11 5 29 / 0.45);
+}
+
+/* `min-h-screen` on the view itself is right on a page of its own and wrong
+   inside a dialog, where it forces the panel taller than the scrim. */
+.journey-panel__surface > * {
+	min-height: 0;
+}
