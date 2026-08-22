@@ -61,7 +61,14 @@ def band_for(born: date | None, *, is_minor: bool, today: date | None = None) ->
 #: The persona each band gets unless a narrower one is asked for.
 DEFAULT_PERSONA: dict[str, str] = {
     "5-8": "stella",
-    "9-12": "stella",
+    # `kaleb`, not `stella`. This line is the signed-in half of the split and it
+    # is easy to miss: `_ANONYMOUS_BANDS` covers a visitor, but a reader with an
+    # account gets their band from their date of birth and their persona from
+    # here. Left as `stella`, a ten-year-old with an account resolved to a
+    # persona whose 9-12 card no longer exists, so `_card_text` fell through to
+    # `stella.5-8.md` -- Skye's card and Skye's name for a reader who is Kaleb's.
+    # Nothing failed; it just quietly served the younger voice.
+    "9-12": "kaleb",
     "13-15": "orion",
     "16-18": "orion",
     "adult": "aurora",

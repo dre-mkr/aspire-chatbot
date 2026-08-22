@@ -409,6 +409,19 @@ _QA_DEPTH: dict[str, str] = {
   and she is having a conversation.
 - If a money word is unavoidable, say what it means in the same breath.
 - If the honest answer needs a grown-up, say so kindly and stop.""",
+    # A row of his own, because the default here is `nova` -- the fullest block,
+    # written for a teacher. Without this line Kaleb takes his key to the
+    # `.get`, misses, and a nine-year-old is answered in an educator's register.
+    # He is between Skye and Zion and belongs to neither: more than her two or
+    # three sentences, and none of Zion's conditions.
+    "kaleb": """DEPTH AND COMPLETENESS
+- Answer what he asked, then the one thing that would change it. Not every
+  condition -- he will stop reading, and the one that matters gets lost.
+- Three or four sentences. Show the arithmetic when there is arithmetic: he is
+  the reader who wants to see how the number was reached.
+- Say what a money word means the first time it appears, then use it plainly.
+- If the honest answer needs a grown-up, say so and say why, without softening
+  it into something he can tell is softened.""",
     "orion": """DEPTH AND COMPLETENESS
 - Give the direct answer first, then only the conditions that would actually
   change what he does. Leave the rest out.
@@ -538,6 +551,14 @@ _STORY_BY_PERSONA: dict[str, str] = {
         "twelve. One child, one problem about money, one thing they decide. "
         "Simple words and short sentences. End with the one idea it teaches, in "
         "a single line."
+    ),
+    "kaleb": (
+        # Same reason as the depth block: the fallback here is `guest`, the
+        # mixed-audience shape, which is nobody's voice in particular.
+        "Tell a short story, six to eight sentences, for a child aged nine to "
+        "twelve. One character, one money decision, and a consequence that "
+        "follows from it rather than being announced. Plain words, and show the "
+        "sums if there are sums. End with what it cost or earned them."
     ),
     "orion": (
         "Tell a story for a teenager: eight to twelve sentences, a character "

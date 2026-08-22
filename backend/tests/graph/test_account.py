@@ -334,7 +334,7 @@ def test_an_absent_role_behaves_exactly_as_before_the_column_existed():
     """Every row backfilled by migration 0017 is a `participant`."""
     for band_born, expected in (
         (date(2018, 1, 1), "stella"),  # 8  -> 5-8
-        (date(2015, 1, 1), "stella"),  # 11 -> 9-12
+        (date(2015, 1, 1), "kaleb"),  # 11 -> 9-12, and Kaleb is his own key now
         (date(2012, 1, 1), "orion"),  # 14 -> 13-15
         (date(2009, 1, 1), "orion"),  # 17 -> 16-18
         (date(1990, 1, 1), "aurora"),  # adult
