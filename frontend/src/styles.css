@@ -1194,7 +1194,10 @@ body {
 	overflow-y: auto;
 	overflow-x: hidden;
 	overscroll-behavior: contain;
-	padding-top: 28px;
+	/* Trimmed with the welcome stack below: the empty hero overflowed an 827px
+	   window by 46px, and that is taken back across the whole column rather
+	   than out of any single gap, so nothing reads as cramped. */
+	padding-top: 18px;
 	/* Both edges. Without the second stop the transcript was sliced flat against
 	   the composer, which read as content ending rather than continuing. */
 	mask-image: linear-gradient(
@@ -1216,7 +1219,17 @@ body {
 
 /* Anchors short conversations to the bottom, so the first reply rises out of the composer. */
 .thread__inner {
-	margin-top: auto;
+	/* TOP-ANCHORED, not bottom-anchored.
+	 *
+	 * `margin-top: auto` sat a short conversation just above the composer, which
+	 * is the classic chat feel and was right when the thread began with the
+	 * reader's first message. It is wrong now that the hook always leads: the
+	 * greeting is the top of the conversation, and pushing it down left a band
+	 * of empty scene above it -- 167px on a tablet -- and put the whole column
+	 * out of reach of the viewport it was supposed to fit inside.
+	 *
+	 * Long conversations are unaffected: once the content is taller than the
+	 * thread there is no spare room for `auto` to have distributed anyway. */
 	width: 100%;
 }
 
@@ -7917,14 +7930,14 @@ a.source__site--link:hover .source__out {
 .welcome {
 	display: flex;
 	flex-direction: column;
-	gap: 28px;
+	gap: 20px;
 	/* A real gutter, because there was none: the zone and the cards both began
 	   at the workspace's own left edge, which is the rail's right edge -- the
 	   headline and the first card were touching the navigation. Measured at
 	   1440px: gap from the workspace's left was 0. The inline value carries the
 	   whole column, zone and cards together, so they stay aligned to each
 	   other while both clear the rail. */
-	padding: clamp(18px, 2.4vh, 34px) clamp(20px, 2.6vw, 44px) 28px;
+	padding: clamp(14px, 1.9vh, 28px) clamp(20px, 2.6vw, 44px) 16px;
 }
 
 /* Top-left, and the mark sits at the TOP of the text rather than centred
@@ -8153,26 +8166,32 @@ a.source__site--link:hover .source__out {
  */
 .app[data-phase="chat"] .workspace {
 	background:
+		/* The reading column still gets a lift, but a MUCH lighter one. At 0.92
+		   the radial was not protecting the text, it was replacing the picture
+		   with white and leaving the mountain as a strip on the right. The scene
+		   is the product's whole atmosphere and it should carry the full width. */
 		radial-gradient(
-			circle at 24% 42%,
-			rgb(255 255 255 / 0.92) 0%,
-			rgb(255 255 255 / 0.8) 22%,
-			rgb(255 255 255 / 0.46) 48%,
-			rgb(255 255 255 / 0.1) 70%,
-			transparent 84%
+			circle at 26% 44%,
+			rgb(255 255 255 / 0.5) 0%,
+			rgb(255 255 255 / 0.4) 26%,
+			rgb(255 255 255 / 0.22) 52%,
+			rgb(255 255 255 / 0.06) 74%,
+			transparent 88%
 		),
 		linear-gradient(
 			to bottom,
-			rgb(255 255 255 / 0.06) 0%,
-			rgb(255 255 255 / 0.2) 34%,
-			rgb(255 255 255 / 0.52) 68%,
-			rgb(255 255 255 / 0.78) 100%
+			rgb(255 255 255 / 0.02) 0%,
+			rgb(255 255 255 / 0.08) 38%,
+			rgb(255 255 255 / 0.22) 72%,
+			rgb(255 255 255 / 0.34) 100%
 		),
 		image-set(
 			url("/images/hero-bg.webp") type("image/webp"),
 			url("/images/hero-bg.jpg") type("image/jpeg")
 		)
-		right top / cover no-repeat;
+		/* `cover` anchored right-top left the left third on the image's own pale
+		   sky. Centre it so the scene actually spans the column. */
+		center center / cover no-repeat;
 }
 
 /* The composer is the smallest type and the control everyone uses, so it keeps
@@ -8724,7 +8743,7 @@ a.source__site--link:hover .source__out {
 	width: min(620px, 48vw);
 	/* The wrapper supplies the gutter now, so this only adds the extra breathing
 	   room the hero wants above the orb. */
-	padding-top: clamp(8px, 2.2vh, 30px);
+	padding-top: clamp(4px, 1.3vh, 18px);
 	padding-bottom: 8px;
 }
 
@@ -8738,7 +8757,7 @@ a.source__site--link:hover .source__out {
 	   guessed -- hiding the orb turns a 48px overlap into 98px of clearance.
 	   9vh keeps it generous on a tall display and yields on a short one. */
 	--orb-size: clamp(64px, 9vh, 112px);
-	margin: 0 0 clamp(16px, 2.6vh, 34px) 4px;
+	margin: 0 0 clamp(12px, 2vh, 26px) 4px;
 	filter: drop-shadow(0 8px 20px rgb(84 52 145 / 0.18))
 		drop-shadow(0 0 16px rgb(194 47 153 / 0.22));
 	animation: orbFloat 4.5s ease-in-out infinite;
@@ -8793,7 +8812,7 @@ a.source__site--link:hover .source__out {
 }
 
 .welcome-tagline {
-	margin: 22px 0 0;
+	margin: 16px 0 0;
 	font-size: clamp(17px, 1.6vw, 24px);
 	line-height: 1.4;
 	font-weight: 500;
@@ -8812,7 +8831,7 @@ a.source__site--link:hover .source__out {
 /* Interface copy, not a chat message: no bubble, no avatar, quieter than the
    tagline above it. */
 .welcome-copy {
-	margin: 30px 0 0;
+	margin: 22px 0 0;
 	max-width: 540px;
 	font-size: 19px;
 	line-height: 1.6;
