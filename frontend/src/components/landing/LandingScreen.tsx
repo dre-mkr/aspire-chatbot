@@ -2,7 +2,11 @@ import { useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useState } from "react";
 import { stageFirstTurn } from "#/lib/aspire/handoff";
-import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
+import {
+	type AgeBand,
+	GUIDES,
+	type PersonaId,
+} from "#/lib/aspire/personas";
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
 import { EducatorsView } from "./EducatorsView";
@@ -70,6 +74,15 @@ const GUIDE_TO_PERSONA: Record<GuideId, PersonaId> = {
  * fell back to `stella`'s default of `5-8`, and the reader who asked for Kaleb
  * was answered by Skye -- with Skye's name on the composer chip.
  */
+/** The colour each guide is remembered by. Same five as "Meet your guides". */
+const GUIDE_RING: Record<string, string> = {
+	skye: "#C22F99",
+	kaleb: "#3B82F6",
+	zion: "#F4B000",
+	imani: "#5C3AAE",
+	azuri: "#0DAE93",
+};
+
 const GUIDE_TO_BAND: Partial<Record<GuideId, AgeBand>> = {
 	skye: "5-8",
 	kaleb: "9-12",
@@ -79,19 +92,16 @@ interface LandingScreenProps {
 	onStartConversation?: (message: string) => void;
 }
 
-const PERSONAS = [
-	{ id: "skye", name: "Skye", icon: "🦋", color: "bg-[#c22f99]" },
-	{ id: "kaleb", name: "Kaleb", icon: "🚀", color: "bg-[#3b82f6]" },
-	{ id: "zion", name: "Zion", icon: "🎧", color: "bg-[#fed141]" },
-	{ id: "imani", name: "Imani", icon: "📚", color: "bg-[#482977]" },
-	{ id: "azuri", name: "Azuri", icon: "👩🏾‍🏫", color: "bg-[#10b981]" },
-] as const;
 
 export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const navigate = useNavigate();
 	const [draft, setDraft] = useState("");
 	const [activeView, setActiveView] = useState<ViewState>("landing");
 	const [selectedPersona, setSelectedPersona] = useState<GuideId | null>(null);
+	/** The chosen guide's row, for the face beside the name. Null means Guest. */
+	const selected = selectedPersona
+		? (GUIDES.find((g) => g.guideId === selectedPersona) ?? null)
+		: null;
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === "Enter" && draft.trim()) {
@@ -312,25 +322,62 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								<span className="text-[9px] font-bold uppercase tracking-wider text-[#482977]/60 mb-1 ml-[28px]">
 									Choose your guide
 								</span>
+								{/* THE OPTIONS WERE THE WRONG IDS, and the dropdown quietly
+								  * chose nobody for four of the five guides.
+								  *
+								  * It was populated from `PERSONAS`, whose ids are persona
+								  * KEYS -- `stella`, `orion`, `aurora`, `nova` -- and the
+								  * result was stored as a `GuideId`, which is `skye`, `zion`,
+								  * `imani`, `azuri`. Only `kaleb` spells the same in both, so
+								  * only Kaleb worked: every other choice put a key into
+								  * `GUIDE_TO_PERSONA`, missed, and started the conversation
+								  * with no persona at all. An `as GuideId` cast was holding
+								  * the two apart.
+								  *
+								  * Driven from `GUIDES` now, which carries the guide id, the
+								  * persona key and the band together -- and which the row
+								  * below already uses, so the two controls on this page
+								  * cannot disagree about who Skye is.
+								  *
+								  * Guest also appeared twice: once as the empty option and
+								  * again from `PERSONAS`, which gained a `guest` row when it
+								  * gained Kaleb. `GUIDES` is filtered to the five, so the
+								  * empty option is the only Guest.
+								  */}
 								<div className="flex items-center gap-2">
-									<i className="ph-duotone ph-user text-[#482977]/60 text-lg"></i>
+									{selected ? (
+										<span
+											className="w-7 h-7 rounded-full bg-cover bg-top shrink-0 ring-2"
+											style={{
+												backgroundImage: `image-set(url("/guides/${selected.guideId}.webp") type("image/webp"), url("/guides/${selected.guideId}.png") type("image/png"))`,
+												// The ring the guide is remembered by, the same
+												// five the row below uses.
+												"--tw-ring-color": GUIDE_RING[selected.guideId],
+											} as React.CSSProperties}
+											aria-hidden="true"
+										/>
+									) : (
+										<i className="ph-duotone ph-user text-[#482977]/60 text-lg"></i>
+									)}
 									<select
 										value={selectedPersona || ""}
 										onChange={(e) =>
-											setSelectedPersona(e.target.value as GuideId)
+											setSelectedPersona(
+												(e.target.value || null) as GuideId | null,
+											)
 										}
 										className="appearance-none bg-transparent border-none text-sm font-semibold text-[#482977] outline-none cursor-pointer hover:text-[#c22f99] transition-colors"
 									>
 										<option value="" className="bg-white">
 											Guest
 										</option>
-										{PERSONAS.map((p) => (
+										{GUIDES.filter((g) => g.guideId !== "guest").map((g) => (
 											<option
-												key={p.id}
-												value={p.id}
+												key={g.guideId}
+												value={g.guideId}
 												className="bg-white text-[#1A103C]"
 											>
-												{p.name}
+												{g.name} &middot; {g.audience}
 											</option>
 										))}
 									</select>
