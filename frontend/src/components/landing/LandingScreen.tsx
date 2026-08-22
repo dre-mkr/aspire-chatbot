@@ -220,7 +220,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</div>
 
 			{/* Elegant Header */}
-			<header className="relative z-10 w-full max-w-[90rem] mx-auto px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
+			<header className="relative z-10 w-full max-w-[104rem] mx-auto px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
 				<div className="flex items-center gap-8">
 					<Brandmark variant="header" />
 					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
@@ -281,7 +281,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</header>
 
 			{/* Main Content */}
-			<main className="relative z-10 flex-1 w-full max-w-[90rem] mx-auto px-4 sm:px-8 flex flex-col justify-center">
+			<main className="relative z-10 flex-1 w-full max-w-[104rem] mx-auto px-4 sm:px-8 flex flex-col justify-center">
 				{/* Hero Section */}
 				<div className="max-w-4xl mb-5 relative z-10">
 					<h1 className="text-5xl md:text-6xl lg:text-[4.75rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
@@ -645,7 +645,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 
 			{/* Institutional Footer */}
 			<footer className="relative z-10 w-full border-t border-[#482977]/10 bg-white/90 backdrop-blur-xl mt-auto">
-				<div className="max-w-[90rem] mx-auto px-4 sm:px-8 py-3 flex flex-wrap gap-6 items-center justify-between">
+				<div className="max-w-[104rem] mx-auto px-4 sm:px-8 py-3 flex flex-wrap gap-6 items-center justify-between">
 					{/* THREE STATISTICS WERE HERE, AND NONE OF THEM WERE TRUE.
 					 *
 					 * "4,200+ young learners", "18,745 lessons completed" and

@@ -8499,23 +8499,24 @@ a.source__site--link:hover .source__out {
    for them, and "Teachers & educ..." answers that worse than a second line
    does. The three short ones still sit on one line. */
 .rail-guide__name {
-	font-size: 12.5px;
+	font-size: 13.5px;
 	font-weight: 700;
 	color: var(--ink);
 	line-height: 1.3;
 	overflow-wrap: anywhere;
 }
-/* A step smaller than the name it follows. "Azuri" is what the reader is
-   looking for; "Teachers & educators" is what tells them it is theirs, and it
-   is the half that runs long. Sizing them the same made the longest labels set
-   the width of the whole card. */
+/* A step smaller than the name it follows -- one step, not three. "Azuri" is
+   what the reader is looking for; "Teachers & educators" tells them it is
+   theirs. An earlier pass shrank both to buy width, which was solving a problem
+   the container constraint had already solved and left the card looking
+   starved. */
 .rail-guide__audience {
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 500;
 	color: var(--ink-soft, rgb(72 41 119 / 0.7));
 }
 .rail-guide__note {
-	font-size: 11px;
+	font-size: 11.5px;
 	color: var(--ink-soft, rgb(72 41 119 / 0.7));
 }
 
