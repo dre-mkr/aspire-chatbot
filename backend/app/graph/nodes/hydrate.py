@@ -89,6 +89,32 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         raw_auto = (body or {}).get("auto_language")
         update["auto_language"] = True if raw_auto is None else bool(raw_auto)
 
+        # THE PINNED LANGUAGE ITSELF, which nothing read until now.
+        #
+        # `locale` above comes from the signed token, and the selector's choice
+        # arrives in the body -- so pressing Espanol sent `auto_language: false`,
+        # which switched the detector OFF, alongside a `language` field that no
+        # code path consumed. The conversation therefore stayed in English AND
+        # stopped following the reader: strictly worse than never touching the
+        # control. The greeting changed because that is client-side, which is
+        # exactly why the two looked inconsistent.
+        #
+        # Only when the reader has pinned. Automatic sessions keep taking their
+        # locale from the token and letting `detect_language` move it, which is
+        # the behaviour every client that predates the selector relies on.
+        if not update["auto_language"]:
+            pinned = (body or {}).get("language")
+            if pinned in ("en", "es", "fr"):
+                update["locale"] = pinned
+            elif pinned is not None:
+                logger.warning(
+                    "session %s asked for locale %r, which the product has no "
+                    "copy for; keeping %s",
+                    claims.session_id,
+                    pinned,
+                    update.get("locale"),
+                )
+
         # ── the turn's inputs, put back after the clear ──
         # A widget interaction or a game result arrives as a body field, not as a message.
         for field in CONTINUATION_FIELDS:
