@@ -105,20 +105,42 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	};
 
 	const startConversation = (
-		message: string,
+		/**
+		 * The reader's own first question, or null to open the guide with nothing
+		 * staged.
+		 *
+		 * NULL IS THE FIX FOR A LIVE DEFECT. Choosing a guide used to stage
+		 * "Hi! What can you help me with?" as the opening turn. With no
+		 * conversation behind it that phrase classifies as an INTENT, the
+		 * eligibility flow claims it, and the form then latches: every later
+		 * message is read as an answer to the slot it is waiting on. Observed on
+		 * production 22 Aug -- "who are you" returned the guardian probe again,
+		 * and "how do I register my child" was read as a parish name. A five-year
+		 * -old who picked Skye was asked how they were related to the child.
+		 *
+		 * The same phrase typed as a SECOND message answers normally, which is
+		 * what says it is the opening-turn position and not the words.
+		 *
+		 * So a guide card now opens the conversation and lets the guide speak
+		 * first. Zion already introduces himself properly when nothing hijacks
+		 * the turn.
+		 */
+		message: string | null,
 		persona?: PersonaId | null,
 		band?: AgeBand | null,
 	) => {
 		if (onStartConversation) {
-			onStartConversation(message);
+			if (message) onStartConversation(message);
 		} else {
 			const threadId = crypto.randomUUID();
-			stageFirstTurn({
-				threadId,
-				question: message,
-				simple: false,
-				language: "en",
-			});
+			if (message) {
+				stageFirstTurn({
+					threadId,
+					question: message,
+					simple: false,
+					language: "en",
+				});
+			}
 			// The guide rides the address, which is where the chat reads it from
 			// (`validateAnswerSearch`). Until now `selectedPersona` was set by the
 			// dropdown and then dropped on the floor: choosing a guide on this page
@@ -676,11 +698,8 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							selected={selectedPersona}
 							onChoose={(choice) => {
 								setSelectedPersona(choice.guideId as GuideId);
-								startConversation(
-									"Hi! What can you help me with?",
-									choice.persona,
-									choice.band ?? null,
-								);
+								// No staged question: see `startConversation`.
+								startConversation(null, choice.persona, choice.band ?? null);
 							}}
 						/>
 					</div>

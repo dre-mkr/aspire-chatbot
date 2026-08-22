@@ -89,6 +89,15 @@ export interface ActiveEligibility {
 }
 
 interface TranscriptProps {
+	/**
+	 * The name the reader knows this assistant by -- Skye, Kaleb, Zion, and so on.
+	 *
+	 * Every assistant turn used to be announced as "ASPIRE AI" while the composer
+	 * chip said Skye, so a screen-reader user never met the guide they chose.
+	 * `global_rules.py` settles which is right: "You are called ASPIRE AI; if a
+	 * persona below gives you a name, THAT is the name the reader knows you by."
+	 */
+	guideName: string;
 	messages: Array<ChatMessage>;
 	/** The answer still being revealed, if there is one. */
 	streaming: Streaming | null;
@@ -118,6 +127,7 @@ const VIRTUALIZE_ABOVE = 60;
 const ESTIMATED_TURN_PX = 220;
 
 export function Transcript({
+	guideName,
 	messages,
 	streaming,
 	isThinking,
@@ -235,7 +245,7 @@ export function Transcript({
 				>
 					<div className="orb" aria-hidden="true" />
 					<div className="answer">
-						<h2 className="sr-only">ASPIRE AI</h2>
+						<h2 className="sr-only">{guideName}</h2>
 						<Suspense fallback={<CardLoading />}>
 							{/*
 							  Switched on the prompt kind rather than chained ternaries.
@@ -280,7 +290,7 @@ export function Transcript({
 				>
 					<div className="orb" aria-hidden="true" />
 					<div className="answer">
-						<h2 className="sr-only">ASPIRE AI</h2>
+						<h2 className="sr-only">{guideName}</h2>
 						<Suspense fallback={<CardLoading />}>
 							<EligibilityCheck
 								threadId={eligibility.threadId}
@@ -298,6 +308,7 @@ export function Transcript({
 		if (message.role === "error") {
 			return (
 				<Failure
+					guideName={guideName}
 					key={message.id}
 					text={message.text}
 					canRetry={message.canRetry}
@@ -310,6 +321,7 @@ export function Transcript({
 
 		return (
 			<Answer
+				guideName={guideName}
 				key={message.id}
 				message={message}
 				directiveContext={directiveContext}
@@ -384,6 +396,7 @@ export function Transcript({
 
 /** One assistant turn, mid-reveal or settled. */
 function Answer({
+	guideName,
 	message,
 	directiveContext,
 	onRegenerate,
@@ -392,6 +405,7 @@ function Answer({
 	arriving,
 	revealing,
 }: {
+	guideName: string;
 	message: Extract<ChatMessage, { role: "assistant" }>;
 	directiveContext: DirectiveContext;
 	/** `simple` forces the plain-words answer regardless of the composer toggle. */
@@ -409,7 +423,7 @@ function Answer({
 		>
 			<div className="orb" aria-hidden="true" />
 			<div className="answer">
-				<h2 className="sr-only">ASPIRE AI</h2>
+				<h2 className="sr-only">{guideName}</h2>
 				{message.blocks.map((block, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
 					<Block key={index} block={block} revealing={revealing} />
@@ -674,12 +688,14 @@ function SourceHead({ group }: { group: GroupedSource }) {
 }
 
 function Failure({
+	guideName,
 	text,
 	canRetry,
 	tone,
 	onRetry,
 	arriving,
 }: {
+	guideName: string;
 	text: string;
 	canRetry: boolean;
 	tone?: "stopped";
@@ -692,7 +708,7 @@ function Failure({
 			<div className="orb orb--muted" aria-hidden="true" />
 			<div className="answer">
 				{/* Every other assistant turn carries this; without it heading navigation skips failures. */}
-				<h2 className="sr-only">ASPIRE AI</h2>
+				<h2 className="sr-only">{guideName}</h2>
 				{/* No role="alert" here. */}
 				<p className="failure" data-tone={tone}>
 					{stopped ? <StopIcon /> : <AlertIcon />}

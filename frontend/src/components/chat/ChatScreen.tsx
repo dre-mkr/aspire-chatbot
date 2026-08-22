@@ -26,6 +26,7 @@ import {
 	titleFor,
 } from "#/lib/aspire/history";
 import { answerToText } from "#/lib/aspire/knowledge";
+import { displayName } from "#/lib/aspire/persona-name";
 import {
 	eligibilityStateQuery,
 	gameStateQuery,
@@ -89,6 +90,14 @@ export function ChatScreen() {
 
 	/** Read only for the orb's colour: the band is what separates Skye from Kaleb. */
 	const { session: identity } = useSession();
+
+	/**
+	 * What the reader calls this assistant, for the parts only a screen reader
+	 * hears. `displayName` mirrors the server's `names.py` and falls back to
+	 * "ASPIRE AI" when no persona has given it a name -- which is Guest, and is
+	 * correct there.
+	 */
+	const guideName = displayName(persona, band ?? identity?.ageBand);
 
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
@@ -660,7 +669,22 @@ export function ChatScreen() {
 		   included, got the five-year-old's configuration by fallback. Derived
 		   from the guide they chose; see `bandForPersona`. */
 		<AgeBandProvider
-			band={band ?? identity?.ageBand ?? bandForPersona(persona)}
+			// ORDER MATTERS, and it was wrong. `identity.ageBand` came second, but
+			// for an ANONYMOUS session `/api/auth/anonymous` returns the youngest
+			// band for everyone -- it describes the account, which has no persona,
+			// and 5-8 is the safe answer there. So a signed-out reader who picked
+			// Zion, Imani or Azuri got `data-band="5-8"` and `bandForPersona`,
+			// which returns 13-15 for orion, was never reached.
+			//
+			// A SIGNED-IN reader is different: their band comes from their date of
+			// birth and is the real answer, so it still beats the guide they
+			// picked. Hence the account-type check rather than a plain reorder.
+			band={
+				band ??
+				(identity?.accountType === "registered" ? identity.ageBand : null) ??
+				bandForPersona(persona) ??
+				identity?.ageBand
+			}
 		>
 			<div
 				className="app"
@@ -737,7 +761,7 @@ export function ChatScreen() {
 						{/* Above the transcript, not after it: each answer carries its own
 					    `h2`, and a page whose first heading is an `h2` reads to a
 					    screen reader as a document that starts mid-outline. */}
-						<h1 className="sr-only">Conversation with ASPIRE AI</h1>
+						<h1 className="sr-only">Conversation with {guideName}</h1>
 
 						<ChatTitleBar
 							title={activeTitle}
@@ -779,6 +803,7 @@ export function ChatScreen() {
 									) : null}
 									<section aria-label="Conversation">
 										<Transcript
+											guideName={guideName}
 											messages={messages}
 											streaming={streaming}
 											isThinking={isThinking}

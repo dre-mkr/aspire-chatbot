@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Final
 
 from langchain_core.messages import AIMessage
 
@@ -286,6 +286,44 @@ def locale_instruction(locale: str) -> str:
 # ── the node ─────────────────────────────────────────────────────────────────
 
 
+#: Bands whose card forbids a figure outright.
+#:
+#: 5-8 ONLY, and the narrowness is the point. `stella.5-8.md` red line 3 reads
+#: "NEVER state a rate, a percentage, a balance or a projected amount -- not even
+#: a sourced one. This reader cannot check it and does not need it." Kaleb's 9-12
+#: card says the opposite in as many words -- "Plain digits. EC dollars as EC$.
+#: Examples in sums between five and three hundred" -- so a gate that caught him
+#: would be breaking his card to enforce hers.
+_NO_FIGURE_BANDS: Final[frozenset[str]] = frozenset({"5-8"})
+
+#: A money amount or a percentage. Deliberately narrow.
+#:
+#: Bare small integers are NOT matched: "three rounds", "two jars" and "you are 7"
+#: are ordinary language at this age, and a gate that ate them would be worse than
+#: the thing it is guarding.
+_FIGURE = re.compile(
+    r"(?:EC\s?\$|US\s?\$|\$)\s?[\d,]+(?:\.\d+)?"   # EC$1,000
+    r"|\b\d+(?:\.\d+)?\s?(?:%|per\s?cent|percent)"     # 5%, 5 per cent
+    r"|\b\d[\d,]{2,}(?:\.\d+)?\b",                     # 1,000 / 1000 bare
+    re.IGNORECASE,
+)
+
+
+def has_figure(text: str) -> bool:
+    """Whether an answer names a money amount or a percentage."""
+    return bool(_FIGURE.search(text))
+
+
+def figure_instruction() -> str:
+    """The reprompt. Names the rule rather than the offending string."""
+    return (
+        "Remove every money amount and every percentage from the answer. Say the "
+        "idea in words instead -- 'the bank adds a little', not a figure. If the "
+        "reader asked for an amount, say plainly that it is something a grown-up "
+        "should tell them, as a choice rather than as something you do not know."
+    )
+
+
 def make_safety_out(reprompt: Reprompt | None = None):
     """Build the outbound gate."""
 
@@ -337,6 +375,35 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 )
                 text = truncate_at_sentence(text, cap)
                 report["length_truncated"] = True
+
+        # ── (a2) figures, at the youngest band only ─────────────────────────
+        # `stella.5-8.md` red line 3 forbids a rate, a percentage, a balance or a
+        # projected amount, "not even a sourced one" -- and until now that rule
+        # lived ONLY in the prompt. Observed on production 22 Aug: the same
+        # question produced "the bank may add EC$20 after one year" on one run and
+        # a figure-free answer on the next. A red line the model follows most of
+        # the time is not a red line.
+        #
+        # Every other rule on that card has a backstop: the vocabulary ladder has
+        # `vocab.check`, the links have `_NO_LINK_PERSONAS`. This is that, for the
+        # one rule that had none.
+        if band in _NO_FIGURE_BANDS and has_figure(text):
+            report["figure_violation"] = True
+            if reprompt is not None:
+                timing.note_reprompt("figure")
+                text = await reprompt(figure_instruction(), text)
+            if has_figure(text):
+                # The reprompt did not clear it. Redacting mid-sentence would leave
+                # a hole a five-year-old reads as a mistake, so the whole answer is
+                # replaced by the refusal the card already specifies.
+                logger.warning(
+                    "figure survived the reprompt at band %s; serving the card's refusal",
+                    band,
+                )
+                text = (
+                    "That is something a grown-up should tell you. What I can say "
+                    "is that the money is yours, it is safe, and it is growing."
+                )
 
         # ── (b) vocabulary ──────────────────────────────────────────────────
         violations = vocab.check(text, band)
