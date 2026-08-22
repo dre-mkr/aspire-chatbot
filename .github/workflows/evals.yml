@@ -35,8 +35,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
 
       # The golden set names real KB row ids. If the corpus is edited and a row
@@ -93,7 +93,7 @@ jobs:
 
       # Only when there is something to upload. `if: always()` was raising a
       # second annotation on every run for a file the step above never wrote.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always() && steps.key.outputs.present == 'true'
         with:
           name: eval-retrieval
@@ -107,8 +107,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
 
       - name: Build the vector store
@@ -131,7 +131,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: uv run python -m evals.run --answers --kind exact --json evals-exact.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: eval-answers
