@@ -8,7 +8,7 @@ import {
 	ShuffleIcon,
 	SparkIcon,
 } from "#/components/icons";
-import { PERSONAS } from "#/lib/aspire/personas";
+import { GUIDES } from "#/lib/aspire/personas";
 
 /**
  * "How to use ASPIRE AI" — the launcher and the panel it opens.
@@ -185,13 +185,20 @@ function HelpContent() {
 					point. It is not just a label — the same question genuinely gets a
 					different answer.
 				</p>
+				{/* GUIDES, not PERSONAS. Skye and Kaleb share the `stella` key, so the
+				 * persona list collapses them into one row reading "Skye & Kaleb ·
+				 * Ages 5-12" -- and then the picker this paragraph tells you to open
+				 * offers them as two separate faces. The reader is being introduced
+				 * to five and shown six. GUIDES is the six-row view the landing page
+				 * and the picker already use; this is the third surface joining them.
+				 */}
 				<ul className="help__list">
-					{PERSONAS.map((persona) => (
-						<li key={persona.id}>
-							<strong>{persona.name}</strong>
-							<span className="help__muted"> · {persona.audience}</span>
+					{GUIDES.map((guide) => (
+						<li key={guide.guideId}>
+							<strong>{guide.name}</strong>
+							<span className="help__muted"> · {guide.audience}</span>
 							<br />
-							{persona.blurb}
+							{guide.blurb}
 						</li>
 					))}
 				</ul>
@@ -218,11 +225,11 @@ function HelpContent() {
 
 			<Section title="Listening and speaking" glyph={<MicIcon />}>
 				<p>
-					Press the <strong>microphone</strong> to talk instead of typing.
-					Press <strong>Play</strong> under any answer to hear it read aloud.
-					The sliders button opens voice settings, where you can have every
-					answer read out automatically, change the reading speed, and switch
-					between English, Spanish and French.
+					Press the <strong>microphone</strong> to talk instead of typing. Press{" "}
+					<strong>Play</strong> under any answer to hear it read aloud. The
+					sliders button opens voice settings, where you can have every answer
+					read out automatically, change the reading speed, and switch between
+					English, Spanish and French.
 				</p>
 				<p className="help__note">
 					Each persona has its own voice, and the youngest one reads more

@@ -1,15 +1,23 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronDownIcon, PersonIcon } from "#/components/icons";
-import { PERSONAS, type PersonaId, personaById } from "#/lib/aspire/personas";
+import {
+	type AgeBand,
+	GUIDES,
+	guideFor,
+	type PersonaId,
+} from "#/lib/aspire/personas";
 
 /** Who the assistant is talking to, chosen from the composer. */
 export function PersonaPicker({
 	persona,
+	band,
 	onChange,
 }: {
 	persona: PersonaId | null;
-	onChange: (next: PersonaId | null) => void;
+	/** Which voice of that persona, where it carries more than one. */
+	band?: AgeBand | null;
+	onChange: (next: PersonaId | null, band?: AgeBand) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const [at, setAt] = useState<{ top: number; left: number } | null>(null);
@@ -18,7 +26,8 @@ export function PersonaPicker({
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
-	const current = personaById(persona);
+	const selected = guideFor(persona, band);
+	const current = selected;
 
 	/** Fixed positioning, anchored to the trigger. */
 	const measure = (estimatedHeight: number) => {
@@ -104,8 +113,8 @@ export function PersonaPicker({
 		next?.focus();
 	}
 
-	function choose(next: PersonaId | null) {
-		onChange(next);
+	function choose(next: PersonaId | null, chosenBand?: AgeBand) {
+		onChange(next, chosenBand);
 		setOpen(false);
 		triggerRef.current?.focus();
 	}
@@ -130,7 +139,21 @@ export function PersonaPicker({
 						: "Choose who this is for"
 				}
 			>
-				<PersonIcon />
+				{/* The guide's face, not a generic person glyph.
+				 *
+				 * This control is the reader's only standing reminder of who is
+				 * answering, and it showed the same outline for all six. The
+				 * `persona__face` span is painted by the same `--orb-face` cascade
+				 * the transcript orb uses, so it follows `data-persona` at the root
+				 * and there is nothing to keep in step here.
+				 *
+				 * `guest` has no face and falls back to the glyph, which is right:
+				 * it is the voice that has not been told who is reading. */}
+				{current ? (
+					<span className="persona__face" aria-hidden="true" />
+				) : (
+					<PersonIcon />
+				)}
 				<span className="persona__name">
 					{current ? current.name : "General"}
 				</span>
@@ -154,17 +177,22 @@ export function PersonaPicker({
 							style={{ top: at.top, left: at.left }}
 							onKeyDown={onMenuKeyDown}
 						>
-							{PERSONAS.map((option) => (
+							{/* Six rows, five keys. `stella` carries Skye and Kaleb, and
+							    both cards exist -- collapsing them into one row meant a
+							    twelve-year-old could not ask for Kaleb by name. */}
+							{GUIDES.map((option) => (
 								<button
-									key={option.id}
+									key={option.guideId}
 									type="button"
 									role="menuitemradio"
-									aria-checked={persona === option.id}
+									aria-checked={selected?.guideId === option.guideId}
 									className="persona__option"
-									onClick={() => choose(option.id)}
+									onClick={() => choose(option.persona, option.band)}
 								>
 									<span className="persona__tick" aria-hidden="true">
-										{persona === option.id ? <CheckIcon /> : null}
+										{selected?.guideId === option.guideId ? (
+											<CheckIcon />
+										) : null}
 									</span>
 									<span className="persona__text">
 										<span className="persona__label">
@@ -177,7 +205,6 @@ export function PersonaPicker({
 									</span>
 								</button>
 							))}
-
 						</div>,
 						document.body,
 					)

@@ -42,6 +42,9 @@ DELIVERABLES (what you may say)
   - An honest description of the curriculum material: what exists, at what bands, and
     what is planned but not built.
   - What the children's activities are, in enough detail that he can judge them.
+  - That the ASPIRE videos exist, what each one covers, and that he can watch one
+    himself before deciding whether to use it. He is evaluating; he should see the
+    material rather than a description of it.
 
 RED LINES (never cross)
 1. NEVER state a rate, figure or projection he cannot open and check. He will check.

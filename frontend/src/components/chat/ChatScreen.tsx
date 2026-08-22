@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { engineGameType } from "#/lib/aspire/game-kinds";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
 	useCallback,
@@ -18,6 +17,7 @@ import {
 	loadEligibilityResult,
 } from "#/lib/aspire/eligibility";
 import { downloadTranscript } from "#/lib/aspire/export";
+import { engineGameType } from "#/lib/aspire/game-kinds";
 import { type GameState, startGame } from "#/lib/aspire/games";
 import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
 import {
@@ -38,10 +38,12 @@ import { ensureSession } from "#/lib/aspire/session";
 import { DEFAULT_DOCUMENT_TITLE } from "#/lib/aspire/title";
 import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
+import { useSession } from "#/lib/aspire/use-session";
 import { useVoice } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { AgeBandProvider, bandForPersona } from "./AgeBandProvider";
 import { ChatTitleBar } from "./ChatTitleBar";
+import { ChatWelcome } from "./ChatWelcome";
 import { Composer } from "./Composer";
 import { FirstRun } from "./FirstRun";
 import { Rail } from "./Rail";
@@ -77,12 +79,16 @@ export function ChatScreen() {
 		simpleMode,
 		toggleSimpleMode,
 		persona,
+		band,
 		setPersona,
 		lang,
 		setLanguageInUrl,
 		personaNotice,
 		dismissPersonaNotice,
 	} = useAnswerSettings();
+
+	/** Read only for the orb's colour: the band is what separates Skye from Kaleb. */
+	const { session: identity } = useSession();
 
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
@@ -120,6 +126,11 @@ export function ChatScreen() {
 	} = useConversation({
 		onAnswer: (id, text) => speakArrival.current(id, text),
 		persona,
+		// The band travels with the persona, because for `stella` it IS the
+		// persona as far as the reader is concerned: Skye at 5-8, Kaleb at 9-12.
+		// It was already in the URL and already driving the orb's colour; the
+		// turn itself was the one place it never reached.
+		band,
 		// Titles follow the interface language, read at call time since voice is built below.
 		getLanguage: () => voice.language,
 		getAutoLanguage: () => voice.autoLanguage,
@@ -141,7 +152,7 @@ export function ChatScreen() {
 			// was served the Orion set -- compound interest, 5% returns, "no more
 			// than 25% in any one sector" -- while the set written for her was
 			// unreachable. The filter was always correct; nothing was calling it.
-			void startGame(id, { game_type: engineName, persona })
+			void startGame(id, { game_type: engineName, persona, age_band: band })
 				.then((state) => {
 					if (state) setGame(state);
 				})
@@ -648,10 +659,18 @@ export function ChatScreen() {
 		   widget-preview route and nowhere else — so every reader, teachers
 		   included, got the five-year-old's configuration by fallback. Derived
 		   from the guide they chose; see `bandForPersona`. */
-		<AgeBandProvider band={bandForPersona(persona)}>
+		<AgeBandProvider
+			band={band ?? identity?.ageBand ?? bandForPersona(persona)}
+		>
 			<div
 				className="app"
 				data-phase="chat"
+				/* The orb's colour, and nothing else, reads this. One attribute at
+				   the root beats drilling the persona through the transcript to
+				   reach a decorative sphere. Falls back to `guest`, which is the
+				   voice that answers before it knows who is reading. */
+				data-persona={persona || "guest"}
+				data-band={band ?? identity?.ageBand ?? undefined}
 				data-rail={railClosed ? "collapsed" : "expanded"}
 			>
 				<div className="atmosphere" aria-hidden="true">
@@ -683,6 +702,10 @@ export function ChatScreen() {
 							regenerateTitle(conversation.threadId)
 						}
 						onDeleteConversation={handleDeleteConversation}
+						persona={persona}
+						band={band}
+						onPersonaChange={setPersona}
+						onSeed={ask}
 					/>
 
 					{drawerModal ? (
@@ -741,6 +764,19 @@ export function ChatScreen() {
 								}}
 							>
 								<div className="thread__inner">
+									{/* Before anybody has said anything, the room says hello.
+									 *
+									 * A new thread rendered a bare transcript: a blank
+									 * column and a text box, with no indication of what the
+									 * assistant could do or which of its six voices was
+									 * about to answer. */}
+									{messages.length === 0 && !streaming && !isThinking ? (
+										<ChatWelcome
+											persona={persona}
+											ageBand={band ?? identity?.ageBand}
+											onAsk={ask}
+										/>
+									) : null}
 									<section aria-label="Conversation">
 										<Transcript
 											messages={messages}
@@ -859,6 +895,7 @@ export function ChatScreen() {
 								simpleMode={simpleMode}
 								onToggleSimpleMode={toggleSimpleMode}
 								persona={persona}
+								band={band}
 								onPersonaChange={setPersona}
 								draft={draft}
 								onDraftChange={setDraft}

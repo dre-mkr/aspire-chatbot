@@ -204,6 +204,13 @@ export interface UseConversationOptions {
 	onAnswer?: (id: number, text: string) => void;
 	/** Who is talking. Null means unknown, which the service treats as permissive. */
 	persona?: string | null;
+	/**
+	 * Which of the persona's own bands to answer at.
+	 *
+	 * Skye and Kaleb are both `stella`; this is the only thing that tells them
+	 * apart, so without it the picker offers Kaleb and the turn answers as Skye.
+	 */
+	band?: string | null;
 	/** Fired when a turn started a game instead of answering; carries game name and concept. */
 	onGameStart?: (threadId: string, gameType: string, concept: string) => void;
 	/** Fired when a turn opened the eligibility check instead of answering. */
@@ -213,6 +220,7 @@ export interface UseConversationOptions {
 export function useConversation({
 	onAnswer,
 	persona = null,
+	band = null,
 	getLanguage = () => "en",
 	getAutoLanguage = () => true,
 	onGameStart,
@@ -602,6 +610,7 @@ export function useConversation({
 					threadId: threadRef.current,
 					simpleMode,
 					persona,
+					band,
 					// Read at call time: the voice layer is built after this hook.
 					language: language ?? getLanguageRef.current(),
 					autoLanguage: getAutoLanguageRef.current(),
@@ -634,6 +643,7 @@ export function useConversation({
 		[
 			beginStream,
 			persona,
+			band,
 			nameConversation,
 			settleRevealed,
 			hasTitled,

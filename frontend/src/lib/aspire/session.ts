@@ -15,6 +15,14 @@ export interface Session {
 	role?: "participant" | "guardian" | "educator";
 	/** The persona this account resolves to, derived server-side. */
 	persona?: string;
+	/**
+	 * The band that persona answers at, and the only way to tell its voices apart.
+	 *
+	 * `stella` is Skye at 5-8 and Kaleb at 9-12. The persona alone cannot say
+	 * which, and `bandForPersona` answers "5-8" for both, so without this a
+	 * twelve-year-old was shown the five-year-old's face.
+	 */
+	ageBand?: string;
 	/** When this token stops being accepted, in epoch milliseconds. */
 	expiresAt?: number;
 }
@@ -142,6 +150,8 @@ export function ensureSession(): Promise<Session | null> {
 				email: body.email ?? null,
 				displayName: body.display_name ?? null,
 				avatarUrl: body.avatar_url ?? null,
+				persona: body.persona ?? undefined,
+				ageBand: body.age_band ?? undefined,
 				expiresAt: body.expires_in
 					? Date.now() + Number(body.expires_in) * 1000
 					: undefined,

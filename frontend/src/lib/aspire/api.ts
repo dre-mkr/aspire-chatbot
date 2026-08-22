@@ -65,6 +65,15 @@ export interface AskInput {
 	simpleMode: boolean;
 	/** Who is talking: "stella", "orion", "aurora" or "nova". */
 	persona?: string | null;
+	/**
+	 * Which of the persona's own bands to answer at.
+	 *
+	 * Skye and Kaleb are both `stella` and are told apart by this alone, so
+	 * without it the picker offers a name the server cannot deliver. Honoured
+	 * only inside the persona's own cards -- a band `stella` has no card for
+	 * falls back rather than reaching another persona's material.
+	 */
+	band?: string | null;
 	/** Which language the conversation is being held in. */
 	language?: string;
 }
@@ -79,4 +88,3 @@ export class AspireError extends Error {
 		this.canRetry = canRetry;
 	}
 }
-

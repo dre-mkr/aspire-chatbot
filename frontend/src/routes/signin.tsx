@@ -73,6 +73,7 @@ function SignIn() {
 	 * had just worked.
 	 */
 	const redeemed = useRef(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the `redeemed` ref is the guard — this runs once per token and must not re-run when a helper's identity changes
 	useEffect(() => {
 		if (!token || redeemed.current) return;
 		redeemed.current = true;

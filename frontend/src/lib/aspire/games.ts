@@ -8,6 +8,7 @@ const TIMEOUT_MS = 10_000;
 // caller must send the real value rather than null: the refusal is the point.
 export type GamePersona =
 	| "stella"
+	| "kaleb"
 	| "orion"
 	| "aurora"
 	| "nova"
@@ -167,6 +168,16 @@ export async function startGame(
 	threadId: string,
 	options: {
 		persona?: GamePersona | null;
+		/**
+		 * Which age band to draw items for.
+		 *
+		 * Separate from the persona because one persona can span two ages:
+		 * `orion` serves 13-15 and 16-18 from a single bank, and an item pitched
+		 * at a sixteen-year-old had no way to say so. Omitted means every item
+		 * the persona may see, which is how this behaved before the dimension
+		 * existed.
+		 */
+		age_band?: string | null;
 		language?: string;
 		/** The engine's own identifier — `word_scramble`, not `scramble`. */
 		game_type?: string;
@@ -179,6 +190,7 @@ export async function startGame(
 			body: JSON.stringify({
 				thread_id: threadId,
 				persona: options.persona ?? null,
+				...(options.age_band ? { age_band: options.age_band } : {}),
 				language: options.language ?? "en",
 				...(options.game_type ? { game_type: options.game_type } : {}),
 			}),

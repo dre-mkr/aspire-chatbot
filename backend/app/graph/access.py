@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Final
+
+logger = logging.getLogger(__name__)
 
 # ── the closed sets ──
 # Runtime frozensets, deliberately duplicated from the Literal types in `state`.
 
 PERSONAS: Final[frozenset[str]] = frozenset(
-    {"stella", "orion", "aurora", "nova", "guest"}
+    {"stella", "kaleb", "orion", "aurora", "nova", "guest"}
 )
 AGE_BANDS: Final[frozenset[str]] = frozenset({"5-8", "9-12", "13-15", "16-18", "adult"})
 ACCOUNT_STATUSES: Final[frozenset[str]] = frozenset(
@@ -100,6 +103,35 @@ _ANONYMOUS: Final[tuple[str, ...]] = (
 )
 
 
+def _refused(persona: str, age_band: str) -> list[str]:
+    """Zero agents for a persona and band that are each individually valid.
+
+    THIS IS THE FAILURE MODE THAT DOES NOT ANNOUNCE ITSELF. Both values passed
+    the closed-vocabulary checks above, so nothing is malformed and nothing
+    raises -- the caller simply gets an empty list and the reader gets an
+    assistant that cannot answer anything. No stack trace, no 500, no alert.
+
+    The way it happens in practice is a persona whose bands changed while
+    tokens minted under the old shape are still valid. `stella` losing 9-12 to
+    `kaleb` is exactly that, `TOKEN_TTL` is seven days, and `_SPLIT` is what
+    keeps those tokens working. If `_SPLIT` is ever removed early, this line is
+    where it will show up -- so it logs at WARNING with both values, rather
+    than leaving somebody to infer it from a week of silent, useless sessions.
+
+    A legitimately impossible pair -- `orion` at `5-8` from a hand-edited token
+    -- lands here too and is also worth a line.
+    """
+    logger.warning(
+        "No agents for persona %r at band %r: both are valid on their own, so "
+        "this is a pair the access matrix has no row for. If it is a band that "
+        "recently moved between personas, check the compatibility seam in "
+        "`app.domain._SPLIT` before assuming the token is bad.",
+        persona,
+        age_band,
+    )
+    return []
+
+
 def allowed_agents(
     persona: str,
     age_band: str,
@@ -112,6 +144,13 @@ def allowed_agents(
     if user_id is None:
         return list(_ANONYMOUS)
 
+    # An old token says `stella` where this now says `kaleb`. Applied before the
+    # vocabulary check, so the pair that moved is answered under its new name
+    # rather than falling through to the empty list.
+    from app.domain import normalise_persona_band
+
+    persona = normalise_persona_band(persona, age_band)
+
     # From a signed token, so anything outside the closed vocabularies is refused.
     if persona not in PERSONAS:
         return []
@@ -121,9 +160,19 @@ def allowed_agents(
         return []
 
     if persona == "stella":
-        # Child bands only.
-        if age_band not in _STELLA_BANDS:
-            return []
+        # Skye alone now: `kaleb.9-12.md` took the older band with it.
+        if age_band != "5-8":
+            return _refused(persona, age_band)
+        return list(_STELLA)
+
+    if persona == "kaleb":  # noqa: E501 -- see `_refused` below for why this branch is loud
+        # THE SAME SET STELLA GRANTED AT 9-12, deliberately unchanged. Kaleb
+        # becoming a key of his own is a change of vocabulary, not of
+        # entitlement: he is the same child reader, at the same band, reaching
+        # the same agents. Anything wider would make a naming fix into a
+        # privilege change, which is not what it was asked to be.
+        if age_band != "9-12":
+            return _refused(persona, age_band)
         return list(_STELLA)
 
     if persona == "orion":
@@ -132,7 +181,7 @@ def allowed_agents(
         if age_band == "16-18":
             return list(_ORION_16_18)
         # 5-8, 9-12 and adult are not Orion's bands.
-        return []
+        return _refused(persona, age_band)
 
     if persona == "aurora":
         return list(_AURORA)

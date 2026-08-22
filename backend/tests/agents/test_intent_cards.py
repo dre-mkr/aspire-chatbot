@@ -420,27 +420,38 @@ async def test_the_signup_card_ends_the_turn_at_the_outbound_gate() -> None:
 
 
 class TestWhoIsOfferedAGame:
-    """Aurora and Nova are adult bands, and adult bands cleared the band gate.
+    """A guardian or a teacher who ASKS for a game now gets one.
 
-    So the card opened for a guardian or a teacher and `POST /api/games/start`
-    then refused the same request with `not_available_for_persona` -- the card
-    rendered and sat dead on the page. The two gates disagreed; this is the band
-    gate learning what the engine already knew.
+    These two used to assert the opposite, and the reason was sound at the time:
+    `POST /api/games/start` answered `not_available_for_persona`, so a card that
+    opened here would render and sit dead on the page. This gate existed to
+    match the engine's refusal.
+
+    The engine no longer refuses -- `PLAYING_PERSONAS` covers every persona, and
+    `_CONTENT_BANK` serves the adult voices the 13-18 material they have no
+    authored equivalent for. So the gate matches it again, in the other
+    direction.
+
+    Restraint about *offering* did not disappear; it moved to where it can be
+    stated properly. Imani's card says never to raise an activity unprompted
+    with a parent who has four minutes. That is a different rule from "you may
+    not have this at all", and a card is the right place to draw it. The reader
+    here typed "can we play a game", which is asking.
     """
 
-    async def test_a_guardian_is_not_offered_a_game(self) -> None:
+    async def test_a_guardian_who_asks_is_offered_a_game(self) -> None:
         gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
         update = await gate(
             _state("can we play a game", persona="aurora", age_band="adult")
         )
-        assert update == {}
+        assert update != {}
 
-    async def test_a_teacher_is_not_offered_a_game(self) -> None:
+    async def test_a_teacher_who_asks_is_offered_a_game(self) -> None:
         gate = make_intent_gate(eligibility_on=lambda: False, games_on=lambda: True)
         update = await gate(
             _state("can we play a game", persona="nova", age_band="adult")
         )
-        assert update == {}
+        assert update != {}
 
     @pytest.mark.parametrize(
         ("persona", "band"),

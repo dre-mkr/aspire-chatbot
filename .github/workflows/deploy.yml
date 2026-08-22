@@ -27,7 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # `lfs: true` because the two ASPIRE story videos are tracked with git-lfs
+      # and a plain checkout leaves 130-byte pointer stubs in their place.
+      # `test_the_file_is_video_and_not_an_lfs_pointer` then fails -- correctly,
+      # it is doing exactly its job -- and takes the whole gate down with it.
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       # --- frontend ---
       - uses: actions/setup-node@v4

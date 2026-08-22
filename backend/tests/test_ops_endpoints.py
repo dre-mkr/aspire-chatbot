@@ -8,6 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.conftest import requires_database
+
+
+pytestmark = requires_database
 
 
 @pytest.fixture(scope="module")

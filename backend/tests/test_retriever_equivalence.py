@@ -25,9 +25,18 @@ from app.rag import (
 # entire run -- the whole backend suite went red, the `verify` job in
 # .github/workflows/deploy.yml failed, and the `deploy` job that depends on it
 # never started. One stale import was blocking every deployment.
+from tests.conftest import requires_database
 from tests.scripts.latency_probe import load_cases
 
-pytestmark = pytest.mark.slow
+# `requires_database` alongside `slow`, because "these tests need the Postgres
+# corpus" was written as an assert rather than a skip -- a precondition dressed
+# as a failure. On a machine without a database that is 2 failures and 8 errors,
+# every run, and `deploy: needs: verify` turns it into a blocked deploy.
+#
+# It also needs OPENAI_API_KEY for the embeddings, which the hermetic gate does
+# not set; the database check catches both cases, since neither is present in a
+# tree that has not been provisioned.
+pytestmark = [pytest.mark.slow, requires_database]
 
 #: How far apart two chunks may be and still be considered order-unstable.
 NOISE_BAND = 2e-3

@@ -137,14 +137,38 @@ class TestTheDirectoryIsNamedForKeys:
                 "signed-in session, not just the build."
             )
 
-    def test_one_key_carries_two_labels_so_files_cannot_follow_labels(self):
-        """`stella` carries one label at 5-8 and another at 9-12. One key, two names.
+    def test_the_directory_is_named_for_keys_not_labels(self):
+        """Card files follow the persona KEY, and that is what makes them findable.
 
-        A directory named for labels would need two files for one access row.
+        This test used to assert the opposite case: that `stella` carried one
+        label at 5-8 and another at 9-12, so a directory named for labels would
+        need two files for one access row. Kaleb has a key of his own now --
+        `kaleb.9-12.md` -- so `stella` carries one label again and that example
+        no longer exists.
+
+        The RULE it was defending is unchanged and is what is checked here: a
+        card is named for the key it serves, so the loader can find it from a
+        token without knowing any label. `names.py` still states it outright --
+        "Rename the label. Never rename the key."
         """
-        assert display_name("stella", "5-8") != display_name("stella", "9-12")
-        assert (CARDS / "stella.5-8.md").is_file()
-        assert (CARDS / "stella.9-12.md").is_file()
+        for persona in ("stella", "kaleb", "orion", "aurora", "nova"):
+            found = list(CARDS.glob(f"{persona}.*.md")) + (
+                [CARDS / f"{persona}.md"] if (CARDS / f"{persona}.md").is_file() else []
+            )
+            assert found, f"{persona} has no card named for its key"
+
+        # And no card is named for a label, which is the failure this guards.
+        #
+        # Labels that happen to spell their own key are skipped, or the check
+        # reports itself: `kaleb` is both, so `kaleb.9-12.md` is correctly named
+        # for the key and would otherwise look like a label-named file.
+        keys = set(NAMES)
+        for label in NAMES.values():
+            if label.lower() in keys:
+                continue
+            assert not list(CARDS.glob(f"{label.lower()}.*.md")), (
+                f"a card is named for the label {label!r} rather than its key"
+            )
 
     def test_the_note_lives_in_python_and_not_in_a_card(self):
         """Measured, not assumed. A README.md here fails the card assertions,

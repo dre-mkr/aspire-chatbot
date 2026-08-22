@@ -173,6 +173,7 @@ def start_game(body: StartBody) -> GameStateEnvelope:
             game_type=body.game_type,
             language=_language(body.language),
             persona=_persona(body.persona),
+            age_band=body.age_band,
         )
     except GameError as error:
         raise _fail(error) from None

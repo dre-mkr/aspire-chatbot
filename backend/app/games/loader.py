@@ -67,6 +67,16 @@ def _common(raw: dict, *, set_language: Language, where: str) -> dict[str, Any]:
     except ValueError as exc:
         raise SeedError(f"{where}: unknown persona in persona_bands — {exc}") from exc
 
+    # Optional, and absent means every band -- see `Entry.age_bands`. Validated
+    # against the same closed vocabulary the rest of the app uses, so a typo in
+    # a seed is a load-time error rather than an item that silently never serves.
+    from app.graph.state import AGE_BANDS
+
+    age_raw = raw.get("age_bands") or []
+    age_bands = tuple(str(b) for b in age_raw)
+    for band in age_bands:
+        _require(band in AGE_BANDS, where, f"unknown age band {band!r} in age_bands")
+
     try:
         volatility = Volatility(str(raw.get("volatility", "stable")))
     except ValueError as exc:
@@ -97,6 +107,7 @@ def _common(raw: dict, *, set_language: Language, where: str) -> dict[str, Any]:
         "language": language,
         "difficulty_band": _text(raw, "difficulty_band", where),
         "persona_bands": bands,
+        "age_bands": age_bands,
         "topic": _text(raw, "topic", where, required=False) or None,
         "volatility": volatility,
         "verified_on": verified_on,

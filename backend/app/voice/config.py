@@ -59,6 +59,13 @@ class VoiceSettings(BaseSettings):
     # --- Voice ids --------------------------------------------------------
     # A persona's base voice covers every language unless a per-language id overrides it.
     voice_stella: str | None = None
+    # Kaleb is a persona key of his own, so he needs an id of his own -- without
+    # this field `VOICE_KALEB` is read by nothing and SILENTLY IGNORED. Someone
+    # casts him a voice, sets the variable, redeploys, and he still speaks as
+    # Skye with no error anywhere to say why. He falls back to her through
+    # `_VOICE_UNDERSTUDY` until this is set, which is deliberate; being unable to
+    # set it was not.
+    voice_kaleb: str | None = None
     voice_orion: str | None = None
     voice_aurora: str | None = None
     voice_nova: str | None = None
@@ -78,6 +85,9 @@ class VoiceSettings(BaseSettings):
     voice_stella_en: str | None = None
     voice_stella_es: str | None = None
     voice_stella_fr: str | None = None
+    voice_kaleb_en: str | None = None
+    voice_kaleb_es: str | None = None
+    voice_kaleb_fr: str | None = None
     voice_orion_en: str | None = None
     voice_orion_es: str | None = None
     voice_orion_fr: str | None = None
@@ -112,6 +122,15 @@ class VoiceSettings(BaseSettings):
     voice_stella_similarity_boost: float | None = None
     voice_stella_style: float | None = None
     voice_stella_speed: float | None = None
+
+    # Kaleb's delivery is set in `registry._DELIVERY` like everyone else's, but
+    # without these he was the one persona whose pace could not be tuned from the
+    # environment -- so a Spanish or French cast that needed him a touch slower
+    # would have required a code change and a deploy.
+    voice_kaleb_stability: float | None = None
+    voice_kaleb_similarity_boost: float | None = None
+    voice_kaleb_style: float | None = None
+    voice_kaleb_speed: float | None = None
 
     voice_orion_stability: float | None = None
     voice_orion_similarity_boost: float | None = None

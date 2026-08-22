@@ -8,7 +8,9 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
-pytestmark = pytest.mark.slow
+from tests.conftest import requires_database
+
+pytestmark = [pytest.mark.slow, requires_database]
 
 #: Distinctive enough that a log match cannot be coincidence, yet shaped like real child input.
 NAME = "Zephaniah Quillfeather"

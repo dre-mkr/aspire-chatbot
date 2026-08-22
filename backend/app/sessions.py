@@ -65,6 +65,13 @@ class SessionResponse(BaseModel):
     role: str = "participant"
     #: The persona this account resolves to, so the client can show the right one at once.
     persona: str = "stella"
+    #: The band that persona answers at, which is NOT derivable from the persona.
+    #:
+    #: `stella` carries two voices -- Skye at 5-8 and Kaleb at 9-12 -- and the
+    #: client had no way to tell them apart, so both readers were shown the same
+    #: face. The band is computed here already, three lines down, to choose the
+    #: persona; it was simply never returned.
+    age_band: str = "5-8"
 
 
 def to_session(user: User, token: str) -> SessionResponse:
@@ -90,6 +97,7 @@ def to_session(user: User, token: str) -> SessionResponse:
         expires_in=int(TOKEN_TTL.total_seconds()),
         role=role,
         persona=persona_for(band, role),
+        age_band=band,
     )
 
 
