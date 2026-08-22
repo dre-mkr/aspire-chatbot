@@ -114,3 +114,99 @@ a refusal is a broken chip.
 **Earn the specificity.** Start warm and relevant, learn naturally, name the
 relationship only when it is known — and only then does the experience feel
 unmistakably personal.
+
+---
+
+## The hooks in three languages
+
+Authored natively in each language, **not translated from the English**. That is
+a deliberate constraint and it shows in the copy: Spanish does not open with a
+calque of "Welcome!", for the reason immediately below.
+
+### Grammatical gender is part of the ladder
+
+Spanish «bienvenido» / «bienvenida» agrees with *the person being welcomed*. A
+literal "Welcome!" would therefore assign the reader a gender ASPIRE does not
+know — personalising upward by guessing, in grammar rather than in content. The
+rule does not care which. So Spanish opens **«¡Hola! Soy …»**: warm, idiomatic,
+and neutral.
+
+French **«Bienvenue»** agrees with nothing, so French keeps the literal form.
+
+### Address
+
+| | Children & teens | Adults |
+|---|---|---|
+| **Spanish** | tú | tú |
+| **French** | tu | vous |
+
+Spanish uses «tú» throughout, which is the Caribbean register. Azuri could take
+«usted» if the client would rather ASPIRE were formal with professionals — that
+is a decision waiting on them, not an oversight.
+
+### The table
+
+| Guide | English | Spanish | French |
+|---|---|---|---|
+| **Skye** | Welcome! I'm Skye. | ¡Hola! Soy Skye. | Bienvenue ! Je suis Skye. |
+| **Kaleb** | Welcome! I'm Kaleb. | ¡Hola! Soy Kaleb. | Bienvenue ! Je suis Kaleb. |
+| **Zion** | Welcome! I'm Zion. | Hola. Soy Zion. | Bonjour. Je suis Zion. |
+| **Imani** | Welcome! I'm Imani. | ¡Hola! Soy Imani. | Bienvenue ! Je suis Imani. |
+| **Azuri** | Welcome! I'm Azuri. | Hola. Soy Azuri. | Bienvenue ! Je suis Azuri. |
+| **Guest** | Welcome! I'm ASPIRE AI. | ¡Hola! Soy ASPIRE AI. | Bienvenue ! Je suis ASPIRE AI. |
+
+The guide's **name** is the one specific thing a hook may always use — it is a
+fact about the guide, not a claim about the reader — which is why it carries the
+accent styling in all three languages.
+
+Tagline, per language:
+
+| | |
+|---|---|
+| **EN** | Ask. Play. Explore. Build your money future. |
+| **ES** | Pregunta. Juega. Explora. Construye tu futuro financiero. |
+| **FR** | Demandez. Jouez. Explorez. Construisez votre avenir financier. |
+
+---
+
+## Choosing the language
+
+`EN · ES · FR`, top-right of the chat. Three buttons rather than a menu, because
+there are three of them.
+
+There is **no fourth "Auto" button**, deliberately. The reader is always being
+answered in exactly one language, so the control shows *which one*, not *which
+policy chose it*. Until someone picks, that language is whatever the
+conversation has been in — English unless the reader wrote or spoke Spanish or
+French, in which case ASPIRE already followed them and the highlight moves on
+its own.
+
+Picking one also leaves Automatic. Choosing Español and then being answered in
+English because the last message happened to be English is the control not
+working, whatever it looks like.
+
+---
+
+## Native, not translated — what is and is not done
+
+The hooks, taglines and the language control are native. **The conversation
+behind them is not yet**, and the distinction matters:
+
+| Layer | State |
+|---|---|
+| Hooks and taglines | **native** in EN / ES / FR |
+| Language switcher | done |
+| Eligibility flow | translated — 38 strings per language |
+| Persona cards (`prompting/personas/*.md`) | **English only.** Every guide's voice, red lines and worked examples are authored in English. |
+| Retrieval corpus | **English only.** A Spanish question is translated to English to search, and the answer is composed back into Spanish. |
+| Vocabulary ladder | **English only**, and keyed by band. `_BAN` holds English strings, so a 5–8 Spanish answer can use *interés* freely — the word `interest` would have been stripped. |
+| Voice casting | `VOICE_<PERSONA>_ES` / `_FR` unset. Every non-English turn falls back to an English-trained accent. |
+| Composer placeholder, failure text | English only |
+
+So today a Spanish reader gets a native greeting and then a **translated
+conversation**. Closing that gap is authoring work, in this order: the
+vocabulary ladder, then the persona cards, then the game and story sets — with
+voice casting running alongside, since it is a procurement question rather than
+a writing one.
+
+`ASPIRE_voice_language_spec_v1.json` and the Spanish run-sheet carry the detail.

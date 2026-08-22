@@ -32,6 +32,7 @@
  * already does this from the landing screen; this is the same mechanism one
  * surface further in.
  */
+import { type HookLanguage, hookFor, TAGLINES } from "#/lib/aspire/hooks";
 
 export interface WelcomeCard {
 	/** What the reader taps. */
@@ -155,127 +156,49 @@ export function cardsFor(
 	return YOUNG;
 }
 
-/**
- * THE ASPIRE PERSONALISATION LADDER.
- *
- * The governing rule, and the reason this file reads the way it does:
- *
- *     ASPIRE may always personalise DOWNWARD to what it knows.
- *     It must never personalise UPWARD by guessing.
- *
- * The levels, and what each is licensed to say:
- *
- *   L0  unknown           "Hi there."
- *   L1  audience known    "if you're supporting a young person..."
- *   L2  role known        "as a parent...", "as a teacher..."
- *   L3  relationship      "your daughter", "your grandson", "your students"
- *   L4  context           "your six-year-old", "your Form 3 class"
- *   L5  goal              "you're working out whether she is eligible"
- *
- * THIS FUNCTION IS PINNED AT L1 and cannot go higher, because a welcome fires
- * before the reader has said anything. Choosing "Parents & Guardians" says the
- * reader belongs somewhere in that audience. It does NOT say parent -- they may
- * be a grandmother, an aunt, a foster carer, a guardian, or someone asking on
- * behalf of a friend. Choosing "Teachers & Educators" does not say classroom
- * teacher: principal, facilitator, counsellor and youth worker all live there.
- *
- * So the conditional matters. "If you're supporting a young person" is true of
- * every one of them and asserts nothing. "You're building their future" reads
- * warmer and is an L3 claim about a relationship nobody has stated -- it was
- * here until 22 Aug and it was wrong.
- *
- * L2 and above belong to the conversation, where the reader supplies the fact:
- * "my daughter is six" licenses "your daughter", and not one word before it.
- *
- * The shape at every level is the same seven beats:
- *   WELCOME -> ORIENT -> INVITE -> DISCOVER -> MIRROR -> IMPACT -> GUIDE
- * A welcome owns the first three. The rest are the conversation's.
- */
-function welcomeFor(
-	persona: string | null | undefined,
-	priorConversations = 0,
-): {
-	/** Set plain, in the display face. */
-	lead: string;
-	/** Set in the italic gradient, exactly as "take you!" is on the landing. */
-	accent: string;
-	emoji: string;
-	line: string;
-} {
-	const returning = priorConversations > 0;
-	switch ((persona ?? "").trim().toLowerCase()) {
-		// ── the adult audiences: L1, and the conditional is load-bearing ──
-		case "aurora":
-			return {
-				lead: returning ? "Welcome " : "Hi there. Welcome to ",
-				accent: returning ? "back." : "Imani.",
-				emoji: "\u{1F331}",
-				line: returning
-					? "Where would you like to pick up?"
-					: "If you\u2019re supporting a young person through ASPIRE, I can help with the programme, their learning, and what comes next. What can I help you with today?",
-			};
-		case "nova":
-			return {
-				lead: returning ? "Welcome " : "Hi there. Welcome to ",
-				accent: returning ? "back." : "Azuri.",
-				emoji: "\u{1F4DA}",
-				line: returning
-					? "What would be useful today?"
-					: "If you\u2019re helping young people learn, I can give you accurate, sourced information and practical ASPIRE support. What would be useful today?",
-			};
-
-		// ── the child and teen bands: the age IS known, so it may be used ──
-		case "stella":
-			return {
-				lead: returning ? "Welcome back, " : "Hi there, ",
-				accent: returning ? "explorer!" : "little explorer!",
-				emoji: "\u2728",
-				line: returning
-					? "What should we find out today?"
-					: "There are lots of things about money we can discover together. What should we explore today?",
-			};
-		case "kaleb":
-			return {
-				lead: returning ? "Back for " : "Hey \u2014 ready to ",
-				accent: returning ? "more?" : "figure something out?",
-				emoji: "\u{1F680}",
-				line: returning
-					? "What are we working out this time?"
-					: "Money, ASPIRE, saving, investing \u2014 whatever you\u2019re trying to understand. What do you want to work out?",
-			};
-		case "orion":
-			return {
-				lead: returning ? "Welcome " : "Hi. What do you need to ",
-				accent: returning ? "back." : "get clear on?",
-				emoji: "\u2728",
-				line: "I can help with ASPIRE, money questions, planning, and the facts behind the numbers.",
-			};
-
-		// ── L0: Guest knows nothing safe about anybody ──
-		default:
-			return {
-				lead: returning ? "Welcome " : "Hi there. Welcome to ",
-				accent: returning ? "back." : "ASPIRE AI.",
-				emoji: "\u2728",
-				line: "What would you like to explore or learn today?",
-			};
-	}
-}
+/* The hooks themselves moved to `lib/aspire/hooks.ts`, where they sit in one
+ * table across English, Spanish and French. They were here as a switch over
+ * personas, which was fine for one language and would have become three
+ * near-identical switches for three. The ladder that governs them, and the
+ * reason every adult line is conditional, is documented there and in
+ * `docs/HOOK_SPINE.md`. */
 
 export function ChatWelcome({
 	persona,
+	language = "en",
 	priorConversations = 0,
 	onAsk,
 	onOpenVideos,
+	showCards = true,
 }: {
 	persona: string | null | undefined;
 	/** How many conversations this reader already has. Zero on a first visit. */
+	/** Which language the hook is spoken in. English until told otherwise. */
+	language?: HookLanguage;
 	priorConversations?: number;
 	onAsk: (question: string) => void;
 	onOpenVideos?: () => void;
+	/**
+	 * Whether to offer the four chips.
+	 *
+	 * The HOOK and the CHIPS have different lifetimes, which is the thing this
+	 * separates. The hook is the guide saying hello -- beats one to three of the
+	 * spine, RECOGNISE / ORIENT / INVITE -- and it belongs at the top of the
+	 * conversation whether or not the reader arrived with something to say.
+	 * The chips are an invitation to start, so once the reader has started they
+	 * are furniture in the way of the answer.
+	 *
+	 * Before this split the whole block was gated on `messages.length === 0`,
+	 * and a reader who chose Imani and typed "hi" on the landing never saw her
+	 * greet them at all: staging the turn made the thread non-empty before the
+	 * chat first painted. Only the guide cards, which stage nothing, ever showed
+	 * a hook.
+	 */
+	showCards?: boolean;
 }) {
 	const cards = cardsFor(persona);
-	const welcome = welcomeFor(persona, priorConversations);
+	const welcome = hookFor(persona, language, priorConversations);
+	const tagline = TAGLINES[language] ?? TAGLINES.en;
 
 	return (
 		<div className="welcome">
@@ -305,10 +228,10 @@ export function ChatWelcome({
 				{/* Three words carry brand colour and the rest does not. Colouring
 				 * every word turns a tagline into a rainbow. */}
 				<p className="welcome-tagline">
-					<span className="welcome-tagline__ask">Ask.</span>{" "}
-					<span className="welcome-tagline__play">Play.</span>{" "}
-					<span className="welcome-tagline__explore">Explore.</span> Build your
-					money future.
+					<span className="welcome-tagline__ask">{tagline.ask}</span>{" "}
+					<span className="welcome-tagline__play">{tagline.play}</span>{" "}
+					<span className="welcome-tagline__explore">{tagline.explore}</span>{" "}
+					{tagline.rest}
 				</p>
 
 				{/* Interface copy, not a chat message -- so no bubble and no orb
@@ -320,25 +243,27 @@ export function ChatWelcome({
 				<p className="welcome-copy">{welcome.line}</p>
 			</section>
 
-			<ul className="welcome__cards">
-				{cards.map((card) => (
-					<li key={card.title}>
-						<button
-							type="button"
-							className="welcome__card"
-							onClick={() =>
-								card.panel === "videos"
-									? onOpenVideos?.()
-									: card.question && onAsk(card.question)
-							}
-						>
-							<i className={card.icon} aria-hidden="true" />
-							<span className="welcome__card-title">{card.title}</span>
-							<span className="welcome__card-blurb">{card.blurb}</span>
-						</button>
-					</li>
-				))}
-			</ul>
+			{showCards ? (
+				<ul className="welcome__cards">
+					{cards.map((card) => (
+						<li key={card.title}>
+							<button
+								type="button"
+								className="welcome__card"
+								onClick={() =>
+									card.panel === "videos"
+										? onOpenVideos?.()
+										: card.question && onAsk(card.question)
+								}
+							>
+								<i className={card.icon} aria-hidden="true" />
+								<span className="welcome__card-title">{card.title}</span>
+								<span className="welcome__card-blurb">{card.blurb}</span>
+							</button>
+						</li>
+					))}
+				</ul>
+			) : null}
 		</div>
 	);
 }

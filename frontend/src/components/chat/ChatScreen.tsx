@@ -30,6 +30,7 @@ import {
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
+import type { HookLanguage } from "#/lib/aspire/hooks";
 import { answerToText } from "#/lib/aspire/knowledge";
 import { displayName } from "#/lib/aspire/persona-name";
 import {
@@ -52,6 +53,7 @@ import { ChatTitleBar } from "./ChatTitleBar";
 import { ChatWelcome } from "./ChatWelcome";
 import { Composer } from "./Composer";
 import { FirstRun } from "./FirstRun";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Rail } from "./Rail";
 import { Transcript } from "./Transcript";
 import { VoiceConsent, VoiceNote } from "./Voice";
@@ -793,6 +795,18 @@ export function ChatScreen() {
 							Skip to the message box
 						</a>
 
+						{/* EN / ES / FR. Its own corner slot rather than a fourth control
+						    beside the guide picker; see `LanguageSwitcher`. */}
+						<div
+							className="lang-slot"
+							data-with-account={railClosed || undefined}
+						>
+							<LanguageSwitcher
+								selected={voice.language as HookLanguage}
+								onChoose={(next) => voice.setLanguage(next)}
+							/>
+						</div>
+
 						{/* The way into an account, whenever the sidebar is not there to carry it. */}
 						{/* `inert` as well as the CSS, because they cover different people. */}
 						<div
@@ -833,19 +847,23 @@ export function ChatScreen() {
 								}}
 							>
 								<div className="thread__inner">
-									{/* Before anybody has said anything, the room says hello.
-									 *
-									 * A new thread rendered a bare transcript: a blank
-									 * column and a text box, with no indication of what the
-									 * assistant could do or which of its six voices was
-									 * about to answer. */}
-									{messages.length === 0 && !streaming && !isThinking ? (
-										<ChatWelcome
-											persona={persona}
-											priorConversations={priorConversations}
-											onAsk={ask}
-										/>
-									) : null}
+									{/* THE HOOK ALWAYS, THE CHIPS ONLY WHEN THE THREAD IS EMPTY.
+									    This used to be one condition for both, which meant a
+									    reader who chose a guide and typed a question on the
+									    landing never saw that guide greet them: staging the
+									    turn made the thread non-empty before the chat first
+									    painted. The greeting is beats one to three of the
+									    spine and belongs at the top of the conversation
+									    either way; it scrolls off as the conversation grows. */}
+									<ChatWelcome
+										showCards={
+											messages.length === 0 && !streaming && !isThinking
+										}
+										persona={persona}
+										language={voice.language as HookLanguage}
+										priorConversations={priorConversations}
+										onAsk={ask}
+									/>
 									<section aria-label="Conversation">
 										<Transcript
 											guideName={guideName}
