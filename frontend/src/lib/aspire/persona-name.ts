@@ -21,6 +21,7 @@
 /** Whole-persona labels. Mirrors `NAMES`. */
 const NAMES: Record<string, string> = {
 	stella: "Skye",
+	kaleb: "Kaleb",
 	orion: "Zion",
 	aurora: "Imani",
 	nova: "Azuri",
@@ -31,9 +32,10 @@ const NAMES: Record<string, string> = {
 };
 
 /** Labels that belong to one band rather than to the whole persona. Mirrors `BY_BAND`. */
-const BY_BAND: Record<string, string> = {
-	"stella:9-12": "Kaleb",
-};
+// Empty: Kaleb is `NAMES.kaleb` now, not a band of Stella's. Mirrors the
+// server's `BY_BAND`, which emptied for the same reason. Kept, not deleted --
+// a genuine two-voice persona would need it again.
+const BY_BAND: Record<string, string> = {};
 
 /** What the assistant is called when no persona has given it a name. */
 export const SYSTEM_NAME = "ASPIRE AI";

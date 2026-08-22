@@ -1313,8 +1313,12 @@ body {
 	--orb-deep: #6d2c17;
 }
 
-/* Kaleb -- 9 to 12. Same key, different voice, so a different face: the dry
-   older cousin is not the gentle one, and a twelve-year-old notices first. */
+/* Kaleb -- 9 to 12. His own key now, so his own selector: the dry older cousin
+   is not the gentle one, and a twelve-year-old notices first. The old
+   `[data-persona="stella"][data-band="9-12"]` is kept beside it so a session
+   minted before the split still shows his face rather than reverting to
+   Skye's -- the client mirror of the server's `_SPLIT` seam. */
+.app[data-persona="kaleb"],
 .app[data-persona="stella"][data-band="9-12"] {
 	--orb-tint: #ffd4ef;
 	--orb-mid: #e879c9;

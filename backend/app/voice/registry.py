@@ -45,6 +45,11 @@ _DELIVERY: dict[Persona, dict[str, float]] = {
     # six-year-old is decoding the words as they arrive. Expressive (low
     # stability) but under the exaggeration ceiling: playful, not cartoonish.
     Persona.STELLA: {"stability": 0.50, "similarity_boost": 0.75, "style": 0.40, "speed": 0.88},
+    # Ages 9-12. Skye's warmth without her pace: a nine-year-old reads fluently
+    # and hears a five-year-old's speed as being talked down to -- the same
+    # reason Orion is not slowed. A step calmer and a step less exaggerated
+    # than Skye, because his card shows workings rather than wondering aloud.
+    Persona.KALEB: {"stability": 0.58, "similarity_boost": 0.75, "style": 0.30, "speed": 0.95},
     # Ages 13-18. Livelier than an adult read and deliberately not slowed --
     # a teenager hearing a children's pace hears condescension.
     Persona.ORION: {"stability": 0.50, "similarity_boost": 0.75, "style": 0.35, "speed": 1.0},
@@ -90,7 +95,16 @@ def _delivery_for(settings: VoiceSettings, persona: Persona) -> dict[str, float]
 #: has not been given a thirteenth should keep speaking rather than refuse to
 #: boot. Zion is the understudy because it is the most neutral of the four.
 #: An explicit VOICE_GUEST always wins over this.
-_VOICE_UNDERSTUDY: dict[Persona, Persona] = {Persona.GUEST: Persona.ORION}
+#: Kaleb understudies Stella so the split cannot silence him. He is a new
+#: persona, so `VOICE_KALEB` does not exist in any deployed .env yet, and
+#: `validate` fails startup on an unmapped pair -- without this line, shipping
+#: the split would take the whole app down until someone set a new variable.
+#: Give him his own `VOICE_KALEB` when a voice is cast for him; until then he
+#: speaks in Skye's voice at his own pace, since `_DELIVERY` is his own.
+_VOICE_UNDERSTUDY: dict[Persona, Persona] = {
+    Persona.GUEST: Persona.ORION,
+    Persona.KALEB: Persona.STELLA,
+}
 
 
 class VoiceRegistryError(RuntimeError):

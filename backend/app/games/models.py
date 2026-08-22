@@ -62,6 +62,16 @@ class Entry:
     language: Language
     difficulty_band: str
     persona_bands: tuple[Persona, ...]
+    #: Which age bands this item may be served at. EMPTY MEANS EVERY BAND the
+    #: listed personas already cover, which is what every existing seed means
+    #: today -- so adding the field changes nothing until an item uses it.
+    #:
+    #: `difficulty_band` is warmup/core/advanced and says how hard an item is,
+    #: not who it is old enough for. Those came apart the moment `orion` had to
+    #: serve both 13-15 and 16-18 from one bank: an advanced item is not thereby
+    #: a sixteen-year-old's item, and a warmup one is not thereby a
+    #: thirteen-year-old's.
+    age_bands: tuple[str, ...] = ()
     topic: str | None = None
 
     # Provenance.

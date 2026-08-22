@@ -153,6 +153,9 @@ _STATUS_FROM_APPLICATION: dict[str, str] = {
 #: The reading band each persona implies for an ANONYMOUS session.
 _ANONYMOUS_BANDS: dict[str, str] = {
     "stella": YOUNGEST_BAND,
+    # His own row, which is the whole point of the split: choosing Kaleb now
+    # resolves to 9-12 by itself, with no band request needed to get there.
+    "kaleb": "9-12",
     "orion": "13-15",
     "aurora": "adult",
     "nova": "adult",

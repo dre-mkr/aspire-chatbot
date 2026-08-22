@@ -1,7 +1,8 @@
-/** The five ASPIRE personas, as the client needs to know them. */
+/** The six ASPIRE personas, as the client needs to know them. */
 
 export type PersonaId =
 	| "stella"
+	| "kaleb"
 	| "orion"
 	| "aurora"
 	| "nova"
@@ -21,9 +22,19 @@ export interface Persona {
 export const PERSONAS: ReadonlyArray<Persona> = [
 	{
 		id: "stella",
-		name: "Skye & Kaleb",
-		audience: "Ages 5–12",
-		blurb: "Skye answers 5 to 8; Kaleb answers 9 to 12, in his own voice.",
+		name: "Skye",
+		audience: "Ages 5–8",
+		blurb: "Gentle and unhurried, in pictures rather than numbers.",
+	},
+	{
+		// A key of his own, not a band of Stella's. He used to share `stella`
+		// and appear here as half of "Skye & Kaleb · Ages 5–12", which is a row
+		// no reader ever chose -- they chose a person. The server splits them
+		// now, so this list can too.
+		id: "kaleb",
+		name: "Kaleb",
+		audience: "Ages 9–12",
+		blurb: "The older cousin who tells you the truth, and shows the workings.",
 	},
 	{
 		id: "orion",
@@ -102,7 +113,7 @@ export const GUIDES: ReadonlyArray<Guide> = [
 	},
 	{
 		guideId: "kaleb",
-		persona: "stella",
+		persona: "kaleb",
 		band: "9-12",
 		name: "Kaleb",
 		audience: "Ages 9–12",

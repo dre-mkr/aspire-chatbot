@@ -52,7 +52,7 @@ type GuideId = "skye" | "kaleb" | "zion" | "imani" | "azuri";
 /** Label to key. `skye` and `kaleb` are one key; the band decides the voice. */
 const GUIDE_TO_PERSONA: Record<GuideId, PersonaId> = {
 	skye: "stella",
-	kaleb: "stella",
+	kaleb: "kaleb",
 	zion: "orion",
 	imani: "aurora",
 	azuri: "nova",
@@ -120,8 +120,9 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			const chosen =
 				persona ?? (selectedPersona ? GUIDE_TO_PERSONA[selectedPersona] : null);
 			// The band rides along for the same reason the persona does, and it is
-			// not optional for `stella`: Skye and Kaleb share that key, so the
-			// persona alone cannot say which of them was tapped.
+			// Still sent though Kaleb has his own key: it pins the band for a
+			// persona that could otherwise take the server's default, and it is
+			// what the old `stella` sessions are read back through.
 			const chosenBand =
 				band ?? (selectedPersona ? GUIDE_TO_BAND[selectedPersona] : null);
 			navigate({
@@ -625,9 +626,9 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 						 * reach them at all. Each one now opens a conversation with
 						 * that guide answering.
 						 *
-						 * Skye and Kaleb are one persona key. `stella` is Skye at 5-8
-						 * and Kaleb at 9-12, and the band comes from the session, not
-						 * from the address -- so a signed-out reader picking Kaleb gets
+						 * Skye and Kaleb are separate keys now. `stella` is Skye at 5-8
+						 * and `kaleb` is his own persona at 9-12, so the address carries
+						 * both and a signed-out reader picking Kaleb gets
 						 * `stella`, and the server decides which voice that is. The
 						 * alternative is asking a child their age on a landing page.
 						 *
@@ -646,7 +647,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								},
 								{
 									name: "Kaleb",
-									persona: "stella" as PersonaId,
+									persona: "kaleb" as PersonaId,
 									band: "9-12" as AgeBand,
 									who: "ages 9 to 12",
 									color: "from-blue-500 to-cyan-500",

@@ -77,6 +77,11 @@ class NoContentAvailable(GameError):
 #: the 13-18 material, which is the closest thing to an adult register already
 #: written. Delete an entry here the day its own seeds land.
 _CONTENT_BANK: dict[Persona, Persona] = {
+    # Kaleb reads from Stella's bank because that is where his items already
+    # are: every seed entry written for a 9-12 reader lists `stella` in its
+    # `persona_bands`, from when he was one. Rewriting those lists is an
+    # editorial pass on the seeds, not part of giving him a key.
+    Persona.KALEB: Persona.STELLA,
     Persona.AURORA: Persona.ORION,
     Persona.NOVA: Persona.ORION,
 }
@@ -217,13 +222,34 @@ class GameEngine:
         self._store.delete(session.session_id)
         return summary
 
-    def _servable(self, entries: tuple[Entry, ...], persona: Persona | None) -> list[Entry]:
-        """Items this player may be served, right now."""
+    def _servable(
+        self,
+        entries: tuple[Entry, ...],
+        persona: Persona | None,
+        age_band: str | None = None,
+    ) -> list[Entry]:
+        """Items this player may be served, right now.
+
+        Two dimensions, and they answer different questions. `persona_bands`
+        says whose voice an item was written for; `age_bands` says how old the
+        reader has to be. They used to be the same question because each child
+        persona covered one age -- until `orion` had to serve 13-15 and 16-18
+        from one bank, and an item pitched at a sixteen-year-old had no way to
+        say so.
+
+        An item with no `age_bands` serves every band, so a bank that has not
+        been through an editorial pass behaves exactly as it did before.
+        """
         today = self._today or date.today()
         return [
             entry
             for entry in entries
             if (persona is None or persona in entry.persona_bands)
+            and (
+                age_band is None
+                or not entry.age_bands
+                or age_band in entry.age_bands
+            )
             and entry.servable_on(today, review_days=self._settings.volatile_review_days)
         ]
 
@@ -253,6 +279,7 @@ class GameEngine:
         game_type: str = "word_scramble",
         language: Language = Language.EN,
         persona: Persona | None = None,
+        age_band: str | None = None,
     ) -> StartResult:
         # Games are a learning activity for account holders.
         if persona is not None and persona not in PLAYING_PERSONAS:
@@ -306,7 +333,7 @@ class GameEngine:
         game_set = None
         servable: list[Entry] = []
         for candidate in sets:
-            items = self._servable(candidate.entries, content_persona)
+            items = self._servable(candidate.entries, content_persona, age_band)
             if not items:
                 continue
             if game_set is None:

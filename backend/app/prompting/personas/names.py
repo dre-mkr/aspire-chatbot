@@ -19,6 +19,7 @@ from typing import Final
 
 NAMES: Final[dict[str, str]] = {
     "stella": "Skye",  # <- change this line, and only this line
+    "kaleb": "Kaleb",
     "orion": "Zion",
     "aurora": "Imani",
     "nova": "Azuri",
@@ -38,9 +39,14 @@ NAMES: Final[dict[str, str]] = {
 #: "Skye"` as well reads better and quietly breaks the guarantee this whole file
 #: exists for: with both bands pinned here, renaming `NAMES["stella"]` changes
 #: no card, and "a rename is one line" stops being true. There is a test for it.
-BY_BAND: Final[dict[tuple[str, str], str]] = {
-    ("stella", "9-12"): "Kaleb",
-}
+#: EMPTY, AND THAT IS THE POINT. Kaleb was the only row here, and being a row
+#: here was exactly his problem: a label without a key is invisible to access,
+#: to the games, to the session token and to the anonymous default. He is
+#: `NAMES["kaleb"]` now, with `kaleb.9-12.md` as his card.
+#:
+#: The mechanism stays because it is the right one for a genuine two-voice
+#: persona, and because emptying it is a smaller change than deleting it.
+BY_BAND: Final[dict[tuple[str, str], str]] = {}
 
 #: The old name for `BY_BAND`, kept for one release. Nothing in the tree reads
 #: it; a branch written against the earlier spelling would.

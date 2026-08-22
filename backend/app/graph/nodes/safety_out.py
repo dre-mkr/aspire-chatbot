@@ -90,7 +90,10 @@ def cap_for(band: str, agent: str | None, *, story: bool = False) -> int | None:
     return table.get(band)
 
 #: The band at and above which links may be shown, and the personas that never see them regardless.
-_NO_LINK_PERSONAS = frozenset({"stella"})
+# `kaleb` joins `stella` because he IS the older half of what `stella` used to
+# be. Leaving him out would have handed a nine-year-old the link strip that the
+# same reader was refused the day before, purely because his key changed.
+_NO_LINK_PERSONAS = frozenset({"stella", "kaleb"})
 _ORION_LINK_BAND = "16-18"
 
 #: How many chips a lesson turn must offer, and how long each may be.

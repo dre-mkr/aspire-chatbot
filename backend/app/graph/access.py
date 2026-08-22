@@ -8,7 +8,7 @@ from typing import Final
 # Runtime frozensets, deliberately duplicated from the Literal types in `state`.
 
 PERSONAS: Final[frozenset[str]] = frozenset(
-    {"stella", "orion", "aurora", "nova", "guest"}
+    {"stella", "kaleb", "orion", "aurora", "nova", "guest"}
 )
 AGE_BANDS: Final[frozenset[str]] = frozenset({"5-8", "9-12", "13-15", "16-18", "adult"})
 ACCOUNT_STATUSES: Final[frozenset[str]] = frozenset(
@@ -88,6 +88,13 @@ def allowed_agents(
     if user_id is None:
         return list(_ANONYMOUS)
 
+    # An old token says `stella` where this now says `kaleb`. Applied before the
+    # vocabulary check, so the pair that moved is answered under its new name
+    # rather than falling through to the empty list.
+    from app.domain import normalise_persona_band
+
+    persona = normalise_persona_band(persona, age_band)
+
     # From a signed token, so anything outside the closed vocabularies is refused.
     if persona not in PERSONAS:
         return []
@@ -97,8 +104,18 @@ def allowed_agents(
         return []
 
     if persona == "stella":
-        # Child bands only.
-        if age_band not in _STELLA_BANDS:
+        # Skye alone now: `kaleb.9-12.md` took the older band with it.
+        if age_band != "5-8":
+            return []
+        return list(_STELLA)
+
+    if persona == "kaleb":
+        # THE SAME SET STELLA GRANTED AT 9-12, deliberately unchanged. Kaleb
+        # becoming a key of his own is a change of vocabulary, not of
+        # entitlement: he is the same child reader, at the same band, reaching
+        # the same agents. Anything wider would make a naming fix into a
+        # privilege change, which is not what it was asked to be.
+        if age_band != "9-12":
             return []
         return list(_STELLA)
 

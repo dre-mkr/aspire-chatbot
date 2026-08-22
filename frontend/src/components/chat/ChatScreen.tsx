@@ -152,7 +152,7 @@ export function ChatScreen() {
 			// was served the Orion set -- compound interest, 5% returns, "no more
 			// than 25% in any one sector" -- while the set written for her was
 			// unreachable. The filter was always correct; nothing was calling it.
-			void startGame(id, { game_type: engineName, persona })
+			void startGame(id, { game_type: engineName, persona, age_band: band })
 				.then((state) => {
 					if (state) setGame(state);
 				})
