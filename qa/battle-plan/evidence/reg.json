@@ -1,0 +1,622 @@
+[
+ {
+  "test_id": "REG-01",
+  "what": "Full happy-path sign-up",
+  "status": "PASS",
+  "note": "HTTP 200; persona=orion band=None verified=None",
+  "at": "2026-08-21T11:52:09+00:00",
+  "findings": [],
+  "evidence": {
+   "email": "aspire-qa-16d17b29f399@example.test",
+   "response": {
+    "user_id": "510aced7-f329-4e1b-b449-8a5c5f9a9bce",
+    "account_type": "registered",
+    "email": "aspire-qa-16d17b29f399@example.test",
+    "display_name": "Qa Tester",
+    "avatar_url": null,
+    "expires_in": 604800,
+    "role": "participant",
+    "persona": "orion",
+    "claim": {
+     "attempted": false,
+     "conversations": 0,
+     "reason": null
+    }
+   }
+  }
+ },
+ {
+  "test_id": "REG-02",
+  "what": "Register again with an existing email",
+  "status": "PASS",
+  "note": "HTTP 409: {\"detail\":\"That email already has an account. Try signing in.\"}",
+  "at": "2026-08-21T11:52:09+00:00",
+  "findings": [],
+  "evidence": {
+   "status": 409,
+   "body": "{\"detail\":\"That email already has an account. Try signing in.\"}"
+  }
+ },
+ {
+  "test_id": "REG-03",
+  "what": "Malformed emails one at a time",
+  "status": "PASS",
+  "note": "no-at-sign.com->422; two@@at.com->422; trailing@dot.->422; space in@mail.com->422; aaaaaaaaaaaaaaaaaaaaaaaa->422; usuario@exámple.test->422",
+  "at": "2026-08-21T11:52:09+00:00",
+  "findings": [],
+  "evidence": {
+   "rows": [
+    {
+     "email": "no-at-sign.com",
+     "status": 422,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"no-at-sign.com\",\"ctx\":{\"error\":{}}}]}"
+    },
+    {
+     "email": "two@@at.com",
+     "status": 422,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"two@@at.com\",\"ctx\":{\"error\":{}}}]}"
+    },
+    {
+     "email": "trailing@dot.",
+     "status": 422,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"trailing@dot.\",\"ctx\":{\"error\":{}}}]}"
+    },
+    {
+     "email": "space in@mail.com",
+     "status": 422,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"space in@mail.com\",\"ctx\":{\"error\":{}}}]}"
+    },
+    {
+     "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…",
+     "status": 422,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+     "email": "usuario@exámple.test",
+     "status": 422,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"usuario@exámple.test\",\"ctx\":{\"error\":{}}}]}"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-04",
+  "what": "Attack the password rules",
+  "status": "FAIL",
+  "note": "1 char->422; 200 chars->422; spaces only->200; emoji only->200; password123->422; own email as password->200",
+  "at": "2026-08-21T11:52:18+00:00",
+  "findings": [
+   {
+    "test_id": "REG-04",
+    "severity": "S2",
+    "title": "Weak password accepted: spaces only, own email as password",
+    "steps": [
+     "Register with password case spaces only",
+     "Register with password case own email as password"
+    ],
+    "expected": "Rules enforced consistently and stated before the user fails.",
+    "actual": "HTTP 200, account created.",
+    "reproducible": "every time",
+    "impact": "A learner's account is trivially guessable.",
+    "persona": "",
+    "session": "",
+    "at": "2026-08-21T11:52:18+00:00"
+   }
+  ],
+  "evidence": {
+   "rows": [
+    {
+     "case": "1 char",
+     "status": 422,
+     "detail": "{\"detail\":\"Use at least 10 characters.\"}"
+    },
+    {
+     "case": "200 chars",
+     "status": 422,
+     "detail": "{\"detail\":\"That password is too long. Use 72 characters or fewer.\"}"
+    },
+    {
+     "case": "spaces only",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkODI5OTc3YS00OGE1LTRiOTEtYTQxZC04Yjc5MDBkODFlYzIiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxMzMsImV4cCI6MTc4NzkxNzkzMywianRpIjoiN"
+    },
+    {
+     "case": "emoji only",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0ZjA1YWQ3Ny1kNGM5LTRlNzQtYWMzNC0zN2EwNDAzNmNmMDUiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxMzYsImV4cCI6MTc4NzkxNzkzNiwianRpIjoiZ"
+    },
+    {
+     "case": "password123",
+     "status": 422,
+     "detail": "{\"detail\":\"That password is too easy to guess. Try something less common.\"}"
+    },
+    {
+     "case": "own email as password",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0Mjc0MTgyMi1hYTY1LTRmNTYtYjhkMi1iNzdmYzE3NGRhNTciLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxMzgsImV4cCI6MTc4NzkxNzkzOCwianRpIjoiM"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-05",
+  "what": "Mismatched password and confirm-password",
+  "status": "PASS",
+  "note": "confirm-password handling found in 5 frontend file(s)",
+  "at": "2026-08-21T11:52:19+00:00",
+  "findings": [],
+  "evidence": {
+   "files": [
+    "components\\chat\\HelpPanel.tsx",
+    "lib\\admin\\api.ts",
+    "lib\\aspire\\auth.ts",
+    "routes\\admin.tsx",
+    "routes\\reset.tsx"
+   ]
+  }
+ },
+ {
+  "test_id": "REG-06",
+  "what": "Each required field blank, then all blank",
+  "status": "PASS",
+  "note": "all rejected; fields NOT named in the error: none",
+  "at": "2026-08-21T11:52:19+00:00",
+  "findings": [],
+  "evidence": {
+   "rows": [
+    {
+     "field": "email",
+     "status": 422,
+     "names_the_field": true,
+     "detail": "{\"detail\":[{\"type\":\"value_error\",\"loc\":[\"body\",\"email\"],\"msg\":\"Value error, That does not look like an email address.\",\"input\":\"\",\"ctx\":{\"error\":{}}}]}"
+    },
+    {
+     "field": "password",
+     "status": 422,
+     "names_the_field": true,
+     "detail": "{\"detail\":[{\"type\":\"string_too_short\",\"loc\":[\"body\",\"password\"],\"msg\":\"String should have at least 1 character\",\"input\":\"\",\"ctx\":{\"min_length\":1}}]}"
+    },
+    {
+     "field": "first_name",
+     "status": 422,
+     "names_the_field": true,
+     "detail": "{\"detail\":[{\"type\":\"string_too_short\",\"loc\":[\"body\",\"first_name\"],\"msg\":\"String should have at least 1 character\",\"input\":\"\",\"ctx\":{\"min_length\":1}}]}"
+    },
+    {
+     "field": "last_name",
+     "status": 422,
+     "names_the_field": true,
+     "detail": "{\"detail\":[{\"type\":\"string_too_short\",\"loc\":[\"body\",\"last_name\"],\"msg\":\"String should have at least 1 character\",\"input\":\"\",\"ctx\":{\"min_length\":1}}]}"
+    },
+    {
+     "field": "date_of_birth",
+     "status": 422,
+     "names_the_field": true,
+     "detail": "{\"detail\":[{\"type\":\"date_from_datetime_parsing\",\"loc\":[\"body\",\"date_of_birth\"],\"msg\":\"Input should be a valid date or datetime, input is too short\",\"input\":\"\",\"ctx\":{\"error\":\"input is too short\"}}]}"
+    },
+    {
+     "field": "ALL BLANK",
+     "status": 422,
+     "names_the_field": true,
+     "detail": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"email\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"first_name\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"last_name\"],\"msg\":\"F"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-07",
+  "what": "Leading/trailing spaces in name and email",
+  "status": "PASS",
+  "note": "padded register=200, trimmed re-register=409 (409 = same account), display_name='Padded     Name'",
+  "at": "2026-08-21T11:52:22+00:00",
+  "findings": [],
+  "evidence": {
+   "email": "  aspire-qa-aff058d5727f@example.test  ",
+   "display_name": "Padded     Name",
+   "retry_status": 409
+  }
+ },
+ {
+  "test_id": "REG-08",
+  "what": "SQL and script payloads into every text field",
+  "status": "PASS",
+  "note": "'; DROP TABLE user->200/login 200; <script>alert(1)</->200/login 200",
+  "at": "2026-08-21T11:52:29+00:00",
+  "findings": [],
+  "evidence": {
+   "rows": [
+    {
+     "payload": "'; DROP TABLE users;--",
+     "status": 200,
+     "stored": "'; DROP TABLE users;-- '; DROP TABLE users;--",
+     "login_after": 200
+    },
+    {
+     "payload": "<script>alert(1)</script>",
+     "status": 200,
+     "stored": "<script>alert(1)</script> <script>alert(1)</script>",
+     "login_after": 200
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-09",
+  "what": "Long, emoji, Arabic and Chinese names",
+  "status": "PASS",
+  "note": "500-char->200; emoji-only->200; Arabic->200; Chinese->200",
+  "at": "2026-08-21T11:52:39+00:00",
+  "findings": [],
+  "evidence": {
+   "rows": [
+    {
+     "case": "500-char",
+     "sent_len": 500,
+     "status": 200,
+     "stored": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN Tester",
+     "faithful": true,
+     "detail": ""
+    },
+    {
+     "case": "emoji-only",
+     "sent_len": 3,
+     "status": 200,
+     "stored": "🙂🎓🌟 Tester",
+     "faithful": true,
+     "detail": ""
+    },
+    {
+     "case": "Arabic",
+     "sent_len": 13,
+     "status": 200,
+     "stored": "محمد عبد الله Tester",
+     "faithful": true,
+     "detail": ""
+    },
+    {
+     "case": "Chinese",
+     "sent_len": 3,
+     "status": 200,
+     "stored": "李小龙 Tester",
+     "faithful": true,
+     "detail": ""
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-10",
+  "what": "Verification link once/twice/expired/already-verified",
+  "status": "PARTIAL",
+  "note": "first->200; second->400; expired->400; after-verified->200",
+  "at": "2026-08-21T11:52:48+00:00",
+  "findings": [
+   {
+    "test_id": "REG-10",
+    "severity": "S3",
+    "title": "Verification link cases are not distinguishable",
+    "steps": [
+     "Click verify once",
+     "Click it again",
+     "Use an expired token",
+     "Use a token for an already-verified account"
+    ],
+    "expected": "Each of the four cases gives a distinct, correct message.",
+    "actual": "[{\"case\": \"first\", \"status\": 200, \"body\": \"{\\\"token\\\":\\\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MTBhY2VkNy1mMzI5LTRlMWItYjQ0OS04YTVjNWY5YTliY2UiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxNjMsImV4cCI6MTc4NzkxNzk2MywianRpIjoiM\"}, {\"case\": \"second\", \"status\": 400, \"body\": \"{\\\"detail\\\":\\\"That link has expired or has already been used.\\\"}\"}, {\"case\": \"expired\", \"status\": 400, \"body\": \"{\\\"detail\\\":\\\"That link has expired or has already been used.\\\"}\"}, {\"case\": \"after-verified\", \"status\": 200, \"body\": \"{\\\"token\\\":\\\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MTBhY2VkNy1mMz",
+    "reproducible": "every time",
+    "impact": "A learner who clicks the link twice cannot tell whether they are verified.",
+    "persona": "",
+    "session": "",
+    "at": "2026-08-21T11:52:48+00:00"
+   }
+  ],
+  "evidence": {
+   "rows": [
+    {
+     "case": "first",
+     "status": 200,
+     "body": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MTBhY2VkNy1mMzI5LTRlMWItYjQ0OS04YTVjNWY5YTliY2UiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxNjMsImV4cCI6MTc4NzkxNzk2MywianRpIjoiM"
+    },
+    {
+     "case": "second",
+     "status": 400,
+     "body": "{\"detail\":\"That link has expired or has already been used.\"}"
+    },
+    {
+     "case": "expired",
+     "status": 400,
+     "body": "{\"detail\":\"That link has expired or has already been used.\"}"
+    },
+    {
+     "case": "after-verified",
+     "status": 200,
+     "body": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MTBhY2VkNy1mMzI5LTRlMWItYjQ0OS04YTVjNWY5YTliY2UiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxNjgsImV4cCI6MTc4NzkxNzk2OCwianRpIjoiO"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-11",
+  "what": "Hit resend verification ten times",
+  "status": "FAIL",
+  "note": "statuses: [202, 202, 202, 202, 202, 202, 202, 202, 202, 202]",
+  "at": "2026-08-21T11:53:05+00:00",
+  "findings": [
+   {
+    "test_id": "REG-11",
+    "severity": "S2",
+    "title": "No rate limit on resending a sign-in / verification link",
+    "steps": [
+     "POST /api/auth/signin-link for aspire-qa-16d17b29f399@example.test, ten times in a row"
+    ],
+    "expected": "Rate limited with an explanation.",
+    "actual": "All ten returned [202] — no 429, no explanation.",
+    "reproducible": "every time",
+    "impact": "Anyone can flood a learner's inbox with sign-in links, and each is a live credential.",
+    "persona": "",
+    "session": "",
+    "at": "2026-08-21T11:53:05+00:00"
+   }
+  ],
+  "evidence": {
+   "statuses": [
+    202,
+    202,
+    202,
+    202,
+    202,
+    202,
+    202,
+    202,
+    202,
+    202
+   ]
+  }
+ },
+ {
+  "test_id": "REG-12",
+  "what": "Abandon registration halfway, return later",
+  "status": "PASS",
+  "note": "Partial submit -> HTTP 422. The wizard holds state in the browser and submits once at the end, so an abandoned flow writes no row.",
+  "at": "2026-08-21T11:53:05+00:00",
+  "findings": [],
+  "evidence": {
+   "status": 422,
+   "body": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":{\"role\":\"participant\",\"email\":\"aspire-qa-60f85ce9e22d@example.test\",\"first_name\":\"Half\"}},{\"type\":\"missing\",\"loc\":"
+  }
+ },
+ {
+  "test_id": "REG-19",
+  "what": "Age / eligibility gate below, at and above the threshold",
+  "status": "PASS",
+  "note": "age 12 (under 13)->422/None; age 13 (at the line)->200/None; age 17 (above)->200/None; age 19 (over 18)->200/None",
+  "at": "2026-08-21T11:53:13+00:00",
+  "findings": [],
+  "evidence": {
+   "rows": [
+    {
+     "case": "age 12 (under 13)",
+     "dob": "2014-07-22",
+     "status": 422,
+     "band": null,
+     "detail": "{\"detail\":\"An adult needs to be named for an account for someone under 13.\"}",
+     "with_guardian": {
+      "status": 200,
+      "band": null,
+      "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjRhMGZjNy00YTA1LTQ0ZGUtYWEyYi02M2U5N2M1Y2E5ZjkiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQ"
+     }
+    },
+    {
+     "case": "age 13 (at the line)",
+     "dob": "2013-07-22",
+     "status": 200,
+     "band": null,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkN2Q3YThkYy0wYzgxLTRhMTctYTUxMC0yMjgzMmNkZWM5MzAiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxODksImV4cCI6MTc4NzkxNzk4OSwianRpIjoiY"
+    },
+    {
+     "case": "age 17 (above)",
+     "dob": "2009-07-22",
+     "status": 200,
+     "band": null,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkNDIwYTMzOC01YWMyLTQ3ZTAtYTVmOS0wMThjYzBjYzY1OTciLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxOTEsImV4cCI6MTc4NzkxNzk5MSwianRpIjoiY"
+    },
+    {
+     "case": "age 19 (over 18)",
+     "dob": "2007-07-22",
+     "status": 200,
+     "band": null,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlOGFjYTQ0Yi05YzdkLTQ1ZGUtOGVlNS02ZmJjOTg3ZTMzOGMiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQiOjE3ODczMTMxOTMsImV4cCI6MTc4NzkxNzk5MywianRpIjoiN"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-21",
+  "what": "Phone numbers: local, +591, letters, 30 digits, blank",
+  "status": "FAIL",
+  "note": "local->200; international +591->200; letters->200; 30 digits->200; blank->200",
+  "at": "2026-08-21T11:53:21+00:00",
+  "findings": [
+   {
+    "test_id": "REG-21",
+    "severity": "S3",
+    "title": "Guardian phone accepts anything at all",
+    "steps": [
+     "Register an under-13 with guardian_phone = 'call-me-maybe'",
+     "Register another with guardian_phone = '111111111111111111111111111111'"
+    ],
+    "expected": "Validation matches the countries ASPIRE serves (KN is +1 869).",
+    "actual": "Every value returned HTTP 200, including letters and thirty digits.",
+    "reproducible": "every time",
+    "impact": "Safeguarding cannot reach the guardian of an under-13 applicant, and nobody finds out until they try.",
+    "persona": "",
+    "session": "",
+    "at": "2026-08-21T11:53:21+00:00"
+   }
+  ],
+  "evidence": {
+   "rows": [
+    {
+     "case": "local",
+     "value": "8695551234",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmODg3ZmQ2Ny1lY2RiLTRlYmMtYjE3Yi0xOGFmNTg4NDMzMWUiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQ"
+    },
+    {
+     "case": "international +591",
+     "value": "+59171234567",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4NTgyNmIxNi03NDM3LTQ3ODgtYWQzZC1lMTJjODZkOWMwMmQiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQ"
+    },
+    {
+     "case": "letters",
+     "value": "call-me-maybe",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3YmJiNzI2Yy0zN2UyLTQxNGYtODk0Zi05Y2Q4ZWYzZDc1ZWYiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQ"
+    },
+    {
+     "case": "30 digits",
+     "value": "111111111111111111111111111111",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3ZjdjZWExYS04YzYyLTRkZmMtOWUwNi0wMmUyNDdjNTViYTciLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQ"
+    },
+    {
+     "case": "blank",
+     "value": "",
+     "status": 200,
+     "detail": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyYjI5MzFiYi02ODIxLTQwYmYtYmQ3ZS1lNGRkMGEwNTljNWMiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjoxLCJpYXQ"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-22",
+  "what": "Log out, log back in, then log in from a second browser",
+  "status": "PASS",
+  "note": "session before logout=200; after logout=200/null; two logins agree on identity=True",
+  "at": "2026-08-21T11:53:26+00:00",
+  "findings": [],
+  "evidence": {
+   "before": 200,
+   "logout": 204,
+   "after": 200,
+   "after_body": "null",
+   "identity_stable": true
+  }
+ },
+ {
+  "test_id": "REG-23",
+  "what": "Password reset: valid, unknown, expired, reused",
+  "status": "PASS",
+  "note": "known email->202; unknown email->202; valid token->200; token reused->400; expired token->400",
+  "at": "2026-08-21T11:53:33+00:00",
+  "findings": [],
+  "evidence": {
+   "rows": [
+    {
+     "case": "known email",
+     "status": 202,
+     "body": "{\"sent\":true}"
+    },
+    {
+     "case": "unknown email",
+     "status": 202,
+     "body": "{\"sent\":true}"
+    },
+    {
+     "case": "valid token",
+     "status": 200,
+     "body": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZTM4MzU5ZC0yYzhiLTQ0OGMtYTg1My0yNDNmNGM2ZDYyODMiLCJ0eXAiOiJyZWdpc3RlcmVkIiwiZXBvIjozLCJpYXQiOjE3ODczM"
+    },
+    {
+     "case": "token reused",
+     "status": 400,
+     "body": "{\"detail\":\"That link has expired or has already been used.\"}"
+    },
+    {
+     "case": "expired token",
+     "status": 400,
+     "body": "{\"detail\":\"That link has expired or has already been used.\"}"
+    }
+   ]
+  }
+ },
+ {
+  "test_id": "REG-24",
+  "what": "Backend record vs exactly what was typed",
+  "status": "PASS",
+  "note": "every field matches character-for-character",
+  "at": "2026-08-21T11:53:35+00:00",
+  "findings": [],
+  "evidence": {
+   "typed": {
+    "email": "aspire-qa-96c12075a139@example.test",
+    "first_name": "Renata",
+    "last_name": "O'Brien-Núñez",
+    "date_of_birth": "2009-03-04",
+    "island": "Nevis",
+    "school": "Charlestown Secondary"
+   },
+   "stored": {
+    "first_name": "Renata",
+    "last_name": "O'Brien-Núñez",
+    "island": "Nevis",
+    "school": "Charlestown Secondary",
+    "date_of_birth": "2009-03-04",
+    "password_hash": "$2b$12$3t.x4C7UDl55kknA4LsgXuubtkxiLpmxtSudf84sHDd02Op2rynx6",
+    "display_name": "Renata O'Brien-Núñez",
+    "email": "aspire-qa-96c12075a139@example.test"
+   }
+  }
+ },
+ {
+  "test_id": "REG-25",
+  "what": "Does the bot or the logs ever echo the password back",
+  "status": "PASS",
+  "note": "password appears nowhere in the response, the stored row or the server logs",
+  "at": "2026-08-21T11:53:39+00:00",
+  "findings": [],
+  "evidence": {
+   "where": [],
+   "hash_prefix": "$2b$12$nM4Cx"
+  }
+ },
+ {
+  "test_id": "REG-26",
+  "what": "Two tabs submitting the same registration at once",
+  "status": "FAIL",
+  "note": "statuses=[200, 500]; rows in users for that email = 1",
+  "at": "2026-08-21T11:53:43+00:00",
+  "findings": [
+   {
+    "test_id": "REG-26",
+    "severity": "S3",
+    "title": "The losing tab of a double submit gets HTTP 500, not a clean refusal",
+    "steps": [
+     "Open two tabs on /signup for aspire-qa-4c9729806e0f@example.test",
+     "Submit both within a second of each other"
+    ],
+    "expected": "One account is created, not two. The second attempt fails cleanly.",
+    "actual": "Statuses [200, 500]. Exactly one row was written, so the data is right, but the losing tab gets an unhandled server error rather than 'That email already has an account.' Body: Internal Server Error",
+    "reproducible": "ran once",
+    "impact": "A learner who double-taps sees a crash and cannot tell whether they have an account, so they sign up again with a different address.",
+    "persona": "",
+    "session": "",
+    "at": "2026-08-21T11:53:43+00:00"
+   }
+  ],
+  "evidence": {
+   "statuses": [
+    [
+     500,
+     "Internal Server Error"
+    ],
+    [
+     200,
+     "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhYjdmYjEwNS02MWRjLTRkMGMtYWQ3Yy1kMTlkZmMwN2JjYTIiLCJ0eXAiOiJyZ"
+    ]
+   ],
+   "rows": 1
+  }
+ }
+]

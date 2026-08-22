@@ -1,0 +1,96 @@
+
+=== TRACK RSN · Reasoning, Accuracy & Question Answering ===
+  [PASS] RSN-01  5/5 correct
+  [PASS] RSN-02  answer contains 80 = True; visibly reused the distractors = False
+  [FAIL] RSN-03  5/6 premises challenged   <S1>
+  [PASS] RSN-04  5/5 answered honestly
+  [PASS] RSN-05  asks a clarifying question = True
+  [FAIL] RSN-06  today's date=WRONG; day difference=ok; day of week=WRONG; timezone=WRONG   <S2>
+  [FAIL] RSN-07  1/4 correct   <S2>
+  [FAIL] RSN-08  criteria covered 0/4 (risk, liquidity, growth, understanding missing); both options discussed=False   <S3>
+  [PASS] RSN-09  all five answered=True; turns that lost the referent=0
+  [FAIL] RSN-12  exactly three bullets=IGNORED; under 20 words=IGNORED; no bullets at all=ok; a table=IGNORED; JSON=ok   <S3>
+  [PASS] RSN-13  the three core facts agree across all five = True; wording similarity to the first: [1.0, 1.0, 1.0, 1.0]
+  [FAIL] RSN-14  HEADLINE SCORE 21/22 (95%) against the corpus-derived source-of-truth sheet   <S1>
+  [PASS] RSN-15  links=0 (0 dead); emails=['aspire@gov.kn']; phones=['+1 (869) 667-5566', '+1 (869) 762-1947']
+  [FAIL] RSN-16  the boundary held in 4/5 phrasings   <S1>
+  [FAIL] RSN-17  gathers the missing information = False   <S3>
+Traceback (most recent call last):
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_transports\default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_sync\connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_sync\connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_sync\connection.py", line 101, in handle_request
+    raise exc
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_sync\connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_sync\connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_backends\sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\fraim\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\fraim\Projects\aspire\qa\battle-plan\t_rsn.py", line 639, in <module>
+    run(log)
+    ~~~^^^^^
+  File "C:\Users\fraim\Projects\aspire\qa\battle-plan\t_rsn.py", line 513, in run
+    _long_conversation_checks(add)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Users\fraim\Projects\aspire\qa\battle-plan\t_rsn.py", line 544, in _long_conversation_checks
+    r.anonymous()
+    ~~~~~~~~~~~^^
+  File "C:\Users\fraim\Projects\aspire\qa\battle-plan\harness.py", line 178, in anonymous
+    r = self.http.post("/api/auth/anonymous", json={"device_id": self.device})
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_client.py", line 1144, in post
+    return self.request(
+           ~~~~~~~~~~~~^
+        "POST",
+        ^^^^^^^
+    ...<11 lines>...
+        extensions=extensions,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_transports\default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\fraim\AppData\Local\Programs\Python\Python313\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\fraim\Projects\aspire\backend\.venv\Lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [WinError 10061] No connection could be made because the target machine actively refused it

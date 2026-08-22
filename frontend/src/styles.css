@@ -7481,15 +7481,21 @@ body {
 	background: var(--wash-14);
 }
 
+/* 40px, not 34: at 34 the grid fitted eight columns on a phone and every key
+   came out 38x40, under the 44px floor — on the one card in the app whose whole
+   surface is 26 adjacent targets, played by the youngest readers. Seven columns
+   of 45px costs one extra row. The overlapping `::after` extender the rest of
+   the app uses is wrong here: these sit 6px apart, so an extended hit area
+   would steal its neighbour's taps. */
 .hangman__keys {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
 	gap: 6px;
 	margin-bottom: 16px;
 }
 
 .hangman__key {
-	min-height: 40px;
+	min-height: 44px;
 	border: 1px solid var(--control-line);
 	border-radius: 9px;
 	background: #fff;
