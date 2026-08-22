@@ -8042,10 +8042,10 @@ a.source__site--link:hover .source__out {
 }
 
 .guide-selector--compact {
-	--guide-avatar: 78px;
+	--guide-avatar: 66px;
 	--guide-gap: 14px;
 	border-radius: 24px;
-	padding: 16px 24px 18px;
+	padding: 14px 24px 16px;
 }
 
 .guide-selector__heading {
@@ -8063,9 +8063,9 @@ a.source__site--link:hover .source__out {
 	display: inline-flex;
 }
 .guide-selector--compact .guide-selector__heading {
-	font-size: 17px;
-	gap: 10px;
-	margin: 0 0 12px;
+	font-size: 16px;
+	gap: 9px;
+	margin: 0 0 11px;
 }
 .guide-selector--compact .guide-selector__heading-icon {
 	font-size: 19px;
@@ -8179,8 +8179,8 @@ a.source__site--link:hover .source__out {
 	gap: 8px;
 }
 .guide-selector--compact .guide-card__name {
-	margin-top: 8px;
-	font-size: 14px;
+	margin-top: 7px;
+	font-size: 13px;
 	gap: 5px;
 }
 .guide-card__check {
