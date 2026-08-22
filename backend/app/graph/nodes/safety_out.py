@@ -89,6 +89,49 @@ def cap_for(band: str, agent: str | None, *, story: bool = False) -> int | None:
         table = WORD_CAPS
     return table.get(band)
 
+async def _pathway_step(state: Any) -> Any:
+    """The next-step suggestion for this turn, or None. Never raises.
+
+    Everything here is best-effort by design: this runs after the answer exists
+    and cannot change it, so a slow store, a missing curriculum file or a
+    learner with no rows must all resolve to "no suggestion" rather than to a
+    turn that fails on its way out. The reader has an answer either way.
+    """
+    from app.config import get_settings
+
+    if not get_settings().pathway_suggestions_enabled:
+        return None
+
+    learner = state.get("user_id")
+    if not learner:
+        # Nothing recorded for an anonymous reader, so every rung that reads
+        # mastery is silent and rung 5 would invite them into a lesson their
+        # session cannot remember.
+        return None
+
+    try:
+        from app.curriculum.schema import load_all
+        from app.learning.mastery import MasteryStore
+        from app.pathway.suggest import next_step
+
+        curriculum = load_all()
+        band = state.get("age_band") or "9-12"
+        rows = await MasteryStore().all_for(learner)
+        return next_step(
+            state,
+            mastery=rows,
+            lessons=curriculum.lessons_for_band(band),
+            concept_names={
+                concept_id: concept.name
+                for concept_id, concept in curriculum.concepts.items()
+            },
+        )
+    except Exception:
+        logger.warning("pathway suggestion skipped", exc_info=True)
+        return None
+
+
+
 #: The band at and above which links may be shown, and the personas that never see them regardless.
 # `kaleb` joins `stella` because he IS the older half of what `stella` used to
 # be. Leaving him out would have handed a nine-year-old the link strip that the
@@ -535,6 +578,21 @@ def make_safety_out(reprompt: Reprompt | None = None):
             # An offer the reader answered with something else has expired. A
             # "yes" two turns later belongs to whatever was asked in between.
             update["offered_video"] = None
+        else:
+            # The pathway suggestion, and only when no video was offered: two
+            # offers on one turn is the assistant talking over itself, and the
+            # video is the more concrete of the two.
+            #
+            # OFF by default. It adds one mastery read to the reply path and
+            # puts a chip in front of a reader, and neither is a change to make
+            # quietly. `next_step` itself is pure and separately tested.
+            step = await _pathway_step(state)
+            if step is not None:
+                update["suggested_step"] = step.lesson_id or step.concept_id
+                update["quick_replies"] = [step.chip, *replies][:3]
+                logger.info(
+                    "pathway rung %s: %s (%s)", step.rung.value, step.chip, step.why
+                )
 
         if text != original:
             # Same message id, so `add_messages` replaces the message instead of appending one.
