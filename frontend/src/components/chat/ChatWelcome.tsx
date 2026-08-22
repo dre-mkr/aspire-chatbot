@@ -169,7 +169,7 @@ export function ChatWelcome({
 	priorConversations = 0,
 	onAsk,
 	onOpenVideos,
-	showCards = true,
+	showOnboarding = true,
 }: {
 	persona: string | null | undefined;
 	/** How many conversations this reader already has. Zero on a first visit. */
@@ -179,22 +179,28 @@ export function ChatWelcome({
 	onAsk: (question: string) => void;
 	onOpenVideos?: () => void;
 	/**
-	 * Whether to offer the four chips.
+	 * Whether the onboarding content is still doing its job.
 	 *
-	 * The HOOK and the CHIPS have different lifetimes, which is the thing this
-	 * separates. The hook is the guide saying hello -- beats one to three of the
-	 * spine, RECOGNISE / ORIENT / INVITE -- and it belongs at the top of the
-	 * conversation whether or not the reader arrived with something to say.
-	 * The chips are an invitation to start, so once the reader has started they
-	 * are furniture in the way of the answer.
+	 * THE PAGE DOES NOT CHANGE STATE. There is one desktop conversation layout,
+	 * and what happens on the reader's first action is progressive content
+	 * COLLAPSE inside it -- not a switch to a second layout.
 	 *
-	 * Before this split the whole block was gated on `messages.length === 0`,
-	 * and a reader who chose Imani and typed "hi" on the landing never saw her
-	 * greet them at all: staging the turn made the thread non-empty before the
-	 * chat first painted. Only the guide cards, which stage nothing, ever showed
-	 * a hook.
+	 * What stays, always: the avatar, the title and the tagline. That is the
+	 * guide's identity and the product's promise, and neither stops being true
+	 * once a question has been asked.
+	 *
+	 * What goes, once the reader has started: the supporting paragraph and the
+	 * four chips. Both exist to answer "what is this and what do I do here",
+	 * and the reader who has just asked something has answered that themselves.
+	 * The freed space goes to the transcript, which is what they actually came
+	 * to read.
+	 *
+	 * Gating both on one flag rather than two, because they collapse together
+	 * and always will: they are the same beat of the spine (ORIENT and INVITE),
+	 * and a version where the paragraph lingered without the chips would read
+	 * as the page having failed to finish tidying up.
 	 */
-	showCards?: boolean;
+	showOnboarding?: boolean;
 }) {
 	const cards = cardsFor(persona);
 	const welcome = hookFor(persona, language, priorConversations);
@@ -239,11 +245,16 @@ export function ChatWelcome({
 				 * never does. */}
 				{/* No hardcoded greeting in front of this any more. The headline
 				 * does the welcoming now, in each guide's own words, and prefixing
-				 * "Welcome to ASPIRE AI." to Imani's line said it twice. */}
-				<p className="welcome-copy">{welcome.line}</p>
+				 * "Welcome to ASPIRE AI." to Imani's line said it twice.
+				 *
+				 * Collapses with the chips: it orients a reader who has not started
+				 * and repeats itself to one who has. */}
+				{showOnboarding ? (
+					<p className="welcome-copy">{welcome.line}</p>
+				) : null}
 			</section>
 
-			{showCards ? (
+			{showOnboarding ? (
 				<ul className="welcome__cards">
 					{cards.map((card) => (
 						<li key={card.title}>

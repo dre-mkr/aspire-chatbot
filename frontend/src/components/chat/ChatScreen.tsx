@@ -856,7 +856,7 @@ export function ChatScreen() {
 									    spine and belongs at the top of the conversation
 									    either way; it scrolls off as the conversation grows. */}
 									<ChatWelcome
-										showCards={
+										showOnboarding={
 											messages.length === 0 && !streaming && !isThinking
 										}
 										persona={persona}

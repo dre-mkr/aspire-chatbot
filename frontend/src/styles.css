@@ -8166,31 +8166,27 @@ a.source__site--link:hover .source__out {
  */
 .app[data-phase="chat"] .workspace {
 	background:
-		/* The reading column still gets a lift, but a MUCH lighter one. At 0.92
-		   the radial was not protecting the text, it was replacing the picture
-		   with white and leaving the mountain as a strip on the right. The scene
-		   is the product's whole atmosphere and it should carry the full width. */
-		radial-gradient(
-			circle at 26% 44%,
-			rgb(255 255 255 / 0.5) 0%,
-			rgb(255 255 255 / 0.4) 26%,
-			rgb(255 255 255 / 0.22) 52%,
-			rgb(255 255 255 / 0.06) 74%,
-			transparent 88%
-		),
+		/* ONE WASH, not a multi-zone fade system. The scene already carries a
+		   lot of white of its own, so a second shaped veil on top was solving a
+		   problem the picture did not have -- the radial that used to sit here
+		   peaked at 0.92 and replaced the reading column with white.
+		   
+		   Weakest at the top, where the avatar, title and tagline live, so they
+		   keep their colour and contrast against the scene. Strongest at the
+		   bottom, through the reading area and behind the composer, where prose
+		   needs a settled surface. No horizontal component at all: the mountain
+		   and its glowing path are on the right and stay legible. */
 		linear-gradient(
 			to bottom,
-			rgb(255 255 255 / 0.02) 0%,
-			rgb(255 255 255 / 0.08) 38%,
-			rgb(255 255 255 / 0.22) 72%,
-			rgb(255 255 255 / 0.34) 100%
+			rgb(255 255 255 / 0.08) 0%,
+			rgb(255 255 255 / 0.18) 28%,
+			rgb(255 255 255 / 0.34) 58%,
+			rgb(255 255 255 / 0.5) 100%
 		),
 		image-set(
 			url("/images/hero-bg.webp") type("image/webp"),
 			url("/images/hero-bg.jpg") type("image/jpeg")
 		)
-		/* `cover` anchored right-top left the left third on the image's own pale
-		   sky. Centre it so the scene actually spans the column. */
 		center center / cover no-repeat;
 }
 
