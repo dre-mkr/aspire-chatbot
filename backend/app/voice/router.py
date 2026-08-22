@@ -39,6 +39,35 @@ router = APIRouter(prefix="/api/voice", tags=["voice"])
 # What the client shows instead of a dead button when we cannot serve audio.
 _FALLBACK = {"error": "voice_unavailable", "fallback": "browser"}
 
+#: Distinct from `_FALLBACK` so an operator reading logs can tell an upstream
+#: outage from a casting gap. The client's rule: an English-trained voice NEVER
+#: speaks Spanish or French to a reader. No flag overrides this -- the override
+#: is casting the voice, which is `VOICE_{PERSONA}_{ES|FR}` and a restart.
+_UNCAST = {"error": "voice_uncast", "fallback": "browser"}
+
+
+def _require_native(profile) -> None:
+    """Native voice or no voice. Text is never affected.
+
+    `resolve_profile` hands back whatever the registry could resolve, and for an
+    ES/FR pair with no per-language id that is the persona's base voice: an
+    English-trained model pushed through French text with the wrong accent and
+    prosody. A French-speaking child hears it immediately, and it says, in the
+    one channel built for the readers who cannot yet read well, that this
+    product was not made for them. Silence degrades better: the player falls
+    back exactly as it does when the upstream is down.
+    """
+    if not profile.native:
+        logger.warning(
+            "voice refused: %s/%s resolves only to an English-trained base "
+            "voice. Cast VOICE_%s_%s to turn this pair's audio on.",
+            profile.persona.value,
+            profile.language.value,
+            profile.persona.value.upper(),
+            profile.language.value.upper(),
+        )
+        raise HTTPException(status_code=503, detail=_UNCAST)
+
 
 async def require_voice_principal(
     principal: Principal | None = Depends(chat_principal),
@@ -234,6 +263,7 @@ async def _speak(request: Request, body: SpeakRequest, principal: Principal) -> 
         raise HTTPException(status_code=400, detail="Nothing to say once the text was cleaned.")
 
     profile = resolve_profile(body.persona, body.language)
+    _require_native(profile)
     # Figure-heavy lines go to the higher-quality model, which reads numbers better.
     model_id = (
         settings.tts_model_quality if has_many_numbers(body.text) else profile.model_id
@@ -313,6 +343,7 @@ async def speak_stream(
             )
 
         profile = resolve_profile(body.persona, body.language)
+        _require_native(profile)
         model_id = (
             settings.tts_model_quality
             if has_many_numbers(body.text)

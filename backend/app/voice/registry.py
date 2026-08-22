@@ -20,6 +20,21 @@ class VoiceProfile:
     voice_id: str
     model_id: str
     settings: ElevenVoiceSettings
+    #: Whether this voice was cast FOR this language.
+    #:
+    #: True when the id came from a per-language variable -- `VOICE_STELLA_ES`
+    #: -- at any step of the resolution chain, understudy included, and always
+    #: for English, whose base ids ARE the English casting.
+    #:
+    #: False means the pair resolved through a base id: an English-trained
+    #: voice that ElevenLabs will happily push through Spanish or French text
+    #: with the wrong accent and the wrong prosody. A French-speaking child
+    #: hears it immediately. The client's rule is that this NEVER reaches a
+    #: reader, so the speech endpoints refuse a non-native profile and the
+    #: player falls back exactly as it does when voice is down -- text intact,
+    #: no audio, rather than audio that tells the reader this product was not
+    #: built for them.
+    native: bool = True
 
 
 #: The ceiling on `style`, which ElevenLabs documents as style EXAGGERATION.
@@ -114,13 +129,21 @@ class VoiceRegistryError(RuntimeError):
 
 def _resolve_voice_id(
     settings: VoiceSettings, persona: Persona, language: Language
-) -> str | None:
-    """Per-language override first, then the persona's base voice, then its understudy."""
+) -> tuple[str, bool] | None:
+    """Per-language override first, then the persona's base voice, then its
+    understudy. Returns `(voice_id, native)` -- see `VoiceProfile.native`.
+
+    An understudy's PER-LANGUAGE id keeps `native=True`: if `VOICE_STELLA_ES`
+    is set and Kaleb understudies Stella, his Spanish is a Spanish-cast voice
+    -- the wrong character, which is the tradeoff every understudy already is,
+    but never the wrong language.
+    """
     specific = getattr(settings, f"voice_{persona.value}_{language.value}", None)
+    if specific:
+        return specific, True
     base = getattr(settings, f"voice_{persona.value}", None)
-    resolved = (specific or base) or None
-    if resolved is not None:
-        return resolved
+    if base:
+        return base, language is Language.EN
 
     understudy = _VOICE_UNDERSTUDY.get(persona)
     if understudy is None:
@@ -140,15 +163,17 @@ def build_registry(
     registry: dict[tuple[Persona, Language], VoiceProfile] = {}
     for persona in Persona:
         for language in Language:
-            voice_id = _resolve_voice_id(settings, persona, language)
-            if voice_id is None:
+            resolved = _resolve_voice_id(settings, persona, language)
+            if resolved is None:
                 continue
+            voice_id, native = resolved
             registry[(persona, language)] = VoiceProfile(
                 persona=persona,
                 language=language,
                 voice_id=voice_id,
                 model_id=chosen_model,
                 settings=ElevenVoiceSettings(**_delivery_for(settings, persona)),
+                native=native,
             )
     return registry
 
@@ -186,6 +211,23 @@ def validate_registry(settings: VoiceSettings | None = None) -> None:
 @lru_cache(maxsize=1)
 def get_registry() -> dict[tuple[Persona, Language], VoiceProfile]:
     return build_registry()
+
+
+def uncast_pairs(
+    settings: VoiceSettings | None = None,
+) -> list[tuple[Persona, Language]]:
+    """The persona x language pairs that resolve but are not natively cast.
+
+    The deployment audit, as code: everything this returns is a pair that will
+    boot cleanly and then be REFUSED audio at request time, because the only id
+    available for it is an English-trained base voice. Setting
+    `VOICE_{PERSONA}_{LANG}` removes it from this list and turns the sound on.
+    """
+    registry = build_registry(settings or get_voice_settings())
+    return sorted(
+        (key for key, profile in registry.items() if not profile.native),
+        key=lambda key: (key[0].value, key[1].value),
+    )
 
 
 def resolve_profile(persona: Persona, language: Language) -> VoiceProfile:
