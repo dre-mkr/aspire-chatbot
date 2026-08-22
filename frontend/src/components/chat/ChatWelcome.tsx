@@ -169,86 +169,158 @@ export function cardsFor(
 }
 
 /**
- * How the reader is addressed on the empty thread.
+ * The headline and the line under it, per reader.
  *
- * "future builder" is the client's line and it is written for a child. Skye,
- * Kaleb and Zion get it. Imani is a parent with four minutes and Azuri is a
- * teacher deciding whether to use this with a class -- calling either of them a
- * future builder reads as a product that has not noticed who is talking, which
- * is the exact failure the six voices exist to avoid.
+ * "Hi there, future builder!" is the client's line and it is written for a
+ * child -- Skye, Kaleb, Zion and Guest get it. Imani and Azuri do NOT: a parent
+ * with four minutes and a teacher deciding whether to use this with a class are
+ * not future builders, and calling them one reads as a product that has not
+ * noticed who is talking.
+ *
+ * They keep the word rather than the label, which is what holds the family
+ * together: a parent is building their child's future, a teacher is building
+ * the builders. Same idea, addressed to the person actually reading.
  */
-function greetingFor(
+function welcomeFor(
 	persona: string | null | undefined,
-	band: string | null | undefined,
-): { line: string; emoji: string } {
-	const key = (persona ?? "").trim().toLowerCase();
-	if (key === "aurora") {
-		return { line: "Hi there — glad you came.", emoji: "\u{1F44B}" };
+	/**
+	 * How many conversations this reader already has.
+	 *
+	 * A returning reader has been greeted before, and greeting them identically
+	 * every time is the tell that nobody is home. It changes the OPENING only --
+	 * the tagline, the placement and the orb are the product's identity and do
+	 * not move.
+	 */
+	priorConversations = 0,
+): {
+	title: string;
+	emoji: string;
+	line: string;
+} {
+	const returning = priorConversations > 0;
+	switch ((persona ?? "").trim().toLowerCase()) {
+		case "aurora":
+			return returning
+				? {
+						title: "Welcome back.",
+						emoji: "\u{1F331}",
+						line: "Where would you like to pick up?",
+					}
+				: {
+						title: "Hi there. You\u2019re building their future.",
+						emoji: "\u{1F331}",
+						line: "What can I help you work through today?",
+					};
+		case "nova":
+			return returning
+				? {
+						title: "Welcome back.",
+						emoji: "\u{1F4DA}",
+						line: "What would be useful for you today?",
+					}
+				: {
+						title: "Hi there. You\u2019re building the builders.",
+						emoji: "\u{1F4DA}",
+						line: "What would be useful for you today?",
+					};
+		case "stella":
+			return returning
+				? {
+						title: "Welcome back, builder!",
+						emoji: "\u2728",
+						line: "Let\u2019s find out something new.",
+					}
+				: {
+						title: "Hi there, future builder!",
+						emoji: "\u2728",
+						line: "Let\u2019s discover something together.",
+					};
+		case "kaleb":
+			return returning
+				? {
+						title: "Welcome back, builder!",
+						emoji: "\u2728",
+						line: "What are we working out this time?",
+					}
+				: {
+						title: "Hi there, future builder!",
+						emoji: "\u2728",
+						line: "Ready to figure something out?",
+					};
+		case "orion":
+			return returning
+				? {
+						title: "Welcome back, builder!",
+						emoji: "\u2728",
+						line: "What do you want to get into today?",
+					}
+				: {
+						title: "Hi there, future builder!",
+						emoji: "\u2728",
+						line: "What do you want to explore today?",
+					};
+		default:
+			// Guest, and anyone whose persona has not been set.
+			return returning
+				? {
+						title: "Welcome back, builder!",
+						emoji: "\u2728",
+						line: "What would you like to explore or learn today?",
+					}
+				: {
+						title: "Hi there, future builder!",
+						emoji: "\u2728",
+						line: "What would you like to explore or learn today?",
+					};
 	}
-	if (key === "nova") {
-		return { line: "Hi there — have a look around.", emoji: "\u{1F44B}" };
-	}
-	// stella, kaleb, orion and guest: the child and teen voices, and the one
-	// that has not been told who is reading.
-	void band;
-	return { line: "Hi there, future builder!", emoji: "\u{1F680}" };
 }
 
 export function ChatWelcome({
 	persona,
-	ageBand,
+	priorConversations = 0,
 	onAsk,
 	onOpenVideos,
 }: {
 	persona: string | null | undefined;
-	ageBand?: string | null;
+	/** How many conversations this reader already has. Zero on a first visit. */
+	priorConversations?: number;
 	onAsk: (question: string) => void;
 	onOpenVideos?: () => void;
 }) {
 	const cards = cardsFor(persona);
-	const greeting = greetingFor(persona, ageBand);
+	const welcome = welcomeFor(persona, priorConversations);
 
 	return (
 		<div className="welcome">
-			<div className="welcome__hero">
-				{/* THE MARK, NOT THE GUIDE'S FACE.
+			<section className="welcome-zone">
+				{/* THE ORB IS ASPIRE ITSELF, and the guide's face replaces it once one
+				 * is chosen -- spec section 17, and the same `.orb` element does both:
+				 * `--orb-face` carries the guide's portrait, and Guest has none, so
+				 * Guest keeps the purple sphere with its gold star. One element, no
+				 * branch, and the two are never shown together.
 				 *
-				 * The guide's face is already on every answer below and on the
-				 * composer chip. Repeating it a third time in the same viewport
-				 * says nothing new -- and this block is the moment the reader
-				 * meets ASPIRE, not the moment they meet Skye. The A does that
-				 * job; the guide introduces themselves in their own first reply.
-				 */}
-				<img
-					className="welcome__mark"
-					src="/brand/aspire-mark.png"
-					alt=""
-					width={40}
-					height={40}
-					aria-hidden="true"
-				/>
-				<div>
-					{/* Set in the display face the landing hero uses, because this is
-					 * the same sentence one surface later -- a reader who arrives
-					 * here from "Where will your money take you!" should recognise
-					 * the voice.
-					 *
-					 * The greeting is BAND-AWARE. "future builder" is written for a
-					 * child; it would read as faintly ridiculous to a teacher
-					 * evaluating the material or a parent with four minutes, so the
-					 * adult voices get an address of their own. */}
-					<h2 className="welcome__greeting">
-						{greeting.line} <span aria-hidden="true">{greeting.emoji}</span>
-					</h2>
-					<p className="welcome__tagline">
-						Ask. Play. Explore. Build your money future.
-					</p>
-					<p className="welcome__sub">
-						Welcome to ASPIRE AI. What would you like to <em>explore</em> or{" "}
-						<em>learn</em> today?
-					</p>
-				</div>
-			</div>
+				 * Above the headline rather than beside it, so it reads as a guide
+				 * hovering over the introduction rather than a bullet point. */}
+				<div className="welcome-zone__orb orb" aria-hidden="true" />
+
+				<h1 className="welcome-title">
+					{welcome.title} <span aria-hidden="true">{welcome.emoji}</span>
+				</h1>
+
+				{/* Three words carry brand colour and the rest does not. Colouring
+				 * every word turns a tagline into a rainbow. */}
+				<p className="welcome-tagline">
+					<span className="welcome-tagline__ask">Ask.</span>{" "}
+					<span className="welcome-tagline__play">Play.</span>{" "}
+					<span className="welcome-tagline__explore">Explore.</span> Build your
+					money future.
+				</p>
+
+				{/* Interface copy, not a chat message -- so no bubble and no orb
+				 * beside it. The second sentence changes per guide; the placement
+				 * never does. */}
+				<p className="welcome-copy">Welcome to ASPIRE AI. {welcome.line}</p>
+			</section>
 
 			<ul className="welcome__cards">
 				{cards.map((card) => (

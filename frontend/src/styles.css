@@ -8682,56 +8682,112 @@ a.source__site--link:hover .source__out {
 	}
 }
 
-/* ── The empty thread's welcome ───────────────────────────────────────────
+
+/* ── The empty-state welcome ──────────────────────────────────────────────
  *
- * This is the first thing in the chat now that choosing a guide no longer
- * stages a question. It is the same sentence the landing hero opens with, one
- * surface later, so it is set in the same display face -- a reader arriving
- * from "Where will your money take you!" should recognise the voice.
+ * The identity of the conversation before anybody has said anything: guide on
+ * the left, the mountain and its rising path on the right. Left is help; right
+ * is where the reader is going. The composition only works if the copy stays
+ * out of the artwork, so the zone is width-capped rather than centred.
+ *
+ * Not a card. A white rectangle behind this would flatten the scene it is
+ * meant to sit inside.
  */
-.welcome__mark {
-	width: 40px;
-	height: 40px;
-	flex: none;
-	border-radius: 12px;
-	object-fit: cover;
-	box-shadow: 0 4px 12px rgb(72 41 119 / 0.22);
+.welcome-zone {
+	position: relative;
+	z-index: 2;
+	width: min(620px, 48vw);
+	padding-top: clamp(24px, 6vh, 64px);
+	padding-bottom: 8px;
 }
 
-.welcome__greeting {
-	font-family: var(--font-display);
-	font-weight: 500;
-	font-size: clamp(1.65rem, 3.4vw, 2.4rem);
-	line-height: 1.08;
-	letter-spacing: -0.015em;
-	color: var(--ink);
+/* Above the headline, not beside it: a guide hovering over the introduction
+   rather than a bullet point. The same `.orb` the transcript uses, so a chosen
+   guide shows their own face and Guest keeps the sphere and its star. */
+.welcome-zone__orb {
+	--orb-size: 112px;
+	margin: 0 0 34px 4px;
+	filter: drop-shadow(0 8px 20px rgb(84 52 145 / 0.18))
+		drop-shadow(0 0 16px rgb(194 47 153 / 0.22));
+	animation: orbFloat 4.5s ease-in-out infinite;
+}
+
+@keyframes orbFloat {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-5px);
+	}
+}
+
+.welcome-title {
+	font-size: clamp(34px, 4vw, 62px);
+	line-height: 1.04;
+	font-weight: 750;
+	letter-spacing: -0.035em;
+	color: #2e1760;
+	max-width: 640px;
 	margin: 0;
+	text-wrap: balance;
 }
 
-/* Smaller than the greeting and quieter than the question under it: this line
-   is the promise, not the prompt. */
-.welcome__tagline {
-	font-size: 0.82rem;
-	font-weight: 600;
-	letter-spacing: 0.01em;
-	color: var(--magenta);
-	margin: 0.3rem 0 0;
+.welcome-tagline {
+	margin: 22px 0 0;
+	font-size: clamp(17px, 1.6vw, 24px);
+	line-height: 1.4;
+	font-weight: 500;
+	color: #342c4d;
+}
+.welcome-tagline__ask {
+	color: #c22f99;
+}
+.welcome-tagline__play {
+	color: #3b82f6;
+}
+.welcome-tagline__explore {
+	color: #f43f5e;
 }
 
-.welcome__sub {
-	margin: 0.55rem 0 0;
+/* Interface copy, not a chat message: no bubble, no avatar, quieter than the
+   tagline above it. */
+.welcome-copy {
+	margin: 30px 0 0;
+	max-width: 540px;
+	font-size: 19px;
+	line-height: 1.55;
+	font-weight: 400;
+	color: #696277;
 }
 
-/* The two verbs the reader is actually being offered. Italic rather than bold
-   so they read as emphasis in a sentence, not as links. */
-.welcome__sub em {
-	font-style: italic;
-	color: var(--plum);
-	font-weight: 600;
+/* Below this the side-by-side reading stops working: the zone takes the width
+   it needs and the artwork sits behind it rather than beside it. */
+@media (max-width: 1100px) {
+	.welcome-zone {
+		width: 56%;
+	}
+	.welcome-zone__orb {
+		--orb-size: 92px;
+	}
 }
 
-@media (max-width: 640px) {
-	.welcome__greeting {
-		font-size: 1.5rem;
+@media (max-width: 860px) {
+	.welcome-zone {
+		width: auto;
+		padding-top: 20px;
+	}
+	.welcome-zone__orb {
+		--orb-size: 78px;
+		margin-bottom: 22px;
+	}
+	.welcome-copy {
+		font-size: 17px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.welcome-zone__orb {
+		animation: none;
 	}
 }

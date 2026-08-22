@@ -22,6 +22,7 @@ import { type GameState, startGame } from "#/lib/aspire/games";
 import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
 import {
 	displayTitle,
+	loadConversations,
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
@@ -98,6 +99,21 @@ export function ChatScreen() {
 	 * correct there.
 	 */
 	const guideName = displayName(persona, band ?? identity?.ageBand);
+
+	/**
+	 * How many conversations this reader already has, for the welcome's opening
+	 * line. Read once on mount rather than subscribed: it decides between "Hi
+	 * there" and "Welcome back", and a greeting that changed mid-session because
+	 * a conversation was saved behind it would be worse than either.
+	 *
+	 * localStorage is unavailable during SSR, hence the effect rather than an
+	 * initialiser -- the first paint says "Hi there" and corrects itself, which
+	 * is the right way round for a reader who has never been here.
+	 */
+	const [priorConversations, setPriorConversations] = useState(0);
+	useEffect(() => {
+		setPriorConversations(loadConversations().length);
+	}, []);
 
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
@@ -797,7 +813,7 @@ export function ChatScreen() {
 									{messages.length === 0 && !streaming && !isThinking ? (
 										<ChatWelcome
 											persona={persona}
-											ageBand={band ?? identity?.ageBand}
+											priorConversations={priorConversations}
 											onAsk={ask}
 										/>
 									) : null}
