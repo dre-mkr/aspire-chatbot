@@ -26,14 +26,22 @@ import {
 	groupByRecency,
 	type StoredConversation,
 } from "#/lib/aspire/history";
+import { type AgeBand, guideFor, type PersonaId } from "#/lib/aspire/personas";
 import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 import { HelpLauncher } from "./HelpPanel";
+import { PersonaPicker } from "./PersonaPicker";
 import { VideoLauncher } from "./VideoPanel";
 import { ViewLauncher } from "./ViewLauncher";
 
 interface RailProps {
+	/** The guide answering, so the foot can say who it is. */
+	persona?: PersonaId | null;
+	/** Which voice of that guide, where the key carries more than one. */
+	band?: AgeBand | null;
+	/** Switching guide from the rail, the same handler the composer uses. */
+	onPersonaChange?: (next: PersonaId | null, band?: AgeBand) => void;
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
 	collapsed: boolean;
 	/** Off-screen entirely: zero width on the landing screen, or a closed drawer. */
@@ -73,9 +81,14 @@ export function Rail({
 	onRegenerateTitle,
 	onDeleteConversation,
 	onSeed,
+	persona,
+	band,
+	onPersonaChange,
 }: RailProps) {
 	/** The list, subscribed here rather than passed in. */
 	const { session } = useSession();
+	/** The card is for people with an account: it is theirs to change and keep. */
+	const signedIn = session?.accountType === "registered";
 	const conversations = useQuery(conversationsQuery(session?.userId ?? "anon"));
 	/** Shown before the list folds. Five is what fits without crowding the nav. */
 	const HISTORY_SHOWN = 5;
@@ -367,6 +380,12 @@ export function Rail({
 
 			{/* One block, two states: an invitation signed out, the avatar and name signed in. */}
 			<div className="rail__foot">
+				{/* Signed in only, as asked. A signed-out reader gets the sign-in
+				    prompt below and nothing above it; two blocks in a foot that is
+				    already the narrowest part of the app is one too many. */}
+				{signedIn && persona ? (
+					<GuideCard persona={persona} band={band} onChange={onPersonaChange} />
+				) : null}
 				<AccountControl variant="rail" />
 			</div>
 		</aside>
@@ -628,6 +647,51 @@ function HistoryRow({
 						</>
 					)}
 				</div>
+			) : null}
+		</div>
+	);
+}
+
+/**
+ * The guide at the foot of the rail: face, name, audience, and a way to switch.
+ *
+ * AN EARLIER VERSION OF THIS BROKE THE RAIL, and the reason is worth keeping:
+ * `.rail__foot` is a flex ROW. Adding the card as a sibling of the account
+ * control put the two side by side, the card was squeezed to 22px, and "Skye"
+ * wrapped one letter per line straight through the sign-in text underneath.
+ *
+ * The fix is in the stylesheet -- the foot stacks when it holds a card -- which
+ * is why this component looks unremarkable. Nothing here needed to change.
+ */
+function GuideCard({
+	persona,
+	band,
+	onChange,
+}: {
+	persona: PersonaId | null;
+	band?: AgeBand | null;
+	onChange?: (next: PersonaId | null, band?: AgeBand) => void;
+}) {
+	const guide = guideFor(persona, band ?? undefined);
+	if (!guide) return null;
+
+	return (
+		<div className="rail-guide">
+			<span className="rail-guide__face" aria-hidden="true" />
+			<span className="rail-guide__text">
+				<span className="rail-guide__name">
+					{guide.name}
+					<span className="rail-guide__audience">
+						{" "}
+						&middot; {guide.audience}
+					</span>
+				</span>
+				<span className="rail-guide__note">Your ASPIRE guide</span>
+			</span>
+			{onChange ? (
+				<span className="rail-guide__picker">
+					<PersonaPicker persona={persona} band={band} onChange={onChange} />
+				</span>
 			) : null}
 		</div>
 	);

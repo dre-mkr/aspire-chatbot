@@ -1368,6 +1368,7 @@ body {
 		url("/guides/skye.png") type("image/png")
 	);
 	--guide-ring: #c22f99;
+	--orb-depth: 0 0 0 0 transparent;
 }
 .app[data-persona="kaleb"],
 /* A session minted before the split still says `stella` at 9-12. Same seam as
@@ -1378,6 +1379,7 @@ body {
 		url("/guides/kaleb.png") type("image/png")
 	);
 	--guide-ring: #3b82f6;
+	--orb-depth: 0 0 0 0 transparent;
 }
 .app[data-persona="orion"] {
 	--orb-face: image-set(
@@ -1385,6 +1387,7 @@ body {
 		url("/guides/zion.png") type("image/png")
 	);
 	--guide-ring: #f4b000;
+	--orb-depth: 0 0 0 0 transparent;
 }
 .app[data-persona="aurora"] {
 	--orb-face: image-set(
@@ -1392,6 +1395,7 @@ body {
 		url("/guides/imani.png") type("image/png")
 	);
 	--guide-ring: #5c3aae;
+	--orb-depth: 0 0 0 0 transparent;
 }
 .app[data-persona="nova"] {
 	--orb-face: image-set(
@@ -1399,6 +1403,7 @@ body {
 		url("/guides/azuri.png") type("image/png")
 	);
 	--guide-ring: #0dae93;
+	--orb-depth: 0 0 0 0 transparent;
 }
 
 /* Thinking keeps the sphere -- a portrait that pulses is unsettling.
@@ -1421,6 +1426,39 @@ body {
 /* Declared on `.app` rather than on `.orb` so anything inside the app can use
    the guide's face -- the composer chip does. Set on `.orb` it was invisible to
    every element that was not one. */
+
+/* Guest keeps the sphere and gets a star.
+ *
+ * The other five are recognised by a face; Guest has none, because it is the
+ * voice that has not been told who is reading. A bare purple ball beside an
+ * answer reads as an avatar that failed to load, so it carries a mark of its
+ * own instead -- ASPIRE's gold, the same one in the wordmark.
+ *
+ * `::before` rather than an <svg> in the markup: every orb in the app is a bare
+ * `<div className="orb">`, and adding a child to all of them to serve one
+ * persona would put the star in the transcript, the welcome, the voice
+ * indicator and the picker whether it belonged there or not.
+ */
+.app[data-persona="guest"] .orb::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FED141'%3E%3Cpath d='M12 2.6l2.6 6.06 6.57.54-4.99 4.32 1.5 6.42L12 16.6l-5.68 3.34 1.5-6.42-4.99-4.32 6.57-.54L12 2.6z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: center;
+	/* Proportional, so it holds at 20px in the composer and 56px in the welcome. */
+	background-size: 52% 52%;
+	filter: drop-shadow(0 1px 1.5px rgb(53 29 90 / 0.45));
+	pointer-events: none;
+}
+
+/* No star on a turn that failed or one still thinking -- it is the guide's
+   mark, and neither of those states is the guide speaking. */
+.app[data-persona="guest"] .orb--muted::before,
+.app[data-persona="guest"] .orb--thinking::before {
+	content: none;
+}
 
 /* Guest -- answers before it knows who is reading, and looks like it. */
 .app[data-persona="guest"] {
@@ -1464,9 +1502,14 @@ body {
 	   the middle of one takes the chin and loses the eyes. */
 	background-position: center top, center;
 	background-repeat: no-repeat, no-repeat;
+	/* `--orb-depth` is the sphere's own inner shading, and it is the thing that
+	 * was making the guides look washed out: a deep purple inset at 50% over a
+	 * photograph is an overlay, not lighting. It stays for the sphere -- Guest,
+	 * and the moment before a face has loaded -- and every persona with a face
+	 * turns it off. */
 	box-shadow:
 		inset 0 0 0 1.5px var(--guide-ring, transparent),
-		inset 0 -3px 7px rgb(53 29 90 / 0.5),
+		var(--orb-depth, inset 0 -3px 7px rgb(53 29 90 / 0.5)),
 		0 4px 12px rgb(72 41 119 / 0.25);
 	/* The colour is identity, so it should not snap when the reader switches guide. */
 	transition: background 320ms ease;
@@ -2498,7 +2541,9 @@ body {
    only touches what it means to. */
 .orb--muted::after {
 	animation: none;
-	filter: grayscale(0.55) opacity(0.65);
+	/* Enough to read as "this turn did not land", not so much that the guide
+	   stops being recognisable. */
+	filter: grayscale(0.25) opacity(0.88);
 }
 
 /* Nothing to desaturate without a face -- `guest` and the thinking state fall
@@ -8470,4 +8515,114 @@ a.source__site--link:hover .source__out {
 .rail__history-toggle:hover {
 	background: var(--wash-8, rgb(72 41 119 / 0.06));
 	color: var(--ink);
+}
+
+/* ── The guide at the foot of the rail ────────────────────────────────────
+ *
+ * Face, name, audience, and the picker. Signed-in only.
+ *
+ * THE FIRST VERSION BROKE THE RAIL, and the cause was one line above this
+ * block: `.rail__foot` is a flex ROW. The card was added as a sibling of the
+ * account control, so the two sat side by side and the card was squeezed to
+ * 22px -- which is why "Skye" wrapped one letter per line straight through the
+ * sign-in text. It was never about the collapsed state.
+ *
+ * The foot stacks when it holds a guide card, and keeps its row otherwise, so
+ * the signed-out rail is untouched.
+ */
+.rail__foot:has(.rail-guide) {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+}
+
+.rail-guide {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 10px;
+	margin-bottom: 8px;
+	border-radius: 14px;
+	background: rgb(255 255 255 / 0.72);
+	border: 1px solid rgb(72 41 119 / 0.12);
+	/* The card may never be wider than the rail that holds it. Without this it
+	   sizes to its longest label and pushes the picker past the edge. */
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+.rail-guide__face {
+	width: 34px;
+	height: 34px;
+	flex: none;
+	border-radius: 999px;
+	background-image: var(--orb-face, none);
+	background-size: cover;
+	background-position: center top;
+	background-repeat: no-repeat;
+	box-shadow: inset 0 0 0 2px var(--guide-ring, transparent);
+}
+
+.rail-guide__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	line-height: 1.25;
+}
+
+.rail-guide__name {
+	font-size: 13.5px;
+	font-weight: 700;
+	color: var(--ink);
+	line-height: 1.25;
+}
+
+/* SMALLER THAN THE NAME, and smaller again for the two that run long.
+ * "Parents & guardians" and "Teachers & educators" are roughly twice the
+ * length of "Ages 5-8", and at one size the longest label decided the width of
+ * the card -- which is what pushed the picker out of the rail. Sized down and
+ * allowed to wrap, they fit beside the chevron instead of displacing it. */
+.rail-guide__audience {
+	font-size: 11.5px;
+	font-weight: 500;
+	color: rgb(72 41 119 / 0.72);
+}
+.app[data-persona="aurora"] .rail-guide__audience,
+.app[data-persona="nova"] .rail-guide__audience {
+	font-size: 10px;
+	letter-spacing: -0.01em;
+}
+
+.rail-guide__note {
+	font-size: 11px;
+	color: rgb(72 41 119 / 0.66);
+}
+
+/* Only the chevron shows: the trigger's own label would repeat the name
+   printed beside it. */
+.rail-guide__picker {
+	margin-left: auto;
+	flex: none;
+	align-self: center;
+}
+.rail-guide__picker .persona__name,
+.rail-guide__picker .persona__face {
+	display: none;
+}
+.rail-guide__picker .persona__trigger {
+	padding: 4px 5px;
+}
+
+/* Collapsed: the face, centred, and nothing that needs width. */
+.app[data-rail="collapsed"] .rail-guide {
+	justify-content: center;
+	padding: 8px 0;
+	gap: 0;
+	background: transparent;
+	border-color: transparent;
+}
+.app[data-rail="collapsed"] .rail-guide__text,
+.app[data-rail="collapsed"] .rail-guide__picker {
+	display: none;
 }

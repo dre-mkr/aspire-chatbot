@@ -700,6 +700,9 @@ export function ChatScreen() {
 							regenerateTitle(conversation.threadId)
 						}
 						onDeleteConversation={handleDeleteConversation}
+						persona={persona}
+						band={band}
+						onPersonaChange={setPersona}
 						onSeed={ask}
 					/>
 
