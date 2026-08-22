@@ -1362,38 +1362,38 @@ body {
  * `guest` is deliberately absent: it keeps the sphere, because it is the voice
  * that has not been told who is reading and there is no face for that.
  */
-.app[data-persona="stella"] .orb {
+.app[data-persona="stella"] {
 	--orb-face: image-set(
 		url("/guides/skye.webp") type("image/webp"),
 		url("/guides/skye.png") type("image/png")
 	);
 	--guide-ring: #c22f99;
 }
-.app[data-persona="kaleb"] .orb,
+.app[data-persona="kaleb"],
 /* A session minted before the split still says `stella` at 9-12. Same seam as
    the server's `_SPLIT`, so an old token shows Kaleb rather than reverting. */
-.app[data-persona="stella"][data-band="9-12"] .orb {
+.app[data-persona="stella"][data-band="9-12"] {
 	--orb-face: image-set(
 		url("/guides/kaleb.webp") type("image/webp"),
 		url("/guides/kaleb.png") type("image/png")
 	);
 	--guide-ring: #3b82f6;
 }
-.app[data-persona="orion"] .orb {
+.app[data-persona="orion"] {
 	--orb-face: image-set(
 		url("/guides/zion.webp") type("image/webp"),
 		url("/guides/zion.png") type("image/png")
 	);
 	--guide-ring: #f4b000;
 }
-.app[data-persona="aurora"] .orb {
+.app[data-persona="aurora"] {
 	--orb-face: image-set(
 		url("/guides/imani.webp") type("image/webp"),
 		url("/guides/imani.png") type("image/png")
 	);
 	--guide-ring: #5c3aae;
 }
-.app[data-persona="nova"] .orb {
+.app[data-persona="nova"] {
 	--orb-face: image-set(
 		url("/guides/azuri.webp") type("image/webp"),
 		url("/guides/azuri.png") type("image/png")
@@ -1401,17 +1401,26 @@ body {
 	--guide-ring: #0dae93;
 }
 
-/* Thinking and muted keep the sphere: a portrait that pulses is unsettling,
-   and a greyed-out face reads as the person being disabled.
-   Written with `[data-persona]` to match the specificity of the rules above --
-   `.orb--muted` alone loses to `.app[data-persona="nova"] .orb` and the intent
-   would only be holding because `.orb--muted::after` happens to use the
-   `background` shorthand. */
-.app[data-persona] .orb--thinking,
-.app[data-persona] .orb--muted {
+/* Thinking keeps the sphere -- a portrait that pulses is unsettling.
+ *
+ * MUTED KEEPS THE FACE, and an earlier version of this got it wrong. Dropping
+ * it there was reasoned as "a greyed-out face reads as the person being
+ * disabled" -- but `.orb--muted` is the FAILED TURN, and a failed turn is
+ * exactly when a reader most needs to see who they were talking to. Losing the
+ * face there also meant that on any setup where turns cannot complete, the
+ * guide never appeared at all.
+ *
+ * Written with `[data-persona]` to match the specificity of the rules above;
+ * as `.orb--thinking` alone it loses to `.app[data-persona="nova"] .orb`.
+ */
+.app[data-persona] .orb--thinking {
 	--orb-face: none;
 	--guide-ring: transparent;
 }
+
+/* Declared on `.app` rather than on `.orb` so anything inside the app can use
+   the guide's face -- the composer chip does. Set on `.orb` it was invisible to
+   every element that was not one. */
 
 /* Guest -- answers before it knows who is reading, and looks like it. */
 .app[data-persona="guest"] {
@@ -2484,9 +2493,20 @@ body {
 	margin-top: 2px;
 }
 
+/* Desaturated and dimmed rather than blanked: the turn failed, the guide did
+   not stop existing. `background` shorthand would drop the face layers, so this
+   only touches what it means to. */
 .orb--muted::after {
-	background: var(--wash-18);
 	animation: none;
+	filter: grayscale(0.55) opacity(0.65);
+}
+
+/* Nothing to desaturate without a face -- `guest` and the thinking state fall
+   back to the flat wash this rule always applied. */
+.app[data-persona="guest"] .orb--muted::after,
+.orb--thinking.orb--muted::after {
+	background: var(--wash-18);
+	filter: none;
 }
 
 /* The evidence chip and the action row, held in reserve. */
@@ -8380,4 +8400,23 @@ a.source__site--link:hover .source__out {
 	.guide-card:hover {
 		transform: none;
 	}
+}
+
+/* The guide's face in the composer chip.
+ *
+ * Same `--orb-face` cascade as the transcript orb, so it follows `data-persona`
+ * at the root and there is no second list of images to keep in step. Square-ish
+ * and small, so it reads as an identity marker beside the name rather than as a
+ * second avatar competing with the one in the transcript.
+ */
+.persona__face {
+	width: 18px;
+	height: 18px;
+	border-radius: 999px;
+	flex: none;
+	background-image: var(--orb-face, none);
+	background-size: cover;
+	background-position: center top;
+	background-repeat: no-repeat;
+	box-shadow: inset 0 0 0 1.5px var(--guide-ring, transparent);
 }
