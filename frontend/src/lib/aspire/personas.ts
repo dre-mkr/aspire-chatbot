@@ -1,11 +1,6 @@
 /** The five ASPIRE personas, as the client needs to know them. */
 
-export type PersonaId =
-	| "stella"
-	| "orion"
-	| "aurora"
-	| "nova"
-	| "guest";
+export type PersonaId = "stella" | "orion" | "aurora" | "nova" | "guest";
 
 export interface Persona {
 	id: PersonaId;

@@ -14,7 +14,8 @@ export const TITLE_MAX = 48;
  * document title by hand, so both `__root`'s head and the landing page read it
  * from here rather than each keeping their own copy to drift from.
  */
-export const DEFAULT_DOCUMENT_TITLE = "ASPIRE AI · Financial literacy assistant";
+export const DEFAULT_DOCUMENT_TITLE =
+	"ASPIRE AI · Financial literacy assistant";
 
 /** Asks the service to name a conversation. */
 export async function requestTitle(input: {

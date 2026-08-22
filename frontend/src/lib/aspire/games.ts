@@ -6,12 +6,7 @@ const TIMEOUT_MS = 10_000;
 
 // Mirrors `PersonaId`. The engine refuses aurora and nova, which is why the
 // caller must send the real value rather than null: the refusal is the point.
-export type GamePersona =
-	| "stella"
-	| "orion"
-	| "aurora"
-	| "nova"
-	| "guest";
+export type GamePersona = "stella" | "orion" | "aurora" | "nova" | "guest";
 
 /** How an item is put to the player. */
 export type PromptKind = "scramble" | "statement" | "quiz" | "hangman";

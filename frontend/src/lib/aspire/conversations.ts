@@ -164,7 +164,10 @@ function normaliseSource(source: Source | WireSource): Source {
 
 	return {
 		content: text(content) || text(snippet) || title || kbId,
-		metadata: { ...meta, ...(meta.question || !title ? {} : { question: title }) },
+		metadata: {
+			...meta,
+			...(meta.question || !title ? {} : { question: title }),
+		},
 		// Only when the row was actually attributed. An absent `origin` is how
 		// the panel knows there is nothing to name, rather than a name that is
 		// the empty string. `domain` counts: a source can arrive with a host and
