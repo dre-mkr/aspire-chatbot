@@ -123,6 +123,15 @@ class VoiceSettings(BaseSettings):
     voice_stella_style: float | None = None
     voice_stella_speed: float | None = None
 
+    # Kaleb's delivery is set in `registry._DELIVERY` like everyone else's, but
+    # without these he was the one persona whose pace could not be tuned from the
+    # environment -- so a Spanish or French cast that needed him a touch slower
+    # would have required a code change and a deploy.
+    voice_kaleb_stability: float | None = None
+    voice_kaleb_similarity_boost: float | None = None
+    voice_kaleb_style: float | None = None
+    voice_kaleb_speed: float | None = None
+
     voice_orion_stability: float | None = None
     voice_orion_similarity_boost: float | None = None
     voice_orion_style: float | None = None
