@@ -4,4 +4,11 @@
 !.claude/launch.json
 
 # Checkpoints and deliverables of `scripts/seed_concepts.py` -- all regenerable.
-learning/
+# Anchored to the repo root, and the slash at the front is load-bearing: the
+# unanchored `learning/` matched ANY directory of that name at any depth, which
+# includes `backend/app/learning/` and `backend/tests/learning/`. Files already
+# tracked there survived, but every NEW file was silently swallowed -- a test
+# written for app/learning/health.py sat on disk, ran green locally, and never
+# entered a commit. `git add -A` reported nothing, because ignored is not the
+# same as unstaged.
+/learning/
