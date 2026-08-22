@@ -9,6 +9,37 @@ import pytest
 
 os.environ.setdefault("SESSION_SECRET", "test-only-secret-not-for-production-32b+")
 
+
+#: For suites that cannot run without Postgres, because starting the app needs it.
+#:
+#: `app/main.py` refuses to boot without a corpus -- deliberately, and that is the
+#: right call for a service that answers children's questions about money. But it
+#: means every `TestClient(app)` fixture dies at lifespan on a machine with no
+#: database, and pytest reports that as an ERROR rather than a skip.
+#:
+#: Which turns a correct precondition into a red build. `deploy.yml`'s `verify`
+#: job is deliberately hermetic -- "no database, no Valkey, no model calls" in its
+#: own words -- so those errors fire on every run, `pytest` exits non-zero, and
+#: `deploy: needs: verify` means nothing ships. The tests were right, the gate was
+#: wrong, and the difference between "cannot run here" and "failed" is the whole
+#: distinction pytest has `skipif` for.
+#:
+#: 59 tests in this suite already skip for reasons like this. This is that
+#: pattern, applied to the ones that were left out of it.
+def _has_database() -> bool:
+    try:
+        from app.db.engine import database_enabled
+
+        return database_enabled()
+    except Exception:
+        return False
+
+
+requires_database = pytest.mark.skipif(
+    not _has_database(),
+    reason="needs Postgres: app/main.py refuses to boot without a corpus",
+)
+
 # Give this run its own Valkey namespace.
 os.environ.setdefault("ASPIRE_CACHE_NAMESPACE", f"test-{uuid.uuid4().hex[:8]}:")
 
