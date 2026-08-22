@@ -59,8 +59,12 @@ class TestNoRouterPathTerminatesAtEscalation:
             "qa_agent_limited",
             "learn_agent",
         ]
+        # More than one, and that is the point: a single-candidate row makes
+        # `classify` skip the router entirely.
         assert routable(allowed_agents("nova", "adult", "prospect", user_id="u")) == [
-            "qa_agent"
+            "qa_agent",
+            "learn_agent",
+            "learning_preview",
         ]
 
     async def test_the_anonymous_row_survives_too(self):

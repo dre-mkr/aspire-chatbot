@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from app.agents.learn.state import MAX_DIGRESSIONS
 from app.curriculum.schema import for_band
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,32 @@ def make_explain_back(curriculum=None):
                     learning, phase="explaining_back", question_id=question.id
                 ),
             }
+
+        # ── the same release `branch` makes, on the other grading path ──
+        #
+        # `branch` is not the only place a message is scored. A correct answer
+        # sends the turn to `explain_back`, which sets `phase="explaining_back"`,
+        # and from then on `_entry`'s phase table routes straight back here --
+        # never through `branch`. Gating only `branch` would leave this path
+        # swallowing questions exactly as before.
+        from app.agents.learn.graph import is_an_answer
+
+        said = latest_user_text(state)
+        if not is_an_answer(question, said):
+            asides = int(learning.get("digression_count") or 0)
+            if asides < MAX_DIGRESSIONS:
+                logger.info(
+                    "A message during explain-back on %s was not an attempt; "
+                    "handing the turn to the tutor.",
+                    lesson.id,
+                )
+                return {
+                    "learning": merge(
+                        learning,
+                        phase="released",
+                        digression_count=asides + 1,
+                    )
+                }
 
         result = grade(latest_user_text(state), question.accept)
         logger.info(

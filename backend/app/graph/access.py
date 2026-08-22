@@ -56,8 +56,16 @@ _ORION_16_18: Final[tuple[str, ...]] = (
 )
 
 #: The guardian persona, and the ONLY row that reaches registration.
+#:
+#: `learn_agent` is here to keep `set(_NOVA) <= set(_AURORA)`, which
+#: `account._narrowing` reads to decide whether an educator may keep `nova`.
+#: Break the subset and `persona_for` silently returns `aurora` for every
+#: educator, handing staff the registration walk. It is a real grant too: a
+#: guardian who asks how compound interest works should be taught, not quoted a
+#: rule.
 _AURORA: Final[tuple[str, ...]] = (
     "qa_agent",
+    "learn_agent",
     "register_agent",
     "servicing_agent",
     "escalate_agent",
@@ -65,7 +73,23 @@ _AURORA: Final[tuple[str, ...]] = (
 )
 
 #: Staff and partners.
-_NOVA: Final[tuple[str, ...]] = ("qa_agent", "escalate_agent")
+#:
+#: Two entries was a bug with a measurable cost. `routable()` drops
+#: `escalate_agent`, so this row offered the router exactly ONE candidate and
+#: `classify` took its `len(allowed) == 1` shortcut -- no model call, no
+#: decision. Measured across the 21 Aug reasoning run: 22 of 22 nova turns were
+#: answered by `qa_agent`, including every "how does this work" question, which
+#: the fact-lookup agent answers by declining to.
+#:
+#: `learn_agent` (audience "youth") and `learning_preview` (audience "all") are
+#: both narrower than or equal to the `qa_agent` slice this row already held, so
+#: neither widens what a staff reader can see -- only who answers them.
+_NOVA: Final[tuple[str, ...]] = (
+    "qa_agent",
+    "learn_agent",
+    "learning_preview",
+    "escalate_agent",
+)
 
 #: No proven identity.
 _ANONYMOUS: Final[tuple[str, ...]] = (

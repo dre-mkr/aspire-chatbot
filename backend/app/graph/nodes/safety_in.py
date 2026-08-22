@@ -7,6 +7,7 @@ import re
 from typing import Any, Final
 
 from app.safety import pii
+from app.graph.nodes.classify import TEACHING_AGENTS
 from app.graph.nodes.intents import fold
 from app.graph.state import AspireState
 
@@ -302,7 +303,16 @@ def safety_in(state: AspireState) -> dict[str, Any]:
             state.get("session_id"),
         )
 
-    if state.get("active_agent") == "learn_agent" and is_off_topic(text):
+    # Every teaching agent, not just the signed-in one.
+    #
+    # This read `== "learn_agent"`, so the digression path was unreachable for a
+    # guest (`learning_sample`) and for a guardian (`learning_preview`) -- the
+    # two audiences most likely to wander, and the ones with no account behind
+    # them to make the wandering safe. Measured, the 21 Aug long-thread run:
+    # `learning_sample` graded "My sister's name is Renata" as a WRONG ANSWER
+    # and sent the reader down the hint ladder, because `_digress` was dead code
+    # for the persona actually being tested.
+    if state.get("active_agent") in TEACHING_AGENTS and is_off_topic(text):
         flags["off_topic"] = True
 
     return {"safety_flags": flags}

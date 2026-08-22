@@ -228,6 +228,78 @@ def _forms(text: str) -> set[str]:
     return out
 
 
+#: Openers that make a message a question rather than an attempt at one.
+#:
+#: Anchored at the start, because a check answer can legitimately CONTAIN one of
+#: these words -- "because it grows" is an answer, "why does it grow" is not.
+_IS_A_QUESTION = re.compile(
+    r"""^\s*(?:
+        wh(?:at|y|en|ere|ich|o)\b
+      | how\b
+      | can\s+(?:you|we|i)\b
+      | could\s+you\b
+      | do(?:es)?\s+(?:it|that|this|they)\b
+      | is\s+(?:it|that|this|there)\b
+      | are\s+(?:they|there|these|those)\b
+      | tell\s+me\b
+      | explain\b
+    )""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+#: How many words a message may have and still read as an attempt on its own.
+#: Matches `evaluate.match_accept_list`, which draws the same short/long line.
+SHORT_ANSWER_WORDS = 6
+
+
+def is_an_answer(question: CheckQuestion, text: str) -> bool:
+    """Whether this message is an ATTEMPT at `question` -- right or wrong.
+
+    `grade_answer` answers "did they get it", and has no way to say "they were
+    not answering at all". Everything that was not the correct option came back
+    False, so `branch` walked the hint ladder at people who had asked something
+    else entirely. Measured, `qa/battle-plan/evidence/rsn-10-11-long-thread.md`:
+
+        > My sister's name is Renata and she's applying too.
+        "Close. Ask yourself whether the money left your account or moved
+         within it."
+
+    That is a learner being marked wrong for a sentence that was not an answer,
+    and the name in it was lost -- asked for it 37 turns later, the tutor had
+    never stored it, because the turn was spent grading it.
+
+    Deliberately a POSITIVE test for "this is an attempt", not a negative test
+    for "this looks odd". A genuinely wrong answer MUST still read as an answer
+    or the hint ladder stops working, which is the thing that teaches.
+    """
+    cleaned = _clean(text)
+    if not cleaned:
+        return False
+
+    # A tapped option, or anything that matches one. Always an answer, even
+    # when it is phrased as a question -- the options are the interaction.
+    accepted: set[str] = set()
+    for option in question.options or ():
+        accepted |= _forms(option)
+    if cleaned in accepted:
+        return True
+
+    # An outright question is not an attempt, however short.
+    if _IS_A_QUESTION.match(cleaned):
+        return False
+
+    # Short and not a question: a free-text attempt. "saving", "20", "no",
+    # "i don't know", "because it grows" all land here, and all should be graded.
+    if len(cleaned.split()) <= SHORT_ANSWER_WORDS:
+        return True
+
+    # Long, not a question, and matching no option. A learner explaining their
+    # reasoning writes like this and so does someone changing the subject, so
+    # the tie is broken on whether any option's words appear at all.
+    words = set(cleaned.split())
+    return any(words & set(form.split()) for form in accepted if form)
+
+
 def grade_answer(question: CheckQuestion, answer: str) -> bool:
     """Whether the child got it.
 
@@ -340,7 +412,35 @@ def make_branch(curriculum=None):
         if question is None:  # pragma: no cover
             return {"learning": merge(learning, phase="updating_mastery")}
 
-        correct = grade_answer(question, latest_user_text(state))
+        # ── not every message that is not the answer is a WRONG answer ──
+        #
+        # Sited after `question` is resolved, because the options are what a
+        # message is judged against, and after the `off_topic` check above so
+        # that path keeps its precedence where it fires at all.
+        #
+        # A released turn keeps `question_id`, so the check stays outstanding
+        # behind the answer the tutor gives; `MAX_DIGRESSIONS` bounds how long
+        # that can go on before `_digress` steers back, which is the same cap
+        # the off-topic path already uses.
+        answer = latest_user_text(state)
+        if not is_an_answer(question, answer):
+            asides = int(learning.get("digression_count") or 0)
+            if asides >= MAX_DIGRESSIONS:
+                return _digress(state, learning, lesson)
+            logger.info(
+                "A message during %s was not an attempt at the check; handing "
+                "the turn to the tutor rather than marking it wrong.",
+                lesson.id,
+            )
+            return {
+                "learning": merge(
+                    learning,
+                    phase="released",
+                    digression_count=asides + 1,
+                )
+            }
+
+        correct = grade_answer(question, answer)
         attempts = int(learning.get("attempts") or 0)
 
         if correct:
@@ -538,6 +638,10 @@ def _after_branch(state: AspireState) -> str:
     if phase == "placing":
         # A move-on request, answered in THIS turn rather than the next one.
         return "resume_or_place"
+    if phase == "released":
+        # The message was not an attempt at the check. The tutor takes the
+        # turn and answers it; the check question stays outstanding behind it.
+        return "tutor"
     return END
 
 
@@ -548,7 +652,11 @@ def _after_hint(state: AspireState) -> str:
 
 def _after_explain(state: AspireState) -> str:
     learning = state.get("learning") or {}
-    return "mastery_update" if learning.get("phase") == "updating_mastery" else END
+    phase = learning.get("phase")
+    if phase == "released":
+        # Not an attempt at the explain-back either; the tutor takes the turn.
+        return "tutor"
+    return "mastery_update" if phase == "updating_mastery" else END
 
 
 def _after_mastery(state: AspireState) -> str:
@@ -673,7 +781,19 @@ def _entry(state: AspireState) -> str:
             and learning.get("resolution_source") != "none"
         ):
             return "tutor"
-        if asks_about_a_topic(text) and not learning.get("question_id"):
+        # No `question_id` guard, and removing it is the fix for two of the
+        # four failing turns in the 21 Aug long thread.
+        #
+        # `check` sets `question_id`, so from the first check question onward
+        # this claim read False for EVERY enquiry and the phase table sent it to
+        # `branch` to be marked wrong. "What is a savings account?" and "What
+        # does interest mean?" both match `asks_about_a_topic`, and both were
+        # answered with a hint about the previous question instead.
+        #
+        # A pending check is not a reason to refuse to answer a question; it is
+        # a reason to come back to it afterwards, which `branch` now does by
+        # keeping `question_id` across a release.
+        if asks_about_a_topic(text):
             return "tutor"
         # "Teach me something" names no topic and used to fall through to the
         # lesson machine below -- which cannot emit a widget and never sets
@@ -690,6 +810,10 @@ def _entry(state: AspireState) -> str:
         # `plan_widget`, never `teach` directly.
         "teaching": "plan_widget",
         "checking": "branch",
+        # The tutor rewrites `phase` on every path out, so a `released` phase
+        # should never survive a turn. Named anyway: without it the default
+        # below re-places a lesson in the middle of an outstanding question.
+        "released": "tutor",
         "hinting": "hint_ladder",
         "reteaching": "reteach",
         "explaining_back": "explain_back",
@@ -782,11 +906,15 @@ def build_learn_graph(
     graph.add_edge("teach", "check")
     graph.add_conditional_edges("check", _after_check, [END])
     graph.add_conditional_edges(
-        "branch", _after_branch, ["hint_ladder", "explain_back", "resume_or_place", END]
+        "branch",
+        _after_branch,
+        ["hint_ladder", "explain_back", "resume_or_place", "tutor", END],
     )
     graph.add_conditional_edges("hint_ladder", _after_hint, ["reteach", END])
     graph.add_edge("reteach", "mastery_update")
-    graph.add_conditional_edges("explain_back", _after_explain, ["mastery_update", END])
+    graph.add_conditional_edges(
+        "explain_back", _after_explain, ["mastery_update", "tutor", END]
+    )
     graph.add_conditional_edges(
         "mastery_update", _after_mastery, ["wrap_session", "resume_or_place"]
     )

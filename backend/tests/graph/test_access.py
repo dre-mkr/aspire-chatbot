@@ -148,6 +148,7 @@ class TestTheRowsThemselves:
     def test_aurora(self, band, status):
         assert allowed_agents("aurora", band, status, user_id=USER) == [
             "qa_agent",
+            "learn_agent",
             "register_agent",
             "servicing_agent",
             "escalate_agent",
@@ -157,9 +158,17 @@ class TestTheRowsThemselves:
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_nova(self, band, status):
-        """Neither servicing nor registration: both act on another person's account."""
+        """Neither servicing nor registration: both act on another person's account.
+
+        The two teaching agents are here so the row offers the router more than
+        one candidate. With only `qa_agent` routable, `classify` took its
+        single-option shortcut and never ran -- every staff question, including
+        every "how does this work", was answered by the fact-lookup agent.
+        """
         assert allowed_agents("nova", band, status, user_id=USER) == [
             "qa_agent",
+            "learn_agent",
+            "learning_preview",
             "escalate_agent",
         ]
 

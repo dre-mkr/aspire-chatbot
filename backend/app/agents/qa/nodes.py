@@ -380,16 +380,21 @@ def make_rerank(score=None):
 
 #: The half of the role card that never varies. Grounding is not a style choice.
 _QA_ROLE_HEAD = """YOUR JOB THIS TURN
-Answer a factual question about the ASPIRE programme from the knowledge-base
-extracts supplied with the question.
+Answer a factual question about the ASPIRE programme from what you have been
+given with the question.
 
 GROUNDING (non-negotiable)
-- Answer ONLY from the extracts. If they do not contain the answer, say so
-  plainly and name who does -- never fill a gap from anything else you know.
-- Every figure, date, amount and rule you state must appear in an extract. Do
-  not round, convert, average or infer one.
-- Cite the extracts you used by their [ASP-xxx] id, inline, right after the
-  fact each one supports. An answer with no citation will not be served.
+- Answer ONLY from what you were given. If it does not contain the answer, say
+  so plainly and name who does -- never fill a gap from anything else you know.
+- Every figure, date, amount and rule you state must be there in front of you.
+  Do not round, convert, average or infer one.
+- Cite what you used by its [ASP-xxx] id, inline, right after the fact it
+  supports. An answer with no citation will not be served.
+- State facts, never your source. The reader cannot see what you were given and
+  does not know it exists, so any sentence describing what it does or does not
+  say reads as a report on a search rather than an answer. Where something is
+  missing, the honest sentence is "I do not have that" followed by who does --
+  never a description of what you looked at.
 
 """
 
@@ -412,39 +417,39 @@ _QA_DEPTH: dict[str, str] = {
     "orion": """DEPTH AND COMPLETENESS
 - Give the direct answer first, then only the conditions that would actually
   change what he does. Leave the rest out.
-- If the question is how or why something works, join the extracts into one
+- If the question is how or why something works, join what you have into one
   chain of cause and effect and show the arithmetic once. Three cited facts
   sitting next to each other is not an answer to a "how" question.
-- One worked example in EC$ where the extracts support it.
+- One worked example in EC$ where you have the figures for it.
 - Four or five sentences. Bullets only for a genuine list of steps.""",
     "aurora": """DEPTH AND COMPLETENESS
 - Lead with the answer she can act on. Then the documents, amounts, deadlines
-  and next step the extracts support -- and stop.
+  and next step you can support -- and stop.
 - Where the answer IS a list of documents or steps, use `-` bullets and let the
   list be the whole answer.
 - Do not explain a money concept unless she asked how something works.
 - Name the exception only when it could apply to her.""",
     "nova": """DEPTH AND COMPLETENESS
-- Be thorough. Use every extract that bears on the question: give the direct
-  answer first, then the conditions, exceptions, amounts, deadlines and next
-  steps the extracts support.
-- When several extracts together answer the question, weave them into one
+- Be thorough. Use everything you were given that bears on the question: give
+  the direct answer first, then the conditions, exceptions, amounts, deadlines
+  and next steps you can support.
+- When several facts together answer the question, weave them into one
   coherent, complete answer rather than answering from only one.
 - Explain any programme or money term the moment you use it.
 - Structure a longer answer: a direct opening sentence, short paragraphs, and
   `-` bullets for lists of documents, steps or rules.
 - Where a rule has an exception, state the exception -- this reader will be
   asked about it.
-- Close with the one thing the reader should do next, when the extracts name
-  one. Never pad; every sentence must carry information from an extract.""",
+- Close with the one thing the reader should do next, where you have one.
+  Never pad; every sentence must carry a fact you were given.""",
     "guest": """DEPTH AND COMPLETENESS
 - Give the direct answer in the first sentence, then the one or two details that
   change what the reader does next.
-- When several extracts bear on the question, join them into one answer rather
+- When several facts bear on the question, join them into one answer rather
   than listing them separately.
 - Explain any programme or money term in half a clause the first time you use it.
 - Two to four sentences. `-` bullets only for a real list of documents or steps.
-- Close with the next step when the extracts name one.""",
+- Close with the next step when you have one.""",
 }
 
 #: Which block an unrecognised persona gets: the fullest one, which is what this
@@ -479,17 +484,20 @@ _SIMPLE_MODE_QA_EXTRA = (
 GENERATE_SYSTEM = """You answer questions about the ASPIRE savings programme.
 
 Rules, in order of importance:
-1. Answer ONLY from the numbered knowledge-base extracts below. If they do not
+1. Answer ONLY from the numbered reference material below. If it does not
    contain the answer, say so plainly -- do not fill the gap from anything you
    know.
-2. Every figure, date, amount and rule in your answer must appear in an extract.
-   Do not round, convert, average or infer one.
-3. Cite the extracts you used by their [ASP-xxx] id, inline.
-4. Write for the reader described below. Be thorough and complete: use every
-   extract that bears on the question, explain terms as you use them, and
+2. Every figure, date, amount and rule in your answer must be there in front of
+   you. Do not round, convert, average or infer one.
+3. Cite what you used by its [ASP-xxx] id, inline.
+4. Write for the reader described below. Be thorough and complete: use
+   everything that bears on the question, explain terms as you use them, and
    structure longer answers with short paragraphs and `-` bullets. No links.
+5. State facts, never your source. The reader cannot see any of this and does
+   not know it exists, so a sentence about what it does or does not say reads
+   as a report on a search rather than an answer. Where something is missing,
+   say "I do not have that" and name who does.
 
-Knowledge-base extracts:
 {context}
 """
 
@@ -583,11 +591,50 @@ def _story_instruction(state: AspireState) -> str | None:
     )
 
 
+#: What a self-contained sum adds to the prompt.
+#:
+#: Added ONLY on a turn `is_self_contained_sum` recognised, so the standing
+#: grounding rules are byte-identical on every programme question. This cannot
+#: loosen an ASPIRE answer because it is never in the prompt for one.
+_SELF_CONTAINED_INSTRUCTION = (
+    "This question carries its own figures and is not about the ASPIRE "
+    "programme, so the reference material below cannot answer it and is not "
+    "meant to. Work it out from the numbers the reader gave you, show the "
+    "steps briefly, and give the answer. Do not decline it, and do not cite "
+    "anything for it. The grounding rules still hold for anything you say "
+    "about ASPIRE itself."
+)
+
+
+def _self_contained_instruction(state: AspireState) -> str | None:
+    """The extra system line for a sum the reader set up themselves.
+
+    Guarded on retrieval exactly as `ground_check` is, and for the same reason:
+    a question whose premise the corpus DOES state -- "if the minimum deposit is
+    EC$25, what do 4 of them cost?" -- must still be answered with its citation.
+    Telling the model not to cite here and then requiring a citation there would
+    put the two halves of this fix in disagreement on the same turn.
+    """
+    question = _latest_user_text(state)
+    query = state.get("qa_query") or question
+    if not is_self_contained_sum(question, query):
+        return None
+    chunks = list(state.get("retrieved") or [])
+    best = max((chunk.relevance for chunk in chunks), default=0.0)
+    if best >= get_settings().qa_relevance_floor:
+        return None
+    return _SELF_CONTAINED_INSTRUCTION
+
+
 def _shaping_instructions(state: AspireState) -> str | None:
     """Every extra system line this turn earns, joined. None when there are none."""
     lines = [
         line
-        for line in (_simple_mode_instruction(state), _story_instruction(state))
+        for line in (
+            _simple_mode_instruction(state),
+            _story_instruction(state),
+            _self_contained_instruction(state),
+        )
         if line
     ]
     return "\n\n".join(lines) or None
@@ -669,6 +716,74 @@ def normalise_figure(text: str) -> str:
     if "." in digits:
         digits = digits.rstrip("0").rstrip(".")
     return digits.lstrip("0") or "0"
+
+
+# ── questions that carry their own arithmetic ────────────────────────────────
+#
+# A word problem the reader supplied every figure for is not a claim about
+# ASPIRE, will never appear in a row, and is declined by every gate below that
+# asks "which row says this?".
+#
+# Measured, `qa/battle-plan/evidence/rsn-01-logic.md`: four of five word
+# problems declined -- notebooks at 3 for EC$12, a bus leaving at 07:40,
+# EC$500 at 2% simple interest -- each one replaced whole by "I do not have an
+# answer for that. The ASPIRE team can answer it". The model had done the sum
+# correctly; `_ungrounded` threw the answer away and served a decline instead.
+#
+# The predicate is the whole safety of this and is conservative on both sides.
+# The question must carry at least two figures of its own AND an arithmetic
+# cue AND name nothing of ASPIRE's. Anything that fails one of those three is
+# an ordinary programme question and keeps every gate it has today.
+
+#: Words that mean the reader is asking for a calculation, not a rule.
+_ARITHMETIC_CUE = re.compile(
+    r"\b(?:how\s+much|how\s+many|how\s+long|how\s+old|how\s+far|what\s+time"
+    r"|altogether|in\s+total|sum\s+of|left\s+over|left|cost|costs|each|per"
+    r"|apiece|add|plus|minus|times|twice|half|double|multiply|divide|split"
+    r"|share[sd]?\s+between|average|grows?\s+by|older|younger"
+    r"|interest\s+a\s+year|percent|%)\b",
+    re.IGNORECASE,
+)
+
+#: Anything that makes a question ASPIRE's rather than arithmetic's.
+#:
+#: Deliberately wide. A false positive here costs nothing -- the question keeps
+#: exactly the gates it has today -- while a false negative lets a programme
+#: claim through ungrounded, which is the one outcome this file exists to stop.
+_NAMES_THE_PROGRAMME = re.compile(
+    r"\b(?:aspire|programme|program|eligib\w*|enrol\w*|enroll\w*|registrat\w*"
+    r"|register|apply|applicant|application|qualify|qualifie[sd]|document\w*"
+    r"|passport|birth\s+certificate|national\s+id|deadline|branch|office"
+    r"|hotline|contact|st\.?\s*kitts|nevis|anguilla|government|ministry"
+    r"|my\s+account|my\s+child|my\s+application|the\s+scheme)\b",
+    re.IGNORECASE,
+)
+
+
+def is_self_contained_sum(*questions: str) -> bool:
+    """Whether the reader set up a sum that no row was ever going to answer.
+
+    True only when the question carries its own figures, asks for a
+    calculation, and names nothing of the programme's. Every one of the three
+    is required, and each is tested against BOTH the reader's own words and the
+    rewritten `qa_query` -- the rewrite is a model call, and a rewrite that
+    drags ASPIRE into an arithmetic question must not be able to unlock this,
+    nor a rewrite that drops ASPIRE out of a programme one.
+    """
+    asked = [text for text in questions if text and text.strip()]
+    if not asked:
+        return False
+
+    # Naming the programme anywhere disqualifies the turn.
+    if any(_NAMES_THE_PROGRAMME.search(text) for text in asked):
+        return False
+
+    # The reader's own words are what the figures must come from; a rewrite
+    # cannot manufacture the premises that make a question self-contained.
+    reader = asked[0]
+    if len(_FIGURE.findall(reader)) < 2:
+        return False
+    return bool(_ARITHMETIC_CUE.search(reader))
 
 
 def _figures_in_our_own_contacts() -> set[str]:
@@ -988,6 +1103,49 @@ def make_ground_check(threshold: float | None = None):
 
         query = state.get("qa_query") or _latest_user_text(state)
 
+        # ── a sum the reader set up, and that the corpus has nothing to say to ──
+        #
+        # Sited after the empty-answer check, so a turn that generated nothing
+        # still declines, and before all four grounding gates below, because
+        # every one of them asks the same question -- which row says this? -- and
+        # a sum of the reader's own numbers has no row and never will.
+        #
+        # BOTH conditions are required, and the second is what keeps this off
+        # the turns that already work. "If the minimum deposit is EC$25, what do
+        # 4 of them cost?" carries its own figures and names nothing of ASPIRE's
+        # by vocabulary alone -- but retrieval finds the row that states the
+        # EC$25, and that row IS the answer's source. `unattributed_figures`
+        # already licenses the EC$100 as arithmetic on a retrieved quantity, so
+        # the ordinary path serves it correctly WITH its citation. Bypassing
+        # would have thrown that citation away; two tests in `test_citations`
+        # say so by name.
+        #
+        # So the bypass fires only where the corpus genuinely has nothing:
+        # retrieval below the floor AND a question the reader supplied every
+        # premise for. That is the notebook question, and not the deposit one.
+        #
+        # This is the ONLY path that skips `unattributed_figures`, so it is
+        # deliberately the narrowest gate in the file.
+        best_relevance = max((chunk.relevance for chunk in chunks), default=0.0)
+        if best_relevance < floor and is_self_contained_sum(
+            _latest_user_text(state), query
+        ):
+            logger.info(
+                "Session %s asked a self-contained sum and retrieval found "
+                "nothing above %.3f; answering it rather than declining for "
+                "want of a row.",
+                state.get("session_id"),
+                floor,
+            )
+            return Command(
+                update={
+                    "citations": [],
+                    "groundedness": 1.0,
+                    "active_agent": state.get("active_agent"),
+                    "decline_streak": {},
+                }
+            )
+
         # ── direct evidence of grounding, read BEFORE the proxies for it ──
         #
         # The two floors below score the RETRIEVAL. Whether the answer is
@@ -1237,8 +1395,16 @@ def follow_up_chips(
 #: Above this overlap, two questions are the same question.
 _RESTATEMENT = 0.75
 
-#: Words that carry no topic.
-_STOPWORDS = frozenset(
+#: Words that carry no topic, for telling one follow-up chip from another.
+#:
+#: Named apart from `_STOPWORDS` above, and that is a fix rather than a tidy-up.
+#: Both were bound to the bare name `_STOPWORDS` at module level, so this one --
+#: the later assignment -- won for the whole module, and `lexical_coverage`,
+#: `matched_terms` and `required_terms` silently measured the coverage floor
+#: with the chip list instead of the sixty-word list written for them. "have",
+#: "if", "that", "they", "with" and "would" were all being counted as content
+#: words a corpus row had to contain.
+_CHIP_STOPWORDS = frozenset(
     {
         "a", "an", "and", "are", "at", "be", "can", "do", "does", "for", "how",
         "i", "in", "is", "it", "me", "my", "of", "on", "or", "the", "to", "we",
@@ -1251,7 +1417,7 @@ def _words(text: str) -> set[str]:
     return {
         word.strip("?.!,;:'\"")
         for word in text.lower().split()
-        if word.strip("?.!,;:'\"") and word.strip("?.!,;:'\"") not in _STOPWORDS
+        if word.strip("?.!,;:'\"") and word.strip("?.!,;:'\"") not in _CHIP_STOPWORDS
     }
 
 

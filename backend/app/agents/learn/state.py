@@ -10,6 +10,9 @@ Phase = Literal[
     "placing",
     "teaching",
     "checking",
+    #: The message was not an attempt at the outstanding check. `branch` hands
+    #: the turn to the tutor and the question stays outstanding behind it.
+    "released",
     "hinting",
     "reteaching",
     "explaining_back",

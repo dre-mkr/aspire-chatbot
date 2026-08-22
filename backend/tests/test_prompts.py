@@ -67,11 +67,20 @@ def test_the_prompt_forbids_narrating_the_search():
 
     This is the one that was being certified against dead text while the live
     prompt had no such rule at all.
+
+    The rule used to quote the phrasings it banned -- `not "the extracts"`, `not
+    "the published information says"` -- and that was the defect, not the
+    wording. One negated mention lost to twenty affirmative uses of the same
+    word elsewhere in the QA card, and readers were shown all three of the named
+    phrases anyway. So the assertion inverts: the rule must still be there, and
+    the vocabulary it exists to suppress must NOT be.
     """
     assert "answer, do not narrate" in FLAT
-    assert "never say where the answer came from" in FLAT
-    assert "the extracts" in FLAT, (
-        "the prompt no longer names the attribution phrasing it is banning"
+    assert "let the citation carry the provenance silently" in FLAT
+    assert "never name, describe or refer to whatever you were given" in FLAT
+    assert "extract" not in FLAT, (
+        "the prompt names the vocabulary it is trying to suppress, which is how "
+        "it leaked to readers in the first place"
     )
     assert "never add what you did not find to an answer you did give" in FLAT
 
@@ -89,7 +98,7 @@ def test_the_grounding_rules_reach_a_qa_turn():
     Asserting only against `GLOBAL` would miss the rules that make an answer
     citable, which is the property the whole eval harness is built on.
     """
-    assert "answer only from the extracts" in FLAT
+    assert "answer only from what you were given" in FLAT
     assert "an answer with no citation will not be served" in FLAT
 
 
@@ -109,9 +118,14 @@ class TestEveryPersonaGetsTheGroundingRules:
     @pytest.mark.parametrize("persona", PERSONAS)
     def test_the_grounding_rules_survive_every_variant(self, persona):
         flat = " ".join(qa_agent_role(persona).split()).lower()
-        assert "answer only from the extracts" in flat
+        assert "answer only from what you were given" in flat
         assert "an answer with no citation will not be served" in flat
         assert "do not round, convert, average or infer one" in flat
+        # The rule is stated without naming the thing it is about. Naming it --
+        # the card used to say "the extracts" four times -- taught the model the
+        # word, and the word came back out at readers: "The supplied extracts do
+        # not contain this age calculation."
+        assert "extract" not in flat
 
     @pytest.mark.parametrize("persona", PERSONAS)
     def test_every_variant_still_says_what_depth_to_write_at(self, persona):
