@@ -158,14 +158,23 @@ export function Rail({
 					</button>
 
 					{/* Opacity does not remove a node from the a11y tree, so the hidden state is stated. */}
-					<img
-						className="rail__wordmark"
-						src="/brand/aspire-wordmark.png"
-						alt="ASPIRE"
-						width={190}
-						height={48}
-						aria-hidden={collapsed || undefined}
-					/>
+					{/* The lockup, not the bare wordmark. `aspire-wordmark.png` is the
+					    letterforms alone; this is the mark with the expansion under it
+					    -- "Achieving Success through Personal Investment, Resources and
+					    Education" -- which is the thing a reader meeting the programme
+					    for the first time actually needs. The landing page has carried
+					    it since the logo was supplied; the chat was still on the old
+					    asset. */}
+					<picture aria-hidden={collapsed || undefined}>
+						<source srcSet="/brand/aspire-lockup.webp" type="image/webp" />
+						<img
+							className="rail__wordmark"
+							src="/brand/aspire-lockup.png"
+							alt="ASPIRE"
+							width={1200}
+							height={350}
+						/>
+					</picture>
 				</div>
 
 				<button

@@ -438,7 +438,10 @@ body {
 	display: grid;
 	flex: 1;
 	min-width: 0;
-	height: 40px;
+	/* Room for the lockup, which is the mark AND the words under it. The
+	   wordmark that was here was 15px tall -- legible as a shape, unreadable as
+	   a sentence, and the sentence is what says what ASPIRE stands for. */
+	height: 58px;
 	overflow: hidden;
 }
 
@@ -492,7 +495,11 @@ body {
 }
 
 .rail__wordmark {
-	height: 15px;
+	/* 1200x350, so 52px tall is about 178px wide -- inside the 190px the header
+	   leaves beside the collapse button. The expansion is baked into the
+	   artwork rather than set as live text, so height is the only lever on
+	   whether it can be read. */
+	height: 52px;
 	width: auto;
 	/* Never squashed by the shrinking header -- it fades, it does not compress. */
 	flex-shrink: 0;
@@ -1282,8 +1289,12 @@ body {
 .orb {
 	position: relative;
 	flex-shrink: 0;
-	width: var(--orb-size, 30px);
-	height: var(--orb-size, 30px);
+	/* 30px was sized for a gradient ball, where the whole thing read at a
+	 * glance. A face needs more: at 30px Skye and Kaleb are two dark smudges
+	 * and the guide the reader chose is not recognisable beside their answer.
+	 * The places that want a smaller one set `--orb-size` themselves. */
+	width: var(--orb-size, 44px);
+	height: var(--orb-size, 44px);
 }
 
 /* ── The orb is the assistant's face, and there are five of them ──────────
