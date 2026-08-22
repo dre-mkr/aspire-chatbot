@@ -111,14 +111,18 @@ _ALLOW: Final[dict[str, tuple[str, ...]]] = {
 #: Adding a language means adding variants here, and nowhere else.
 _BAN: Final[dict[str, dict[str, tuple[str, ...]]]] = {
     "5-8": {
-        "interest": ("interest", "interés", "intereses", "intérêt", "intérêts"),
+        "interest": (
+            "interest", "interests",
+            "interés", "intereses", "intérêt", "intérêts",
+        ),
         "compound": (
             "compound", "compounds", "compounded", "compounding",
             "compuesto", "compuestos", "capitalización", "capitalizado",
             "composé", "composés", "capitalisation", "capitalisé",
         ),
         "investment": (
-            "investment", "investments", "invest", "investing", "investor",
+            "investment", "investments", "invest", "invests", "invested",
+            "investing", "investor", "investors",
             "inversión", "inversiones", "invertir", "invierte", "invertido",
             "inversionista",
             "investissement", "investissements", "investir", "investit",
@@ -132,9 +136,16 @@ _BAN: Final[dict[str, dict[str, tuple[str, ...]]]] = {
             "dividend", "dividends", "dividendo", "dividendos",
             "dividende", "dividendes",
         ),
-        "credit": ("credit", "credits", "crédito", "créditos", "crédit", "crédits"),
+        # `credited` matters more than it looks: the programme's own published
+        # phrasing is "2%, credited twice a year", so an answer echoing the
+        # source leaks the term at a band that may not hear it.
+        "credit": (
+            "credit", "credits", "credited", "crediting",
+            "crédito", "créditos", "crédit", "crédits",
+        ),
         "loan": (
-            "loan", "loans", "préstamo", "préstamos",
+            "loan", "loans", "loaned", "loaning",
+            "préstamo", "préstamos",
             "prêt", "prêts", "emprunt", "emprunts",
         ),
         "percent": (
@@ -171,7 +182,8 @@ _BAN: Final[dict[str, dict[str, tuple[str, ...]]]] = {
             "cote de crédit", "score de crédit",
         ),
         "loan": (
-            "loan", "loans", "préstamo", "préstamos",
+            "loan", "loans", "loaned", "loaning",
+            "préstamo", "préstamos",
             "prêt", "prêts", "emprunt", "emprunts",
         ),
     },
@@ -297,12 +309,59 @@ def banned_terms(band: str) -> frozenset[str]:
     return frozenset(_PATTERNS.get(band, _PATTERNS["adult"]).keys())
 
 
-def check(text: str, band: str) -> list[VocabViolation]:
-    """Every banned term in `text` for this band, in the order they appear."""
+#: The terms the band ladder holds back that ASPIRE'S OWN FACTS require.
+#:
+#: A child in this programme owns EC$500 of investment. Telling them what that
+#: is is not financial education, it is telling them what they have -- and the
+#: ladder was refusing it, so Skye could not say what half of a five-year-old's
+#: own money does, and could not spell out the programme's name either, because
+#: "Achieving Success through Personal INVESTMENT..." trips the same gate.
+#:
+#: These lift ONLY for an answer grounded in the Golden Record. Ungrounded
+#: financial-education prose still meets the full ladder, which is what the
+#: ladder was written for: a five-year-old does not need compound interest
+#: explained, and does need to know the money is theirs.
+PROGRAMME_TERMS: Final[frozenset[str]] = frozenset(
+    {"interest", "investment", "credit", "dividend", "portfolio", "compound"}
+)
+
+
+def check(
+    text: str,
+    band: str,
+    *,
+    programme_scope: bool = False,
+) -> list[VocabViolation]:
+    """Every banned term in `text` for this band, in the order they appear.
+
+    `programme_scope` says this answer is grounded in the Golden Record -- the
+    sourced ASPIRE facts -- and lifts `PROGRAMME_TERMS` for it.
+
+    WHAT IT NEVER LIFTS, and the distinction is the whole of the rule:
+
+      * `_GENERAL_BAN` -- guaranteed return, get rich, risk-free, crypto, day
+        trading, guaranteed profit. Not an age gate. A position the programme
+        takes, at every band including adult, in every context. A scam sentence
+        does not become safe because it is about ASPIRE; it becomes worse.
+      * The per-card figure rules. Skye may now say her money is invested and
+        still may not say 2%, because "never a rate, a percentage, a balance or
+        a projection, not even a sourced one" lives in her card, not here. The
+        WORDS and the NUMBERS were always separate rules and they stay separate.
+    """
     if not text:
         return []
 
     patterns = _PATTERNS.get(band, _PATTERNS["adult"])
+    if programme_scope:
+        patterns = {
+            term: pattern
+            for term, pattern in patterns.items()
+            # `_GENERAL_BAN` keys are never in PROGRAMME_TERMS, so this cannot
+            # reach them. Stated as a filter over the band's own terms rather
+            # than a lookup, so adding a scam phrase to the general list can
+            # never accidentally make it liftable.
+            if term not in PROGRAMME_TERMS or term in _GENERAL_BAN
+        }
     # Scanned folded, REPORTED against the original. `strip_accents` removes
     # combining marks without changing how many characters precede any given
     # letter, so the offsets a caller uses to blank a word still land on it --

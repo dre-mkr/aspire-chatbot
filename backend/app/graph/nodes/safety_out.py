@@ -132,6 +132,40 @@ async def _pathway_step(state: Any) -> Any:
 
 
 
+#: Corpus rows that ARE the programme: the Golden Record.
+#:
+#: `ASP-` ids and the programme categories. A row about budgeting in general is
+#: financial education and meets the full ladder; a row about what ASPIRE is,
+#: who is eligible, or what the EC$500 buys is a fact about the reader's own
+#: money and does not.
+_GOLDEN_CATEGORIES: Final[frozenset[str]] = frozenset(
+    {"programme", "overview", "eligibility", "application", "investments", "savings"}
+)
+
+
+def grounded_in_the_programme(state: Any) -> bool:
+    """Whether this answer is built on ASPIRE's own published facts.
+
+    THE SCOPE THE VOCABULARY BAN LIFTS FOR, and it is decided by what the
+    answer was BUILT FROM rather than by what it happens to mention. A reply
+    that reached for `investment` while grounded in nothing is exactly the
+    reply the ladder exists to stop; one grounded in the row that says the
+    EC$500 buys shares is the programme telling a child what they own.
+
+    Conservative on purpose: no retrieval, no lift. An ungrounded answer meets
+    the full ladder, which is the safe direction to fail in.
+    """
+    for chunk in state.get("retrieved") or ():
+        kb_id = str(getattr(chunk, "kb_id", "") or "")
+        if kb_id.upper().startswith("ASP-"):
+            return True
+        metadata = getattr(chunk, "metadata", None) or {}
+        category = str(metadata.get("category", "")).strip().lower()
+        if category in _GOLDEN_CATEGORIES:
+            return True
+    return False
+
+
 #: The band at and above which links may be shown, and the personas that never see them regardless.
 # `kaleb` joins `stella` because he IS the older half of what `stella` used to
 # be. Leaving him out would have handed a nine-year-old the link strip that the
@@ -491,14 +525,18 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 )
 
         # ── (b) vocabulary ──────────────────────────────────────────────────
-        violations = vocab.check(text, band)
+        # Grounded in ASPIRE's own facts? Then the programme's own vocabulary is
+        # not a thing to hide from the child it belongs to. `_GENERAL_BAN` and
+        # the cards' figure rules are untouched by this -- see `vocab.check`.
+        programme_scope = grounded_in_the_programme(state)
+        violations = vocab.check(text, band, programme_scope=programme_scope)
         if violations:
             report["vocab_violations"] = sorted({v.term for v in violations})
             if reprompt is not None:
                 timing.note_reprompt("vocab")
                 text = await reprompt(vocab.explain(violations, band), text)
                 # Re-checked, and a second failure is NOT re-prompted again.
-                remaining = vocab.check(text, band)
+                remaining = vocab.check(text, band, programme_scope=programme_scope)
                 if remaining:
                     report["vocab_stripped"] = sorted({v.term for v in remaining})
                     for violation in reversed(remaining):
