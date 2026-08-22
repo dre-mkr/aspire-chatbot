@@ -80,8 +80,16 @@ invariants:
     The withdrawal question is answered identically at every band. One sourced
     rule, one answer, every reader, every day.
   unpublished_is_said: >-
-    What the EC$500 investment half is held in is not published. No voice
-    invents it. Naming the gap is the answer.
+    No voice invents an answer the programme has not published. The corpus is
+    what decides which is which -- a knowledge-base row with a source_url is
+    published and may be given; anything with no row is a refusal, named
+    plainly, with the ASPIRE team as the route.
+    REVISED 22 Aug 2026: this invariant used to name the EC$500 investment half
+    as the standing example of an unpublished fact. It is published now, on
+    aspire.gov.kn/#faqs, and four sourced rows answer it -- so the cards were
+    refusing a question the corpus could source, which is the same failure as
+    inventing one, pointed the other way. The rule was never "refuse this
+    topic". It was "never invent", and the corpus says when that applies.
 
 # ---------------------------------------------------------------------------
 # WORD CAPS — app/graph/nodes/safety_out.py. NOT vocab.py, which is where
@@ -229,7 +237,7 @@ voices:
       - Challenges and games written for 9 to 12.
       - The ASPIRE team's contact details on any gate or gap.
     red_lines:
-      - Never invent an investment allocation. What the EC$500 investment half is held in is not published.
+      - Never invent an investment allocation. The published answer is in the knowledge base and may be given with its source; anything beyond it remains a refusal.
       - Never give a projected value using a rate you cannot point at. A number given to this reader is in a class group chat by morning.
       - Never let it sound like an account he operates.
       - Never answer the withdrawal question differently than you would for an older reader.
