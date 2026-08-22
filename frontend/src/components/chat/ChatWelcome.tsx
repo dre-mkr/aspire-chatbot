@@ -167,6 +167,7 @@ export function ChatWelcome({
 	persona,
 	language = "en",
 	priorConversations = 0,
+	readerName = null,
 	onAsk,
 	onOpenVideos,
 	showOnboarding = true,
@@ -176,6 +177,8 @@ export function ChatWelcome({
 	/** Which language the hook is spoken in. English until told otherwise. */
 	language?: HookLanguage;
 	priorConversations?: number;
+	/** The signed-in reader's first name, when the account knows it. */
+	readerName?: string | null;
 	onAsk: (question: string) => void;
 	onOpenVideos?: () => void;
 	/**
@@ -203,7 +206,7 @@ export function ChatWelcome({
 	showOnboarding?: boolean;
 }) {
 	const cards = cardsFor(persona);
-	const welcome = hookFor(persona, language, priorConversations);
+	const welcome = hookFor(persona, language, priorConversations, readerName);
 	const tagline = TAGLINES[language] ?? TAGLINES.en;
 
 	return (
@@ -249,9 +252,7 @@ export function ChatWelcome({
 				 *
 				 * Collapses with the chips: it orients a reader who has not started
 				 * and repeats itself to one who has. */}
-				{showOnboarding ? (
-					<p className="welcome-copy">{welcome.line}</p>
-				) : null}
+				{showOnboarding ? <p className="welcome-copy">{welcome.line}</p> : null}
 			</section>
 
 			{showOnboarding ? (

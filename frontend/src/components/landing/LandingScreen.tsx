@@ -1,8 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useState } from "react";
+import { AccountControl } from "#/components/auth/AccountControl";
 import { markFreshThread, stageFirstTurn } from "#/lib/aspire/handoff";
 import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
+import { useSession } from "#/lib/aspire/use-session";
+import {
+	preferredGuide,
+	rememberGuide,
+	workspaceDestination,
+} from "#/lib/aspire/workspace";
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
 import { EducatorsView } from "./EducatorsView";
@@ -93,6 +100,31 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const [draft, setDraft] = useState("");
 	const [activeView, setActiveView] = useState<ViewState>("landing");
 	const [selectedPersona, setSelectedPersona] = useState<GuideId | null>(null);
+
+	/**
+	 * Who is signed in, from the same store the chat rail reads.
+	 *
+	 * `resolved` is why the header does not flash: it is false until the session
+	 * question has been answered, and answering it is a network call on a cold
+	 * arrival.
+	 */
+	const { session, resolved } = useSession();
+	const signedIn = session?.accountType === "registered";
+
+	/** Their guide, if the account or this device remembers one. */
+	const rememberedGuide = preferredGuide(session);
+	const rememberedName = GUIDES.find(
+		(guide) => guide.guideId === rememberedGuide,
+	)?.name;
+	const continueLabel = rememberedName
+		? `Continue with ${rememberedName}`
+		: "Open ASPIRE AI";
+
+	/** Back into the workspace: their last conversation, with their guide. */
+	const openWorkspace = () => {
+		const { chatId, search } = workspaceDestination(session);
+		navigate({ to: "/chat/$chatId", params: { chatId }, search });
+	};
 	/** The chosen guide's row, for the face beside the name. Null means Guest. */
 	const selected = selectedPersona
 		? (GUIDES.find((g) => g.guideId === selectedPersona) ?? null)
@@ -292,13 +324,44 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 					</nav>
 				</div>
 				<div className="flex items-center gap-4">
-					<button
-						type="button"
-						onClick={() => navigate({ to: "/signin" })}
-						className="hidden sm:block text-sm font-semibold text-[#1A103C]/70 hover:text-[#1A103C] transition-colors px-4 py-2 cursor-pointer"
-					>
-						Sign in
-					</button>
+					{/* AUTHENTICATION STATE, not a hardcoded invitation.
+					 *
+					 * This said "Sign in" unconditionally, so a reader who had just
+					 * signed in was told, in the top right of the first page they
+					 * landed on, that they had not. `AccountControl` reads the same
+					 * session store the chat rail does -- one source, both surfaces.
+					 *
+					 * Nothing renders until `resolved`, because the alternative is the
+					 * flash: "Sign in" paints, the session resolves a tick later, and
+					 * the control swaps under the reader's eyes. */}
+					{!resolved ? (
+						// Holds the row's height so the header does not jump.
+						<div aria-hidden="true" className="w-[92px] h-9" />
+					) : signedIn ? (
+						<>
+							{/* THE WAY BACK IN. Without this the only route from the
+							 * landing page to your own workspace was to pick a guide
+							 * card again -- which is onboarding, and a returning
+							 * reader has already done it. */}
+							<button
+								type="button"
+								onClick={openWorkspace}
+								className="hidden sm:inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#6d3fa8] to-[#482977] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+							>
+								{continueLabel}
+								<span aria-hidden="true">→</span>
+							</button>
+							<AccountControl variant="corner" />
+						</>
+					) : (
+						<button
+							type="button"
+							onClick={() => navigate({ to: "/signin" })}
+							className="hidden sm:block text-sm font-semibold text-[#1A103C]/70 hover:text-[#1A103C] transition-colors px-4 py-2 cursor-pointer"
+						>
+							Sign in
+						</button>
+					)}
 					<button
 						type="button"
 						onClick={() => setActiveView("history")}
@@ -383,11 +446,11 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 									)}
 									<select
 										value={selectedPersona || ""}
-										onChange={(e) =>
-											setSelectedPersona(
-												(e.target.value || null) as GuideId | null,
-											)
-										}
+										onChange={(e) => {
+											const chosen = (e.target.value || null) as GuideId | null;
+											setSelectedPersona(chosen);
+											rememberGuide(chosen);
+										}}
 										className="appearance-none bg-transparent border-none text-sm font-semibold text-[#482977] outline-none cursor-pointer hover:text-[#c22f99] transition-colors"
 									>
 										<option value="" className="bg-white">
@@ -701,6 +764,10 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							selected={selectedPersona}
 							onChoose={(choice) => {
 								setSelectedPersona(choice.guideId as GuideId);
+								// Survives the navigation, the refresh, and the trip through
+								// sign-up: a visitor who picks Kaleb and then creates an
+								// account must not be handed Guest on the other side.
+								rememberGuide(choice.guideId);
 								// No staged question: see `startConversation`.
 								startConversation(null, choice.persona, choice.band ?? null);
 							}}

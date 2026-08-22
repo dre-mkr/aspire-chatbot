@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
 	useEffect,
 	useId,
@@ -165,16 +166,34 @@ export function Rail({
 					    for the first time actually needs. The landing page has carried
 					    it since the logo was supplied; the chat was still on the old
 					    asset. */}
-					<picture aria-hidden={collapsed || undefined}>
-						<source srcSet="/brand/aspire-lockup.webp" type="image/webp" />
-						<img
-							className="rail__wordmark"
-							src="/brand/aspire-lockup.png"
-							alt="ASPIRE"
-							width={1200}
-							height={350}
-						/>
-					</picture>
+					{/* THE WORDMARK IS THE WAY HOME, and only the wordmark: the A mark
+					 * above is the expand control, because at 76px nothing else fits
+					 * beside it, and a logo that sometimes navigates and sometimes
+					 * opens a panel is a logo nobody trusts.
+					 *
+					 * A `Link`, so it middle-clicks and opens in a new tab like every
+					 * other logo on the web. It navigates and does NOTHING else --
+					 * the session, the guide and the conversation are all untouched,
+					 * which is the difference between visiting the front door and
+					 * being shown out of it. */}
+					<Link
+						to="/"
+						className="rail__home"
+						aria-hidden={collapsed || undefined}
+						tabIndex={collapsed ? -1 : undefined}
+						title="ASPIRE home"
+					>
+						<picture>
+							<source srcSet="/brand/aspire-lockup.webp" type="image/webp" />
+							<img
+								className="rail__wordmark"
+								src="/brand/aspire-lockup.png"
+								alt="ASPIRE"
+								width={1200}
+								height={350}
+							/>
+						</picture>
+					</Link>
 				</div>
 
 				<button

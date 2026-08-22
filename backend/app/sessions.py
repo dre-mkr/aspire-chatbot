@@ -59,6 +59,19 @@ class SessionResponse(BaseModel):
     account_type: str
     email: str | None = None
     display_name: str | None = None
+    #: The given name the reader typed at sign-up, on its own.
+    #:
+    #: Sent SEPARATELY from `display_name`, which is `first last` joined and is
+    #: whatever the reader put in those boxes. The client greets a returning
+    #: reader by name, and deriving that name by splitting the display name is a
+    #: guess: "T. Onu" yields "T.", an organisation account yields a shouted
+    #: acronym, and an email-prefix display name yields an address. The product
+    #: then addresses somebody by a name they do not have, in the first line
+    #: they read.
+    #:
+    #: The column has been on `users` since sign-up was written. It was simply
+    #: never returned, so the client had nothing to use but the joined string.
+    first_name: str | None = None
     avatar_url: str | None = None
     expires_in: int
     #: Who the account is for, as chosen at sign-up.
@@ -93,6 +106,8 @@ def to_session(user: User, token: str) -> SessionResponse:
         account_type=user.account_type,
         email=user.email,
         display_name=user.display_name,
+        # Anonymous rows have no name and must not borrow one.
+        first_name=user.first_name if user.account_type != ACCOUNT_ANONYMOUS else None,
         avatar_url=user.avatar_url,
         expires_in=int(TOKEN_TTL.total_seconds()),
         role=role,

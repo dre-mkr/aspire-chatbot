@@ -480,6 +480,22 @@ body {
 	pointer-events: auto;
 }
 
+/* The wordmark is a link now, so it needs to behave like the block it replaced
+   rather than like an inline anchor: no underline, no colour, and the same box
+   the `<picture>` occupied. */
+.rail__home {
+	display: block;
+	min-width: 0;
+	text-decoration: none;
+	color: inherit;
+	border-radius: 8px;
+}
+
+.rail__home:focus-visible {
+	outline: 2px solid var(--focus-ring, #c22f99);
+	outline-offset: 3px;
+}
+
 .app[data-rail="collapsed"] .rail__wordmark {
 	opacity: 0;
 }

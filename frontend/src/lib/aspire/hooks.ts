@@ -318,6 +318,42 @@ const HOOKS: Record<HookLanguage, Record<string, HookPair>> = {
 };
 
 /**
+ * The reader's given name, ONLY when the account actually holds one.
+ *
+ * THE LADDER, APPLIED TO NAMES. A display name is not a first name; it is
+ * whatever a person typed into a box, and splitting it on whitespace and
+ * greeting the first token is a guess. Real values this has to survive:
+ *
+ *     "T. Onu"                   -> "Welcome back, T.!"        an initial
+ *     "tellyonu"                 -> "Welcome back, tellyonu!"  an email prefix
+ *     "MINISTRY OF SOCIAL DEV…"  -> "Welcome back, MINISTRY!"  an organisation
+ *
+ * Each of those is the product claiming to know somebody it does not, which is
+ * exactly what `docs/HOOK_SPINE.md` forbids -- and a greeting is the worst
+ * place to be wrong, because it is the first thing read and it is addressed to
+ * them personally.
+ *
+ * So the token has to look like a name a person would answer to. Anything else
+ * returns null, the neutral "Welcome back!" stands, and nothing is lost: the
+ * greeting was warm before the name was ever added.
+ */
+export function readerGivenName(
+	displayName: string | null | undefined,
+): string | null {
+	const first = (displayName ?? "").trim().split(/\s+/)[0] ?? "";
+	if (first.length < 2 || first.length > 20) return null;
+	// An initial. "T." is how a name is abbreviated, not how it is said aloud.
+	if (first.endsWith(".")) return null;
+	// An address or a handle, not a name.
+	if (/[@_\d]/.test(first)) return null;
+	// Shouting, or an acronym: an organisation account rather than a person.
+	if (first === first.toUpperCase() && first.length > 3) return null;
+	// Letters, apostrophes and hyphens only -- O'Brien and Anne-Marie are names.
+	if (!/^[\p{L}][\p{L}'\u2019-]*$/u.test(first)) return null;
+	return first;
+}
+
+/**
  * The hook for this guide, in this language.
  *
  * Falls back to English rather than to nothing, and to Guest rather than to
@@ -328,11 +364,39 @@ export function hookFor(
 	persona: string | null | undefined,
 	language: HookLanguage = "en",
 	priorConversations = 0,
+	/**
+	 * The reader's first name, when the account knows it.
+	 *
+	 * Used ONLY on the returning line, and only when it is actually known --
+	 * this is the ladder again. A name is the strongest possible signal that
+	 * the product remembers you, and inventing one, or guessing at a display
+	 * name that is really an email prefix, is worse than the neutral greeting.
+	 */
+	name: string | null = null,
 ): Hook {
 	const key = (persona ?? "").trim().toLowerCase() || "guest";
 	const table = HOOKS[language] ?? HOOKS.en;
 	const pair = table[key] ?? HOOKS.en[key] ?? table.guest ?? HOOKS.en.guest;
-	return priorConversations > 0 ? pair.returning : pair.first;
+	if (priorConversations <= 0) return pair.first;
+
+	const back = pair.returning;
+	if (!name) return back;
+	// The name joins the GREETING clause, not the guide's introduction:
+	//
+	//   "Welcome back! It's "   -> "Welcome back, Telly! It's "
+	//   "Hola de nuevo. Soy "   -> "Hola de nuevo, Telly. Soy "
+	//   "Bon retour ! Je suis " -> "Bon retour, Telly ! Je suis "
+	//
+	// Inserting at the FIRST sentence-ending punctuation is what makes that work
+	// in all three at once, and it puts the name before French's space-before-!
+	// rather than after it. Appending to the end of the lead instead produced
+	// "Welcome back! It's, Telly Azuri." -- correct code, nonsense sentence.
+	//
+	// A lead with no terminal punctuation keeps the neutral greeting: Kaleb's
+	// "Back for " carries its question mark in the accent, and a name wedged in
+	// by force would read worse than no name at all.
+	const named = back.lead.replace(/^(.*?)(\s*[.!?])/, `$1, ${name}$2`);
+	return { ...back, lead: named };
 }
 
 /**

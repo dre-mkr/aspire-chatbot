@@ -10,6 +10,13 @@ export interface Session {
 	accountType: "anonymous" | "registered";
 	email: string | null;
 	displayName: string | null;
+	/**
+	 * The given name the reader typed at sign-up.
+	 *
+	 * Its own field because `displayName` is `first last` joined, and splitting
+	 * that back apart is a guess -- see `readerGivenName`.
+	 */
+	firstName: string | null;
 	avatarUrl: string | null;
 	/** Who the account is for, as chosen at sign-up. */
 	role?: "participant" | "guardian" | "educator";
@@ -149,6 +156,7 @@ export function ensureSession(): Promise<Session | null> {
 				accountType: body.account_type,
 				email: body.email ?? null,
 				displayName: body.display_name ?? null,
+				firstName: body.first_name ?? null,
 				avatarUrl: body.avatar_url ?? null,
 				persona: body.persona ?? undefined,
 				ageBand: body.age_band ?? undefined,

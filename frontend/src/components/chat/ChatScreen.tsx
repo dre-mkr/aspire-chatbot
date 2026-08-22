@@ -30,9 +30,10 @@ import {
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
-import type { HookLanguage } from "#/lib/aspire/hooks";
+import { type HookLanguage, readerGivenName } from "#/lib/aspire/hooks";
 import { answerToText } from "#/lib/aspire/knowledge";
 import { displayName } from "#/lib/aspire/persona-name";
+import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import {
 	eligibilityStateQuery,
 	gameStateQuery,
@@ -47,6 +48,7 @@ import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
 import { useSession } from "#/lib/aspire/use-session";
 import { useVoice } from "#/lib/aspire/use-voice";
+import { guideIdFor, rememberGuide } from "#/lib/aspire/workspace";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { AgeBandProvider, bandForPersona } from "./AgeBandProvider";
 import { ChatTitleBar } from "./ChatTitleBar";
@@ -94,6 +96,22 @@ export function ChatScreen() {
 		personaNotice,
 		dismissPersonaNotice,
 	} = useAnswerSettings();
+
+	/**
+	 * Changing guide in the chat changes it everywhere.
+	 *
+	 * `setPersona` writes the address, which is right for this conversation and
+	 * forgotten the moment the reader leaves it. The preference has to outlive
+	 * the tab: a reader who switches to Azuri here and comes back tomorrow
+	 * should be met by Azuri, not by whoever they picked the first time.
+	 */
+	const choosePersona = useCallback(
+		(next: PersonaId | null, nextBand?: AgeBand | null) => {
+			setPersona(next, nextBand ?? undefined);
+			rememberGuide(guideIdFor(next, nextBand ?? band ?? null));
+		},
+		[setPersona, band],
+	);
 
 	/** Read only for the orb's colour: the band is what separates Skye from Kaleb. */
 	const { session: identity } = useSession();
@@ -775,7 +793,7 @@ export function ChatScreen() {
 						onDeleteConversation={handleDeleteConversation}
 						persona={persona}
 						band={band}
-						onPersonaChange={setPersona}
+						onPersonaChange={choosePersona}
 						onSeed={ask}
 					/>
 
@@ -862,6 +880,16 @@ export function ChatScreen() {
 										persona={persona}
 										language={voice.language as HookLanguage}
 										priorConversations={priorConversations}
+										/* Only for a registered account, and only when the name
+										 * survives `readerGivenName` -- see the ladder note there.
+										 * An initial or an email prefix is not a name, and greeting
+										 * somebody by one is the product guessing. */
+										readerName={
+											identity?.accountType === "registered"
+												? identity.firstName?.trim() ||
+													readerGivenName(identity.displayName)
+												: null
+										}
 										onAsk={ask}
 									/>
 									<section aria-label="Conversation">
@@ -984,7 +1012,7 @@ export function ChatScreen() {
 								onToggleSimpleMode={toggleSimpleMode}
 								persona={persona}
 								band={band}
-								onPersonaChange={setPersona}
+								onPersonaChange={choosePersona}
 								draft={draft}
 								onDraftChange={setDraft}
 								focusSignal={0}
