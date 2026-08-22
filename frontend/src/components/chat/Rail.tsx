@@ -18,6 +18,9 @@ import {
 	RetryIcon,
 	TrashIcon,
 } from "#/components/icons";
+import { EducatorsView } from "#/components/landing/EducatorsView";
+import { JourneyView } from "#/components/landing/JourneyView";
+import { ParentsView } from "#/components/landing/ParentsView";
 import {
 	displayTitle,
 	groupByRecency,
@@ -27,8 +30,8 @@ import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
 import { Crossfade } from "./Crossfade";
 import { HelpLauncher } from "./HelpPanel";
-import { JourneyLauncher } from "./JourneyLauncher";
 import { VideoLauncher } from "./VideoPanel";
+import { ViewLauncher } from "./ViewLauncher";
 
 interface RailProps {
 	/** Desktop: icon-only rail. Compact: drawer is closed. */
@@ -204,16 +207,16 @@ export function Rail({
 			{/* Outside `rail__body`, so a long history cannot scroll it out of reach. */}
 			<div className="rail__help">
 				{/* Each of these asks a question rather than opening a page.
-				  *
-				  * The assistant already plays games, offers films and tracks a
-				  * journey; none of it had a door. A rail item that seeds the turn
-				  * lets the reader arrive at it without having to guess the phrase.
-				  *
-				  * Videos keeps its own panel: browsing a library is not a
-				  * conversation, and `/api/videos` is unfiltered so every persona
-				  * reaches it -- including the two the assistant will not offer a
-				  * film to unprompted.
-				  */}
+				 *
+				 * The assistant already plays games, offers films and tracks a
+				 * journey; none of it had a door. A rail item that seeds the turn
+				 * lets the reader arrive at it without having to guess the phrase.
+				 *
+				 * Videos keeps its own panel: browsing a library is not a
+				 * conversation, and `/api/videos` is unfiltered so every persona
+				 * reaches it -- including the two the assistant will not offer a
+				 * film to unprompted.
+				 */}
 				<VideoLauncher />
 				{onSeed ? (
 					<>
@@ -250,12 +253,47 @@ export function Rail({
 							</span>
 							<span className="rail__fold">Games</span>
 						</button>
-						{/* Opens the journey rather than asking about it. The seed
-						    "How am I doing so far?" is a fine turn and it is not what
-						    the label promises -- and `JourneyView` was reachable from
-						    the landing page alone, so from inside a conversation the
-						    page existed and had no door. */}
-						<JourneyLauncher />
+						{/* These three open the landing page's own section views in
+						    place. None of them is a route -- `LandingScreen` renders
+						    them behind local state -- so from inside a conversation
+						    they were written, reachable from the landing, and
+						    unreachable from where most readers actually are.
+
+						    Parents and Educators sit last before How to use because
+						    they are the two an adult goes looking for, and an adult
+						    scans to the bottom of a rail. A child does not go looking
+						    for "For Educators" at all. */}
+						<ViewLauncher
+							label="My Journey"
+							icon="ph-duotone ph-medal"
+							dialogLabel="Your financial journey"
+							triggerClassName="btn-journey"
+						>
+							{(close) => (
+								<JourneyView onBack={close} backLabel="Back to chat" />
+							)}
+						</ViewLauncher>
+						<ViewLauncher
+							label="For Parents & Guardians"
+							icon="ph-duotone ph-users-three"
+							ariaLabel="For parents and guardians"
+							dialogLabel="For parents and guardians"
+							triggerClassName="btn-parents"
+						>
+							{(close) => (
+								<ParentsView onBack={close} backLabel="Back to chat" />
+							)}
+						</ViewLauncher>
+						<ViewLauncher
+							label="For Educators"
+							icon="ph-duotone ph-chalkboard-teacher"
+							dialogLabel="For teachers and educators"
+							triggerClassName="btn-educators"
+						>
+							{(close) => (
+								<EducatorsView onBack={close} backLabel="Back to chat" />
+							)}
+						</ViewLauncher>
 					</>
 				) : null}
 				<HelpLauncher />

@@ -2,9 +2,11 @@ import { ViewHeader } from "./ViewHeader";
 
 interface EducatorsViewProps {
 	onBack: () => void;
+	/** Set by the rail's launcher, which closes a panel rather than navigating. */
+	backLabel?: string;
 }
 
-export function EducatorsView({ onBack }: EducatorsViewProps) {
+export function EducatorsView({ onBack, backLabel }: EducatorsViewProps) {
 	return (
 		<div className="relative flex flex-col min-h-screen bg-white text-[#1A103C]">
 			{/* Scenic Background Layers */}
@@ -31,7 +33,7 @@ export function EducatorsView({ onBack }: EducatorsViewProps) {
 			</div>
 			
 			<div className="relative z-10 flex flex-col flex-1">
-			<ViewHeader onBack={onBack} />
+			<ViewHeader onBack={onBack} backLabel={backLabel} />
 
 			<main className="flex-1 w-full max-w-4xl mx-auto px-6 py-12">
 				<div className="mb-12">

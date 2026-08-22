@@ -8004,6 +8004,7 @@ a.source__site--link:hover .source__out {
  * unlike the video library it is not wrapped in `.help__panel` -- it only
  * needs somewhere to sit above the scrim and a ceiling on how wide it gets.
  */
+.view-panel__surface,
 .journey-panel__surface {
 	position: relative;
 	z-index: 1;
@@ -8016,6 +8017,7 @@ a.source__site--link:hover .source__out {
 
 /* `min-h-screen` on the view itself is right on a page of its own and wrong
    inside a dialog, where it forces the panel taller than the scrim. */
+.view-panel__surface > *,
 .journey-panel__surface > * {
 	min-height: 0;
 }
