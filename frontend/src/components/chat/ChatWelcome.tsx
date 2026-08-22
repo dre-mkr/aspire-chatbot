@@ -86,34 +86,22 @@ const GUARDIAN: ReadonlyArray<WelcomeCard> = [
 		icon: "ph-duotone ph-graduation-cap",
 	},
 	{
-		title: "Is my child eligible?",
+		title: "Who is eligible?",
 		blurb: "Who qualifies, and from what age.",
-		question: "Is my child eligible for ASPIRE?",
+		question: "Who is eligible for ASPIRE?",
 		icon: "ph-duotone ph-user",
 	},
 	{
 		title: "How do I register?",
 		blurb: "Where to go and what to bring.",
-		question: "How do I register my child for ASPIRE?",
+		question: "How do I register a young person for ASPIRE?",
 		icon: "ph-duotone ph-file-text",
 	},
 	{
 		title: "What will they learn?",
 		blurb: "The material, split by age.",
-		question: "What will my child learn through ASPIRE?",
+		question: "What will young people learn through ASPIRE?",
 		icon: "ph-duotone ph-books",
-	},
-	{
-		title: "Watch the films",
-		blurb: "The two stories your child is shown.",
-		panel: "videos",
-		icon: "ph-duotone ph-play-circle",
-	},
-	{
-		title: "Try a challenge yourself",
-		blurb: "The same quiz the children play.",
-		question: "I'd like to play a game.",
-		icon: "ph-duotone ph-game-controller",
 	},
 ];
 
@@ -138,22 +126,21 @@ const EDUCATOR: ReadonlyArray<WelcomeCard> = [
 		icon: "ph-duotone ph-chart-line-up",
 	},
 	{
-		title: "What is not built yet?",
-		blurb: "The gaps, named plainly.",
-		question: "What parts of ASPIRE are planned but not built yet?",
+		/* Taken from Azuri's own card, not invented: her EVALUATING branch is
+		   written against this exact question -- `IF he is EVALUATING ("can I use
+		   this with Form 3") -> state the pitch level, describe the material
+		   honestly, and name the gap BEFORE he finds it`. So the chip lands on a
+		   route she is built for, in local school vocabulary.
+
+		   Two earlier drafts were wrong. "What is not built yet?" asked about the
+		   product's build status rather than about ASPIRE. "Running it as a
+		   lesson" was worse: her red line 2 forbids claiming to be a curriculum
+		   or a scheme of work, so that chip primed the one answer she must
+		   refuse. A chip that invites a refusal is a broken chip. */
+		title: "Can I use this with Form 3?",
+		blurb: "The pitch level, and the gaps.",
+		question: "Can I use ASPIRE with a Form 3 class?",
 		icon: "ph-duotone ph-file-text",
-	},
-	{
-		title: "Watch the films",
-		blurb: "Judge the material yourself.",
-		panel: "videos",
-		icon: "ph-duotone ph-play-circle",
-	},
-	{
-		title: "Try a challenge yourself",
-		blurb: "The same quiz your students play.",
-		question: "I'd like to play a game.",
-		icon: "ph-duotone ph-game-controller",
 	},
 ];
 
@@ -169,109 +156,109 @@ export function cardsFor(
 }
 
 /**
- * The headline and the line under it, per reader.
+ * THE ASPIRE PERSONALISATION LADDER.
  *
- * "Hi there, future builder!" is the client's line and it is written for a
- * child -- Skye, Kaleb, Zion and Guest get it. Imani and Azuri do NOT: a parent
- * with four minutes and a teacher deciding whether to use this with a class are
- * not future builders, and calling them one reads as a product that has not
- * noticed who is talking.
+ * The governing rule, and the reason this file reads the way it does:
  *
- * They keep the word rather than the label, which is what holds the family
- * together: a parent is building their child's future, a teacher is building
- * the builders. Same idea, addressed to the person actually reading.
+ *     ASPIRE may always personalise DOWNWARD to what it knows.
+ *     It must never personalise UPWARD by guessing.
+ *
+ * The levels, and what each is licensed to say:
+ *
+ *   L0  unknown           "Hi there."
+ *   L1  audience known    "if you're supporting a young person..."
+ *   L2  role known        "as a parent...", "as a teacher..."
+ *   L3  relationship      "your daughter", "your grandson", "your students"
+ *   L4  context           "your six-year-old", "your Form 3 class"
+ *   L5  goal              "you're working out whether she is eligible"
+ *
+ * THIS FUNCTION IS PINNED AT L1 and cannot go higher, because a welcome fires
+ * before the reader has said anything. Choosing "Parents & Guardians" says the
+ * reader belongs somewhere in that audience. It does NOT say parent -- they may
+ * be a grandmother, an aunt, a foster carer, a guardian, or someone asking on
+ * behalf of a friend. Choosing "Teachers & Educators" does not say classroom
+ * teacher: principal, facilitator, counsellor and youth worker all live there.
+ *
+ * So the conditional matters. "If you're supporting a young person" is true of
+ * every one of them and asserts nothing. "You're building their future" reads
+ * warmer and is an L3 claim about a relationship nobody has stated -- it was
+ * here until 22 Aug and it was wrong.
+ *
+ * L2 and above belong to the conversation, where the reader supplies the fact:
+ * "my daughter is six" licenses "your daughter", and not one word before it.
+ *
+ * The shape at every level is the same seven beats:
+ *   WELCOME -> ORIENT -> INVITE -> DISCOVER -> MIRROR -> IMPACT -> GUIDE
+ * A welcome owns the first three. The rest are the conversation's.
  */
 function welcomeFor(
 	persona: string | null | undefined,
-	/**
-	 * How many conversations this reader already has.
-	 *
-	 * A returning reader has been greeted before, and greeting them identically
-	 * every time is the tell that nobody is home. It changes the OPENING only --
-	 * the tagline, the placement and the orb are the product's identity and do
-	 * not move.
-	 */
 	priorConversations = 0,
 ): {
-	title: string;
+	/** Set plain, in the display face. */
+	lead: string;
+	/** Set in the italic gradient, exactly as "take you!" is on the landing. */
+	accent: string;
 	emoji: string;
 	line: string;
 } {
 	const returning = priorConversations > 0;
 	switch ((persona ?? "").trim().toLowerCase()) {
+		// ── the adult audiences: L1, and the conditional is load-bearing ──
 		case "aurora":
-			return returning
-				? {
-						title: "Welcome back.",
-						emoji: "\u{1F331}",
-						line: "Where would you like to pick up?",
-					}
-				: {
-						title: "Hi there. You\u2019re building their future.",
-						emoji: "\u{1F331}",
-						line: "What can I help you work through today?",
-					};
+			return {
+				lead: returning ? "Welcome " : "Hi there. Welcome to ",
+				accent: returning ? "back." : "Imani.",
+				emoji: "\u{1F331}",
+				line: returning
+					? "Where would you like to pick up?"
+					: "If you\u2019re supporting a young person through ASPIRE, I can help with the programme, their learning, and what comes next. What can I help you with today?",
+			};
 		case "nova":
-			return returning
-				? {
-						title: "Welcome back.",
-						emoji: "\u{1F4DA}",
-						line: "What would be useful for you today?",
-					}
-				: {
-						title: "Hi there. You\u2019re building the builders.",
-						emoji: "\u{1F4DA}",
-						line: "What would be useful for you today?",
-					};
+			return {
+				lead: returning ? "Welcome " : "Hi there. Welcome to ",
+				accent: returning ? "back." : "Azuri.",
+				emoji: "\u{1F4DA}",
+				line: returning
+					? "What would be useful today?"
+					: "If you\u2019re helping young people learn, I can give you accurate, sourced information and practical ASPIRE support. What would be useful today?",
+			};
+
+		// ── the child and teen bands: the age IS known, so it may be used ──
 		case "stella":
-			return returning
-				? {
-						title: "Welcome back, builder!",
-						emoji: "\u2728",
-						line: "Let\u2019s find out something new.",
-					}
-				: {
-						title: "Hi there, future builder!",
-						emoji: "\u2728",
-						line: "Let\u2019s discover something together.",
-					};
+			return {
+				lead: returning ? "Welcome back, " : "Hi there, ",
+				accent: returning ? "explorer!" : "little explorer!",
+				emoji: "\u2728",
+				line: returning
+					? "What should we find out today?"
+					: "There are lots of things about money we can discover together. What should we explore today?",
+			};
 		case "kaleb":
-			return returning
-				? {
-						title: "Welcome back, builder!",
-						emoji: "\u2728",
-						line: "What are we working out this time?",
-					}
-				: {
-						title: "Hi there, future builder!",
-						emoji: "\u2728",
-						line: "Ready to figure something out?",
-					};
+			return {
+				lead: returning ? "Back for " : "Hey \u2014 ready to ",
+				accent: returning ? "more?" : "figure something out?",
+				emoji: "\u{1F680}",
+				line: returning
+					? "What are we working out this time?"
+					: "Money, ASPIRE, saving, investing \u2014 whatever you\u2019re trying to understand. What do you want to work out?",
+			};
 		case "orion":
-			return returning
-				? {
-						title: "Welcome back, builder!",
-						emoji: "\u2728",
-						line: "What do you want to get into today?",
-					}
-				: {
-						title: "Hi there, future builder!",
-						emoji: "\u2728",
-						line: "What do you want to explore today?",
-					};
+			return {
+				lead: returning ? "Welcome " : "Hi. What do you need to ",
+				accent: returning ? "back." : "get clear on?",
+				emoji: "\u2728",
+				line: "I can help with ASPIRE, money questions, planning, and the facts behind the numbers.",
+			};
+
+		// ── L0: Guest knows nothing safe about anybody ──
 		default:
-			// Guest, and anyone whose persona has not been set.
-			return returning
-				? {
-						title: "Welcome back, builder!",
-						emoji: "\u2728",
-						line: "What would you like to explore or learn today?",
-					}
-				: {
-						title: "Hi there, future builder!",
-						emoji: "\u2728",
-						line: "What would you like to explore or learn today?",
-					};
+			return {
+				lead: returning ? "Welcome " : "Hi there. Welcome to ",
+				accent: returning ? "back." : "ASPIRE AI.",
+				emoji: "\u2728",
+				line: "What would you like to explore or learn today?",
+			};
 	}
 }
 
@@ -303,8 +290,16 @@ export function ChatWelcome({
 				 * hovering over the introduction rather than a bullet point. */}
 				<div className="welcome-zone__orb orb" aria-hidden="true" />
 
-				<h1 className="welcome-title">
-					{welcome.title} <span aria-hidden="true">{welcome.emoji}</span>
+				{/* THE SAME TREATMENT AS THE LANDING HEADLINE, and deliberately so:
+				 * `font-display font-medium` in #1A103C with the emphatic half in
+				 * the italic pink-to-indigo gradient, exactly as "take you!" is set
+				 * on "Where will your money take you!". The two headlines are the
+				 * reader's first and second impression of the same product, and
+				 * they should look like it. */}
+				<h1 className="welcome-title font-display font-medium tracking-tight">
+					{welcome.lead}
+					<span className="welcome-title__accent">{welcome.accent}</span>{" "}
+					<span aria-hidden="true">{welcome.emoji}</span>
 				</h1>
 
 				{/* Three words carry brand colour and the rest does not. Colouring
@@ -319,7 +314,10 @@ export function ChatWelcome({
 				{/* Interface copy, not a chat message -- so no bubble and no orb
 				 * beside it. The second sentence changes per guide; the placement
 				 * never does. */}
-				<p className="welcome-copy">Welcome to ASPIRE AI. {welcome.line}</p>
+				{/* No hardcoded greeting in front of this any more. The headline
+				 * does the welcoming now, in each guide's own words, and prefixing
+				 * "Welcome to ASPIRE AI." to Imani's line said it twice. */}
+				<p className="welcome-copy">{welcome.line}</p>
 			</section>
 
 			<ul className="welcome__cards">

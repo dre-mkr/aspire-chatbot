@@ -7910,7 +7910,13 @@ a.source__site--link:hover .source__out {
 	display: flex;
 	flex-direction: column;
 	gap: 28px;
-	padding: 12px 0 28px;
+	/* A real gutter, because there was none: the zone and the cards both began
+	   at the workspace's own left edge, which is the rail's right edge -- the
+	   headline and the first card were touching the navigation. Measured at
+	   1440px: gap from the workspace's left was 0. The inline value carries the
+	   whole column, zone and cards together, so they stay aligned to each
+	   other while both clear the rail. */
+	padding: clamp(18px, 2.4vh, 34px) clamp(20px, 2.6vw, 44px) 28px;
 }
 
 /* Top-left, and the mark sits at the TOP of the text rather than centred
@@ -7949,8 +7955,8 @@ a.source__site--link:hover .source__out {
 	display: grid;
 	/* Two up on a laptop, one up on a phone. `auto-fit` rather than a media
 	   query so it also behaves in the narrow column left by an open rail. */
-	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-	gap: 12px;
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 10px;
 }
 
 .welcome__card {
@@ -7959,11 +7965,13 @@ a.source__site--link:hover .source__out {
 	display: grid;
 	grid-template-columns: auto 1fr;
 	grid-template-rows: auto auto;
-	column-gap: 12px;
-	row-gap: 2px;
+	column-gap: 10px;
+	row-gap: 1px;
 	align-items: start;
 	text-align: left;
-	padding: 14px 16px;
+	/* Trimmed: four of these sit between the hero and the composer, and at
+	   14/16 they were the widest thing on the page after the headline. */
+	padding: 10px 13px;
 	/* 44px is the WCAG floor and this is a children's product; the padding and
 	   two lines of content clear it comfortably, but it is stated rather than
 	   assumed. */
@@ -8697,7 +8705,9 @@ a.source__site--link:hover .source__out {
 	position: relative;
 	z-index: 2;
 	width: min(620px, 48vw);
-	padding-top: clamp(24px, 6vh, 64px);
+	/* The wrapper supplies the gutter now, so this only adds the extra breathing
+	   room the hero wants above the orb. */
+	padding-top: clamp(8px, 2.2vh, 30px);
 	padding-bottom: 8px;
 }
 
@@ -8705,8 +8715,13 @@ a.source__site--link:hover .source__out {
    rather than a bullet point. The same `.orb` the transcript uses, so a chosen
    guide shows their own face and Guest keeps the sphere and its star. */
 .welcome-zone__orb {
-	--orb-size: 112px;
-	margin: 0 0 34px 4px;
+	/* Sized against the viewport HEIGHT, not a fixed px, and that is the whole
+	   point: at 112px flat the orb costs 146px of column and pushes the last row
+	   of cards 48px underneath the composer on a 900px-tall window. Measured, not
+	   guessed -- hiding the orb turns a 48px overlap into 98px of clearance.
+	   9vh keeps it generous on a tall display and yields on a short one. */
+	--orb-size: clamp(64px, 9vh, 112px);
+	margin: 0 0 clamp(16px, 2.6vh, 34px) 4px;
 	filter: drop-shadow(0 8px 20px rgb(84 52 145 / 0.18))
 		drop-shadow(0 0 16px rgb(194 47 153 / 0.22));
 	animation: orbFloat 4.5s ease-in-out infinite;
@@ -8722,15 +8737,37 @@ a.source__site--link:hover .source__out {
 	}
 }
 
+/* Matched to the landing headline, not approximated. `font-display` and the
+ * weight come from the class list in the JSX; everything the utility classes do
+ * not cover is set here with the landing's own values -- #1A103C, leading 1.05,
+ * and the same soft drop shadow. */
 .welcome-title {
 	font-size: clamp(34px, 4vw, 62px);
-	line-height: 1.04;
-	font-weight: 750;
-	letter-spacing: -0.035em;
-	color: #2e1760;
+	line-height: 1.05;
+	letter-spacing: -0.025em;
+	color: #1a103c;
 	max-width: 640px;
 	margin: 0;
 	text-wrap: balance;
+	filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.05));
+}
+
+/* The exact gradient from "take you!": pink -> indigo -> the body colour,
+ * clipped to the glyphs and set italic. Changing one means changing both. */
+.welcome-title__accent {
+	font-style: italic;
+	background-image: linear-gradient(
+		to right,
+		#c22f99,
+		#482977,
+		#1a103c
+	);
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	/* The italic's overhang clips against the background box without this,
+	 * which is why the landing span carries `pr-2`. */
+	padding-right: 0.5rem;
 }
 
 .welcome-tagline {

@@ -19,7 +19,11 @@ import {
 import { downloadTranscript } from "#/lib/aspire/export";
 import { engineGameType } from "#/lib/aspire/game-kinds";
 import { type GameState, startGame } from "#/lib/aspire/games";
-import { type PendingTurn, takePendingTurn } from "#/lib/aspire/handoff";
+import {
+	isFreshThread,
+	type PendingTurn,
+	takePendingTurn,
+} from "#/lib/aspire/handoff";
 import {
 	displayTitle,
 	loadConversations,
@@ -137,6 +141,7 @@ export function ChatScreen() {
 		activeStoredTitle,
 		threadId,
 		animateAfterId,
+		adoptThread,
 		send,
 		resumeFirstTurn,
 		sendInteraction,
@@ -549,6 +554,22 @@ export function ChatScreen() {
 		}
 
 		/**
+		 * A guide card opens an empty conversation on purpose. It has no rows to
+		 * restore and the server has never been told it exists, so the read below
+		 * would 404 and send the reader back to the landing -- which is where they
+		 * just came from. Nothing to fetch, and that is the correct outcome:
+		 * an empty thread is exactly what the welcome renders for.
+		 */
+		if (isFreshThread(chatId)) {
+			// Nothing to fetch -- but the conversation still has to be adopted, or
+			// `send` refuses every later turn on the grounds that no conversation
+			// is open. That refusal is silent, so the symptom is a composer that
+			// takes the reader's question and does nothing with it.
+			adoptThread(chatId);
+			return;
+		}
+
+		/**
 		 * An identity first, because a conversation is only readable as its
 		 * owner. Then the service directly rather than through Query: this is
 		 * the one read whose *failure* has to be acted on, and a rejection is
@@ -577,7 +598,15 @@ export function ChatScreen() {
 					replace: true,
 				});
 			});
-	}, [chatId, threadId, navigate, openPast, stopPlayback, queryClient]);
+	}, [
+		chatId,
+		threadId,
+		navigate,
+		openPast,
+		stopPlayback,
+		queryClient,
+		adoptThread,
+	]);
 
 	const handleOpenPast = useCallback(
 		(conversation: StoredConversation) => {

@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useState } from "react";
-import { stageFirstTurn } from "#/lib/aspire/handoff";
+import { markFreshThread, stageFirstTurn } from "#/lib/aspire/handoff";
 import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
@@ -133,6 +133,9 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			if (message) onStartConversation(message);
 		} else {
 			const threadId = crypto.randomUUID();
+			// No message means the guide opens the conversation, and the chat page
+			// has to be told this address is new rather than unreachable.
+			if (!message) markFreshThread(threadId);
 			if (message) {
 				stageFirstTurn({
 					threadId,

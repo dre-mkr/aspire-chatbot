@@ -47,6 +47,39 @@ export function takePendingTurn(threadId: string): PendingTurn | null {
 }
 
 /**
+ * A thread the landing page just minted and deliberately left EMPTY.
+ *
+ * Choosing a guide opens a conversation with nothing staged, so the guide can
+ * speak first (see `startConversation`). That leaves the chat page holding a
+ * UUID with no pending turn and no cached rows -- which is character for
+ * character what an address from another device looks like, and that path ends
+ * in `fetchConversation`, a 404, and a redirect back here.
+ *
+ * So the guide cards would bounce straight off the chat page and back to the
+ * landing. Not a backend outage: the conversation genuinely does not exist yet,
+ * because an empty one is never written. The 404 is correct and the conclusion
+ * drawn from it was wrong.
+ *
+ * This is the one bit ofledger that tells the two cases apart. The landing knows
+ * it minted the id a tick ago; nothing else in the system can know that.
+ *
+ * Read without clearing, unlike `takePendingTurn`. That one clears because
+ * sending twice is the failure it guards; here a re-run must reach the SAME
+ * answer, and a second effect pass that found the slot empty would fall through
+ * to the fetch and bounce the reader after all.
+ */
+let freshThread: string | null = null;
+
+export function markFreshThread(threadId: string): void {
+	if (!clientSide) return;
+	freshThread = threadId;
+}
+
+export function isFreshThread(threadId: string): boolean {
+	return freshThread === threadId;
+}
+
+/**
  * The landing composer's unsent text. The page unmounts on the way to a chat,
  * so without this a draft typed at `/` would not survive coming back to it.
  */
