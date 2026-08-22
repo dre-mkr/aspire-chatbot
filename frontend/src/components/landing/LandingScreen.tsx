@@ -230,7 +230,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</div>
 
 			{/* Elegant Header */}
-			<header className="landing-head relative z-10 w-full max-w-[104rem] mx-auto px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
+			<header className="landing-head relative z-10 w-full px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
 				<div className="flex items-center gap-8">
 					<Brandmark variant="header" />
 					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
@@ -291,7 +291,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</header>
 
 			{/* Main Content */}
-			<main className="relative z-10 flex-1 w-full max-w-[104rem] mx-auto px-4 sm:px-8 flex flex-col justify-center">
+			<main className="relative z-10 flex-1 w-full px-4 sm:px-8 flex flex-col justify-center">
 				{/* Hero Section */}
 				<div className="max-w-4xl mb-5 relative z-10 landing-hero">
 					<h1 className="text-5xl md:text-6xl lg:text-[4.75rem] font-display font-medium text-[#1A103C] leading-[1.05] mb-2 tracking-tight drop-shadow-sm">
@@ -606,8 +606,8 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								}
 								className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#c22f99]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer"
 							>
-								<div className="w-8 h-8 rounded-full bg-fuchsia-50 flex items-center justify-center text-[#c22f99]">
-									<i className="ph-duotone ph-graduation-cap text-lg"></i>
+								<div className="w-12 h-12 rounded-2xl bg-fuchsia-50 flex items-center justify-center text-[#c22f99]">
+									<i className="ph-duotone ph-graduation-cap text-2xl"></i>
 								</div>
 								<div className="text-left mt-1">
 									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">
@@ -625,8 +625,8 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								}
 								className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#fed141]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer"
 							>
-								<div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-500">
-									<i className="ph-duotone ph-coins text-lg"></i>
+								<div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500">
+									<i className="ph-duotone ph-coins text-2xl"></i>
 								</div>
 								<div className="text-left mt-1">
 									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">
@@ -646,8 +646,8 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								}
 								className="bg-white/90 backdrop-blur-xl border border-[#482977]/20 rounded-[1.25rem] p-3 flex flex-col items-start gap-2 hover:bg-white hover:border-[#482977]/50 transition-all group shadow-sm hover:shadow-md cursor-pointer"
 							>
-								<div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-[#482977]">
-									<i className="ph-duotone ph-chart-line-up text-lg"></i>
+								<div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-[#482977]">
+									<i className="ph-duotone ph-chart-line-up text-2xl"></i>
 								</div>
 								<div className="text-left mt-1">
 									<div className="text-sm font-bold text-[#1A103C] leading-tight mb-1">
@@ -692,7 +692,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 
 			{/* Institutional Footer */}
 			<footer className="relative z-10 w-full border-t border-[#482977]/10 bg-white/90 backdrop-blur-xl mt-auto">
-				<div className="max-w-[104rem] mx-auto px-4 sm:px-8 py-3 flex flex-wrap gap-6 items-center justify-between">
+				<div className="w-full px-4 sm:px-8 py-3 flex flex-wrap gap-6 items-center justify-between">
 					{/* THREE STATISTICS WERE HERE, AND NONE OF THEM WERE TRUE.
 					 *
 					 * "4,200+ young learners", "18,745 lessons completed" and
