@@ -1357,6 +1357,62 @@ body {
 	--orb-deep: #0e4139;
 }
 
+/* Each guide's own face and ring, keyed off the one attribute at the root.
+ *
+ * `guest` is deliberately absent: it keeps the sphere, because it is the voice
+ * that has not been told who is reading and there is no face for that.
+ */
+.app[data-persona="stella"] .orb {
+	--orb-face: image-set(
+		url("/guides/skye.webp") type("image/webp"),
+		url("/guides/skye.png") type("image/png")
+	);
+	--guide-ring: #c22f99;
+}
+.app[data-persona="kaleb"] .orb,
+/* A session minted before the split still says `stella` at 9-12. Same seam as
+   the server's `_SPLIT`, so an old token shows Kaleb rather than reverting. */
+.app[data-persona="stella"][data-band="9-12"] .orb {
+	--orb-face: image-set(
+		url("/guides/kaleb.webp") type("image/webp"),
+		url("/guides/kaleb.png") type("image/png")
+	);
+	--guide-ring: #3b82f6;
+}
+.app[data-persona="orion"] .orb {
+	--orb-face: image-set(
+		url("/guides/zion.webp") type("image/webp"),
+		url("/guides/zion.png") type("image/png")
+	);
+	--guide-ring: #f4b000;
+}
+.app[data-persona="aurora"] .orb {
+	--orb-face: image-set(
+		url("/guides/imani.webp") type("image/webp"),
+		url("/guides/imani.png") type("image/png")
+	);
+	--guide-ring: #5c3aae;
+}
+.app[data-persona="nova"] .orb {
+	--orb-face: image-set(
+		url("/guides/azuri.webp") type("image/webp"),
+		url("/guides/azuri.png") type("image/png")
+	);
+	--guide-ring: #0dae93;
+}
+
+/* Thinking and muted keep the sphere: a portrait that pulses is unsettling,
+   and a greyed-out face reads as the person being disabled.
+   Written with `[data-persona]` to match the specificity of the rules above --
+   `.orb--muted` alone loses to `.app[data-persona="nova"] .orb` and the intent
+   would only be holding because `.orb--muted::after` happens to use the
+   `background` shorthand. */
+.app[data-persona] .orb--thinking,
+.app[data-persona] .orb--muted {
+	--orb-face: none;
+	--guide-ring: transparent;
+}
+
 /* Guest -- answers before it knows who is reading, and looks like it. */
 .app[data-persona="guest"] {
 	--orb-tint: #e2dcf0;
@@ -1365,25 +1421,48 @@ body {
 	--orb-deep: #33255c;
 }
 
+/* THE GUIDE'S FACE, WITH THE SPHERE UNDERNEATH IT.
+ *
+ * Two layers, and the order is the point. `--orb-face` is the illustrated
+ * guide; the radial gradient beneath is what shows while that image is still
+ * arriving, and what shows permanently for `guest`, which has no face because
+ * it is the voice that has not been told who is reading.
+ *
+ * So the gradient is not dead weight -- it is the fallback, and it is already
+ * tinted per persona, which means the placeholder is the right colour before
+ * the photograph lands rather than a grey hole.
+ *
+ * The ring is `--guide-ring`, the same five colours the landing row uses under
+ * "Meet your guides". A reader who chose Kaleb by his blue circle should meet
+ * that same blue circle at the top of his first answer.
+ */
 .orb::after {
 	content: "";
 	position: absolute;
 	inset: 0;
 	border-radius: 999px;
-	background: radial-gradient(
-		circle at 33% 26%,
-		var(--orb-spec) 0%,
-		var(--orb-tint) 12%,
-		var(--orb-mid) 38%,
-		var(--orb-low) 72%,
-		var(--orb-deep) 100%
-	);
+	background-image: var(--orb-face, none),
+		radial-gradient(
+			circle at 33% 26%,
+			var(--orb-spec) 0%,
+			var(--orb-tint) 12%,
+			var(--orb-mid) 38%,
+			var(--orb-low) 72%,
+			var(--orb-deep) 100%
+		);
+	background-size: cover, auto;
+	/* `top` rather than `center`: these are portraits, and a circle cropped from
+	   the middle of one takes the chin and loses the eyes. */
+	background-position: center top, center;
+	background-repeat: no-repeat, no-repeat;
 	box-shadow:
+		inset 0 0 0 1.5px var(--guide-ring, transparent),
 		inset 0 -3px 7px rgb(53 29 90 / 0.5),
 		0 4px 12px rgb(72 41 119 / 0.25);
 	/* The colour is identity, so it should not snap when the reader switches guide. */
 	transition: background 320ms ease;
 }
+
 
 @media (prefers-reduced-motion: reduce) {
 	.orb::after {
