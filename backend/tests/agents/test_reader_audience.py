@@ -311,3 +311,46 @@ class TestTheJourneyStage:
         )
         assert "STEWARDSHIP" in out
         assert "has not applied" in out
+
+
+class TestThePersonaSaysItsName:
+    """The phrasing everyone actually uses was the one that missed."""
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "what is your name?",
+            "what's your name",
+            "who are you",
+            "what are you",
+            "what do I call you",
+            "do you have a name",
+            "tell me your name",
+            "¿cómo te llamas?",
+            "¿cuál es tu nombre?",
+            "quién eres",
+            "comment tu t'appelles",
+            "quel est ton nom",
+            "qui es-tu",
+        ],
+    )
+    def test_every_way_of_asking(self, message):
+        from app.agents.qa import nodes as qa
+
+        assert qa.small_talk_kind(message) == "identity"
+
+    @pytest.mark.parametrize(
+        "message",
+        ["what is compound interest", "what is ASPIRE", "who gives me the money"],
+    )
+    def test_and_nothing_that_is_not_asking(self, message):
+        from app.agents.qa import nodes as qa
+
+        assert qa.small_talk_kind(message) != "identity"
+
+    def test_the_persona_is_actually_named(self):
+        from app.agents.qa import nodes as qa
+
+        assert "Skye" in qa.small_talk_answer(
+            "what is your name?", locale="en", persona="stella", age_band="5-8"
+        )
