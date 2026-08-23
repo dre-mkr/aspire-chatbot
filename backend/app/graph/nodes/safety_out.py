@@ -803,6 +803,33 @@ def make_safety_out(reprompt: Reprompt | None = None):
         if widgets:
             text = original if text == prose_in else sentinel.reattach(text, widgets)
 
+        # ── (g) the retrieved half of the reply, in the reader's language ───
+        #
+        # The answer is GENERATED, so it already follows a reader who wrote
+        # Spanish. Chips are RETRIEVED -- `follow_up_chips` lifts them verbatim
+        # from a corpus that is English-only -- so they could not follow, and a
+        # Spanish answer arrived under three English buttons.
+        #
+        # Only the corpus-derived ones. Story follow-ups, the fallback chip,
+        # game labels and story topics are authored per locale and are already
+        # right; `from_the_corpus` is that distinction stated exactly rather
+        # than guessed at. Translations are cached by exact text, so a chip is
+        # paid for once across every reader who ever sees it.
+        if locale != "en" and replies:
+            from app.sources import from_the_corpus
+
+            retrieved = [chip for chip in replies if from_the_corpus(chip)]
+            if retrieved:
+                from app.agent import localise_lines
+
+                localised = await localise_lines(retrieved, locale)
+                by_original = dict(zip(retrieved, localised, strict=True))
+                translated = [by_original.get(chip, chip) for chip in replies]
+                if translated != replies:
+                    report["chips_localised"] = locale
+                    flags["outbound"] = report
+                replies = translated
+
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
 
         # The video offer, last, and here rather than in any one agent: this is

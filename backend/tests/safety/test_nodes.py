@@ -715,3 +715,87 @@ class TestSafetyOutGeneral:
     async def test_a_turn_ending_in_a_human_message_is_a_no_op(self, state_for):
         node = so.make_safety_out(None)
         assert await node(state_for(messages=[HumanMessage(content="hi")])) == {}
+
+
+@pytest.mark.asyncio
+class TestChipsFollowTheReaderToo:
+    """A Spanish answer under three English buttons."""
+
+    CORPUS_CHIP = "How do I open a bank account?"
+    AUTHORED_CHIP = "¿Qué harías tú?"
+
+    async def test_a_corpus_chip_is_translated(self, state_for, monkeypatch):
+        async def fake(lines, language):
+            assert language == "es"
+            return [f"[{language}] {line}" for line in lines]
+
+        monkeypatch.setattr("app.agent.localise_lines", fake)
+        node = so.make_safety_out(None)
+        state = state_for(
+            age_band="adult",
+            locale="es",
+            messages=[AIMessage(content="Para inscribir a tu hijo, entra en el portal.")],
+            quick_replies=[self.CORPUS_CHIP],
+        )
+
+        update = await node(state)
+        assert update["quick_replies"] == [f"[es] {self.CORPUS_CHIP}"]
+
+    async def test_an_authored_chip_is_left_alone(self, state_for, monkeypatch):
+        """Story follow-ups and game labels are already written per locale."""
+        called = []
+
+        async def fake(lines, language):
+            called.append(lines)
+            return lines
+
+        monkeypatch.setattr("app.agent.localise_lines", fake)
+        node = so.make_safety_out(None)
+        state = state_for(
+            age_band="adult",
+            locale="es",
+            messages=[AIMessage(content="Había una vez una niña que ahorraba.")],
+            quick_replies=[self.AUTHORED_CHIP],
+        )
+
+        update = await node(state)
+        assert update["quick_replies"] == [self.AUTHORED_CHIP]
+        assert not called, "an already-Spanish chip must not be sent to be translated"
+
+    async def test_english_never_calls_the_translator(self, state_for, monkeypatch):
+        called = []
+
+        async def fake(lines, language):
+            called.append(lines)
+            return lines
+
+        monkeypatch.setattr("app.agent.localise_lines", fake)
+        node = so.make_safety_out(None)
+        state = state_for(
+            age_band="adult",
+            locale="en",
+            messages=[AIMessage(content="To register your child, use the portal.")],
+            quick_replies=[self.CORPUS_CHIP],
+        )
+
+        update = await node(state)
+        assert update["quick_replies"] == [self.CORPUS_CHIP]
+        assert not called
+
+    async def test_a_failed_translation_keeps_the_english(self, state_for, monkeypatch):
+        """Degrading to the status quo beats losing the reader their chips."""
+
+        async def fake(lines, language):
+            return lines
+
+        monkeypatch.setattr("app.agent.localise_lines", fake)
+        node = so.make_safety_out(None)
+        state = state_for(
+            age_band="adult",
+            locale="es",
+            messages=[AIMessage(content="Para inscribir a tu hijo, entra en el portal.")],
+            quick_replies=[self.CORPUS_CHIP],
+        )
+
+        update = await node(state)
+        assert update["quick_replies"] == [self.CORPUS_CHIP]

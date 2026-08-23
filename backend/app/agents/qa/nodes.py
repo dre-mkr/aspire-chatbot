@@ -1227,10 +1227,35 @@ FOLLOW_UP_CHIPS = 3
 CHIP_MAX_CHARS = CHIP_LABEL_CHARS
 
 
+#: Where a story goes next, per locale.
+#:
+#: A story used to end and stop. The shapes in `_STORY_BY_PERSONA` tell the
+#: model not to add a question at the end -- rightly, because an invented quiz
+#: about ASPIRE is exactly the failure this product cannot have -- but nothing
+#: took the conversation on from there either. Maya saved for a laptop, and
+#: then nothing.
+#:
+#: Chips rather than prose, for the same reason the instruction exists: these
+#: are written here, so a story can invite the next turn without the model
+#: being free to invent a programme fact on the way out.
+_STORY_FOLLOW_UPS: dict[str, list[str]] = {
+    "en": ["What would you do?", "Tell me another", "What does it teach?"],
+    "es": ["¿Qué harías tú?", "Cuéntame otra", "¿Qué nos enseña?"],
+    "fr": ["Que ferais-tu ?", "Raconte-m'en une autre", "Qu'est-ce que ça apprend ?"],
+}
+
+
 def follow_up_chips(
     state: AspireState, chunks: list[KBChunk], cited: set[str]
 ) -> list[str]:
     """More questions the corpus can answer, drawn from the reranked chunks then `qa_related`."""
+    # A story earns its own, because corpus questions do not follow from one.
+    # "Is the ASPIRE application always open?" is a fine chip after a policy
+    # answer and a non-sequitur after a story about a girl and a laptop.
+    if state.get("story_topic"):
+        locale = str(state.get("locale") or "en")
+        return list(_STORY_FOLLOW_UPS.get(locale, _STORY_FOLLOW_UPS["en"]))
+
     asked = _asked_questions(state)
     # What the answer covered, by question not by id: two rows can ask the same thing.
     covered = [
