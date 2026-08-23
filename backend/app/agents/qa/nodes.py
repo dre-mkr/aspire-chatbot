@@ -30,16 +30,8 @@ REWRITE_SYSTEM = (
     "Rewrite the last user message into a standalone search query. Resolve "
     "pronouns and anything left out, using the conversation for context. Keep "
     "the user's own words wherever you can -- you are preparing a search, not "
-    "improving a question. Reply with the query and nothing else.\n\n"
-    "A message can be a complete SENTENCE and still not be a QUESTION. When the "
-    "reader is supplying a fact about their situation -- \"she is 15\", \"my son "
-    "is 4\", \"we live in Nevis\", \"he is not in school\" -- they are answering "
-    "or refining the question the conversation is already about, and they expect "
-    "it answered again with the new fact in it. Write THAT question. \"she is "
-    "15\", after a question about which children can join, becomes \"is a "
-    "15-year-old eligible for ASPIRE\".\n\n"
-    "Only repeat a message unchanged when it is already a question that would "
-    "make sense to somebody who had not read the conversation."
+    "improving a question. Reply with the query and nothing else. If the "
+    "message already stands alone, repeat it unchanged."
 )
 
 #: How many turns of context the rewriter sees.

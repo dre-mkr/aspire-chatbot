@@ -295,28 +295,30 @@ class TestConversationalFlow:
         assert small_talk_kind("should I cancel my subscriptions?") is None
         assert small_talk_kind("cancel my ASPIRE application") is None
 
-    def test_the_rewriter_is_told_a_sentence_is_not_a_question(self):
-        """"she is 15" is grammatically complete and is not a question.
+    def test_the_rewriter_resolves_a_fragment_against_context(self):
+        """The instruction that was suspected and cleared.
 
-        It was embedded verbatim, matched nothing, and the parent was told "I do
-        not have an answer for that" — after supplying the one fact the previous
-        question needed. `and the 15 year old?` worked on the same context, which
-        is what isolated it: the noun survived and the pronoun did not.
+        "she is 15" was answered "I do not have an answer for that" on
+        production while `and the 15 year old?` worked on identical context,
+        which pointed at the rewriter: its prompt ends "if the message already
+        stands alone, repeat it unchanged", and "she is 15" is a grammatically
+        complete sentence.
+
+        Tested against the real rewriter on production's own model, with real
+        conversation context, and IT RESOLVES CORRECTLY -- "Can my 15-year-old
+        daughter join ASPIRE?". So the rewriter is not the cause and the prompt
+        was left as it shipped. The failure is downstream of the rewrite, in
+        retrieval or the 0.55 relevance floor, and settling that needs the
+        corpus rather than a model.
+
+        This asserts the instruction is intact, so a later reader does not
+        re-suspect it.
         """
-        from app.agents.qa.nodes import REWRITE_SYSTEM
+        from app.agents.qa.nodes import REWRITE_SYSTEM, REWRITE_WINDOW
 
-        assert "not be a QUESTION" in REWRITE_SYSTEM
-        assert "she is 15" in REWRITE_SYSTEM
-        assert "supplying a fact" in REWRITE_SYSTEM
-
-    def test_the_length_guard_does_not_discard_a_resolved_fragment(self):
-        """A short fragment resolves into a much longer query by design.
-
-        The guard exists to catch a rewrite that ran away. Six times plus eighty
-        leaves room for "she is 15" -> "is a 15-year-old eligible for ASPIRE".
-        """
-        original, rewritten = "she is 15", "is a 15-year-old eligible for ASPIRE"
-        assert len(rewritten) <= len(original) * 6 + 80
+        assert "Resolve pronouns and anything left out" in REWRITE_SYSTEM
+        assert "using the conversation for context" in REWRITE_SYSTEM
+        assert REWRITE_WINDOW >= 4, "too little context to resolve a pronoun"
 
     def test_aurora_does_not_answer_yes_to_a_question_that_asked_neither(self):
         """"What is ASPIRE?" was answered "Yes." and "When can she access it?"
