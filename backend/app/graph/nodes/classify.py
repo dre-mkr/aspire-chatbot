@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import json
 import logging
 from typing import Any
@@ -190,6 +192,26 @@ TEACHING_AGENTS: tuple[str, ...] = (
 )
 
 
+#: A message that is asking something, rather than answering something.
+#:
+#: Quiz answers are short and declarative: "Saving", "Spending", "true", "I
+#: think a loan". A question is not, and the difference is what this reads.
+_ASKS_SOMETHING = re.compile(
+    r"\?\s*$"                                     # ends in a question mark
+    r"|^\s*(what|who|when|where|why|how|which|can|could|do|does|did|is|are|"
+    r"should|will|would|am|have|has|tell me|explain)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_a_question_not_an_answer(state: AspireState) -> bool:
+    """Whether this turn asks something rather than answering the last thing."""
+    text = (_latest_user_text(state) or "").strip()
+    if not text:
+        return False
+    return bool(_ASKS_SOMETHING.search(text))
+
+
 def apply_stickiness(decision: Classification, state: AspireState) -> Classification:
     """Keep an ongoing flow unless the proposal clears the threshold."""
     active = state.get("active_agent")
@@ -215,6 +237,46 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
         logger.info(
             "Letting %s take session %s from %s at %.2f: a move into teaching is "
             "exempt from stickiness.",
+            decision.agent,
+            state.get("session_id"),
+            active,
+            decision.confidence,
+        )
+        return decision
+
+    # A QUESTION is never scored as a quiz answer.
+    #
+    # The exemption above is one-way on purpose: teaching is easy to enter and,
+    # by design, hard to leave. What that had no exit for was a reader who is
+    # inside a lesson and asks about something else entirely. Below the
+    # threshold they stayed in the tutor, and the tutor read their question as
+    # an attempt at its last check question.
+    #
+    # Measured on production, 23 August 2026, signed out:
+    #   Azuri  "What have you got for my Form 3 class?"
+    #          -> "You move EC$25 into your account instead of spending it this
+    #             week. What is that?"        [Saving | Spending]
+    #   Azuri  "What are my safeguarding obligations?"
+    #          -> "Close. Ask yourself whether the money left your account or
+    #             moved within it."           [Let me try again | Show me the answer]
+    #   Imani  "Is my money safe?"  -> the same EC$25 quiz question.
+    #
+    # A teacher asking about child safeguarding was told "Close." Both adult
+    # personas were worst hit, because a parent and a teacher ask the most
+    # questions that are not lessons.
+    #
+    # So the door opens both ways for a QUESTION and stays one-way for
+    # everything else. A quiz answer is short and declarative -- "Saving",
+    # "true", "I think a loan" -- and none of those match, so a lesson under way
+    # is protected exactly as before.
+    if (
+        active in TEACHING_AGENTS
+        and decision.agent not in TEACHING_AGENTS
+        and _is_a_question_not_an_answer(state)
+    ):
+        logger.info(
+            "Letting %s take session %s from %s at %.2f: the reader asked a "
+            "question rather than answering one.",
             decision.agent,
             state.get("session_id"),
             active,
