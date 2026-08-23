@@ -1376,12 +1376,27 @@ _IDENTITY_NAMED: Final[dict[str, str]] = {
 }
 
 
+#: Personas with no name to give, which answer the generic line instead.
+#:
+#: A DECISION, not an oversight, and named here so the next reader can tell.
+#: "Guest" is the absence of a name rather than one -- the persona exists
+#: precisely for the reader who has not said who they are -- so "I'm Guest,
+#: your ASPIRE guide" would be introducing a character that does not exist.
+#: The generic line is not a fallback for that reader; it is the correct answer.
+#:
+#: Anything else in `Persona` must have a name. `test_four_persona_fixes` walks
+#: the enum rather than a list, so adding a persona without one fails the build
+#: instead of quietly rejoining the six that used to say "I'm the ASPIRE
+#: assistant" whoever they were.
+_NO_NAME_TO_GIVE: Final[frozenset[str]] = frozenset({"guest"})
+
+
 def _identity_reply(state: AspireState, locale: str) -> str:
     """The identity line, named where there is a name to give."""
     from app.prompting.personas.names import display_name
 
     persona = str(state.get("persona") or "").strip().lower()
-    if persona and persona != "guest":
+    if persona and persona not in _NO_NAME_TO_GIVE:
         name = display_name(persona, str(state.get("age_band") or ""))
         if name:
             template = _IDENTITY_NAMED.get(locale) or _IDENTITY_NAMED["en"]

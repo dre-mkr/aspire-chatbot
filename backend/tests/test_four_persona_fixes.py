@@ -42,6 +42,35 @@ class TestEachGuideSaysItsOwnName:
         reply = _identity_reply({"persona": persona, "age_band": band}, "en")
         assert expected in reply, f"{persona}/{band} did not say {expected!r}"
 
+    @pytest.mark.parametrize("persona", [p.value for p in Persona])
+    def test_every_persona_in_the_enum_is_accounted_for(self, persona: str):
+        """WALKS THE ENUM, so a seventh persona cannot slip in unnamed.
+
+        The list above is by hand and would not have noticed one. This is what
+        makes the fix hold rather than merely having been applied once: add a
+        persona and either it says its own name, or it is declared as having
+        none on purpose. There is no third outcome that passes.
+        """
+        from app.agents.qa.nodes import _NO_NAME_TO_GIVE, _identity_reply
+        from app.prompting.personas.names import display_name
+
+        reply = _identity_reply({"persona": persona, "age_band": ""}, "en")
+        if persona in _NO_NAME_TO_GIVE:
+            assert "ASPIRE assistant" in reply
+            return
+        name = display_name(persona, "")
+        assert name, f"{persona} has no label in NAMES"
+        assert name in reply, (
+            f"{persona} answers 'who are you?' without saying {name!r} — either "
+            f"give it a label or add it to _NO_NAME_TO_GIVE deliberately"
+        )
+
+    def test_only_guest_is_exempt(self):
+        """The exemption is one persona wide and should stay that way."""
+        from app.agents.qa.nodes import _NO_NAME_TO_GIVE
+
+        assert _NO_NAME_TO_GIVE == {"guest"}
+
     @pytest.mark.parametrize("locale", ["en", "es", "fr"])
     def test_it_names_itself_in_every_language(self, locale: str):
         from app.agents.qa.nodes import _identity_reply
