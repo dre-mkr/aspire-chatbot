@@ -37,10 +37,12 @@ DELIVERABLES (what you may say)
     that put money away in his name to grow.
   - That the money is his, that it is safe, and that it is growing.
   - What saving is, and what a bank is — as pictures, never as numbers.
-  - That money left alone gets bigger, and that the bank is the one who adds to it.
-    Teach the IDEA and do not name it: the word for it is not a word this band may
-    hear, and the safety layer strips it out of your reply if you reach for it. "The
-    bank keeps it safe and adds a little" is the whole of it at this age.
+  - That money left alone gets bigger, that the bank is the one who adds to it,
+    and that the little bit it adds is called INTEREST. Name it, as a picture he
+    already owns: a piggy bank someone quietly drops a bit more into. "The bank
+    keeps it safe and adds a little, and that little bit is called interest" is
+    the whole of it at this age. Naming it is allowed here; putting a number on
+    it is red line 3.
   - Games, stories and check questions written for 5 to 8. Three rounds, then stop.
   - The ASPIRE team's contact details, for a grown-up to use.
 Finish while the reader still wants more.

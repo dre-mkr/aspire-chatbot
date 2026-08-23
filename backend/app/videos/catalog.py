@@ -24,6 +24,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Final
 
 from app.domain import Language, Persona
@@ -69,6 +70,25 @@ class Video:
 
     #: The line offered after an answer. Kept as a question, always declinable.
     offer: str
+
+    #: The locales this video has a caption track for, BESIDES English.
+    #:
+    #: Declaring one is not the same as having one. `has_subtitle` checks the
+    #: file is actually on disk before anything is offered, so a track that is
+    #: commissioned but not delivered keeps the offer closed rather than sending
+    #: a French reader to an English soundtrack with no captions.
+    subtitles: tuple[Language, ...] = ()
+
+    #: The subject, per locale, for the chip. English falls back to `topic`.
+    topics: tuple[tuple[Language, str], ...] = ()
+
+    #: The offer line per locale. English falls back to `offer`.
+    #:
+    #: Translating the offer is not optional decoration: the offer IS the chip
+    #: the reader taps, and a French reader tapping an English sentence has been
+    #: told, in the one place it matters, that this feature was not built for
+    #: them.
+    offers: tuple[tuple[Language, str], ...] = ()
 
 
 #: Where the client looks for the files. One place, so a move is one line.
@@ -127,6 +147,12 @@ _VIDEOS: Final[tuple[Video, ...]] = (
             "shortages",
         ),
         offer="Would you like to watch a short ASPIRE video about scarcity?",
+        subtitles=(Language.ES, Language.FR),
+        offers=(
+            (Language.ES, "¿Quieres ver un vídeo corto de ASPIRE sobre la escasez?"),
+            (Language.FR, "Veux-tu regarder une courte vidéo ASPIRE sur la rareté ?"),
+        ),
+        topics=((Language.ES, "la escasez"), (Language.FR, "la rareté")),
     ),
     Video(
         id="monique-saving-adventure",
@@ -171,10 +197,83 @@ _VIDEOS: Final[tuple[Video, ...]] = (
             "money",
         ),
         offer="Would you like to watch an ASPIRE story about setting a savings goal?",
+        subtitles=(Language.ES, Language.FR),
+        offers=(
+            (Language.ES,
+             "¿Quieres ver una historia de ASPIRE sobre ahorrar para una meta?"),
+            (Language.FR,
+             "Veux-tu regarder une histoire ASPIRE sur l'épargne pour un objectif ?"),
+        ),
+        topics=((Language.ES, "el ahorro"), (Language.FR, "l'épargne")),
     ),
 )
 
 _BY_ID: Final[dict[str, Video]] = {video.id: video for video in _VIDEOS}
+
+
+#: Where a caption track sits, next to the film it belongs to.
+SUBTITLE_DIR: Final[str] = PUBLIC_DIR
+
+#: Resolved from this file, so a checkout with no LFS pull still answers
+#: honestly: no track on disk, no offer.
+_ASSET_ROOT: Final[Path] = (
+    Path(__file__).resolve().parents[3] / "frontend" / "public" / "videos"
+)
+
+
+def subtitle_filename(video: Video, language: Language) -> str:
+    """`moniques-saving-adventure.fr.vtt`. One convention, derived, never typed."""
+    return f"{video.filename.rsplit('.', 1)[0]}.{language.value}.vtt"
+
+
+@lru_cache(maxsize=64)
+def _track_on_disk(name: str) -> bool:
+    return (_ASSET_ROOT / name).is_file()
+
+
+def has_subtitle(video: Video, language: Language) -> bool:
+    """Whether this video can honestly be offered to a reader in this locale.
+
+    English is the soundtrack, so it needs no track. Every other locale needs a
+    file that EXISTS -- declaring it in the catalog is a commission, not a
+    delivery, and the difference is a child being handed five minutes of a
+    language they do not read.
+    """
+    if language is Language.EN:
+        return True
+    if language not in video.subtitles:
+        return False
+    return _track_on_disk(subtitle_filename(video, language))
+
+
+#: The chip, per locale. A COMMAND, because the chip's text is also what gets
+#: sent when it is tapped -- and `intents.wants_video` has to recognise it or the
+#: tap opens nothing. Each of these starts with a verb that `_WATCH` already
+#: matches in that language; `test_the_chip_it_sends_is_a_chip_it_accepts` is
+#: what stops a future edit breaking that quietly.
+_CHIP: Final[dict[Language, str]] = {
+    Language.EN: "Watch the ASPIRE video about {topic}",
+    Language.ES: "Ver el vídeo de ASPIRE sobre {topic}",
+    Language.FR: "Voir la vidéo ASPIRE sur {topic}",
+}
+
+
+def chip_for(video: Video, language: Language) -> str:
+    """The quick-reply chip offering this video, in the reader's language."""
+    topic = video.topic.lower()
+    for locale, localised in video.topics:
+        if locale is language:
+            topic = localised
+            break
+    return _CHIP.get(language, _CHIP[Language.EN]).format(topic=topic)
+
+
+def offer_line(video: Video, language: Language) -> str:
+    """The offer chip, in the reader's language, falling back to English."""
+    for locale, line in video.offers:
+        if locale is language:
+            return line
+    return video.offer
 
 #: Letters only, so "EC$100" carries no words and a figure is never a keyword.
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
@@ -236,15 +335,22 @@ def relevant_to(
     * A clear winner. A message that matches both videos equally is a message
       about money in general, and picking one of them is guessing.
 
-    Language is taken and not yet used to narrow: both files are English, so a
-    reader in Spanish should not be offered one until there is a track for
-    them. That is a content decision and it belongs here, in one line, rather
-    than spread across the caller.
-    """
-    if language is not Language.EN:
-        return None
+    Language narrows by CAPTION TRACK, not by locale. Both soundtracks are
+    English, so a reader in Spanish or French is offered a film only when a
+    caption track for them is on disk -- `has_subtitle`, which checks the file
+    rather than the catalog's intention.
 
-    allowed = {video.id for video in for_persona(persona)}
+    This line used to read `if language is not Language.EN: return None`, and it
+    was the right call while nothing was captioned. Its cost was that the videos
+    did not degrade for a non-English reader, they DISAPPEARED: no offer, no
+    explanation, nothing to notice. Tie it to the asset and it opens by itself
+    the day the asset lands.
+    """
+    allowed = {
+        video.id
+        for video in for_persona(persona)
+        if has_subtitle(video, language)
+    }
     if not allowed:
         return None
 

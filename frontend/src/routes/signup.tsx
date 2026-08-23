@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { AuthSurface } from "#/components/auth/AuthSurface";
 import { Field } from "#/components/auth/Field";
 import { AuthError, register } from "#/lib/aspire/auth";
-import { asPersonaId } from "#/lib/aspire/personas";
 import { keys } from "#/lib/aspire/queries";
+import { currentSession } from "#/lib/aspire/session";
+import { workspaceDestination } from "#/lib/aspire/workspace";
 
 /** Creating an account, at `/signup`. */
 
@@ -81,6 +82,36 @@ function safeNext(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	if (!value.startsWith("/") || value.startsWith("//")) return undefined;
 	return value;
+}
+
+/**
+ * Where to go once the session exists.
+ *
+ * An explicit `?next=` still wins -- that is somebody who was interrupted on
+ * their way somewhere, and returning them to it is the whole point of the
+ * parameter. Everything else goes to the WORKSPACE, not to the landing page.
+ *
+ * Landing was the old default and it read as being sent back to the front
+ * door: sign in, arrive at the marketing page, then hunt for a guide card to
+ * get back in. The chat is where a signed-in reader's ASPIRE actually lives,
+ * and their last conversation is what they are returning to.
+ */
+function goToWorkspace(
+	navigate: ReturnType<typeof useNavigate>,
+	next: unknown,
+): void {
+	const intended = safeNext(next);
+	if (intended) {
+		void navigate({ to: intended, replace: true });
+		return;
+	}
+	const { chatId, search } = workspaceDestination(currentSession());
+	void navigate({
+		to: "/chat/$chatId",
+		params: { chatId },
+		search,
+		replace: true,
+	});
 }
 
 export const Route = createFileRoute("/signup")({
@@ -202,7 +233,7 @@ function SignUp() {
 		if (!validate() || busy || role === null) return;
 		setBusy(true);
 		try {
-			const result = await register({
+			await register({
 				role,
 				// Under 13 the adult's address is the account's, collected on the last step.
 				email: email.trim(),
@@ -225,18 +256,13 @@ function SignUp() {
 				queryKey: keys.allConversations(),
 			});
 
-			// The persona the server derived, carried in so the picker opens correct.
-			const persona = asPersonaId(result.persona);
-
-			// Re-validated at the point of use; see the note in signin.tsx.
-			void navigate({
-				to: safeNext(next) ?? "/",
-				replace: true,
-				search: (previous: Record<string, unknown>) => ({
-					...previous,
-					...(persona ? { persona } : {}),
-				}),
-			});
+			// The persona the server derived no longer has to be threaded through
+			// the navigation by hand: `workspaceDestination` reads it back off the
+			// session that sign-up just established, and prefers it over the guide
+			// this visitor picked before they had an account. Which is the right
+			// order -- the account is the choice that follows them to the next
+			// device.
+			goToWorkspace(navigate, next);
 		} catch (error) {
 			const failure =
 				error instanceof AuthError

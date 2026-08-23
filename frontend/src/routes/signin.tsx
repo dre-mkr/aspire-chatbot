@@ -11,6 +11,8 @@ import {
 	signIn,
 } from "#/lib/aspire/auth";
 import { keys } from "#/lib/aspire/queries";
+import { currentSession } from "#/lib/aspire/session";
+import { workspaceDestination } from "#/lib/aspire/workspace";
 
 /** Signing in, at `/signin`. */
 
@@ -26,6 +28,36 @@ function safeNext(value: unknown): string | undefined {
 	// Reject any second character that is a slash OR a backslash.
 	if (!value.startsWith("/") || /^[/\\]/.test(value.slice(1))) return undefined;
 	return value;
+}
+
+/**
+ * Where to go once the session exists.
+ *
+ * An explicit `?next=` still wins -- that is somebody who was interrupted on
+ * their way somewhere, and returning them to it is the whole point of the
+ * parameter. Everything else goes to the WORKSPACE, not to the landing page.
+ *
+ * Landing was the old default and it read as being sent back to the front
+ * door: sign in, arrive at the marketing page, then hunt for a guide card to
+ * get back in. The chat is where a signed-in reader's ASPIRE actually lives,
+ * and their last conversation is what they are returning to.
+ */
+function goToWorkspace(
+	navigate: ReturnType<typeof useNavigate>,
+	next: unknown,
+): void {
+	const intended = safeNext(next);
+	if (intended) {
+		void navigate({ to: intended, replace: true });
+		return;
+	}
+	const { chatId, search } = workspaceDestination(currentSession());
+	void navigate({
+		to: "/chat/$chatId",
+		params: { chatId },
+		search,
+		replace: true,
+	});
 }
 
 export const Route = createFileRoute("/signin")({
@@ -86,7 +118,7 @@ function SignIn() {
 				await queryClient.invalidateQueries({
 					queryKey: keys.allConversations(),
 				});
-				void navigate({ to: safeNext(next) ?? "/", replace: true });
+				goToWorkspace(navigate, next);
 			})
 			.catch((error) => {
 				setErrors({
@@ -115,12 +147,9 @@ function SignIn() {
 				queryKey: keys.allConversations(),
 			});
 			// Checked again here, deliberately.
-			void navigate({
-				to: safeNext(next) ?? "/",
-				// A signed-in person should not be able to press Back into the sign-in page they just used.
-				replace: true,
-				search: (previous: Record<string, unknown>) => previous,
-			});
+			// `replace`, inside: a signed-in person should not be able to press
+			// Back into the sign-in page they just used.
+			goToWorkspace(navigate, next);
 			void result;
 		} catch (error) {
 			const failure =

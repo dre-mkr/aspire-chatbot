@@ -1,0 +1,110 @@
+# ASPIRE true or false — Kaleb set 1 (ages 9-12)
+#
+# Written for Kaleb's card: straight, dry, unpatronising. Answer, reason,
+# challenge. Sentences up to twenty words. Real money words used correctly and
+# defined in passing -- never in a box, never with a fanfare.
+#
+# Sums between five and three hundred EC dollars, and the examples are his:
+# bus fare, a phone top-up, boots for football, Sugar Mas, saving for a bicycle.
+# Not a toy and not dinner -- those are Skye's, and this reader notices.
+#
+# No rate is stated that is not the published one. The EC$500 investment half
+# buys shares in government-owned entities, which IS published; what it does
+# not say is which entities, or what any of it might return.
+
+id: truefalse-kaleb-01
+game_type: true_false
+language: en
+title: True or false
+source: ASPIRE — true or false written for Kaleb's card, 9-12
+
+closing:
+  lead: Money is mostly arithmetic and timing.
+  text: >-
+    Most of this is not complicated. It is knowing what a thing costs, what you
+    have, and what happens if you wait.
+
+entries:
+  - id: tfk-01-both-halves
+    statement: All EC$1,000 of your ASPIRE money sits in a savings account.
+    answer: false
+    topic: The split
+    topic_line: " — half saved, half invested."
+    takeaway: EC$500 is saved. EC$500 buys shares in government-owned entities.
+    explanation: >-
+      The EC$1,000 is split in two. EC$500 goes into a savings account at the
+      National Bank. The other EC$500 buys shares in government-owned entities
+      on your behalf. Two halves, doing two different jobs.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: tfk-01-withdraw
+    statement: You can take your ASPIRE money out whenever you want.
+    answer: false
+    topic: Withdrawal
+    topic_line: " — the rule is published and it has not moved."
+    takeaway: You cannot withdraw it yet. The rule is the same at every age.
+    explanation: >-
+      No. The withdrawal rule is published on the ASPIRE programme page and it
+      is the same answer for a seven-year-old and a seventeen-year-old. Anyone
+      who tells you otherwise is guessing.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: tfk-01-interest-both-ways
+    statement: Interest is only ever something you earn.
+    answer: false
+    topic: Interest
+    topic_line: " — you earn it saving, you pay it borrowing."
+    takeaway: Interest runs both ways. Which side you are on is the whole question.
+    explanation: >-
+      Interest is what you earn for leaving money alone, and what you pay for
+      borrowing it. Same word, opposite direction. Which side of it you are on
+      is worth checking before you agree to anything.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: tfk-01-you-choose
+    statement: You choose which shares your ASPIRE money buys.
+    answer: false
+    topic: How it works
+    topic_line: " — you do not pick, and that is stated plainly."
+    takeaway: You do not choose the investment. It is not an account you operate.
+    explanation: >-
+      You do not choose. The invested half is handled under the programme rules
+      rather than by you, and saying so plainly is more respectful than being
+      vague about it.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: tfk-01-small-and-regular
+    statement: Saving EC$5 every week beats saving EC$100 once a year.
+    answer: true
+    topic: Habits
+    topic_line: " — EC$5 a week is EC$260 a year."
+    takeaway: Small and regular beats big and occasional, because it keeps happening.
+    explanation: >-
+      EC$5 a week is EC$260 in a year, against EC$100 once. But the arithmetic
+      is not the real reason. One of them is a habit and the other is an event,
+      and only one of them is still happening next year.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: tfk-01-borrowing-friend
+    statement: Money a friend lends you costs nothing as long as you pay it back.
+    answer: false
+    topic: Borrowing
+    topic_line: " — it costs the thing you could not do meanwhile."
+    takeaway: What you owe is money you cannot use for anything else until it is cleared.
+    explanation: >-
+      Even with nothing added on top, money you owe is money already spoken for.
+      Until it is cleared, it is not available for the thing you actually
+      wanted. That is the cost, and it is easy to miss.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]

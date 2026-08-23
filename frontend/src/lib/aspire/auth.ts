@@ -94,6 +94,7 @@ interface WireSession {
 	account_type: "anonymous" | "registered";
 	email: string | null;
 	display_name: string | null;
+	first_name?: string | null;
 	avatar_url: string | null;
 	role?: "participant" | "guardian" | "educator";
 	persona?: string;
@@ -123,6 +124,7 @@ function adopt(wire: WireSession): AuthResult {
 		accountType: wire.account_type,
 		email: wire.email ?? null,
 		displayName: wire.display_name ?? null,
+		firstName: wire.first_name ?? null,
 		avatarUrl: wire.avatar_url ?? null,
 		role: wire.role,
 		// Left undefined rather than defaulted when the service does not send it.

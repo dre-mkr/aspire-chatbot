@@ -1,8 +1,19 @@
 import { useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
-import { stageFirstTurn, stageVoiceStart } from "#/lib/aspire/handoff";
+import { AccountControl } from "#/components/auth/AccountControl";
+import {
+	markFreshThread,
+	stageFirstTurn,
+	stageVoiceStart,
+} from "#/lib/aspire/handoff";
 import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
+import { useSession } from "#/lib/aspire/use-session";
+import {
+	preferredGuide,
+	rememberGuide,
+	workspaceDestination,
+} from "#/lib/aspire/workspace";
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
 import { EducatorsView } from "./EducatorsView";
@@ -200,6 +211,33 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		menuRef.current?.querySelector("button")?.focus();
 		return () => window.removeEventListener("keydown", onKey);
 	}, [menuOpen]);
+
+
+	/**
+	 * Who is signed in, from the same store the chat rail reads.
+	 *
+	 * `resolved` is why the header does not flash: it is false until the session
+	 * question has been answered, and answering it is a network call on a cold
+	 * arrival.
+	 */
+	const { session, resolved } = useSession();
+	const signedIn = session?.accountType === "registered";
+
+	/** Their guide, if the account or this device remembers one. */
+	const rememberedGuide = preferredGuide(session);
+	const rememberedName = GUIDES.find(
+		(guide) => guide.guideId === rememberedGuide,
+	)?.name;
+	const continueLabel = rememberedName
+		? `Continue with ${rememberedName}`
+		: "Open ASPIRE AI";
+
+	/** Back into the workspace: their last conversation, with their guide. */
+	const openWorkspace = () => {
+		const { chatId, search } = workspaceDestination(session);
+		navigate({ to: "/chat/$chatId", params: { chatId }, search });
+	};
+
 	/** The chosen guide's row, for the face beside the name. Null means Guest. */
 	const selected = selectedPersona
 		? (GUIDES.find((g) => g.guideId === selectedPersona) ?? null)
@@ -212,20 +250,45 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	};
 
 	const startConversation = (
-		message: string,
+		/**
+		 * The reader's own first question, or null to open the guide with nothing
+		 * staged.
+		 *
+		 * NULL IS THE FIX FOR A LIVE DEFECT. Choosing a guide used to stage
+		 * "Hi! What can you help me with?" as the opening turn. With no
+		 * conversation behind it that phrase classifies as an INTENT, the
+		 * eligibility flow claims it, and the form then latches: every later
+		 * message is read as an answer to the slot it is waiting on. Observed on
+		 * production 22 Aug -- "who are you" returned the guardian probe again,
+		 * and "how do I register my child" was read as a parish name. A five-year
+		 * -old who picked Skye was asked how they were related to the child.
+		 *
+		 * The same phrase typed as a SECOND message answers normally, which is
+		 * what says it is the opening-turn position and not the words.
+		 *
+		 * So a guide card now opens the conversation and lets the guide speak
+		 * first. Zion already introduces himself properly when nothing hijacks
+		 * the turn.
+		 */
+		message: string | null,
 		persona?: PersonaId | null,
 		band?: AgeBand | null,
 	) => {
 		if (onStartConversation) {
-			onStartConversation(message);
+			if (message) onStartConversation(message);
 		} else {
 			const threadId = crypto.randomUUID();
-			stageFirstTurn({
-				threadId,
-				question: message,
-				simple: false,
-				language: "en",
-			});
+			// No message means the guide opens the conversation, and the chat page
+			// has to be told this address is new rather than unreachable.
+			if (!message) markFreshThread(threadId);
+			if (message) {
+				stageFirstTurn({
+					threadId,
+					question: message,
+					simple: false,
+					language: "en",
+				});
+			}
 			// The guide rides the address, which is where the chat reads it from
 			// (`validateAnswerSearch`). Until now `selectedPersona` was set by the
 			// dropdown and then dropped on the floor: choosing a guide on this page
@@ -264,6 +327,14 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 	const startByVoice = () => {
 		const threadId = crypto.randomUUID();
 		stageVoiceStart(threadId);
+		/* A DEFECT THAT ONLY EXISTS IN THE MERGE. This arrival stages no
+		 * question -- the reader is about to speak it -- which is exactly the
+		 * shape `isFreshThread` was added to recognise. Without the mark the
+		 * chat page falls through to `fetchConversation`, 404s on a thread the
+		 * server has never been told about, and bounces the reader back to the
+		 * landing before the microphone ever opens. `adoptThread` never runs
+		 * either, so the composer would silently refuse every later turn. */
+		markFreshThread(threadId);
 		const chosen = selectedPersona ? GUIDE_TO_PERSONA[selectedPersona] : null;
 		const chosenBand = selectedPersona ? GUIDE_TO_BAND[selectedPersona] : null;
 		navigate({
@@ -386,14 +457,49 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							))}
 						</nav>
 				</div>
+				{/* `gap-3`, not `gap-4`: this row carries one more control than it
+				    did — the phone menu button — and four of them at 44px need the
+				    tighter gutter to clear the wordmark at 390px. */}
 				<div className="flex items-center gap-3">
-					<button
-						type="button"
-						onClick={() => navigate({ to: "/signin" })}
-						className="hidden sm:block text-sm font-semibold text-ink/70 hover:text-ink transition-colors px-4 py-2 cursor-pointer"
-					>
-						Sign in
-					</button>
+					{/* AUTHENTICATION STATE, not a hardcoded invitation.
+					 *
+					 * This said "Sign in" unconditionally, so a reader who had just
+					 * signed in was told, in the top right of the first page they
+					 * landed on, that they had not. `AccountControl` reads the same
+					 * session store the chat rail does -- one source, both surfaces.
+					 *
+					 * Nothing renders until `resolved`, because the alternative is the
+					 * flash: "Sign in" paints, the session resolves a tick later, and
+					 * the control swaps under the reader's eyes. */}
+					{!resolved ? (
+						// Holds the row's height so the header does not jump. 44px,
+						// which is what the controls that replace it measure.
+						<div aria-hidden="true" className="w-[92px] h-11" />
+					) : signedIn ? (
+						<>
+							{/* THE WAY BACK IN. Without this the only route from the
+							 * landing page to your own workspace was to pick a guide
+							 * card again -- which is onboarding, and a returning
+							 * reader has already done it. */}
+							<button
+								type="button"
+								onClick={openWorkspace}
+								className="hidden sm:inline-flex items-center gap-2 min-h-11 rounded-full bg-plum px-5 text-sm font-semibold text-white hover:bg-plum-deep transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-magenta"
+							>
+								{continueLabel}
+								<i className="ph-bold ph-arrow-right" aria-hidden="true" />
+							</button>
+							<AccountControl variant="corner" />
+						</>
+					) : (
+						<button
+							type="button"
+							onClick={() => navigate({ to: "/signin" })}
+							className="hidden sm:block text-sm font-semibold text-ink/70 hover:text-ink transition-colors px-4 py-2 cursor-pointer"
+						>
+							Sign in
+						</button>
+					)}
 					<button
 						type="button"
 						onClick={() => setActiveView("history")}
@@ -562,11 +668,11 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 									<select
 										aria-label="Choose your guide"
 										value={selectedPersona || ""}
-										onChange={(e) =>
-											setSelectedPersona(
-												(e.target.value || null) as GuideId | null,
-											)
-										}
+										onChange={(e) => {
+											const chosen = (e.target.value || null) as GuideId | null;
+											setSelectedPersona(chosen);
+											rememberGuide(chosen);
+										}}
 										className="appearance-none bg-transparent border-none text-sm font-semibold text-plum outline-none cursor-pointer hover:text-magenta transition-colors"
 									>
 										<option value="" className="bg-white">
@@ -768,11 +874,12 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 							selected={selectedPersona}
 							onChoose={(choice) => {
 								setSelectedPersona(choice.guideId as GuideId);
-								startConversation(
-									"Hi! What can you help me with?",
-									choice.persona,
-									choice.band ?? null,
-								);
+								// Survives the navigation, the refresh, and the trip through
+								// sign-up: a visitor who picks Kaleb and then creates an
+								// account must not be handed Guest on the other side.
+								rememberGuide(choice.guideId);
+								// No staged question: see `startConversation`.
+								startConversation(null, choice.persona, choice.band ?? null);
 							}}
 						/>
 					</div>

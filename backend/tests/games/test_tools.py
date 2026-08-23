@@ -44,15 +44,18 @@ def test_list_games_describes_what_actually_exists(engine):
     # The fixture engine carries word scramble only, so no true/false set is listed here.
     #
     # `items` is the whole authored catalogue, counted with no persona: 4 to
-    # start, 25 when the bank was tiered by persona, 46 now that each tier has a
-    # second set. It is NOT the length of a round -- a reader is served only the
-    # entries their own persona bands admit, and only `round_size` of those --
-    # see `test_each_playing_persona_has_a_bank_worth_playing`.
+    # start, 25 when the bank was tiered by persona, 46 once each tier had a
+    # second set, and 52 since Kaleb was given a bank of his own. He had been
+    # reading Stella's, which is 5-8 material -- so a twelve-year-old was being
+    # asked to unscramble COIN. It is NOT the length of a round: a reader is
+    # served only the entries their own persona bands admit, and only
+    # `round_size` of those -- see
+    # `test_each_playing_persona_has_a_bank_worth_playing`.
     assert payload["games"] == [
         {
             "id": "word_scramble",
             "name": "Unscramble These Words",
-            "items": 46,
+            "items": 52,
             "supports_hints": True,
             "languages": ["en"],
         }

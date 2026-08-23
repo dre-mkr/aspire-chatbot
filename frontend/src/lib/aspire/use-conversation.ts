@@ -702,6 +702,25 @@ export function useConversation({
 	);
 
 	/**
+	 * Take up an id the caller minted, without sending anything into it.
+	 *
+	 * `send` refuses when `threadRef` is empty -- "this hook only continues
+	 * conversations" -- and that ref is set in exactly three places: a reply
+	 * coming back, `resumeFirstTurn`, and opening a past conversation. A guide
+	 * card opens an EMPTY conversation, so it reaches none of them, and every
+	 * later send returns at that guard. Silently: no error, no request, no
+	 * state change. The composer accepts the text and nothing happens to it.
+	 *
+	 * So the conversation has to be adopted at the point the reader enters it.
+	 * Unconditional, like `openPast`: the caller names the thread it is opening,
+	 * and a ref still holding the previous one is the case this has to fix.
+	 */
+	const adoptThread = useCallback((id: string) => {
+		threadRef.current = id;
+		setThreadId(id);
+	}, []);
+
+	/**
 	 * Sends the question the landing page staged, into the conversation it
 	 * already minted and committed. The user's message is appended here and
 	 * nowhere else, which is why the chat page must take the pending turn
@@ -937,6 +956,7 @@ export function useConversation({
 		!streaming && tail?.role === "assistant" ? tail.followUps : [];
 
 	return {
+		adoptThread,
 		messages,
 		streaming,
 		isThinking,

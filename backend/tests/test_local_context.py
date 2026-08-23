@@ -274,8 +274,14 @@ class TestTheVocabularyLadder:
         """Kaleb is the first rung that gets arithmetic, and only at a sourced rate."""
         card = _read(_DIR / BAND_CARDS[("kaleb", "9-12")])
         assert "EC$500 savings / EC$500 investment" in card
-        assert "compounded twice a\n    year" in card
-        assert "SOURCED rate" in card
+        # "credited twice a year", not "compounded twice a year". `compound` is
+        # banned at this band, so the old wording instructed the model to produce
+        # a word the gate then stripped -- delivering the sentence with a hole
+        # where the arithmetic was. The rate is now named outright rather than
+        # gestured at as "a SOURCED rate", which is what the spine asks for.
+        assert "credited\n    twice a year" in card
+        assert "2%" in card
+        assert "carrying its source" in card
         assert "NEVER give a projected value using a rate you cannot point at" in card
 
     @pytest.mark.parametrize("band", ["13-15", "16-18"])
@@ -298,7 +304,10 @@ class TestTheVocabularyLadder:
         }
         assert "never as numbers" in card["5-8"]
         assert "never as numbers" not in card["9-12"]
-        assert "SOURCED rate" in card["9-12"]
+        # The step up at this rung is a NAMED published rate, where 5-8 gets no
+        # figure at all. It used to read "a SOURCED rate", which described the
+        # requirement without meeting it.
+        assert "2%" in card["9-12"]
         assert "source_url" not in card["9-12"]
         assert "source_url" in card["13-15"]
 
@@ -352,18 +361,58 @@ class TestTheCardsAskForMoreThanTheOutboundGateAllows:
     reads this file.
     """
 
-    def test_the_5_8_card_no_longer_names_the_word_its_gate_strips(self):
-        """Settled: the card yielded, and the gate is unchanged behind it."""
-        card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
-        assert "what interest is" not in card
-        # The idea survives; only the noun is gone.
-        assert "money left alone gets bigger" in card
-        # And the gate still holds, which is what made the card wrong, not weak.
-        assert [v.term for v in vocab.check("what interest is", "5-8")] == ["interest"]
+    def test_the_5_8_card_may_name_interest_but_never_price_it(self):
+        """Settled the other way round: the GATE moved, and only by one word.
 
-    def test_the_9_12_card_asks_for_arithmetic_the_9_12_gate_still_strips(self):
+        `interest` was lifted from `_BAN["5-8"]` on 22 August 2026 -- a piggy
+        bank is a picture a five-year-old already owns. What was NOT lifted is
+        the figure, and that is the half this test exists for: a card allowed to
+        name a thing will drift toward pricing it unless something says no.
+        """
+        card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
+
+        # The word is teachable now, and the card uses it.
+        assert "interest" in card.lower()
+        assert not vocab.check("that little bit is called interest", "5-8")
+
+        # The idea it always taught is still there, in front of the noun.
+        assert "money left alone gets bigger" in card
+
+        # And the price is still refused, in every locale the product answers in.
+        for text in (
+            "The bank adds two percent every year.",
+            "El banco añade un porcentaje cada año.",
+            "La banque ajoute un pourcentage chaque année.",
+        ):
+            assert [v.term for v in vocab.check(text, "5-8")] == ["percent"], (
+                "the figure ban is what makes naming interest safe at this band"
+            )
+
+        # Nothing else on the 5-8 rung moved with it.
+        for word in ("compound", "investment", "dividend", "loan", "portfolio"):
+            assert vocab.check(f"this is about {word}", "5-8"), (
+                f"{word} should still be banned at 5-8 -- only `interest` moved"
+            )
+
+    def test_the_9_12_card_no_longer_names_the_word_its_gate_strips(self):
+        """Settled the same way 5-8 was: the card yielded, the gate did not.
+
+        This card used to ask for a worked example "compounded twice a year"
+        while `compound` was banned at 9-12 -- so the instruction and the gate
+        were pulling against each other, and the gate wins every time. The
+        reader got a sentence with the word cut out of it.
+
+        The card now says "credited twice a year", which is both the published
+        wording and outside the ban. THE UNDERLYING QUESTION IS STILL OPEN: a
+        Form 1 reader is taught compounding at school, and lifting the term at
+        this band may well be the right answer. That remains a decision for the
+        ASPIRE team. What is no longer true is that the product ships a card
+        arguing with its own safety layer while they decide.
+        """
         card = _read(_DIR / BAND_CARDS[("kaleb", "9-12")])
-        assert "compounded twice a" in card
+        assert "compounded twice a" not in card
+        assert "credited" in card
+        # The gate is untouched, which is what made the card wrong rather than weak.
         assert [v.term for v in vocab.check("compounded twice a year", "9-12")] == [
             "compound"
         ]

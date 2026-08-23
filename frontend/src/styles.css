@@ -522,6 +522,22 @@ body {
 	pointer-events: auto;
 }
 
+/* The wordmark is a link now, so it needs to behave like the block it replaced
+   rather than like an inline anchor: no underline, no colour, and the same box
+   the `<picture>` occupied. */
+.rail__home {
+	display: block;
+	min-width: 0;
+	text-decoration: none;
+	color: inherit;
+	border-radius: 8px;
+}
+
+.rail__home:focus-visible {
+	outline: 2px solid var(--focus-ring, #c22f99);
+	outline-offset: 3px;
+}
+
 .app[data-rail="collapsed"] .rail__wordmark {
 	opacity: 0;
 }
@@ -1255,7 +1271,10 @@ body {
 	overflow-y: auto;
 	overflow-x: hidden;
 	overscroll-behavior: contain;
-	padding-top: 28px;
+	/* Trimmed with the welcome stack below: the empty hero overflowed an 827px
+	   window by 46px, and that is taken back across the whole column rather
+	   than out of any single gap, so nothing reads as cramped. */
+	padding-top: 18px;
 	/* Both edges. Without the second stop the transcript was sliced flat against
 	   the composer, which read as content ending rather than continuing. */
 	mask-image: linear-gradient(
@@ -1277,7 +1296,17 @@ body {
 
 /* Anchors short conversations to the bottom, so the first reply rises out of the composer. */
 .thread__inner {
-	margin-top: auto;
+	/* TOP-ANCHORED, not bottom-anchored.
+	 *
+	 * `margin-top: auto` sat a short conversation just above the composer, which
+	 * is the classic chat feel and was right when the thread began with the
+	 * reader's first message. It is wrong now that the hook always leads: the
+	 * greeting is the top of the conversation, and pushing it down left a band
+	 * of empty scene above it -- 167px on a tablet -- and put the whole column
+	 * out of reach of the viewport it was supposed to fit inside.
+	 *
+	 * Long conversations are unaffected: once the content is taller than the
+	 * thread there is no spare room for `auto` to have distributed anyway. */
 	width: 100%;
 }
 
@@ -1677,8 +1706,10 @@ body {
 	border-radius: 24px 24px 8px 24px;
 	background: linear-gradient(135deg, var(--plum), var(--plum-light));
 	color: #fff;
-	font-size: 0.9375rem;
-	line-height: 1.6;
+	/* Tracks `.answer > p` a step below it: the reader's own words are a quote
+	   of what they asked, not the material they came to read. */
+	font-size: 1rem;
+	line-height: 1.62;
 	box-shadow: 0 6px 18px rgb(72 41 119 / 0.22);
 	text-wrap: pretty;
 	overflow-wrap: anywhere;
@@ -1709,8 +1740,13 @@ body {
 /* The child combinator is load-bearing, not tidiness. */
 .answer > p {
 	margin: 0 0 19px;
-	font-size: 0.96875rem;
-	line-height: 1.72;
+	/* Up from 0.96875rem. This is the product's reading surface -- the thing a
+	   parent squints at on a phone and a child reads aloud -- and it was set
+	   smaller than the composer they typed into. Raised with the leading rather
+	   than on its own, so the column gets easier to read instead of just
+	   bigger. */
+	font-size: 1.0625rem;
+	line-height: 1.75;
 	color: var(--prose);
 	text-wrap: pretty;
 }
@@ -2864,7 +2900,8 @@ body {
 	background: transparent;
 	resize: none;
 	font: inherit;
-	font-size: 1rem;
+	/* One step up, matched to the answer it will sit under. */
+	font-size: 1.0625rem;
 	line-height: 1.6;
 	color: var(--ink);
 }
@@ -7928,17 +7965,23 @@ a.source__site--link:hover .source__out {
 .welcome {
 	display: flex;
 	flex-direction: column;
-	gap: 28px;
-	width: 100%;
-	max-width: calc(var(--reading-width) + 160px);
-	margin-inline: auto;
-	padding: 12px 24px 28px;
+	gap: 20px;
+	/* A real gutter, because there was none: the zone and the cards both began
+	   at the workspace's own left edge, which is the rail's right edge -- the
+	   headline and the first card were touching the navigation. Measured at
+	   1440px: gap from the workspace's left was 0. The inline value carries the
+	   whole column, zone and cards together, so they stay aligned to each
+	   other while both clear the rail. */
+	padding: clamp(14px, 1.9vh, 28px) clamp(20px, 2.6vw, 44px) 16px;
 }
 
+/* Top-left, and the mark sits at the TOP of the text rather than centred
+   against it: the block is three lines now -- greeting, tagline, question --
+   and a mark floating beside the middle one reads as decoration. */
 .welcome__hero {
 	display: flex;
-	align-items: center;
-	gap: 18px;
+	align-items: flex-start;
+	gap: 16px;
 }
 
 .welcome__orb {
@@ -7967,12 +8010,9 @@ a.source__site--link:hover .source__out {
 	padding: 0;
 	display: grid;
 	/* Two up on a laptop, one up on a phone. `auto-fit` rather than a media
-	   query so it also behaves in the narrow column left by an open rail.
-	   280, not 240: at the column width these cards now sit in, a 240px floor
-	   fits three tracks and the fourth card drops to a row of its own. Four
-	   cards want two rows of two. */
-	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-	gap: 12px;
+	   query so it also behaves in the narrow column left by an open rail. */
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 10px;
 }
 
 .welcome__card {
@@ -7981,18 +8021,23 @@ a.source__site--link:hover .source__out {
 	display: grid;
 	grid-template-columns: auto 1fr;
 	grid-template-rows: auto auto;
-	column-gap: 12px;
-	row-gap: 2px;
+	column-gap: 10px;
+	row-gap: 1px;
 	align-items: start;
 	text-align: left;
-	padding: 14px 16px;
+	/* Trimmed: four of these sit between the hero and the composer, and at
+	   14/16 they were the widest thing on the page after the headline. */
+	padding: 10px 13px;
 	/* 44px is the WCAG floor and this is a children's product; the padding and
 	   two lines of content clear it comfortably, but it is stated rather than
 	   assumed. */
 	min-height: 44px;
-	border: 1px solid var(--line, #d3dbe3);
-	border-radius: 14px;
+	border: 1px solid rgb(72 41 119 / 0.13);
+	border-radius: 12px;
 	background: var(--surface, #fff);
+	/* A single tight shadow rather than a soft spread: it separates the card
+	   from the mountain behind it without haloing the border. */
+	box-shadow: 0 1px 2px rgb(26 16 60 / 0.04);
 	cursor: pointer;
 	transition:
 		border-color 160ms ease,
@@ -8020,14 +8065,23 @@ a.source__site--link:hover .source__out {
 }
 
 .welcome__card-title {
-	font-weight: 600;
+	font-weight: 650;
 	line-height: 1.3;
+	font-size: 0.9375rem;
+	letter-spacing: -0.006em;
+	color: #1a103c;
 }
 
 .welcome__card-blurb {
+	/* `--slate`, not `var(--ink-soft, #4a5561)`: `--ink-soft` is declared
+	   nowhere, so the fallback always won -- and it is a cool grey that belongs
+	   to no palette here. The size and tracking below are the composition's. */
 	color: var(--slate);
-	font-size: 0.9rem;
-	line-height: 1.45;
+	font-size: 0.855rem;
+	line-height: 1.42;
+	/* The blurb explains the title; a hair of tracking keeps it legible at a
+	   size that is deliberately quieter than the line above it. */
+	letter-spacing: 0.002em;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -8150,26 +8204,28 @@ a.source__site--link:hover .source__out {
  */
 .app[data-phase="chat"] .workspace {
 	background:
-		radial-gradient(
-			circle at 24% 42%,
-			rgb(255 255 255 / 0.92) 0%,
-			rgb(255 255 255 / 0.8) 22%,
-			rgb(255 255 255 / 0.46) 48%,
-			rgb(255 255 255 / 0.1) 70%,
-			transparent 84%
-		),
+		/* ONE WASH, not a multi-zone fade system. The scene already carries a
+		   lot of white of its own, so a second shaped veil on top was solving a
+		   problem the picture did not have -- the radial that used to sit here
+		   peaked at 0.92 and replaced the reading column with white.
+		   
+		   Weakest at the top, where the avatar, title and tagline live, so they
+		   keep their colour and contrast against the scene. Strongest at the
+		   bottom, through the reading area and behind the composer, where prose
+		   needs a settled surface. No horizontal component at all: the mountain
+		   and its glowing path are on the right and stay legible. */
 		linear-gradient(
 			to bottom,
-			rgb(255 255 255 / 0.06) 0%,
-			rgb(255 255 255 / 0.2) 34%,
-			rgb(255 255 255 / 0.52) 68%,
-			rgb(255 255 255 / 0.78) 100%
+			rgb(255 255 255 / 0.08) 0%,
+			rgb(255 255 255 / 0.18) 28%,
+			rgb(255 255 255 / 0.34) 58%,
+			rgb(255 255 255 / 0.5) 100%
 		),
 		image-set(
 			url("/images/hero-bg.webp") type("image/webp"),
 			url("/images/hero-bg.jpg") type("image/jpeg")
 		)
-		right top / cover no-repeat;
+		center center / cover no-repeat;
 }
 
 /* The composer is the smallest type and the control everyone uses, so it keeps
@@ -9527,6 +9583,147 @@ a.source__site--link:hover .source__out {
 	}
 }
 
+/* ── The empty-state welcome ──────────────────────────────────────────────
+ *
+ * The identity of the conversation before anybody has said anything: guide on
+ * the left, the mountain and its rising path on the right. Left is help; right
+ * is where the reader is going. The composition only works if the copy stays
+ * out of the artwork, so the zone is width-capped rather than centred.
+ *
+ * Not a card. A white rectangle behind this would flatten the scene it is
+ * meant to sit inside.
+ */
+.welcome-zone {
+	position: relative;
+	z-index: 2;
+	width: min(620px, 48vw);
+	/* The wrapper supplies the gutter now, so this only adds the extra breathing
+	   room the hero wants above the orb. */
+	padding-top: clamp(4px, 1.3vh, 18px);
+	padding-bottom: 8px;
+}
+
+/* Above the headline, not beside it: a guide hovering over the introduction
+   rather than a bullet point. The same `.orb` the transcript uses, so a chosen
+   guide shows their own face and Guest keeps the sphere and its star. */
+.welcome-zone__orb {
+	/* Sized against the viewport HEIGHT, not a fixed px, and that is the whole
+	   point: at 112px flat the orb costs 146px of column and pushes the last row
+	   of cards 48px underneath the composer on a 900px-tall window. Measured, not
+	   guessed -- hiding the orb turns a 48px overlap into 98px of clearance.
+	   9vh keeps it generous on a tall display and yields on a short one. */
+	--orb-size: clamp(64px, 9vh, 112px);
+	margin: 0 0 clamp(12px, 2vh, 26px) 4px;
+	filter: drop-shadow(0 8px 20px rgb(84 52 145 / 0.18))
+		drop-shadow(0 0 16px rgb(194 47 153 / 0.22));
+	animation: orbFloat 4.5s ease-in-out infinite;
+}
+
+@keyframes orbFloat {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-5px);
+	}
+}
+
+/* Matched to the landing headline, not approximated. `font-display` and the
+ * weight come from the class list in the JSX; everything the utility classes do
+ * not cover is set here with the landing's own values -- #1A103C, leading 1.05,
+ * and the same soft drop shadow. */
+.welcome-title {
+	font-size: clamp(34px, 4vw, 62px);
+	line-height: 1.05;
+	letter-spacing: -0.025em;
+	color: var(--ink);
+	max-width: 640px;
+	margin: 0;
+	text-wrap: balance;
+	/* NO DROP SHADOW. A blur under 60px type is the opposite of crisp -- it
+	   fogs exactly the edges that carry the display face's character. The
+	   landing can afford `drop-shadow-sm` because it sits on a photograph; this
+	   one sits on near-white and only lost definition. */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* The same treatment as "take you?" on the landing, and the rule this file
+ * already set for itself -- "changing one means changing both" -- is why it is
+ * not a gradient any more. That span was a three-stop clip through pink, plum
+ * and the body ink; it is one flat brand colour on the landing now, so it is
+ * one flat brand colour here. The italic display face carries the emphasis. */
+.welcome-title__accent {
+	font-style: italic;
+	color: var(--magenta);
+	/* The italic's overhang needs the room whether or not it is clipped. */
+	padding-right: 0.5rem;
+}
+
+.welcome-tagline {
+	margin: 16px 0 0;
+	font-size: clamp(17px, 1.6vw, 24px);
+	line-height: 1.4;
+	font-weight: 500;
+	color: var(--prose);
+}
+
+/* Three accents, and all three are ASPIRE's.
+ *
+ * They were magenta, then Tailwind's blue-500, then rose-500 -- the same two
+ * off-brand hues that the four landing cards were carrying before this pass
+ * took them out, arriving back on the surface next door. The brand has three
+ * colours and this line needs exactly three. Each measured on the welcome's
+ * near-white ground: 5.05:1, 9.40:1, 5.92:1. */
+.welcome-tagline__ask {
+	color: var(--magenta);
+}
+.welcome-tagline__play {
+	color: var(--plum);
+}
+.welcome-tagline__explore {
+	color: var(--gold-ink);
+}
+
+/* Interface copy, not a chat message: no bubble, no avatar, quieter than the
+   tagline above it. */
+.welcome-copy {
+	margin: 22px 0 0;
+	max-width: 540px;
+	font-size: 19px;
+	line-height: 1.6;
+	font-weight: 400;
+	/* Was #696277. Darkened toward the headline's own hue rather than to a
+	   neutral grey, so the block reads as one voice at two weights. */
+	color: #4f4763;
+}
+
+/* Below this the side-by-side reading stops working: the zone takes the width
+   it needs and the artwork sits behind it rather than beside it. */
+@media (max-width: 1100px) {
+	.welcome-zone {
+		width: 56%;
+	}
+	.welcome-zone__orb {
+		--orb-size: 92px;
+	}
+}
+
+@media (max-width: 860px) {
+	.welcome-zone {
+		width: auto;
+		padding-top: 20px;
+	}
+	.welcome-zone__orb {
+		--orb-size: 78px;
+		margin-bottom: 22px;
+	}
+	.welcome-copy {
+		font-size: 17px;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	/* Still a mark that something is in flight, without the rotation. */
 	.auth__spin {
@@ -9541,5 +9738,89 @@ a.source__site--link:hover .source__out {
 		50% {
 			opacity: 0.4;
 		}
+	}
+
+	.welcome-zone__orb {
+		animation: none;
+	}
+}
+
+/* ─── EN · ES · FR ────────────────────────────────────────────────────────
+   Top-right, on the same 14px corner as `.account-slot` but inset past it so
+   the two never collide when the rail is closed and the account control is
+   showing. */
+.lang-slot {
+	position: absolute;
+	z-index: 13;
+	top: 14px;
+	right: 14px;
+	/* Moves in step with the control it is making room for, over the same
+	   period the composer takes to travel. */
+	transition: right var(--morph);
+}
+
+/* `.account-slot` appears only when the rail is closed, and it is 82px wide on
+   a 14px inset -- so it owns everything out to 96px. Measured rather than
+   eyeballed: an earlier 68px put the switcher underneath it. */
+.lang-slot[data-with-account] {
+	right: 106px;
+}
+
+.lang-switch {
+	/* A fieldset carries a default border, margin and padding in every browser. */
+	margin: 0;
+	min-inline-size: 0;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 3px;
+	border-radius: 999px;
+	border: 1px solid rgb(72 41 119 / 0.12);
+	background: rgb(255 255 255 / 0.78);
+	-webkit-backdrop-filter: saturate(1.4) blur(12px);
+	backdrop-filter: saturate(1.4) blur(12px);
+	box-shadow:
+		0 1px 2px rgb(26 16 60 / 0.05),
+		0 8px 20px -12px rgb(26 16 60 / 0.28);
+}
+
+.lang-switch__option {
+	appearance: none;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	border-radius: 999px;
+	padding: 5px 10px;
+	font-size: 11px;
+	font-weight: 700;
+	/* A three-letter row of codes reads as a set rather than as words. */
+	letter-spacing: 0.06em;
+	font-variant-numeric: tabular-nums;
+	color: rgb(72 41 119 / 0.62);
+	transition:
+		color 140ms ease,
+		background-color 140ms ease;
+}
+
+.lang-switch__option:hover {
+	color: #482977;
+	background: rgb(72 41 119 / 0.07);
+}
+
+.lang-switch__option[aria-pressed="true"] {
+	color: #fff;
+	background: linear-gradient(135deg, #6d3fa8, #482977);
+	box-shadow: 0 1px 3px rgb(26 16 60 / 0.28);
+}
+
+.lang-switch__option:focus-visible {
+	outline: 2px solid #c22f99;
+	outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+	.lang-switch__option {
+		padding: 5px 8px;
+		font-size: 10px;
 	}
 }

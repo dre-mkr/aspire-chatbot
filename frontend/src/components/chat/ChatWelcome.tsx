@@ -32,8 +32,7 @@
  * already does this from the landing screen; this is the same mechanism one
  * surface further in.
  */
-
-import { displayName } from "#/lib/aspire/persona-name";
+import { type HookLanguage, hookFor, TAGLINES } from "#/lib/aspire/hooks";
 
 export interface WelcomeCard {
 	/** What the reader taps. */
@@ -88,34 +87,22 @@ const GUARDIAN: ReadonlyArray<WelcomeCard> = [
 		icon: "ph-duotone ph-graduation-cap",
 	},
 	{
-		title: "Is my child eligible?",
+		title: "Who is eligible?",
 		blurb: "Who qualifies, and from what age.",
-		question: "Is my child eligible for ASPIRE?",
+		question: "Who is eligible for ASPIRE?",
 		icon: "ph-duotone ph-user",
 	},
 	{
 		title: "How do I register?",
 		blurb: "Where to go and what to bring.",
-		question: "How do I register my child for ASPIRE?",
+		question: "How do I register a young person for ASPIRE?",
 		icon: "ph-duotone ph-file-text",
 	},
 	{
 		title: "What will they learn?",
 		blurb: "The material, split by age.",
-		question: "What will my child learn through ASPIRE?",
+		question: "What will young people learn through ASPIRE?",
 		icon: "ph-duotone ph-books",
-	},
-	{
-		title: "Watch the films",
-		blurb: "The two stories your child is shown.",
-		panel: "videos",
-		icon: "ph-duotone ph-play-circle",
-	},
-	{
-		title: "Try a challenge yourself",
-		blurb: "The same quiz the children play.",
-		question: "I'd like to play a game.",
-		icon: "ph-duotone ph-game-controller",
 	},
 ];
 
@@ -140,22 +127,21 @@ const EDUCATOR: ReadonlyArray<WelcomeCard> = [
 		icon: "ph-duotone ph-chart-line-up",
 	},
 	{
-		title: "What is not built yet?",
-		blurb: "The gaps, named plainly.",
-		question: "What parts of ASPIRE are planned but not built yet?",
+		/* Taken from Azuri's own card, not invented: her EVALUATING branch is
+		   written against this exact question -- `IF he is EVALUATING ("can I use
+		   this with Form 3") -> state the pitch level, describe the material
+		   honestly, and name the gap BEFORE he finds it`. So the chip lands on a
+		   route she is built for, in local school vocabulary.
+
+		   Two earlier drafts were wrong. "What is not built yet?" asked about the
+		   product's build status rather than about ASPIRE. "Running it as a
+		   lesson" was worse: her red line 2 forbids claiming to be a curriculum
+		   or a scheme of work, so that chip primed the one answer she must
+		   refuse. A chip that invites a refusal is a broken chip. */
+		title: "Can I use this with Form 3?",
+		blurb: "The pitch level, and the gaps.",
+		question: "Can I use ASPIRE with a Form 3 class?",
 		icon: "ph-duotone ph-file-text",
-	},
-	{
-		title: "Watch the films",
-		blurb: "Judge the material yourself.",
-		panel: "videos",
-		icon: "ph-duotone ph-play-circle",
-	},
-	{
-		title: "Try a challenge yourself",
-		blurb: "The same quiz your students play.",
-		question: "I'd like to play a game.",
-		icon: "ph-duotone ph-game-controller",
 	},
 ];
 
@@ -170,50 +156,127 @@ export function cardsFor(
 	return YOUNG;
 }
 
+/* The hooks themselves moved to `lib/aspire/hooks.ts`, where they sit in one
+ * table across English, Spanish and French. They were here as a switch over
+ * personas, which was fine for one language and would have become three
+ * near-identical switches for three. The ladder that governs them, and the
+ * reason every adult line is conditional, is documented there and in
+ * `docs/HOOK_SPINE.md`. */
+
 export function ChatWelcome({
 	persona,
-	ageBand,
+	language = "en",
+	priorConversations = 0,
+	readerName = null,
 	onAsk,
 	onOpenVideos,
+	showOnboarding = true,
 }: {
 	persona: string | null | undefined;
-	ageBand?: string | null;
+	/** How many conversations this reader already has. Zero on a first visit. */
+	/** Which language the hook is spoken in. English until told otherwise. */
+	language?: HookLanguage;
+	priorConversations?: number;
+	/** The signed-in reader's first name, when the account knows it. */
+	readerName?: string | null;
 	onAsk: (question: string) => void;
 	onOpenVideos?: () => void;
+	/**
+	 * Whether the onboarding content is still doing its job.
+	 *
+	 * THE PAGE DOES NOT CHANGE STATE. There is one desktop conversation layout,
+	 * and what happens on the reader's first action is progressive content
+	 * COLLAPSE inside it -- not a switch to a second layout.
+	 *
+	 * What stays, always: the avatar, the title and the tagline. That is the
+	 * guide's identity and the product's promise, and neither stops being true
+	 * once a question has been asked.
+	 *
+	 * What goes, once the reader has started: the supporting paragraph and the
+	 * four chips. Both exist to answer "what is this and what do I do here",
+	 * and the reader who has just asked something has answered that themselves.
+	 * The freed space goes to the transcript, which is what they actually came
+	 * to read.
+	 *
+	 * Gating both on one flag rather than two, because they collapse together
+	 * and always will: they are the same beat of the spine (ORIENT and INVITE),
+	 * and a version where the paragraph lingered without the chips would read
+	 * as the page having failed to finish tidying up.
+	 */
+	showOnboarding?: boolean;
 }) {
-	const name = displayName(persona, ageBand);
 	const cards = cardsFor(persona);
+	const welcome = hookFor(persona, language, priorConversations, readerName);
+	const tagline = TAGLINES[language] ?? TAGLINES.en;
 
 	return (
 		<div className="welcome">
-			<div className="welcome__hero">
-				{/* The same face the assistant answers with, at rest. */}
-				<div className="orb welcome__orb" aria-hidden="true" />
-				<div>
-					<h2 className="welcome__greeting">Hi — I&rsquo;m {name}.</h2>
-					<p className="welcome__sub">What would you like to explore today?</p>
-				</div>
-			</div>
+			<section className="welcome-zone">
+				{/* THE ORB IS ASPIRE ITSELF, and the guide's face replaces it once one
+				 * is chosen -- spec section 17, and the same `.orb` element does both:
+				 * `--orb-face` carries the guide's portrait, and Guest has none, so
+				 * Guest keeps the purple sphere with its gold star. One element, no
+				 * branch, and the two are never shown together.
+				 *
+				 * Above the headline rather than beside it, so it reads as a guide
+				 * hovering over the introduction rather than a bullet point. */}
+				<div className="welcome-zone__orb orb" aria-hidden="true" />
 
-			<ul className="welcome__cards">
-				{cards.map((card) => (
-					<li key={card.title}>
-						<button
-							type="button"
-							className="welcome__card"
-							onClick={() =>
-								card.panel === "videos"
-									? onOpenVideos?.()
-									: card.question && onAsk(card.question)
-							}
-						>
-							<i className={card.icon} aria-hidden="true" />
-							<span className="welcome__card-title">{card.title}</span>
-							<span className="welcome__card-blurb">{card.blurb}</span>
-						</button>
-					</li>
-				))}
-			</ul>
+				{/* THE SAME TREATMENT AS THE LANDING HEADLINE, and deliberately so:
+				 * `font-display font-medium` in the ink token with the emphatic
+				 * half italic in one flat brand colour, exactly as "take you?" is
+				 * set on "Where will your money take you?". The two headlines are
+				 * the reader's first and second impression of the same product,
+				 * and they should look like it -- which is why the gradient came
+				 * off both together. */}
+				<h1 className="welcome-title font-display font-medium tracking-tight">
+					{welcome.lead}
+					<span className="welcome-title__accent">{welcome.accent}</span>{" "}
+					<span aria-hidden="true">{welcome.emoji}</span>
+				</h1>
+
+				{/* Three words carry brand colour and the rest does not. Colouring
+				 * every word turns a tagline into a rainbow. */}
+				<p className="welcome-tagline">
+					<span className="welcome-tagline__ask">{tagline.ask}</span>{" "}
+					<span className="welcome-tagline__play">{tagline.play}</span>{" "}
+					<span className="welcome-tagline__explore">{tagline.explore}</span>{" "}
+					{tagline.rest}
+				</p>
+
+				{/* Interface copy, not a chat message -- so no bubble and no orb
+				 * beside it. The second sentence changes per guide; the placement
+				 * never does. */}
+				{/* No hardcoded greeting in front of this any more. The headline
+				 * does the welcoming now, in each guide's own words, and prefixing
+				 * "Welcome to ASPIRE AI." to Imani's line said it twice.
+				 *
+				 * Collapses with the chips: it orients a reader who has not started
+				 * and repeats itself to one who has. */}
+				{showOnboarding ? <p className="welcome-copy">{welcome.line}</p> : null}
+			</section>
+
+			{showOnboarding ? (
+				<ul className="welcome__cards">
+					{cards.map((card) => (
+						<li key={card.title}>
+							<button
+								type="button"
+								className="welcome__card"
+								onClick={() =>
+									card.panel === "videos"
+										? onOpenVideos?.()
+										: card.question && onAsk(card.question)
+								}
+							>
+								<i className={card.icon} aria-hidden="true" />
+								<span className="welcome__card-title">{card.title}</span>
+								<span className="welcome__card-blurb">{card.blurb}</span>
+							</button>
+						</li>
+					))}
+				</ul>
+			) : null}
 		</div>
 	);
 }

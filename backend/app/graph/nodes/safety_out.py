@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Final
 
 from langchain_core.messages import AIMessage
 
@@ -88,6 +88,83 @@ def cap_for(band: str, agent: str | None, *, story: bool = False) -> int | None:
     else:
         table = WORD_CAPS
     return table.get(band)
+
+async def _pathway_step(state: Any) -> Any:
+    """The next-step suggestion for this turn, or None. Never raises.
+
+    Everything here is best-effort by design: this runs after the answer exists
+    and cannot change it, so a slow store, a missing curriculum file or a
+    learner with no rows must all resolve to "no suggestion" rather than to a
+    turn that fails on its way out. The reader has an answer either way.
+    """
+    from app.config import get_settings
+
+    if not get_settings().pathway_suggestions_enabled:
+        return None
+
+    learner = state.get("user_id")
+    if not learner:
+        # Nothing recorded for an anonymous reader, so every rung that reads
+        # mastery is silent and rung 5 would invite them into a lesson their
+        # session cannot remember.
+        return None
+
+    try:
+        from app.curriculum.schema import load_all
+        from app.learning.mastery import MasteryStore
+        from app.pathway.suggest import next_step
+
+        curriculum = load_all()
+        band = state.get("age_band") or "9-12"
+        rows = await MasteryStore().all_for(learner)
+        return next_step(
+            state,
+            mastery=rows,
+            lessons=curriculum.lessons_for_band(band),
+            concept_names={
+                concept_id: concept.name
+                for concept_id, concept in curriculum.concepts.items()
+            },
+        )
+    except Exception:
+        logger.warning("pathway suggestion skipped", exc_info=True)
+        return None
+
+
+
+#: Corpus rows that ARE the programme: the Golden Record.
+#:
+#: `ASP-` ids and the programme categories. A row about budgeting in general is
+#: financial education and meets the full ladder; a row about what ASPIRE is,
+#: who is eligible, or what the EC$500 buys is a fact about the reader's own
+#: money and does not.
+_GOLDEN_CATEGORIES: Final[frozenset[str]] = frozenset(
+    {"programme", "overview", "eligibility", "application", "investments", "savings"}
+)
+
+
+def grounded_in_the_programme(state: Any) -> bool:
+    """Whether this answer is built on ASPIRE's own published facts.
+
+    THE SCOPE THE VOCABULARY BAN LIFTS FOR, and it is decided by what the
+    answer was BUILT FROM rather than by what it happens to mention. A reply
+    that reached for `investment` while grounded in nothing is exactly the
+    reply the ladder exists to stop; one grounded in the row that says the
+    EC$500 buys shares is the programme telling a child what they own.
+
+    Conservative on purpose: no retrieval, no lift. An ungrounded answer meets
+    the full ladder, which is the safe direction to fail in.
+    """
+    for chunk in state.get("retrieved") or ():
+        kb_id = str(getattr(chunk, "kb_id", "") or "")
+        if kb_id.upper().startswith("ASP-"):
+            return True
+        metadata = getattr(chunk, "metadata", None) or {}
+        category = str(metadata.get("category", "")).strip().lower()
+        if category in _GOLDEN_CATEGORIES:
+            return True
+    return False
+
 
 #: The band at and above which links may be shown, and the personas that never see them regardless.
 # `kaleb` joins `stella` because he IS the older half of what `stella` used to
@@ -201,6 +278,37 @@ def quick_replies_ok(replies: list[str]) -> bool:
     return all(0 < word_count(reply) <= QUICK_REPLY_MAX_WORDS for reply in replies)
 
 
+def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[str]]:
+    """Split chips into those this band may be offered, and those it may not.
+
+    THE LADDER STOPPED AT THE PROSE. `quick_replies_ok` measures how many chips
+    there are and how long each one is, and that is all it has ever done -- the
+    vocabulary gate ran over the answer and never over the options underneath
+    it. So a nine-year-old on Kaleb was offered a tappable "I think a loan",
+    with `loan` on the enforced 9-12 ban list. Observed on production, 22 Aug,
+    asking how interest on EC$500 works.
+
+    That is the exact failure the ladder exists to prevent, arriving by the one
+    route nothing was watching. It is also silent: the chip is well-formed, the
+    count is right, the build is green.
+
+    DROPPED WHOLE rather than stripped. `safety_out` blanks a banned term inside
+    prose because a sentence with a hole still carries the rest of its meaning.
+    A three-word chip does not -- "I think a" is not an option anybody can tap,
+    and offering it is worse than offering one fewer. If dropping takes the set
+    below the minimum, `quick_replies_ok` fails and the existing fallback runs,
+    which is the behaviour already written for chips that do not survive.
+    """
+    kept: list[str] = []
+    dropped: list[str] = []
+    for reply in replies:
+        if vocab.check(reply, band):
+            dropped.append(reply)
+        else:
+            kept.append(reply)
+    return kept, dropped
+
+
 QUICK_REPLY_INSTRUCTION = (
     f"End with {QUICK_REPLY_MIN} to {QUICK_REPLY_MAX} tappable options. Each "
     f"must be at most {QUICK_REPLY_MAX_WORDS} words. Put them on their own "
@@ -286,6 +394,44 @@ def locale_instruction(locale: str) -> str:
 # ── the node ─────────────────────────────────────────────────────────────────
 
 
+#: Bands whose card forbids a figure outright.
+#:
+#: 5-8 ONLY, and the narrowness is the point. `stella.5-8.md` red line 3 reads
+#: "NEVER state a rate, a percentage, a balance or a projected amount -- not even
+#: a sourced one. This reader cannot check it and does not need it." Kaleb's 9-12
+#: card says the opposite in as many words -- "Plain digits. EC dollars as EC$.
+#: Examples in sums between five and three hundred" -- so a gate that caught him
+#: would be breaking his card to enforce hers.
+_NO_FIGURE_BANDS: Final[frozenset[str]] = frozenset({"5-8"})
+
+#: A money amount or a percentage. Deliberately narrow.
+#:
+#: Bare small integers are NOT matched: "three rounds", "two jars" and "you are 7"
+#: are ordinary language at this age, and a gate that ate them would be worse than
+#: the thing it is guarding.
+_FIGURE = re.compile(
+    r"(?:EC\s?\$|US\s?\$|\$)\s?[\d,]+(?:\.\d+)?"   # EC$1,000
+    r"|\b\d+(?:\.\d+)?\s?(?:%|per\s?cent|percent)"     # 5%, 5 per cent
+    r"|\b\d[\d,]{2,}(?:\.\d+)?\b",                     # 1,000 / 1000 bare
+    re.IGNORECASE,
+)
+
+
+def has_figure(text: str) -> bool:
+    """Whether an answer names a money amount or a percentage."""
+    return bool(_FIGURE.search(text))
+
+
+def figure_instruction() -> str:
+    """The reprompt. Names the rule rather than the offending string."""
+    return (
+        "Remove every money amount and every percentage from the answer. Say the "
+        "idea in words instead -- 'the bank adds a little', not a figure. If the "
+        "reader asked for an amount, say plainly that it is something a grown-up "
+        "should tell them, as a choice rather than as something you do not know."
+    )
+
+
 def make_safety_out(reprompt: Reprompt | None = None):
     """Build the outbound gate."""
 
@@ -305,7 +451,18 @@ def make_safety_out(reprompt: Reprompt | None = None):
         locale = state.get("locale", "en")
         original = text_of(last)
         replies = list(state.get("quick_replies") or [])
+        # Before anything measures them: a chip carrying a term this band may not
+        # hear is not a chip that got through, it is a chip that was never checked.
+        replies, banned_chips = chips_within_band(replies, band)
         report: dict[str, Any] = {}
+        if banned_chips:
+            report["quick_replies_banned"] = banned_chips
+            logger.warning(
+                "dropped %d chip(s) carrying terms banned at %s: %s",
+                len(banned_chips),
+                band,
+                banned_chips,
+            )
 
         # Widgets out, before anything measures or rewrites.
         text, widgets = sentinel.split(original)
@@ -338,15 +495,48 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = truncate_at_sentence(text, cap)
                 report["length_truncated"] = True
 
+        # ── (a2) figures, at the youngest band only ─────────────────────────
+        # `stella.5-8.md` red line 3 forbids a rate, a percentage, a balance or a
+        # projected amount, "not even a sourced one" -- and until now that rule
+        # lived ONLY in the prompt. Observed on production 22 Aug: the same
+        # question produced "the bank may add EC$20 after one year" on one run and
+        # a figure-free answer on the next. A red line the model follows most of
+        # the time is not a red line.
+        #
+        # Every other rule on that card has a backstop: the vocabulary ladder has
+        # `vocab.check`, the links have `_NO_LINK_PERSONAS`. This is that, for the
+        # one rule that had none.
+        if band in _NO_FIGURE_BANDS and has_figure(text):
+            report["figure_violation"] = True
+            if reprompt is not None:
+                timing.note_reprompt("figure")
+                text = await reprompt(figure_instruction(), text)
+            if has_figure(text):
+                # The reprompt did not clear it. Redacting mid-sentence would leave
+                # a hole a five-year-old reads as a mistake, so the whole answer is
+                # replaced by the refusal the card already specifies.
+                logger.warning(
+                    "figure survived the reprompt at band %s; serving the card's refusal",
+                    band,
+                )
+                text = (
+                    "That is something a grown-up should tell you. What I can say "
+                    "is that the money is yours, it is safe, and it is growing."
+                )
+
         # ── (b) vocabulary ──────────────────────────────────────────────────
-        violations = vocab.check(text, band)
+        # Grounded in ASPIRE's own facts? Then the programme's own vocabulary is
+        # not a thing to hide from the child it belongs to. `_GENERAL_BAN` and
+        # the cards' figure rules are untouched by this -- see `vocab.check`.
+        programme_scope = grounded_in_the_programme(state)
+        violations = vocab.check(text, band, programme_scope=programme_scope)
         if violations:
             report["vocab_violations"] = sorted({v.term for v in violations})
             if reprompt is not None:
                 timing.note_reprompt("vocab")
                 text = await reprompt(vocab.explain(violations, band), text)
                 # Re-checked, and a second failure is NOT re-prompted again.
-                remaining = vocab.check(text, band)
+                remaining = vocab.check(text, band, programme_scope=programme_scope)
                 if remaining:
                     report["vocab_stripped"] = sorted({v.term for v in remaining})
                     for violation in reversed(remaining):
@@ -468,6 +658,21 @@ def make_safety_out(reprompt: Reprompt | None = None):
             # An offer the reader answered with something else has expired. A
             # "yes" two turns later belongs to whatever was asked in between.
             update["offered_video"] = None
+        else:
+            # The pathway suggestion, and only when no video was offered: two
+            # offers on one turn is the assistant talking over itself, and the
+            # video is the more concrete of the two.
+            #
+            # OFF by default. It adds one mastery read to the reply path and
+            # puts a chip in front of a reader, and neither is a change to make
+            # quietly. `next_step` itself is pure and separately tested.
+            step = await _pathway_step(state)
+            if step is not None:
+                update["suggested_step"] = step.lesson_id or step.concept_id
+                update["quick_replies"] = [step.chip, *replies][:3]
+                logger.info(
+                    "pathway rung %s: %s (%s)", step.rung.value, step.chip, step.why
+                )
 
         if text != original:
             # Same message id, so `add_messages` replaces the message instead of appending one.

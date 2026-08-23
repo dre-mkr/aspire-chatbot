@@ -202,6 +202,10 @@ class AspireState(TypedDict, total=False):
     #: what has to be remembered. Cleared as soon as it is taken or the reader
     #: asks something else, so a yes three turns later opens nothing.
     offered_video: str | None
+    #: The pathway step offered last turn, for the same reason as the line above:
+    #: never twice running, and a chip the reader ignored is a chip they have
+    #: answered. `app/pathway/suggest.py` reads it and refuses when it is set.
+    suggested_step: str | None
 
     # ── conversation ────────────────────────────────────────────────────────
     messages: Annotated[list[BaseMessage], add_messages]
@@ -294,6 +298,7 @@ def initial_state(
         awaiting_story_topic=False,
         story_topic=None,
         offered_video=None,
+        suggested_step=None,
         videos_offered=[],
         identity_proven=identity_proven,
         messages=[],

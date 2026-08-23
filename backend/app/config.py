@@ -167,6 +167,14 @@ class Settings(BaseSettings):
     #: A validated widget config is reused for this long.
     learn_widget_cache_ttl_days: int = Field(default=7, ge=1, le=90)
 
+    # The pathway suggester.
+    #
+    # OFF by default, and deliberately. `app/pathway/suggest.py` is written and
+    # tested; switching it on adds one mastery read to the reply path and puts a
+    # chip in front of a reader, and neither is ours to decide unilaterally in
+    # judging week. Set PATHWAY_SUGGESTIONS_ENABLED=true to turn it on.
+    pathway_suggestions_enabled: bool = False
+
     # Widgets.
     widgets_enabled: bool = True
     #: A candidate widget is not regenerated for this long, even on a miss.

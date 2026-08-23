@@ -20,16 +20,21 @@ import { downloadTranscript } from "#/lib/aspire/export";
 import { engineGameType } from "#/lib/aspire/game-kinds";
 import { type GameState, startGame } from "#/lib/aspire/games";
 import {
+	isFreshThread,
 	type PendingTurn,
 	takePendingTurn,
 	takeVoiceStart,
 } from "#/lib/aspire/handoff";
 import {
 	displayTitle,
+	loadConversations,
 	type StoredConversation,
 	titleFor,
 } from "#/lib/aspire/history";
+import { type HookLanguage, readerGivenName } from "#/lib/aspire/hooks";
 import { answerToText } from "#/lib/aspire/knowledge";
+import { displayName } from "#/lib/aspire/persona-name";
+import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import {
 	eligibilityStateQuery,
 	gameStateQuery,
@@ -44,12 +49,14 @@ import { useAnswerSettings } from "#/lib/aspire/use-answer-settings";
 import { useConversation } from "#/lib/aspire/use-conversation";
 import { useSession } from "#/lib/aspire/use-session";
 import { useVoice } from "#/lib/aspire/use-voice";
+import { guideIdFor, rememberGuide } from "#/lib/aspire/workspace";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { AgeBandProvider, bandForPersona } from "./AgeBandProvider";
 import { ChatTitleBar } from "./ChatTitleBar";
 import { ChatWelcome } from "./ChatWelcome";
 import { Composer } from "./Composer";
 import { FirstRun } from "./FirstRun";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Rail } from "./Rail";
 import { Transcript } from "./Transcript";
 import { VoiceConsent, VoiceNote } from "./Voice";
@@ -91,8 +98,47 @@ export function ChatScreen() {
 		dismissPersonaNotice,
 	} = useAnswerSettings();
 
+	/**
+	 * Changing guide in the chat changes it everywhere.
+	 *
+	 * `setPersona` writes the address, which is right for this conversation and
+	 * forgotten the moment the reader leaves it. The preference has to outlive
+	 * the tab: a reader who switches to Azuri here and comes back tomorrow
+	 * should be met by Azuri, not by whoever they picked the first time.
+	 */
+	const choosePersona = useCallback(
+		(next: PersonaId | null, nextBand?: AgeBand | null) => {
+			setPersona(next, nextBand ?? undefined);
+			rememberGuide(guideIdFor(next, nextBand ?? band ?? null));
+		},
+		[setPersona, band],
+	);
+
 	/** Read only for the orb's colour: the band is what separates Skye from Kaleb. */
 	const { session: identity } = useSession();
+
+	/**
+	 * What the reader calls this assistant, for the parts only a screen reader
+	 * hears. `displayName` mirrors the server's `names.py` and falls back to
+	 * "ASPIRE AI" when no persona has given it a name -- which is Guest, and is
+	 * correct there.
+	 */
+	const guideName = displayName(persona, band ?? identity?.ageBand);
+
+	/**
+	 * How many conversations this reader already has, for the welcome's opening
+	 * line. Read once on mount rather than subscribed: it decides between "Hi
+	 * there" and "Welcome back", and a greeting that changed mid-session because
+	 * a conversation was saved behind it would be worse than either.
+	 *
+	 * localStorage is unavailable during SSR, hence the effect rather than an
+	 * initialiser -- the first paint says "Hi there" and corrects itself, which
+	 * is the right way round for a reader who has never been here.
+	 */
+	const [priorConversations, setPriorConversations] = useState(0);
+	useEffect(() => {
+		setPriorConversations(loadConversations().length);
+	}, []);
 
 	/** The language each eligibility check opened in, by thread. */
 	const checkLanguage = useRef(new Map<string, string>());
@@ -116,6 +162,7 @@ export function ChatScreen() {
 		activeStoredTitle,
 		threadId,
 		animateAfterId,
+		adoptThread,
 		send,
 		resumeFirstTurn,
 		sendInteraction,
@@ -540,6 +587,22 @@ export function ChatScreen() {
 		}
 
 		/**
+		 * A guide card opens an empty conversation on purpose. It has no rows to
+		 * restore and the server has never been told it exists, so the read below
+		 * would 404 and send the reader back to the landing -- which is where they
+		 * just came from. Nothing to fetch, and that is the correct outcome:
+		 * an empty thread is exactly what the welcome renders for.
+		 */
+		if (isFreshThread(chatId)) {
+			// Nothing to fetch -- but the conversation still has to be adopted, or
+			// `send` refuses every later turn on the grounds that no conversation
+			// is open. That refusal is silent, so the symptom is a composer that
+			// takes the reader's question and does nothing with it.
+			adoptThread(chatId);
+			return;
+		}
+
+		/**
 		 * An identity first, because a conversation is only readable as its
 		 * owner. Then the service directly rather than through Query: this is
 		 * the one read whose *failure* has to be acted on, and a rejection is
@@ -568,7 +631,15 @@ export function ChatScreen() {
 					replace: true,
 				});
 			});
-	}, [chatId, threadId, navigate, openPast, stopPlayback, queryClient]);
+	}, [
+		chatId,
+		threadId,
+		navigate,
+		openPast,
+		stopPlayback,
+		queryClient,
+		adoptThread,
+	]);
 
 	const handleOpenPast = useCallback(
 		(conversation: StoredConversation) => {
@@ -676,7 +747,22 @@ export function ChatScreen() {
 		   included, got the five-year-old's configuration by fallback. Derived
 		   from the guide they chose; see `bandForPersona`. */
 		<AgeBandProvider
-			band={band ?? identity?.ageBand ?? bandForPersona(persona)}
+			// ORDER MATTERS, and it was wrong. `identity.ageBand` came second, but
+			// for an ANONYMOUS session `/api/auth/anonymous` returns the youngest
+			// band for everyone -- it describes the account, which has no persona,
+			// and 5-8 is the safe answer there. So a signed-out reader who picked
+			// Zion, Imani or Azuri got `data-band="5-8"` and `bandForPersona`,
+			// which returns 13-15 for orion, was never reached.
+			//
+			// A SIGNED-IN reader is different: their band comes from their date of
+			// birth and is the real answer, so it still beats the guide they
+			// picked. Hence the account-type check rather than a plain reorder.
+			band={
+				band ??
+				(identity?.accountType === "registered" ? identity.ageBand : null) ??
+				bandForPersona(persona) ??
+				identity?.ageBand
+			}
 		>
 			<div
 				className="app"
@@ -725,7 +811,7 @@ export function ChatScreen() {
 						onDeleteConversation={handleDeleteConversation}
 						persona={persona}
 						band={band}
-						onPersonaChange={setPersona}
+						onPersonaChange={choosePersona}
 						onSeed={ask}
 					/>
 
@@ -745,6 +831,18 @@ export function ChatScreen() {
 							Skip to the message box
 						</a>
 
+						{/* EN / ES / FR. Its own corner slot rather than a fourth control
+						    beside the guide picker; see `LanguageSwitcher`. */}
+						<div
+							className="lang-slot"
+							data-with-account={railClosed || undefined}
+						>
+							<LanguageSwitcher
+								selected={voice.language as HookLanguage}
+								onChoose={(next) => voice.setLanguage(next)}
+							/>
+						</div>
+
 						{/* The way into an account, whenever the sidebar is not there to carry it. */}
 						{/* `inert` as well as the CSS, because they cover different people. */}
 						<div
@@ -758,7 +856,7 @@ export function ChatScreen() {
 						{/* Above the transcript, not after it: each answer carries its own
 					    `h2`, and a page whose first heading is an `h2` reads to a
 					    screen reader as a document that starts mid-outline. */}
-						<h1 className="sr-only">Conversation with ASPIRE AI</h1>
+						<h1 className="sr-only">Conversation with {guideName}</h1>
 
 						<ChatTitleBar
 							title={activeTitle}
@@ -785,21 +883,36 @@ export function ChatScreen() {
 								}}
 							>
 								<div className="thread__inner">
-									{/* Before anybody has said anything, the room says hello.
-									 *
-									 * A new thread rendered a bare transcript: a blank
-									 * column and a text box, with no indication of what the
-									 * assistant could do or which of its six voices was
-									 * about to answer. */}
-									{messages.length === 0 && !streaming && !isThinking ? (
-										<ChatWelcome
-											persona={persona}
-											ageBand={band ?? identity?.ageBand}
-											onAsk={ask}
-										/>
-									) : null}
+									{/* THE HOOK ALWAYS, THE CHIPS ONLY WHEN THE THREAD IS EMPTY.
+									    This used to be one condition for both, which meant a
+									    reader who chose a guide and typed a question on the
+									    landing never saw that guide greet them: staging the
+									    turn made the thread non-empty before the chat first
+									    painted. The greeting is beats one to three of the
+									    spine and belongs at the top of the conversation
+									    either way; it scrolls off as the conversation grows. */}
+									<ChatWelcome
+										showOnboarding={
+											messages.length === 0 && !streaming && !isThinking
+										}
+										persona={persona}
+										language={voice.language as HookLanguage}
+										priorConversations={priorConversations}
+										/* Only for a registered account, and only when the name
+										 * survives `readerGivenName` -- see the ladder note there.
+										 * An initial or an email prefix is not a name, and greeting
+										 * somebody by one is the product guessing. */
+										readerName={
+											identity?.accountType === "registered"
+												? identity.firstName?.trim() ||
+													readerGivenName(identity.displayName)
+												: null
+										}
+										onAsk={ask}
+									/>
 									<section aria-label="Conversation">
 										<Transcript
+											guideName={guideName}
 											messages={messages}
 											streaming={streaming}
 											isThinking={isThinking}
@@ -917,7 +1030,7 @@ export function ChatScreen() {
 								onToggleSimpleMode={toggleSimpleMode}
 								persona={persona}
 								band={band}
-								onPersonaChange={setPersona}
+								onPersonaChange={choosePersona}
 								draft={draft}
 								onDraftChange={setDraft}
 								focusSignal={0}
