@@ -40,11 +40,16 @@ closing:
     you down to explain them, which is the reason to know them now.
 
 entries:
-  - id: wordbank-kaleb-02-value
-    word: VALUE
-    scramble: LUEVA
-    hint: what a thing is really worth, which is not always its price
-    definition: what something is worth to you, which can be more or less than what it costs
+  # WORTH, not VALUE. `value` is a wire key -- it carries the payload of a
+  # quick-reply option -- so VALUE passed the games leak guard only because that
+  # guard reads games payloads, where the key does not appear. A word that is
+  # safe by which endpoint happens to be checked is not safe. See
+  # `test_no_answer_is_also_a_wire_key`.
+  - id: wordbank-kaleb-02-worth
+    word: WORTH
+    scramble: THROW
+    hint: how much a thing actually matters to you, whatever the shelf says
+    definition: how much something means to you, which can be far more or far less than it costs
     difficulty_band: core
     persona_bands: [kaleb]
     age_bands: ["9-12"]
@@ -62,29 +67,29 @@ entries:
     persona_bands: [kaleb]
     age_bands: ["9-12"]
 
-  - id: wordbank-kaleb-02-owe
-    word: OWE
-    scramble: WOE
-    hint: what you do when the money is not yours yet
-    definition: to have money that belongs to somebody else and has to go back
+  - id: wordbank-kaleb-02-borrow
+    word: BORROW
+    scramble: RROWBO
+    hint: what you are doing when the money is not yours yet
+    definition: to take money that belongs to somebody else, on the understanding it goes back
     difficulty_band: core
     persona_bands: [kaleb]
     age_bands: ["9-12"]
 
-  - id: wordbank-kaleb-02-own
-    word: OWN
-    scramble: NWO
-    hint: what you can say about a thing that is properly yours
-    definition: to have something that belongs to you and to nobody else
+  - id: wordbank-kaleb-02-owner
+    word: OWNER
+    scramble: NEROW
+    hint: what a share in a company makes you, however small the share
+    definition: the person a thing belongs to — which is what half of an ASPIRE account makes you
     difficulty_band: warmup
     persona_bands: [kaleb]
     age_bands: ["9-12"]
 
-  - id: wordbank-kaleb-02-patience
-    word: PATIENCE
-    scramble: TIENCEPA
-    hint: the part of saving that has nothing to do with money
-    definition: waiting for something on purpose, because what you get is worth the wait
+  - id: wordbank-kaleb-02-saver
+    word: SAVER
+    scramble: VERSA
+    hint: what you become the moment you leave money alone on purpose
+    definition: somebody who keeps money back for later instead of using it now
     difficulty_band: core
     persona_bands: [kaleb]
     age_bands: ["9-12"]

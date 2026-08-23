@@ -68,12 +68,12 @@ entries:
     persona_bands: [kaleb]
     age_bands: ["9-12"]
 
-  - id: wordbank-kaleb-01-earn
-    language: en
-    word: EARN
-    scramble: RNEA
-    hint: what you do for money rather than being given it
-    definition: to receive money for work done
-    difficulty_band: warmup
+  - id: wordbank-kaleb-01-salary
+    word: SALARY
+    scramble: LARYSA
+    hint: what a job pays, counted by the year rather than the hour
+    definition: a fixed amount someone is paid for their work, the same each month whatever the hours
+    difficulty_band: core
     persona_bands: [kaleb]
     age_bands: ["9-12"]
+

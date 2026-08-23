@@ -1,0 +1,109 @@
+# ASPIRE word scramble — Kaleb bank, set 3 (ages 9–12)
+#
+# The third bank for this reader, and the one that leaves the bank building.
+#
+#   set 1  the words on a STATEMENT     INTEREST BUDGET DEPOSIT SAVINGS SHARES EARN
+#   set 2  the words behind a DECISION  WORTH DECIDE OWE OWN PATIENCE TARGET INCOME TRADE
+#   set 3  the words at the COUNTER     where money actually changes hands
+#
+# A nine-year-old in Basseterre or Charlestown meets these before any of the
+# others: a price on a shelf, change counted back, a receipt they are handed and
+# throw away. The bank comes later. Naming what is already in front of them is
+# the point of this set.
+#
+# THE 9-12 LADDER, HELD. `loan`, `compound`, `dividend`, `portfolio` and
+# `inflation` are banned at this band and none appear here. `PROFIT` does --
+# the term itself is not banned, only `guaranteed profit`, which is a promise
+# rather than a word, and nothing here promises anything.
+#
+# No word is repeated from sets 1 or 2, and every answer was checked against the
+# wire keys before it was written down -- see `test_no_answer_is_also_a_wire_key`
+# for why that is not fussiness.
+
+id: wordbank-kaleb-03
+game_type: word_scramble
+language: en
+title: The words at the counter
+source: ASPIRE — word scramble written for Kaleb's card, 9-12
+
+closing:
+  lead: You have used every one of these already, whether or not you had the word.
+  text: >-
+    A price on a shelf, the change counted back into your hand, the slip of paper
+    you were given and did not read. That is where money is for most people, most
+    days — long before anyone opens an account. Knowing what each part is called
+    is what turns it from something that happens to you into something you are
+    doing.
+
+entries:
+  - id: wordbank-kaleb-03-price
+    word: PRICE
+    scramble: CEPRI
+    hint: the number on the shelf, before you decide anything
+    definition: what a shop is asking for something, which is not the same as what it is worth to you
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-change
+    word: CHANGE
+    scramble: NGECHA
+    hint: what comes back when you hand over more than the price
+    definition: the money returned to you when you pay with more than something costs
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-receipt
+    word: RECEIPT
+    scramble: CEIPTRE
+    hint: the paper you are handed and usually throw away
+    definition: the record of what you bought and what you paid, and your proof if something is wrong
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-afford
+    word: AFFORD
+    scramble: FORDAF
+    hint: what you can do when the money is genuinely there
+    definition: to have enough for something without leaving yourself short of what you need
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-wages
+    word: WAGES
+    scramble: GESWA
+    hint: what someone is paid for the hours they work
+    definition: money paid for work, usually by the hour or the week
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-profit
+    word: PROFIT
+    scramble: FITPRO
+    hint: what is left for a seller once they have paid for what they sold
+    definition: what a business keeps after it has covered what the thing cost it
+    difficulty_band: stretch
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-market
+    word: MARKET
+    scramble: KETMAR
+    hint: where sellers and buyers meet, here and everywhere
+    definition: anywhere buyers and sellers come together and prices get settled between them
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-03-buying
+    word: BUYING
+    scramble: INGBUY
+    hint: the moment a decision stops being a decision
+    definition: handing the money over — the point where the choice is made and cannot be unmade
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]

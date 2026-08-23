@@ -55,7 +55,7 @@ def test_list_games_describes_what_actually_exists(engine):
         {
             "id": "word_scramble",
             "name": "Unscramble These Words",
-            "items": 60,
+            "items": 68,
             "supports_hints": True,
             # `es` and `fr` now, because the word scramble is authored in both
             # -- AHORRAR and EPARGNER, chosen rather than translated.
