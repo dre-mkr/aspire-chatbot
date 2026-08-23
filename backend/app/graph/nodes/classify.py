@@ -6,7 +6,7 @@ import re
 
 import json
 import logging
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, Field
 
