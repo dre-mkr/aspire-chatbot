@@ -30,8 +30,16 @@ REWRITE_SYSTEM = (
     "Rewrite the last user message into a standalone search query. Resolve "
     "pronouns and anything left out, using the conversation for context. Keep "
     "the user's own words wherever you can -- you are preparing a search, not "
-    "improving a question. Reply with the query and nothing else. If the "
-    "message already stands alone, repeat it unchanged."
+    "improving a question. Reply with the query and nothing else.\n\n"
+    "A message can be a complete SENTENCE and still not be a QUESTION. When the "
+    "reader is supplying a fact about their situation -- \"she is 15\", \"my son "
+    "is 4\", \"we live in Nevis\", \"he is not in school\" -- they are answering "
+    "or refining the question the conversation is already about, and they expect "
+    "it answered again with the new fact in it. Write THAT question. \"she is "
+    "15\", after a question about which children can join, becomes \"is a "
+    "15-year-old eligible for ASPIRE\".\n\n"
+    "Only repeat a message unchanged when it is already a question that would "
+    "make sense to somebody who had not read the conversation."
 )
 
 #: How many turns of context the rewriter sees.
@@ -435,6 +443,10 @@ _QA_DEPTH: dict[str, str] = {
 - One worked example in EC$ where the extracts support it.
 - Four or five sentences. Bullets only for a genuine list of steps.""",
     "aurora": """DEPTH AND COMPLETENESS
+- Open with the ANSWER, not with a verdict. Yes or no belongs first only when
+  she asked a yes-or-no question: "What is ASPIRE?" does not open with "Yes",
+  and "When can she access it?" does not open with "No" -- which reads as a
+  refusal before she has been told anything.
 - Lead with the answer she can act on. Then the documents, amounts, deadlines
   and next step the extracts support -- and stop.
 - Where the answer IS a list of documents or steps, use `-` bullets and let the
@@ -1320,6 +1332,13 @@ _SMALL_TALK: Final[tuple[tuple[str, str], ...]] = (
                r"wait,?\s+i\s+don'?t\s+understand|i\s+don'?t\s+understand|"
                r"what\s+did\s+i\s+(just\s+)?ask(\s+you)?)"),
     ("bye", r"(bye|goodbye|see\s+you|adios|adi[oó]s|au\s+revoir)"),
+    # A reader trying to get OUT. Closed class, and it belongs here rather than
+    # in the router for the same reason a greeting does: "cancel" alone was
+    # classified as a topic and answered with advice about cancelling unused
+    # subscriptions, which is the assistant not listening at the exact moment
+    # somebody asked it to stop.
+    ("stop", r"(stop|cancel|never\s*mind|nevermind|forget\s+it|start\s+over|"
+             r"go\s+back|d[eé]jalo|olv[ií]dalo|cancelar|annuler|laisse\s+tomber)"),
 )
 
 #: What to say instead of opening a ticket.
@@ -1350,6 +1369,11 @@ _SMALL_TALK_REPLIES: Final[dict[str, dict[str, str]]] = {
         "en": "Of course — ask me again and I'll explain it a different way.",
         "es": "Claro, pregúntamelo otra vez y te lo explico de otra manera.",
         "fr": "Bien sûr — repose-moi la question et je l'expliquerai autrement.",
+    },
+    "stop": {
+        "en": "No problem — we can leave that. What would you like to do instead? I can tell you about ASPIRE, or start again whenever you are ready.",
+        "es": "Sin problema, lo dejamos ahí. ¿Qué te gustaría hacer? Puedo contarte sobre ASPIRE, o empezamos de nuevo cuando quieras.",
+        "fr": "Pas de souci, on laisse ça. Que veux-tu faire à la place ? Je peux te parler d'ASPIRE, ou on recommence quand tu veux.",
     },
     "bye": {
         "en": "Bye for now! Come back any time you have a question about ASPIRE.",

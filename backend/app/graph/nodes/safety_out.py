@@ -478,6 +478,25 @@ _ABOUT_THE_PROGRAMME = re.compile(
 )
 
 
+#: The agents whose whole job is to teach. A reply from one of these is a
+#: lesson, and a lesson may name what it teaches.
+_TEACHING_AGENTS: Final[frozenset[str]] = frozenset(
+    {"learn_agent", "learning_sample", "learning_preview"}
+)
+
+
+def is_a_lesson(state: Any) -> bool:
+    """Whether this turn is teaching, rather than answering or chatting.
+
+    Read off the agent that produced it, which is the only honest signal: a
+    reader saying "explain loans to me" is asking for a lesson, and a reader
+    saying "should I take a loan" is asking for advice this product does not
+    give. The agent already made that call; this follows it rather than
+    guessing again from the words.
+    """
+    return str(state.get("active_agent") or "") in _TEACHING_AGENTS
+
+
 def about_the_programme(state: Any) -> bool:
     """Whether the reader asked about ASPIRE, read off their own words."""
     try:
@@ -537,10 +556,11 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Read here rather than at gate (b), because the chips are checked before
         # anything else and they need the same scope the prose gets.
         programme_scope = grounded_in_the_programme(state) or about_the_programme(state)
+        teaching_scope = is_a_lesson(state)
         # Before anything measures them: a chip carrying a term this band may not
         # hear is not a chip that got through, it is a chip that was never checked.
         replies, banned_chips = chips_within_band(
-            replies, band, programme_scope=programme_scope
+            replies, band, programme_scope=programme_scope or teaching_scope
         )
         report: dict[str, Any] = {}
         if banned_chips:
@@ -631,14 +651,21 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Grounded in ASPIRE's own facts? Then the programme's own vocabulary is
         # not a thing to hide from the child it belongs to. `_GENERAL_BAN` and
         # the cards' figure rules are untouched by this -- see `vocab.check`.
-        violations = vocab.check(text, band, programme_scope=programme_scope)
+        violations = vocab.check(
+            text, band, programme_scope=programme_scope, teaching_scope=teaching_scope
+        )
         if violations:
             report["vocab_violations"] = sorted({v.term for v in violations})
             if reprompt is not None:
                 timing.note_reprompt("vocab")
                 text = await reprompt(vocab.explain(violations, band), text)
                 # Re-checked, and a second failure is NOT re-prompted again.
-                remaining = vocab.check(text, band, programme_scope=programme_scope)
+                remaining = vocab.check(
+                    text,
+                    band,
+                    programme_scope=programme_scope,
+                    teaching_scope=teaching_scope,
+                )
                 if remaining:
                     report["vocab_stripped"] = sorted({v.term for v in remaining})
                     for violation in reversed(remaining):

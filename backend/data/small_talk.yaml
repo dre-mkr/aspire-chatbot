@@ -61,6 +61,14 @@ replies:
     es: "Soy el asistente de ASPIRE. Respondo preguntas sobre el programa: el ahorro, las cuentas y cómo unirte. ¿Qué te gustaría saber?"
     fr: "Je suis l'assistant ASPIRE. Je réponds aux questions sur le programme : l'épargne, les comptes et comment s'inscrire. Que veux-tu savoir ?"
 
+  # A reader trying to get OUT of whatever is happening. Answered before the
+  # router, because "cancel" alone used to be read as a topic and answered with
+  # advice about cancelling unused subscriptions.
+  stop:
+    en: "No problem — we can leave that. What would you like to do instead? I can tell you about ASPIRE, or start again whenever you are ready."
+    es: "Sin problema, lo dejamos ahí. ¿Qué te gustaría hacer? Puedo contarte sobre ASPIRE, o empezamos de nuevo cuando quieras."
+    fr: "Pas de souci, on laisse ça. Que veux-tu faire à la place ? Je peux te parler d'ASPIRE, ou on recommence quand tu veux."
+
   repeat:
     en: "Of course — ask me again and I'll explain it a different way."
     es: "Claro, pregúntamelo otra vez y te lo explico de otra manera."

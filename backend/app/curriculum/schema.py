@@ -78,14 +78,19 @@ class Concept(_Node):
         it is the one context where the word is the point. A curriculum that
         cannot name what it teaches is not a safer curriculum.
 
-        So a concept is read under the same scope a programme answer gets. The
-        lift is `vocab.PROGRAMME_TERMS` and nothing else -- `_GENERAL_BAN` still
-        rejects a module at load, and so does anything outside that set: a
-        concept about `inflation` at 5-8 or `loan` at 9-12 is still refused,
-        because those are not terms the programme uses about itself.
+        So a concept is read under TEACHING scope -- the wider of the two, and
+        the right one here, because a concept is a lesson. It lifts
+        `vocab.TEACHING_TERMS`, which is the programme's own vocabulary plus
+        `loan`: ASPIRE lends nobody anything, so `loan` is not a programme term,
+        and a lesson about borrowing cannot be written without it.
+
+        `_GENERAL_BAN` still rejects a module at load, and so does anything
+        outside that set -- a concept about `inflation` at 5-8 is still refused,
+        because that is neither what the programme calls itself nor what a
+        lesson at that band is for.
         """
         for word in self.vocabulary:
-            if vocab.check(word, self.band_min, programme_scope=True):
+            if vocab.check(word, self.band_min, teaching_scope=True):
                 raise ValueError(
                     f"{self.id}: vocabulary {word!r} is banned at {self.band_min}"
                 )

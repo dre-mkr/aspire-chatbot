@@ -256,3 +256,120 @@ class TestTheScopeReachesEverySurface:
                 module_id="module_01_saving",
                 vocabulary=["crypto"],
             )
+
+
+class TestConversationalFlow:
+    """Things that stop a conversation being one, found by having conversations.
+
+    Every case here was observed against aspire.eccugenai.app on 23 August 2026.
+    """
+
+    def test_a_reader_can_say_stop(self):
+        """"cancel" alone was answered with advice about unused subscriptions.
+
+        The reader asked the assistant to stop and it changed the subject to
+        direct debits, which is the one moment not-listening is unmistakable.
+        A closed class, so it belongs in front of the router with the greeting.
+        """
+        from app.agents.qa.nodes import small_talk_answer, small_talk_kind
+
+        for text in ("cancel", "stop", "never mind", "forget it", "start over"):
+            assert small_talk_kind(text) == "stop", f"{text!r} is not recognised"
+            reply = small_talk_answer(
+                text, locale="en", persona="aurora", age_band="adult"
+            )
+            assert reply and "subscription" not in reply.lower()
+
+    @pytest.mark.parametrize("locale", ["en", "es", "fr"])
+    def test_and_be_answered_in_their_own_language(self, locale: str):
+        from app.agents.qa.nodes import small_talk_answer
+
+        assert small_talk_answer(
+            "cancel", locale=locale, persona="aurora", age_band="adult"
+        ).strip()
+
+    def test_a_real_question_about_cancelling_still_reaches_the_corpus(self):
+        """The guard must not swallow a genuine question."""
+        from app.agents.qa.nodes import small_talk_kind
+
+        assert small_talk_kind("should I cancel my subscriptions?") is None
+        assert small_talk_kind("cancel my ASPIRE application") is None
+
+    def test_the_rewriter_is_told_a_sentence_is_not_a_question(self):
+        """"she is 15" is grammatically complete and is not a question.
+
+        It was embedded verbatim, matched nothing, and the parent was told "I do
+        not have an answer for that" — after supplying the one fact the previous
+        question needed. `and the 15 year old?` worked on the same context, which
+        is what isolated it: the noun survived and the pronoun did not.
+        """
+        from app.agents.qa.nodes import REWRITE_SYSTEM
+
+        assert "not be a QUESTION" in REWRITE_SYSTEM
+        assert "she is 15" in REWRITE_SYSTEM
+        assert "supplying a fact" in REWRITE_SYSTEM
+
+    def test_the_length_guard_does_not_discard_a_resolved_fragment(self):
+        """A short fragment resolves into a much longer query by design.
+
+        The guard exists to catch a rewrite that ran away. Six times plus eighty
+        leaves room for "she is 15" -> "is a 15-year-old eligible for ASPIRE".
+        """
+        original, rewritten = "she is 15", "is a 15-year-old eligible for ASPIRE"
+        assert len(rewritten) <= len(original) * 6 + 80
+
+    def test_aurora_does_not_answer_yes_to_a_question_that_asked_neither(self):
+        """"What is ASPIRE?" was answered "Yes." and "When can she access it?"
+        was answered "No." — a refusal-shaped opening on a question about when.
+
+        The card said "Yes or no in the FIRST line" unconditionally.
+        """
+        from pathlib import Path
+
+        card = (
+            Path(__file__).resolve().parent.parent
+            / "app/prompting/personas/aurora.adult.md"
+        ).read_text(encoding="utf-8")
+        assert "ONLY when she asked a yes-or-no" in card
+        assert "The ANSWER in the FIRST line" in card
+
+
+class TestTeachingScope:
+    """`loan` in a tutorial, on the client's ruling of 23 August 2026."""
+
+    @pytest.mark.parametrize("band", ["5-8", "9-12", "13-15", "16-18", "adult"])
+    def test_a_lesson_may_say_loan_at_every_band(self, band: str):
+        from app.safety import vocab
+
+        assert not vocab.check("loan", band, teaching_scope=True)
+
+    @pytest.mark.parametrize("band", ["5-8", "9-12"])
+    def test_but_ordinary_talk_still_may_not(self, band: str):
+        """A guide wandering into lending at a nine-year-old has changed the
+        subject to something nobody asked about."""
+        from app.safety import vocab
+
+        assert vocab.check("loan", band)
+        assert vocab.check("loan", band, programme_scope=True), (
+            "ASPIRE lends nobody anything; `loan` is not a programme term"
+        )
+
+    def test_teaching_scope_contains_programme_scope(self):
+        from app.safety import vocab
+
+        assert vocab.PROGRAMME_TERMS < vocab.TEACHING_TERMS
+        assert vocab.TEACHING_TERMS - vocab.PROGRAMME_TERMS == {"loan"}
+
+    @pytest.mark.parametrize("text", ["crypto", "risk-free", "guaranteed return"])
+    def test_and_neither_scope_reaches_the_general_ban(self, text: str):
+        from app.safety import vocab
+
+        assert vocab.check(text, "adult", teaching_scope=True)
+
+    def test_a_teaching_turn_is_recognised_by_its_agent(self):
+        from app.graph.nodes.safety_out import is_a_lesson
+
+        for agent in ("learn_agent", "learning_sample", "learning_preview"):
+            assert is_a_lesson({"active_agent": agent})
+        for agent in ("qa_agent_public", "register_agent_step1", None):
+            assert not is_a_lesson({"active_agent": agent})
