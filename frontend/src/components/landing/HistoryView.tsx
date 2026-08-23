@@ -18,9 +18,12 @@ export function HistoryView({
 	// The list is `conversationsQuery`, and `groupByRecency` already produces
 	// the {label, items} shape the markup below was written against.
 	const { session } = useSession();
-	const { data: conversations } = useQuery(
-		conversationsQuery(session?.userId ?? "anon"),
-	);
+	const {
+		data: conversations,
+		isPending,
+		isError,
+		refetch,
+	} = useQuery(conversationsQuery(session?.userId ?? "anon"));
 	const groups = conversations ? groupByRecency(conversations) : [];
 	const open = (threadId: string) =>
 		onSelectChat
@@ -28,56 +31,94 @@ export function HistoryView({
 			: navigate({ to: "/chat/$chatId", params: { chatId: threadId } });
 
 	return (
-		<div className="flex flex-col min-h-screen bg-[#0B051D] text-white">
-			<div className="border-b border-white/10">
-				<ViewHeader onBack={onBack} tone="dark" />
-			</div>
-			<main className="flex-1 flex flex-col p-8 max-w-4xl mx-auto w-full">
-				<h1 className="text-4xl font-display font-medium text-white mb-2">
-					Chat History
-				</h1>
-				<p className="text-white/60 mb-12">
-					Review your past conversations and learning modules.
-				</p>
+		<div className="view">
+			<ViewHeader onBack={onBack} />
 
-				{!groups || groups.length === 0 ? (
-					<div className="text-center py-12 bg-white/5 rounded-3xl border border-white/10">
-						<i className="ph-duotone ph-chat-circle text-4xl text-white/20 mb-4"></i>
-						<p className="text-white/50">
-							You haven't started any conversations yet.
+			<main className="view__main">
+				<div className="view__head">
+					<h1 className="view__title">Chat history</h1>
+					<p className="view__lede">
+						Review your past conversations and learning modules.
+					</p>
+				</div>
+
+				{/* There was one branch here, and it said "You haven't started any
+				 * conversations yet." It said it while the list was still loading, and
+				 * it said it when the request failed — so a reader with a year of
+				 * conversations behind a flaky connection was told they had none.
+				 * Three states now, and the empty one is only reached when the list
+				 * really did arrive and really was empty. */}
+				{isPending ? (
+					<div className="history__list" aria-busy="true">
+						<span className="sr-only">Loading your conversations</span>
+						{[0, 1, 2].map((n) => (
+							<div className="history__row history__row--ghost" key={n}>
+								<span className="history__mark" />
+								<span className="history__ghost-lines">
+									<span />
+									<span />
+								</span>
+							</div>
+						))}
+					</div>
+				) : isError ? (
+					<div className="history__empty" role="alert">
+						<i
+							className="ph-duotone ph-cloud-warning history__empty-mark"
+							aria-hidden="true"
+						/>
+						<p>We could not load your conversations just now.</p>
+						<button
+							type="button"
+							className="history__retry"
+							onClick={() => refetch()}
+						>
+							Try again
+						</button>
+					</div>
+				) : groups.length === 0 ? (
+					<div className="history__empty">
+						<i
+							className="ph-duotone ph-chat-circle history__empty-mark"
+							aria-hidden="true"
+						/>
+						<p>You haven&rsquo;t started any conversations yet.</p>
+						<p className="history__empty-hint">
+							Ask ASPIRE a question and it will be waiting here next time.
 						</p>
 					</div>
 				) : (
-					<div className="flex flex-col gap-8">
+					<div className="history__groups">
 						{groups.map((group) => (
-							<div key={group.label}>
-								<h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-4">
-									{group.label}
-								</h2>
-								<div className="flex flex-col gap-3">
+							<section key={group.label}>
+								<h2 className="history__group-label">{group.label}</h2>
+								<div className="history__list">
 									{group.items.map((chat) => (
 										<button
 											type="button"
 											key={chat.threadId}
 											onClick={() => open(chat.threadId)}
-											className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-left group cursor-pointer"
+											className="history__row"
 										>
-											<div className="w-10 h-10 rounded-full bg-[#482977]/50 flex items-center justify-center text-[#c22f99] group-hover:scale-110 transition-transform">
-												<i className="ph-duotone ph-chat-text text-xl"></i>
-											</div>
-											<div className="flex-1 overflow-hidden">
-												<h3 className="font-medium text-white truncate">
-													{chat.title || "Untitled Conversation"}
-												</h3>
-												<p className="text-xs text-white/50 truncate">
+											<span className="history__mark" aria-hidden="true">
+												<i className="ph-duotone ph-chat-text" />
+											</span>
+											<span className="history__text">
+												<span className="history__title">
+													{chat.title || "Untitled conversation"}
+												</span>
+												<span className="history__date">
 													{new Date(chat.updatedAt).toLocaleDateString()}
-												</p>
-											</div>
-											<i className="ph-bold ph-caret-right text-white/30 group-hover:text-white/70 transition-colors"></i>
+												</span>
+											</span>
+											<i
+												className="ph-bold ph-caret-right history__chevron"
+												aria-hidden="true"
+											/>
 										</button>
 									))}
 								</div>
-							</div>
+							</section>
 						))}
 					</div>
 				)}

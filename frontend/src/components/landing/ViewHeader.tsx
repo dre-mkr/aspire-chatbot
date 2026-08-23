@@ -16,18 +16,21 @@
  *
  * The mark is a link home rather than decoration, because on every other site
  * in the world it is.
+ *
+ * THE `tone` PROP IS GONE. It painted Journey and History near-black while the
+ * four views reached from the same nav stayed white, and it took the focus ring
+ * with it: `--focus-ring` defaults to plum, which is 1.77:1 on #0B051D, so the
+ * only way out of those two pages could not be seen by anyone tabbing to it.
+ * The section views are one surface now.
  */
 
 import { ASPIRE_EXPANSION } from "./Brandmark";
 
 export function ViewHeader({
 	onBack,
-	tone = "light",
 	backLabel = "Back to ASPIRE",
 }: {
 	onBack: () => void;
-	/** Journey, History and Stories sit on the deep plum; the rest on white. */
-	tone?: "light" | "dark";
 	/**
 	 * What the way out is called.
 	 *
@@ -38,9 +41,8 @@ export function ViewHeader({
 	 */
 	backLabel?: string;
 }) {
-	const dark = tone === "dark";
 	return (
-		<header className="p-6 flex items-center justify-between gap-4 flex-wrap">
+		<header className="view-head">
 			{/* The mark never travels without what it stands for.
 			 *
 			 * ASPIRE is an acronym, and a wordmark on its own is four syllables
@@ -51,13 +53,9 @@ export function ViewHeader({
 			<button
 				type="button"
 				onClick={onBack}
-				className="group relative inline-flex items-center"
+				className="view-head__mark"
 				aria-label="ASPIRE — home"
 			>
-				<span
-					className="absolute inset-0 bg-[#c22f99]/10 blur-2xl rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"
-					aria-hidden="true"
-				/>
 				<picture>
 					<source srcSet="/brand/aspire-lockup.webp" type="image/webp" />
 					<img
@@ -65,22 +63,13 @@ export function ViewHeader({
 						alt={`ASPIRE — ${ASPIRE_EXPANSION}`}
 						width={3046}
 						height={888}
-						className={`relative z-10 h-11 md:h-14 w-auto transition-transform duration-500 group-hover:scale-105 ${
-							dark ? "brightness-0 invert" : ""
-						}`}
 					/>
 				</picture>
 			</button>
 
-			<button
-				type="button"
-				onClick={onBack}
-				className={`flex items-center gap-2 transition-colors font-semibold ${
-					dark
-						? "text-white/70 hover:text-white"
-						: "text-[#482977] hover:text-[#c22f99]"
-				}`}
-			>
+			{/* Was a 26px-tall target on a phone, and it is the only way out of
+			    every one of these pages. */}
+			<button type="button" onClick={onBack} className="view-head__back">
 				<i className="ph-bold ph-arrow-left" aria-hidden="true" /> {backLabel}
 			</button>
 		</header>

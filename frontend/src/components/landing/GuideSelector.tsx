@@ -26,51 +26,20 @@
 
 import { useId, useState } from "react";
 
-import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
-
-/** The ring colour a guide is remembered by, keyed to the guide id. */
-const RING: Record<string, string> = {
-	skye: "#C22F99",
-	kaleb: "#3B82F6",
-	zion: "#F4B000",
-	imani: "#5C3AAE",
-	azuri: "#0DAE93",
-};
-
-/** Pill background and text, per guide. Tinted from the ring, not neutral. */
-const PILL: Record<string, { bg: string; fg: string }> = {
-	skye: { bg: "#FCE5F3", fg: "#D72B91" },
-	kaleb: { bg: "#E8F2FF", fg: "#2F7FE9" },
-	zion: { bg: "#FFF1D5", fg: "#C88710" },
-	imani: { bg: "#EEE6FF", fg: "#6435B6" },
-	azuri: { bg: "#DDF7F1", fg: "#098B76" },
-};
+import {
+	type AgeBand,
+	CHOOSABLE_GUIDES,
+	type PersonaId,
+} from "#/lib/aspire/personas";
 
 /**
- * One line on what changes, shown on hover and focus.
- *
- * Not printed under every avatar: five permanent paragraphs turn a row that
- * reads in two seconds into one that has to be studied.
+ * The ring colour, the chip colours, the hover hint and the spoken label used
+ * to be four maps in this file, keyed by guide id, sitting beside a fifth copy
+ * of the ring colours in `LandingScreen`. They are fields on the guide now —
+ * see `GUIDES` — so a guide added to the product cannot arrive here with no
+ * colour and no spoken name.
  */
-const HINT: Record<string, string> = {
-	skye: "Simple, gentle explanations and playful learning.",
-	kaleb: "Straight answers, real money words and challenges.",
-	zion: "Direct, practical and sourced guidance.",
-	imani: "Clear answers and next steps for families.",
-	azuri: "Precise, sourced support for educators.",
-};
-
-/** Spoken aloud, so it says what the tap does and who it is for. */
-const SPOKEN: Record<string, string> = {
-	skye: "Choose Skye, the ASPIRE guide for ages 5 to 8",
-	kaleb: "Choose Kaleb, the ASPIRE guide for ages 9 to 12",
-	zion: "Choose Zion, the ASPIRE guide for ages 13 to 18",
-	imani: "Choose Imani, the ASPIRE guide for parents and guardians",
-	azuri: "Choose Azuri, the ASPIRE guide for teachers and educators",
-};
-
-/** The five guides, in reading order. `guest` is not one of them -- see above. */
-const ROW = GUIDES.filter((guide) => guide.guideId !== "guest");
+const ROW = CHOOSABLE_GUIDES;
 
 export interface GuideSelectorProps {
 	/** The guide id currently chosen, or null before anything is. */
@@ -109,10 +78,10 @@ export function GuideSelector({
 			className={`guide-selector guide-selector--${size}`}
 			aria-labelledby={headingId}
 		>
+			{/* The glyph that sat here was in Tailwind's blue-500, a colour this
+			    product does not use, and it was the only section heading on the
+			    page wearing an icon. Five faces below it are already the picture. */}
 			<h2 className="guide-selector__heading" id={headingId}>
-				<span className="guide-selector__heading-icon" aria-hidden="true">
-					<i className="ph-bold ph-users-three" />
-				</span>
 				Meet your guides
 			</h2>
 
@@ -120,7 +89,6 @@ export function GuideSelector({
 				{ROW.map((guide) => {
 					const id = guide.guideId;
 					const chosen = selected === id;
-					const pill = PILL[id];
 					return (
 						<button
 							key={id}
@@ -128,16 +96,16 @@ export function GuideSelector({
 							className="guide-card"
 							style={
 								{
-									"--guide-color": RING[id],
-									"--guide-pill-bg": pill?.bg,
-									"--guide-pill-fg": pill?.fg,
+									"--guide-color": guide.colour,
+									"--guide-pill-bg": guide.pillBg,
+									"--guide-pill-fg": guide.pillFg,
 								} as React.CSSProperties
 							}
 							// `aria-pressed` rather than `aria-selected`: this is a button
 							// that stays on, and `aria-selected` belongs to options inside a
 							// listbox or a tab in a tablist. Neither is what this is.
 							aria-pressed={chosen}
-							aria-label={SPOKEN[id]}
+							aria-label={guide.spoken}
 							aria-describedby={`${headingId}-${id}-hint`}
 							onClick={() =>
 								onChoose({
@@ -155,7 +123,7 @@ export function GuideSelector({
 							onFocus={() => setHovered(id)}
 							onBlur={() => setHovered((was) => (was === id ? null : was))}
 						>
-							<span className="guide-card__pill">{guide.audience}</span>
+							<span className="guide-card__pill">{guide.pill}</span>
 
 							<span className="guide-card__avatar">
 								<picture>
@@ -188,7 +156,7 @@ export function GuideSelector({
 								id={`${headingId}-${id}-hint`}
 								data-visible={hovered === id ? "true" : undefined}
 							>
-								{HINT[id]}
+								{guide.hint}
 							</span>
 						</button>
 					);

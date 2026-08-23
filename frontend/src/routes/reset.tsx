@@ -41,6 +41,13 @@ function Reset() {
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
 		if (busy) return;
+		// The rule this page prints and did not enforce: the list above says ten
+		// characters, and a nine-character password was sent to the server to be
+		// refused there — under a field that had nothing wrong with it.
+		if (password.length < 10) {
+			setError("Use at least 10 characters.");
+			return;
+		}
 		if (password !== repeat) {
 			setError("These two do not match yet.");
 			return;
@@ -110,6 +117,7 @@ function Reset() {
 					</li>
 				</ul>
 				<button type="submit" className="auth__primary" disabled={busy}>
+					{busy ? <span className="auth__spin" aria-hidden="true" /> : null}
 					{busy ? "Saving" : "Save and sign in"}
 				</button>
 			</form>

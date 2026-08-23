@@ -106,7 +106,7 @@ export function Compare({
 									style={{
 										display: "block",
 										marginBlockStart: "0.5rem",
-										color: "var(--faint)",
+										color: "var(--slate)",
 										fontSize: "calc(var(--band-type, 16px) - 2px)",
 									}}
 								>

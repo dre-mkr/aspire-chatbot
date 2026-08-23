@@ -47,6 +47,33 @@ export function takePendingTurn(threadId: string): PendingTurn | null {
 }
 
 /**
+ * The landing's microphone, which had no wire behind it.
+ *
+ * The button was drawn, labelled "Voice input", and given no handler — the one
+ * defect worth more than any amount of polish, because a control that looks
+ * live and does nothing teaches the reader that nothing on the page is live.
+ * Voice belongs to the chat page, which owns the recorder, the consent panel
+ * and the language. So the landing does what it can honestly do: it opens a
+ * conversation and says "this one started by tapping the microphone".
+ *
+ * Its own slot rather than a field on `PendingTurn`: that carries a question,
+ * and this arrival has none — the reader is about to speak it.
+ */
+let listenOnArrival: string | null = null;
+
+export function stageVoiceStart(threadId: string): void {
+	if (!clientSide) return;
+	listenOnArrival = threadId;
+}
+
+/** Reads and clears together, so a re-run of the effect cannot open the mic twice. */
+export function takeVoiceStart(threadId: string): boolean {
+	if (listenOnArrival !== threadId) return false;
+	listenOnArrival = null;
+	return true;
+}
+
+/**
  * The landing composer's unsent text. The page unmounts on the way to a chat,
  * so without this a draft typed at `/` would not survive coming back to it.
  */

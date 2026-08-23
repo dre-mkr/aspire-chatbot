@@ -6,6 +6,7 @@ import { Field } from "#/components/auth/Field";
 import {
 	AuthError,
 	redeemSignInLink,
+	requestReset,
 	requestSignInLink,
 	signIn,
 } from "#/lib/aspire/auth";
@@ -49,7 +50,8 @@ function SignIn() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [busy, setBusy] = useState(false);
-	const [linkSent, setLinkSent] = useState(false);
+	/** Which email went out, so the confirmation can say the right thing. */
+	const [sent, setSent] = useState<"signin" | "reset" | null>(null);
 	const [errors, setErrors] = useState<{
 		email?: string;
 		password?: string;
@@ -140,7 +142,7 @@ function SignIn() {
 		setErrors({});
 		try {
 			await requestSignInLink(email.trim());
-			setLinkSent(true);
+			setSent("signin");
 		} catch (error) {
 			setErrors({
 				form:
@@ -153,19 +155,62 @@ function SignIn() {
 		}
 	}
 
-	if (linkSent) {
+	/**
+	 * THE PRODUCT HAD NO WAY TO RESET A PASSWORD.
+	 *
+	 * `requestReset` has existed in `auth.ts` since the account work landed and
+	 * had zero callers; `/reset` and `/verify` both tell a reader to "ask for a
+	 * fresh one" and neither says where. Somebody who forgot their password
+	 * could not get back into their own account at all.
+	 *
+	 * The link is here, on the screen where they discover the problem, and it
+	 * reuses the confirmation the sign-in link already had.
+	 */
+	async function sendReset() {
+		if (busy || !email.trim()) {
+			setErrors({ email: "Enter your email and we will send a reset link." });
+			return;
+		}
+		setBusy(true);
+		setErrors({});
+		try {
+			await requestReset(email.trim());
+			setSent("reset");
+		} catch (error) {
+			setErrors({
+				form:
+					error instanceof AuthError
+						? error.message
+						: "Could not send that link.",
+			});
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	if (sent) {
 		return (
 			<AuthSurface
 				title="Check your email"
-				subtitle={`We sent a sign-in link to ${email.trim()}. It works once and expires in fifteen minutes.`}
-				footText="Wrong address?"
-				footLinkLabel="Try again"
-				footLinkTo="/signin"
+				subtitle={`We sent a ${sent === "reset" ? "password reset" : "sign-in"} link to ${email.trim()}. It works once and expires in fifteen minutes.`}
 			>
 				<p className="auth__note">
 					Nothing arrived? Look in spam, then ask for another link. Nobody can
 					get in without it.
 				</p>
+				{/* "Try again" was a link to `/signin` — the page this already is —
+				 * so a reader who mistyped their address tapped it, watched nothing
+				 * happen, and had no way back to the form. */}
+				<button
+					type="button"
+					className="auth__secondary"
+					onClick={() => {
+						setSent(null);
+						setErrors({});
+					}}
+				>
+					Use a different address
+				</button>
 			</AuthSurface>
 		);
 	}
@@ -212,6 +257,7 @@ function SignIn() {
 				) : null}
 
 				<button type="submit" className="auth__primary" disabled={busy}>
+					{busy ? <span className="auth__spin" aria-hidden="true" /> : null}
 					{busy ? "Signing you in" : "Sign in"}
 				</button>
 
@@ -226,6 +272,15 @@ function SignIn() {
 				<span className="auth__secondary-note">
 					No password needed — we send a link that signs you in.
 				</span>
+
+				<button
+					type="button"
+					className="auth__quiet-link"
+					onClick={sendReset}
+					disabled={busy}
+				>
+					Forgot your password?
+				</button>
 			</form>
 		</AuthSurface>
 	);

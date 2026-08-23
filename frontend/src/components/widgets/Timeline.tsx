@@ -60,7 +60,9 @@ export function Timeline({
 							marginInlineStart: "-0.4375rem",
 							marginBlockStart: "-0.4375rem",
 							borderRadius: "50%",
-							background: tone(point.colour).line,
+							/* `.dot`, not `.line`: a `muted` point drawn in the boundary
+							   colour sat at 1.02:1 against the track it marks. */
+							background: tone(point.colour).dot,
 							border: "2px solid var(--wash-3)",
 						}}
 					/>
@@ -114,7 +116,7 @@ export function Timeline({
 										width: "0.625rem",
 										height: "0.625rem",
 										borderRadius: "50%",
-										background: colours.line,
+										background: colours.dot,
 										flexShrink: 0,
 									}}
 								/>

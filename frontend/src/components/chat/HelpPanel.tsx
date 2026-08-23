@@ -238,12 +238,17 @@ function HelpContent() {
 			</Section>
 
 			<Section title="Games" glyph={<ShuffleIcon />}>
+				{/* "There are two" — the build ships four. Millionaire and Hangman
+				    have been in `game-kinds.ts` and rendering in the thread since
+				    they were added, and the panel that tells a reader what the
+				    product can do never heard about either of them. */}
 				<p>
 					Ask <em>"can we play a game"</em> and a card opens in the chat. There
-					are two: <strong>Word scramble</strong>, where you unscramble a money
-					word, and <strong>True or false</strong>, which explains the answer
-					after each round. You can ask for a clue, skip a question, or leave at
-					any point — your score is kept either way.
+					are four: <strong>Word scramble</strong>, where you unscramble a money
+					word; <strong>True or false</strong>, which explains the answer after
+					each round; <strong>Millionaire</strong>, four choices a question; and{" "}
+					<strong>Hangman</strong>, one letter at a time. You can ask for a clue,
+					skip a question, or leave at any point — your score is kept either way.
 				</p>
 				<p className="help__note">
 					Questions are matched to who you are using ASPIRE AI as, so a younger

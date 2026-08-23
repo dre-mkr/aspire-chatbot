@@ -149,54 +149,53 @@ function SignUp() {
 		credentials: "Sign-in details",
 	};
 
-	function fail(field: string, message: string) {
-		setErrors({ [field]: message });
-		return false;
-	}
-
+	/**
+	 * Every problem on the step, not the first one.
+	 *
+	 * `validate` used to `return false` at the first failure, so a reader who
+	 * left three fields blank was told about one, fixed it, pressed Continue,
+	 * was told about the second, and so on — three round trips through a screen
+	 * that could have said everything at once. The whole step is checked and
+	 * the whole step is reported.
+	 */
 	function validate(): boolean {
-		setErrors({});
+		const next: Record<string, string> = {};
+
 		if (step === "role") {
-			if (role === null) return fail("role", "Choose who this account is for.");
-			return true;
+			if (role === null) next.role = "Choose who this account is for.";
 		}
+
 		if (step === "about") {
-			if (!first.trim()) return fail("first", "We need a first name.");
-			if (!last.trim()) return fail("last", "We need a last name.");
-			if (age === null) return fail("dob", "Fill in the whole date of birth.");
-			if (age < 0 || age > 120)
-				return fail("dob", "Check that date — it looks wrong.");
-			if (tooYoungForRole) {
+			if (!first.trim()) next.first = "We need a first name.";
+			if (!last.trim()) next.last = "We need a last name.";
+			if (age === null) next.dob = "Fill in the whole date of birth.";
+			else if (age < 0 || age > 120)
+				next.dob = "Check that date — it looks wrong.";
+			else if (tooYoungForRole) {
 				// The check that closes the trap this redesign exists for.
-				return fail(
-					"dob",
+				next.dob =
 					role === "guardian"
 						? "This should be your own date of birth, not your child's — their details come later, with the application."
-						: "A teacher or educator account is held by someone over 18.",
-				);
+						: "A teacher or educator account is held by someone over 18.";
 			}
-			return true;
 		}
+
 		if (step === "contact" && isMinor) {
 			// Refused here as well as by the service.
 			if (!gName.trim())
-				return fail("gName", "Name the adult who will hold this account.");
+				next.gName = "Name the adult who will hold this account.";
 			if (!gEmail.trim())
-				return fail(
-					"gEmail",
-					"We need their email — it signs in to this account.",
-				);
-			return true;
+				next.gEmail = "We need their email — it signs in to this account.";
 		}
+
 		if (step === "credentials") {
-			if (!email.trim())
-				return fail("email", "We need an email to sign in with.");
-			if (password.length < 10) {
-				return fail("password", "Use at least 10 characters.");
-			}
-			return true;
+			if (!email.trim()) next.email = "We need an email to sign in with.";
+			if (password.length < 10)
+				next.password = "Use at least 10 characters.";
 		}
-		return true;
+
+		setErrors(next);
+		return Object.keys(next).length === 0;
 	}
 
 	async function submit() {
@@ -302,7 +301,17 @@ function SignUp() {
 			footLinkLabel={index === 0 ? "Sign in" : undefined}
 			footLinkTo={index === 0 ? "/signin" : undefined}
 		>
-			<div className="auth__fields">
+			{/* A `<div>`, so Enter did nothing anywhere in this flow: a reader who
+			    typed their name and pressed Return — which is what everyone does —
+			    watched the page sit still. Sign-in has always been a real form. */}
+			<form
+				className="auth__fields"
+				noValidate
+				onSubmit={(event) => {
+					event.preventDefault();
+					advance();
+				}}
+			>
 				{step === "role" ? (
 					<fieldset className="field auth__fieldset">
 						<legend className="sr-only">Who this account is for</legend>
@@ -546,12 +555,8 @@ function SignUp() {
 					</p>
 				) : null}
 
-				<button
-					type="button"
-					className="auth__primary"
-					onClick={advance}
-					disabled={busy}
-				>
+				<button type="submit" className="auth__primary" disabled={busy}>
+					{busy ? <span className="auth__spin" aria-hidden="true" /> : null}
 					{step === "credentials"
 						? busy
 							? "Creating your account"
@@ -565,7 +570,7 @@ function SignUp() {
 						back if this browser is cleared.
 					</span>
 				) : null}
-			</div>
+			</form>
 		</AuthSurface>
 	);
 }

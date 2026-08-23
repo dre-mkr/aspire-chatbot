@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	CheckIcon,
-	ExitIcon,
 	EyeIcon,
 	LampIcon,
 	SparkIcon,
@@ -16,6 +15,8 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
+import { GAME_COPY } from "./game-copy";
+import { GameHead } from "./GameHead";
 import { useMediaQuery } from "#/lib/use-media-query";
 
 /** True or false, played in the thread. */
@@ -24,17 +25,10 @@ import { useMediaQuery } from "#/lib/use-media-query";
 const COPY = {
 	sub: (total: number) =>
 		`${total} ${total === 1 ? "statement" : "statements"}`,
-	leave: "Leave game",
-	close: "Close",
-	skip: "Not sure — show me the answer",
+	...GAME_COPY,
 	inputHint: "Press T or F.",
-	meaning: "What this means",
 	next: "Next statement",
-	last: "See them all",
 	completeLead: "That is all of them.",
-	together: "What ties them together",
-	exit: "Back to chat",
-	exitNote: "Ask me to go deeper on any of these whenever you want.",
 	right: (answer: string) => `You said ${answer} — that is right.`,
 	wrong: (answer: string) => `Not this one — the answer is ${answer}.`,
 	shown: (answer: string) => `Fair enough — the answer is ${answer}.`,
@@ -213,42 +207,17 @@ export function TrueFalse({
 	return (
 		// tabIndex -1 so a click anywhere puts focus inside, which is what arms the T/F shortcut.
 		<section className="game tf" aria-label={label} ref={cardRef} tabIndex={-1}>
-			<header className="game__head">
-				<span className="game__badge" aria-hidden="true">
-					<SparkIcon />
-				</span>
-				<span className="game__title">{state.display_name}</span>
-				<span className="game__sub">{copy.sub(state.prompt.total)}</span>
-
-				<div className="game__steps" aria-hidden="true">
-					{Array.from({ length: state.prompt.total }, (_, i) => {
-						const n = i + 1;
-						const done =
-							n < state.prompt.position ||
-							(n === state.prompt.position && settled !== null);
-						const now = n === state.prompt.position && !done && !complete;
-						return (
-							<span
-								key={n}
-								className="game__step"
-								data-state={done ? "done" : now ? "now" : "next"}
-							>
-								{done || now ? n : null}
-							</span>
-						);
-					})}
-				</div>
-
-				<button
-					type="button"
-					className="game__leave"
-					onClick={leave}
-					disabled={busy}
-				>
-					<ExitIcon />
-					{complete ? copy.close : copy.leave}
-				</button>
-			</header>
+			<GameHead
+				title={state.display_name}
+				sub={copy.sub(state.prompt.total)}
+				position={state.prompt.position}
+				total={state.prompt.total}
+				complete={complete}
+				currentSettled={settled !== null}
+				leaveLabel={complete ? copy.close : copy.leave}
+				onLeave={leave}
+				busy={busy}
+			/>
 
 			<div className="game__body">
 				{failure ? <output className="game__failure">{failure}</output> : null}
@@ -263,7 +232,6 @@ export function TrueFalse({
 				) : settled ? (
 					<SettledPanel
 						copy={copy}
-						label={label}
 						settled={settled}
 						choices={choices}
 						isLast={summary !== null}
@@ -273,11 +241,8 @@ export function TrueFalse({
 					/>
 				) : (
 					<>
-						<p className="game__eyebrow">
-							<span>{label}</span>
-							<span className="game__rule" aria-hidden="true" />
-						</p>
-
+						{/* "STATEMENT 2 OF 5" over a hairline rule was a kicker, and the
+						 * step dots in the header had already said it. */}
 						<p className="tf__statement">{state.prompt.text}</p>
 
 						{/* No wrapper role: the section label names the statement and each button says its own. */}
@@ -362,7 +327,6 @@ function VerdictPills({
 
 function SettledPanel({
 	copy,
-	label,
 	settled,
 	choices,
 	isLast,
@@ -371,7 +335,6 @@ function SettledPanel({
 	onNext,
 }: {
 	copy: Copy;
-	label: string;
 	settled: Settled;
 	choices: Array<string>;
 	isLast: boolean;
@@ -394,10 +357,6 @@ function SettledPanel({
 
 	return (
 		<div className="tf__settled">
-			<p className="game__eyebrow">
-				<span>{label}</span>
-				<span className="game__rule" aria-hidden="true" />
-			</p>
 			<p className="tf__statement tf__statement--quiet">{settled.statement}</p>
 
 			<p className="game__result" data-outcome={outcome}>
