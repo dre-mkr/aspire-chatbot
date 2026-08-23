@@ -26,13 +26,18 @@ meta:
   prepared_by: ASPIRE AI Team
   for: Government of Saint Kitts and Nevis — ASPIRE Programme
   verified_against: >-
-    The ASPIRE codebase at commit b02a2ec. Every cap, ban list and card file
-    below was read from the tree rather than remembered.
+    The ASPIRE codebase on main at commit baefa1c (23 August 2026). Every cap,
+    ban list and card file below was read from that tree rather than
+    remembered. It was first drafted against b02a2ec, before the Kaleb split
+    and the multilingual ladder had landed; both are on main now.
   kaleb_split_status: >-
-    NOT in any ref as of the 22 August fetch — checked, and stella.9-12.md was
-    still the card. It ships as ASPIRE_kaleb_split_and_pathway.patch in
-    07_code/, two commits applying clean on b02a2ec. Everything in this file
-    that names kaleb.9-12.md is true once that patch is applied and not before.
+    LANDED. kaleb is its own persona key with its own card, kaleb.9-12.md, and
+    stella.9-12.md no longer exists in the tree. Everything in this file that
+    names kaleb.9-12.md is true as written. What still accepts a stella token
+    minted at 9-12 is a two-part seam — app.domain._SPLIT and
+    app.graph.access._STELLA_BANDS — kept only to outlive the seven-day
+    TOKEN_TTL, and removed as one change. app.prompting.personas.names.BY_BAND
+    is a third place the split used to live; it is empty now and stays empty.
   scope: Saint Kitts and Nevis, and the ECCU. Nothing outside it.
   voices: 7
   keys: 6            # orion carries two cards, one per rung
@@ -95,7 +100,7 @@ invariants:
 # WORD CAPS — app/graph/nodes/safety_out.py. NOT vocab.py, which is where
 # people look first. ENFORCED: over the cap a reply is CUT, not shortened.
 # ---------------------------------------------------------------------------
-# All four tables, read from app/graph/nodes/safety_out.py at commit b02a2ec.
+# All four tables, read from app/graph/nodes/safety_out.py on main at baefa1c.
 # cap_for(band, agent, story=...) picks the table; safety_out then truncates at
 # a sentence boundary, silently. A reply over the cap is CUT, not shortened.
 word_caps_enforced:
