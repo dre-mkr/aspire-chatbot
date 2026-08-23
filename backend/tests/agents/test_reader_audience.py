@@ -183,3 +183,131 @@ class TestTheSourcePanelFollowsTheReaderToo:
         monkeypatch.setattr("app.agent.localise_lines", boom)
         one = self._citation()
         assert await nodes.localise_citations([one], "es") == [one]
+
+
+class TestTheRouterReadsTheRole:
+    """A field on the call that already happens, not a second call or a pattern list."""
+
+    def test_the_router_wins_over_the_patterns(self):
+        from app.agents.qa.nodes import speaking_as
+
+        state = {
+            "messages": [HumanMessage(content="my Form 2s need an activity")],
+            "safety_flags": {"route": {"role": "parent"}},
+        }
+        assert speaking_as(state) == "parent", "this turn's message is the current truth"
+
+    def test_the_patterns_carry_a_turn_the_router_never_saw(self):
+        """Single-option turns, widget continuations and no-API-key all skip it."""
+        from app.agents.qa.nodes import speaking_as
+
+        state = {
+            "messages": [
+                HumanMessage(content="As a teacher I need materials"),
+                HumanMessage(content="and what comes next"),
+            ],
+            "safety_flags": {},
+        }
+        assert speaking_as(state) == "teacher"
+
+    def test_an_invented_role_is_dropped_not_trusted(self):
+        from app.graph.nodes.classify import _parse
+
+        assert _parse('{"agent":"qa_agent","confidence":0.9,"role":"headmaster"}')[3] == ""
+
+    def test_the_router_returns_the_closed_set(self):
+        from app.graph.nodes.classify import ROLES
+
+        assert ROLES == {"teacher", "educator", "parent", "learner"}
+
+
+class TestTheTwoReadersInsideAzuri:
+    """One persona key, two jobs, and an answer for one lands wrong on the other."""
+
+    @staticmethod
+    def _said(text, **over):
+        base = {"messages": [HumanMessage(content=text)]}
+        base.update(over)
+        return base
+
+    @pytest.mark.parametrize(
+        ("said", "expected"),
+        [
+            ("my Form 2s need an activity", "teacher"),
+            ("my Grade 4s", "teacher"),
+            ("do you have a plan for period 3", None),
+            ("our school is considering this", "educator"),
+            ("what does it cost us to roll it out", "educator"),
+            ("as the principal, my staff asked", "educator"),
+            ("nuestra escuela quiere adoptarlo", "educator"),
+            ("notre école va l'adopter", "educator"),
+        ],
+    )
+    def test_the_spines_own_signals(self, said, expected):
+        from app.agents.qa.nodes import stated_role
+
+        assert stated_role(self._said(said)) == expected
+
+    def test_teacher_wins_when_the_signals_are_mixed(self):
+        """The spine: answer the Teacher first and offer the Educator half."""
+        from app.agents.qa.nodes import stated_role
+
+        assert stated_role(self._said("My Form 2s, and our school policy")) == "teacher"
+
+    def test_both_read_the_same_rows(self):
+        """The corpus has no administrator tag; the split is register, not access."""
+        from app.agents.qa.nodes import reader_audience
+
+        for role in ("teacher", "educator"):
+            state = self._said("x", safety_flags={"route": {"role": role}})
+            assert reader_audience(state) == "teacher"
+
+    def test_but_they_are_told_different_things(self):
+        from app.agents.qa.nodes import _role_instruction
+
+        teacher = _role_instruction(self._said("my Form 2s need an activity"))
+        educator = _role_instruction(self._said("our school is adopting this"))
+        assert "DELIVERY" in teacher
+        assert "STEWARDSHIP" in educator
+        assert teacher != educator
+
+    def test_no_role_stated_shapes_nothing(self):
+        from app.agents.qa.nodes import _role_instruction
+
+        assert _role_instruction(self._said("what is compound interest")) is None
+
+
+class TestTheJourneyStage:
+    """`account_status` was signed into the token and then thrown away."""
+
+    @pytest.mark.parametrize(
+        "status", ["prospect", "applicant", "beneficiary", "guardian"]
+    )
+    def test_every_status_shapes_the_answer(self, status):
+        from app.agents.qa.nodes import _stage_instruction
+
+        assert _stage_instruction({"account_status": status})
+
+    def test_an_applicant_is_not_told_to_apply(self):
+        from app.agents.qa.nodes import _stage_instruction
+
+        assert "Do not tell them to apply" in _stage_instruction(
+            {"account_status": "applicant"}
+        )
+
+    def test_no_status_shapes_nothing(self):
+        from app.agents.qa.nodes import _stage_instruction
+
+        assert _stage_instruction({}) is None
+
+    def test_role_and_stage_stack(self):
+        from app.agents.qa.nodes import _shaping_instructions
+
+        out = _shaping_instructions(
+            {
+                "messages": [HumanMessage(content="our school is considering this")],
+                "account_status": "prospect",
+            }
+        )
+        assert "STEWARDSHIP" in out
+        assert "has not applied" in out

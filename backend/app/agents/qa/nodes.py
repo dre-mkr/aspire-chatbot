@@ -637,11 +637,94 @@ def _story_instruction(state: AspireState) -> str | None:
     )
 
 
+#: What each role came for, in the register the spine sets for them.
+#:
+#: `Azuri · Teachers & Educators` is one persona key holding two jobs, and an
+#: answer written for one lands wrong on the other. A classroom teacher asks
+#: what to do Monday, period 3, with 28 Form 2s. A principal asks whether this
+#: belongs in their school and what they are taking on. Same corpus rows, and
+#: the wrong shape costs a collapsed lesson in one case and a commitment made
+#: on a false premise in the other.
+_ROLE_INSTRUCTION: dict[str, str] = {
+    "teacher": (
+        "The reader is a classroom teacher, speaking as one. Answer for "
+        "DELIVERY: what they do, with which band, using what. Colleague to "
+        "colleague, practical. If a resource, activity or lesson exists, name "
+        "it. Do not open with the programme's rules unless they asked about "
+        "them."
+    ),
+    "educator": (
+        "The reader is responsible beyond one classroom -- a principal, a head "
+        "of department, a coordinator or an officer. Answer for STEWARDSHIP: "
+        "what this commits the school to, who stands behind it, what it costs "
+        "and what it asks of staff. Colleague to colleague, accountable. Be "
+        "plain about what you do not know: a commitment made on a false "
+        "premise is the expensive mistake here."
+    ),
+    "parent": (
+        "The reader is a parent or guardian speaking about their own child. "
+        "Answer for THEIR child, not for children in general, and say what "
+        "they can do next. Never guess at their account."
+    ),
+}
+
+
+def _role_instruction(state: AspireState) -> str | None:
+    """The register this reader's role earns, or None if they have not said."""
+    role = speaking_as(state)
+    if not role:
+        return None
+    return _ROLE_INSTRUCTION.get(role)
+
+
+#: Where this reader stands in the ASPIRE journey, which nothing was reading.
+#:
+#: `account_status` is signed into the session token and used for access
+#: control, and then thrown away. It is the difference between four different
+#: people asking the same words: "how does ASPIRE work" from someone deciding
+#: whether to apply is a different question from the same words typed by a
+#: parent whose child has been enrolled for two years.
+#:
+#: Shaping only. It cannot widen what a reader may see -- `allowed_agents` has
+#: already settled that -- and it must never be used to assert a fact about an
+#: individual account, which this system cannot see.
+_STAGE_INSTRUCTION: dict[str, str] = {
+    "prospect": (
+        "This reader has not applied. They are deciding whether ASPIRE is for "
+        "them, so answer what it is and what joining would mean, and end with "
+        "the next step rather than assuming they have taken it."
+    ),
+    "applicant": (
+        "This reader has applied and is waiting. Answer what happens next and "
+        "in what order. Do not tell them to apply -- they have. You cannot see "
+        "their application, so never state where it has got to."
+    ),
+    "beneficiary": (
+        "This reader is already in the programme. Answer how to USE it rather "
+        "than how to join it, and do not re-explain eligibility unless asked."
+    ),
+    "guardian": (
+        "This reader manages a child's participation. Answer what they can do "
+        "on the child's behalf and where that has to happen."
+    ),
+}
+
+
+def _stage_instruction(state: AspireState) -> str | None:
+    """Where in the journey this reader is standing, or None."""
+    return _STAGE_INSTRUCTION.get(str(state.get("account_status") or ""))
+
+
 def _shaping_instructions(state: AspireState) -> str | None:
     """Every extra system line this turn earns, joined. None when there are none."""
     lines = [
         line
-        for line in (_simple_mode_instruction(state), _story_instruction(state))
+        for line in (
+            _simple_mode_instruction(state),
+            _role_instruction(state),
+            _stage_instruction(state),
+            _story_instruction(state),
+        )
         if line
     ]
     return "\n\n".join(lines) or None
@@ -1455,13 +1538,32 @@ _ROLE_SAID: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"\bas\s+(?:an?|the)\s+(?:teacher|educator|tutor|instructor|head\s*teacher)\b"
-            r"|\bmy\s+(?:own\s+)?(?:class|students|pupils|school|form\s*\d)\b"
+            r"|\bmy\s+(?:own\s+)?(?:class(?:es|room)?|students|pupils|school)\b"
+            r"|\bmy\s+(?:form|grade|year)\s*\d+\w*"
             r"|\bi\s+teach\b"
             r"|\bcomo\s+(?:docente|maestra?|profesora?)\b|\bmis?\s+(?:alumnos?|clase)\b"
             r"|\ben\s+tant\s+qu(?:e|')\s*(?:enseignant|professeur)\b|\bmes?\s+(?:[eé]l[eè]ves|classe)\b",
             re.IGNORECASE,
         ),
         "teacher",
+    ),
+    # Educator AFTER teacher on purpose. The spine's rule for a principal who
+    # also teaches: "answer the Teacher first and offer the Educator half" --
+    # the practical answer is never wrong to give, and the stewardship answer
+    # is unwelcome when unasked. First match wins, so "my Form 2s" beats "our
+    # school" when both are in one message.
+    (
+        re.compile(
+            r"\bour\s+school\b|\bmy\s+staff\b|\bthe\s+department\b|\bthe\s+cohort\b"
+            r"|\broll(?:ing)?\s+(?:it\s+)?out\b|\badopt(?:ing)?\b|\bacross\s+the\s+school\b"
+            r"|\bwho\s+is\s+accountable\b|\bwhat\s+does\s+it\s+cost\s+(?:us|the\s+school)\b"
+            r"|\bas\s+(?:an?|the)\s+(?:principal|deputy|head|hod|counsellor|facilitator"
+            r"|youth\s+worker|librarian|officer)\b"
+            r"|\bnuestra\s+escuela\b|\bmi\s+personal\b|\bcomo\s+(?:director|directora)\b"
+            r"|\bnotre\s+[eé]cole\b|\bmon\s+personnel\b|\ben\s+tant\s+qu(?:e|')\s*directeur\b",
+            re.IGNORECASE,
+        ),
+        "educator",
     ),
     (
         re.compile(
@@ -1518,11 +1620,56 @@ def stated_role(state: AspireState) -> str | None:
     return None
 
 
+#: A role, as the corpus tags its rows.
+#:
+#: `educator` collapses onto `teacher` because the corpus has no administrator
+#: tag -- a principal and a classroom teacher read the same rows. The two are
+#: kept apart for the REGISTER of the answer, which `speaking_as` carries, not
+#: for which rows they may see.
+_ROLE_TO_AUDIENCE: dict[str, str] = {
+    "teacher": "teacher",
+    "educator": "teacher",
+    "parent": "parent",
+    "learner": "student",
+}
+
+
+def routed_role(state: AspireState) -> str:
+    """The role the router read off this turn's message, or empty.
+
+    The router is a model call that already happens on every routed turn, so
+    this costs nothing and understands phrasings no pattern list will hold.
+    It only ever sees the CURRENT message, which is the point: a role stated
+    now is the one that counts.
+    """
+    route = (state.get("safety_flags") or {}).get("route") or {}
+    role = str(route.get("role") or "").strip().lower()
+    return role if role in _ROLE_TO_AUDIENCE else ""
+
+
+def speaking_as(state: AspireState) -> str | None:
+    """Which role this reader is in, by the best evidence available.
+
+    A ladder, most authoritative first:
+
+    1. What the ROUTER read off this message. Open-ended, and current.
+    2. What the PATTERNS find in the thread. Narrower, but it reaches back --
+       a role stated three turns ago still holds, and the router never saw it.
+    3. Nothing, and the persona's default stands.
+
+    Two is not redundant with one. The router is skipped entirely on a
+    single-option turn, on a widget continuation, and whenever no API key is
+    configured -- and on those turns the patterns are all there is.
+    """
+    return routed_role(state) or stated_role(state)
+
+
 def reader_audience(state: AspireState) -> str:
     """The corpus audience whose questions belong in front of this reader."""
-    return stated_role(state) or _AUDIENCE_BY_PERSONA.get(
-        str(state.get("persona") or "guest"), "general"
-    )
+    role = speaking_as(state)
+    if role:
+        return _ROLE_TO_AUDIENCE.get(role, role)
+    return _AUDIENCE_BY_PERSONA.get(str(state.get("persona") or "guest"), "general")
 
 
 def _asked_questions(state: AspireState) -> list[set[str]]:
