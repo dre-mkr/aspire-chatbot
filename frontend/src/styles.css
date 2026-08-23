@@ -53,8 +53,19 @@
 	--color-plum-deep: #351d5a;
 	--color-magenta: #c22f99;
 	--color-magenta-light: #d94db3;
+	/* The bottom of the magenta ramp, 8.55:1 on white. It was already the hover
+	   colour and the end of two brand gradients, written as a literal each time. */
+	--color-magenta-deep: #8a1c6a;
 
-	--color-ink: #1a1a2e;
+	/* One ink, and it is the plum-tinted one.
+	 *
+	 * There were two. The app wrote `--ink` (#1a1a2e, a navy-black); the landing
+	 * folder wrote `#1A103C` — forty-five times, as a Tailwind arbitrary value —
+	 * and the two front doors of the same product were set in different blacks.
+	 * This is the landing's value, promoted, for the reason `--slate` gives
+	 * three lines down: text on this brand is tinted from the plum, not left
+	 * neutral. 17.75:1 on white, a hair better than the navy it replaces. */
+	--color-ink: #1a103c;
 	--color-prose: #2d3748;
 	/* Muted text is tinted from the brand purple rather than left neutral grey. */
 	--color-slate: #554d63;
@@ -74,6 +85,16 @@
 	/* A wrong guess in a game is not an error. */
 	--color-warn: #d97706;
 	--color-warn-ink: #b45309;
+
+	/* The third brand colour, and the one that had no token.
+	 *
+	 * It is the gold in the mark's star, and it was written as `#fed141` in
+	 * seventeen places across the landing folder — including twice as text,
+	 * where it is 1.46:1 on white and unreadable. It is a FILL, never a word:
+	 * `--color-gold` paints, `--color-gold-ink` (5.9:1) writes. The same split
+	 * `--success` / `--warn` already use, for the same reason. */
+	--color-gold: #fed141;
+	--color-gold-ink: #8a5a06;
 }
 
 :root {
@@ -84,6 +105,7 @@
 	--plum-deep: var(--color-plum-deep);
 	--magenta: var(--color-magenta);
 	--magenta-light: var(--color-magenta-light);
+	--magenta-deep: var(--color-magenta-deep);
 
 	--ink: var(--color-ink);
 	--prose: var(--color-prose);
@@ -130,14 +152,28 @@
 	--warn-tint: rgb(217 119 6 / 0.16);
 	--warn-line: rgb(217 119 6 / 0.32);
 
+	/* The dark ground the four landing cards sit on. It was written as two
+	   Tailwind arbitrary values in `LandingScreen`, and the same colour again as
+	   `rgb(35 21 72)` inside four shadows in this file. */
+	--surface-night: #231548;
+	--surface-night-deep: #100727;
+
+	--gold: var(--color-gold);
+	--gold-ink: var(--color-gold-ink);
+	--gold-wash: rgb(254 209 65 / 0.16);
+	--gold-line: rgb(254 209 65 / 0.4);
+
 	--ease: cubic-bezier(0.4, 0, 0.2, 1);
 	--morph: 560ms var(--ease);
 	--swift: 150ms var(--ease);
 	--settle: 300ms var(--ease);
 
 	--rail-open: 272px;
-	/* 40px mark + 18px padding either side + the rail's own 1px right border, plus a hair of slack. */
-	--rail-shut: 78px;
+	/* 44px control + 18px padding either side + the rail's own 1px right border,
+	   plus a hair of slack. It was 78px, derived from the 40px MARK rather than
+	   from the 44px pills the rail actually holds, so every icon button in the
+	   folded rail was shaved on its right edge. */
+	--rail-shut: 82px;
 	/* 780 put ~88 characters on a line of an answer, well past the 65-75 a
 	   reader holds without losing the return sweep. */
 	--reading-width: 660px;
@@ -200,10 +236,16 @@ body {
 	line-height: 1.6;
 }
 
+/* No `border-radius` here.
+ *
+ * It was `border-radius: 4px`, and it did not round the ring — it rounded the
+ * ELEMENT. Every pill, avatar and circular icon button in the app snapped to a
+ * 4px rectangle the instant a keyboard reached it, which is the one moment the
+ * interface should look most deliberate. `outline` already follows whatever
+ * radius the element has, in every browser this ships to. */
 :focus-visible {
 	outline: 2px solid var(--focus-ring, var(--plum));
 	outline-offset: 2px;
-	border-radius: 4px;
 }
 
 *::-webkit-scrollbar {
@@ -760,6 +802,7 @@ body {
 .tool-btn,
 .voice-switch,
 .field__reveal,
+.elig__speak,
 .auth__back {
 	position: relative;
 }
@@ -775,6 +818,7 @@ body {
 .tool-btn::after,
 .voice-switch::after,
 .field__reveal::after,
+.elig__speak::after,
 .auth__back::after {
 	content: "";
 	position: absolute;
@@ -785,11 +829,16 @@ body {
 	transform: translate(-50%, -50%);
 }
 
-/* These sit alone or with wide gaps, so they can grow in both axes. */
+/* These sit alone or with wide gaps, so they can grow in both axes.
+   `.titlebar__menu` joins them: it is 36px square and it is the only way a
+   phone reader reaches their conversations, so it was the one control in the
+   app that most needed the extra 8px and did not have it. */
 .composer__mic::after,
 .composer__send::after,
 .tool-btn::after,
-.field__reveal::after {
+.field__reveal::after,
+.elig__speak::after,
+.titlebar__menu::after {
 	width: max(100%, 44px);
 }
 
@@ -1105,6 +1154,18 @@ body {
 
 .titlebar__title:hover {
 	background: var(--wash-6);
+}
+
+/* Not a control: there is no title to rename yet. */
+.titlebar__title--empty {
+	margin: 0;
+	align-content: center;
+	color: var(--quiet);
+	cursor: default;
+}
+
+.titlebar__title--empty:hover {
+	background: transparent;
 }
 
 /* Both layers share one grid cell, so a title arriving cannot move the bar or the thread under it. */
@@ -1691,25 +1752,44 @@ body {
 }
 
 /* Scoped off every <ul>/<li> inside .answer that is not answer prose. */
-.answer ul:not(.sources__list, .elig__checklist) {
+/* THE CHILD COMBINATOR IS THE WHOLE FIX.
+ *
+ * These rules dress a list as answer prose. They were written as descendant
+ * selectors — `.answer ul`, `.answer li` — so they reached every list inside
+ * every card `.answer` contains, and the exclusion list grew one `:not()` at a
+ * time as each new one was found: sources, then the eligibility documents,
+ * then its step rows. Two concept widgets are built from `<li>` and had never
+ * been added, so the flow diagram and the timeline got a gradient bullet, a
+ * flex row and a list indent stacked on top of their own layout — which
+ * squeezed the flow diagram's edge labels to two characters wide ("the / n").
+ *
+ * `Block` renders answer lists as DIRECT children of `.answer` (see
+ * `Transcript.tsx`), and nothing else is. So the child combinator says exactly
+ * what the `:not()` chain was trying to say, says it for every card ever
+ * written, and cannot rot: the tenth widget does not have to be remembered. */
+.answer > ul,
+.answer > ol {
 	display: flex;
 	flex-direction: column;
 	gap: 9px;
 	margin: 0 0 18px;
 	padding: 0;
 	list-style: none;
+	/* Numbers the counter below reads. Only `ol` increments it. */
+	counter-reset: answer-item;
 }
 
-.answer li:not(.source, .elig__doc, .elig__step-row) {
+.answer > ul > li,
+.answer > ol > li {
 	display: flex;
 	gap: 11px;
-	font-size: 0.9375rem;
+	font-size: var(--band-type, 0.9375rem);
 	line-height: 1.65;
 	color: var(--prose);
 	text-wrap: pretty;
 }
 
-.answer li:not(.source, .elig__doc, .elig__step-row)::before {
+.answer > ul > li::before {
 	content: "";
 	flex-shrink: 0;
 	width: 6px;
@@ -1717,6 +1797,22 @@ body {
 	margin-top: 9px;
 	border-radius: 999px;
 	background: linear-gradient(135deg, var(--plum), var(--magenta));
+}
+
+/* An ordered list looked exactly like an unordered one: same bullet, no
+   numbers. So "step 2" in an answer that walked a reader through four steps
+   was a dot, and the order was carried by nothing but the reading direction. */
+.answer > ol > li {
+	counter-increment: answer-item;
+}
+
+.answer > ol > li::before {
+	content: counter(answer-item) ".";
+	flex-shrink: 0;
+	min-width: 1.15em;
+	color: var(--plum);
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
 }
 
 .answer > :last-child {
@@ -3390,9 +3486,11 @@ body {
 	--body-pad: 20px;
 	--badge: 28px;
 	--step: 26px;
-	--btn-h: 40px;
+	/* 44, not 40. Every control inside a game card reads this, and these cards
+	   are played by five-year-olds on phones. Four pixels. */
+	--btn-h: 44px;
 	--btn-fs: 0.875rem;
-	/* Shared by every card: the numbered step, the marker chip and the eyebrow rule. */
+	/* Shared by every card: the numbered step and the marker chip. */
 	--disabled: 0.45;
 	--lead-fs: 1.0625rem;
 	--meaning-word: 2.25rem;
@@ -3909,6 +4007,17 @@ body {
 	color: var(--magenta);
 }
 
+/* The round's own number, which two of the four games were setting in
+   `.game__count` — a 13px muted caption. Eight questions answered deserve the
+   display face the taught word gets. */
+.game__score {
+	margin: 0 0 14px;
+	font-family: var(--font-display);
+	font-size: var(--meaning-word);
+	line-height: 1.05;
+	color: var(--plum-deep);
+}
+
 /* The word gets the display face: it is the thing being taught. */
 .game__meaning-word {
 	font-family: var(--font-display);
@@ -3963,22 +4072,19 @@ body {
 	--nest-pad: 14px 16px;
 }
 
-.game__eyebrow {
+/* Was `.game__eyebrow`: 11px, uppercase, letterspaced, over a decorative
+   hairline rule, in four places. Three of those four sat above a heading and
+   repeated what the header's step dots already said. The eligibility check is
+   the one surface with no dots, so it keeps a progress line — as a caption at a
+   readable size, without the rule. */
+.elig__progress {
 	display: flex;
 	align-items: center;
 	gap: 10px;
 	margin: 0;
-	font-size: 0.6875rem;
+	font-size: 0.8125rem;
 	font-weight: 600;
-	letter-spacing: 0.07em;
-	text-transform: uppercase;
 	color: var(--quiet);
-}
-
-.game__rule {
-	flex: 1;
-	height: 1px;
-	background: var(--hairline);
 }
 
 /* The statement is what is being judged, so it gets the weight and a short measure. */
@@ -4696,11 +4802,24 @@ body {
 		transition: transform 320ms var(--ease);
 	}
 
-	.app[data-phase="chat"][data-rail="expanded"] .rail {
+	/* `data-drawer`, not `data-rail`.
+	 *
+	 * The drawer used to open on the ABSENCE of `data-rail="collapsed"`, and
+	 * `data-rail` is computed from `useMediaQuery`, which returns false during
+	 * SSR and on the first client render. So every phone got the same opening:
+	 * the rail slid fully across the conversation, over live content, with no
+	 * scrim and nothing marked inert, and stayed there until React's effect
+	 * corrected the breakpoint. On a slow connection that is the whole first
+	 * impression of the product.
+	 *
+	 * `data-drawer` is only ever "open" when a reader has opened it, so before
+	 * hydration there is nothing to correct: the drawer is shut because shut is
+	 * what the markup says. */
+	.app[data-phase="chat"][data-drawer="open"] .rail {
 		transform: none;
 	}
 
-	.app[data-phase="chat"][data-rail="collapsed"] .rail {
+	.app[data-phase="chat"]:not([data-drawer="open"]) .rail {
 		pointer-events: none;
 	}
 
@@ -4961,40 +5080,6 @@ body {
 	background: linear-gradient(135deg, var(--plum) 0%, var(--plum-light) 100%);
 }
 
-/* Ambient depth on a flat gradient, and the only motion on the page. */
-.auth__orb {
-	position: absolute;
-	border-radius: 50%;
-	filter: blur(64px);
-	animation: auth-glow 2.6s var(--ease) infinite;
-}
-
-.auth__orb--a {
-	top: 22%;
-	left: 20%;
-	width: 384px;
-	height: 384px;
-	background: rgb(255 255 255 / 0.1);
-}
-
-.auth__orb--b {
-	right: 16%;
-	bottom: 18%;
-	width: 320px;
-	height: 320px;
-	background: var(--wash-m-22);
-	animation-delay: 1s;
-}
-
-@keyframes auth-glow {
-	0%,
-	100% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.6;
-	}
-}
 
 .auth__panel-inner {
 	position: relative;
@@ -5039,30 +5124,6 @@ body {
 	text-wrap: pretty;
 }
 
-.auth__stats {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 40px;
-	margin-top: 36px;
-}
-
-.auth__stat {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-}
-
-.auth__stat-value {
-	font-family: "JetBrains Mono", ui-monospace, monospace;
-	font-size: 1.5rem;
-	font-weight: 700;
-	line-height: 1.1;
-	color: #fff;
-	font-variant-numeric: tabular-nums;
-}
-
-.auth__stat-label,
 .auth__gov {
 	font-size: 0.75rem;
 	color: rgb(255 255 255 / 0.8);
@@ -5185,17 +5246,21 @@ body {
 	margin-top: 6px;
 	border: none;
 	border-radius: 16px;
-	background: linear-gradient(135deg, var(--plum), var(--plum-light));
+	/* Solid. Every other primary in the product is a flat plum; this was the
+	   only two-stop fill, and a gradient on a 52px button is a texture nobody
+	   reads as anything but decoration. */
+	background: var(--plum);
 	color: #fff;
 	font-family: inherit;
 	font-size: 0.96875rem;
 	font-weight: 600;
+	gap: 10px;
 	cursor: pointer;
-	transition: filter 150ms var(--ease);
+	transition: background-color 150ms var(--ease);
 }
 
 .auth__primary:hover:not(:disabled) {
-	filter: brightness(1.08);
+	background: var(--plum-deep);
 }
 
 .auth__primary:disabled {
@@ -5570,25 +5635,6 @@ body {
 		margin-bottom: 20px;
 	}
 
-	.auth__orb--a {
-		width: 220px;
-		height: 220px;
-	}
-
-	.auth__orb--b {
-		width: 190px;
-		height: 190px;
-	}
-
-	.auth__stats {
-		gap: 24px;
-		margin-top: 22px;
-	}
-
-	.auth__stat-value {
-		font-size: 1.1875rem;
-	}
-
 	.auth__column {
 		align-items: flex-start;
 		margin-top: -22px;
@@ -5598,12 +5644,6 @@ body {
 
 	.auth__form {
 		max-width: 100%;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.auth__orb {
-		animation: none;
 	}
 }
 
@@ -6553,11 +6593,14 @@ body {
 	color: var(--quiet);
 }
 
+/* The 3px coloured left edge and the two-square-corners radius that went with
+   it are the most recognisable card in generated UI. A tinted panel with a
+   hairline says "aside" without the costume. */
 .help__note {
 	margin-top: 8px;
-	padding: 10px 12px;
-	border-left: 3px solid var(--wash-30);
-	border-radius: 0 10px 10px 0;
+	padding: 12px 14px;
+	border: 1px solid var(--wash-12);
+	border-radius: 12px;
 	background: var(--wash-3);
 	color: var(--slate);
 	font-size: 0.875rem;
@@ -6751,7 +6794,7 @@ body {
 }
 
 /* Elevation is declared once, on the border. The panel owns the shadow. */
-.guide-card {
+.guide__card {
 	display: flex;
 	align-items: center;
 	gap: 14px;
@@ -6768,27 +6811,27 @@ body {
 		transform var(--swift);
 }
 
-.guide-card:hover {
+.guide__card:hover {
 	border-color: var(--wash-30);
 	background: var(--wash-3);
 }
 
-.guide-card:active {
+.guide__card:active {
 	transform: translateY(1px);
 }
 
-.guide-card:focus-visible {
+.guide__card:focus-visible {
 	outline: 2px solid var(--plum-light);
 	outline-offset: 2px;
 }
 
-.guide-card__mark {
+.guide__card-mark {
 	flex-shrink: 0;
 	width: 52px;
 	height: 52px;
 }
 
-.guide-card__text {
+.guide__card-text {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
@@ -6796,7 +6839,7 @@ body {
 	flex: 1;
 }
 
-.guide-card__who {
+.guide__card-who {
 	font-size: 0.75rem;
 	font-weight: 650;
 	letter-spacing: 0.005em;
@@ -6805,34 +6848,34 @@ body {
 	color: var(--plum-light);
 }
 
-.guide-card__who--stella {
+.guide__card-who--stella {
 	color: #1a63b8;
 }
 
-.guide-card__who--orion {
+.guide__card-who--orion {
 	color: #6b42a1;
 }
 
-.guide-card__who--aurora {
+.guide__card-who--aurora {
 	color: #b02a7d;
 }
 
-.guide-card__who--nova {
+.guide__card-who--nova {
 	color: #414aa8;
 }
 
-.guide-card__name {
+.guide__card-name {
 	font-size: 1.0625rem;
 	font-weight: 500;
 	line-height: 1.25;
 	color: var(--ink);
 }
 
-.guide-card__name b {
+.guide__card-name b {
 	font-weight: 750;
 }
 
-.guide-card__blurb {
+.guide__card-blurb {
 	margin-top: 2px;
 	font-size: 0.8125rem;
 	line-height: 1.45;
@@ -6840,20 +6883,20 @@ body {
 	text-wrap: pretty;
 }
 
-.guide-card > svg:last-child {
+.guide__card > svg:last-child {
 	flex-shrink: 0;
 	color: var(--plum-light);
 }
 
 /* The general option reads as the fallback it is: tinted, and with no band
    label above its name, so it cannot be mistaken for a fifth guide. */
-.guide-card--general {
+.guide__card--general {
 	margin-top: 0;
 	border-color: transparent;
 	background: var(--wash-6);
 }
 
-.guide-card--general:hover {
+.guide__card--general:hover {
 	border-color: var(--wash-18);
 	background: var(--wash-9);
 }
@@ -6913,12 +6956,12 @@ body {
 		font-size: 1.3125rem;
 	}
 
-	.guide-card {
+	.guide__card {
 		gap: 12px;
 		padding: 12px;
 	}
 
-	.guide-card__mark {
+	.guide__card-mark {
 		width: 44px;
 		height: 44px;
 	}
@@ -7467,21 +7510,6 @@ body {
 	font-weight: 700;
 }
 
-.game__verdict {
-	margin: 0 0 12px;
-	font-size: 0.9375rem;
-	font-weight: 600;
-	color: var(--ink);
-}
-
-.game__verdict[data-outcome="incorrect"] {
-	color: var(--color-warn-ink);
-}
-
-.game__cheer {
-	color: var(--magenta);
-}
-
 /* ── Hangman ─────────────────────────────────────────────────────────────── */
 
 .game__word {
@@ -7497,8 +7525,16 @@ body {
 
 .hangman__lives {
 	display: flex;
+	align-items: center;
 	justify-content: center;
+	gap: 10px;
 	margin: 0 0 16px;
+}
+
+.hangman__lives-label {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--slate);
 }
 
 .hangman__lives > span[aria-hidden] {
@@ -7520,13 +7556,16 @@ body {
 
 .hangman__keys {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
+	/* 44, not 34. Twenty-six keys at 34x40 is under the touch minimum in both
+	   axes, on the one control a five-year-old presses most. The grid wraps to
+	   however many rows it needs. */
+	grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
 	gap: 6px;
 	margin-bottom: 16px;
 }
 
 .hangman__key {
-	min-height: 40px;
+	min-height: 44px;
 	border: 1px solid var(--control-line);
 	border-radius: 9px;
 	background: #fff;
@@ -7556,9 +7595,12 @@ body {
 	color: var(--quiet);
 }
 
+/* `--magenta-deep`, not `--magenta`: on the 16%-magenta wash the brand accent
+   computes to 3.98:1, under the 4.5:1 a letter has to clear to be read. The
+   deep step is 6.7:1 on the same fill. */
 .hangman__key[data-hit] {
 	background: var(--wash-m-16);
-	color: var(--magenta);
+	color: var(--magenta-deep);
 }
 
 .game__hints {
@@ -7605,41 +7647,6 @@ body {
 	flex-shrink: 0;
 	width: 18px;
 	color: var(--success);
-}
-
-.game__closing {
-	margin-top: 14px;
-	padding: 14px;
-	border-radius: 14px;
-	background: var(--wash-6);
-}
-
-.game__closing-lead {
-	margin: 0 0 6px;
-	color: var(--quiet);
-	font-size: 0.75rem;
-	font-weight: 650;
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-}
-
-.game__closing-head {
-	margin: 0 0 6px;
-	color: var(--ink);
-	font-weight: 650;
-}
-
-.game__closing-text {
-	margin: 0;
-	color: var(--slate);
-	font-size: 0.875rem;
-	line-height: 1.55;
-}
-
-.game__exit-note {
-	margin: 10px 0 0;
-	color: var(--quiet);
-	font-size: 0.8125rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7943,6 +7950,18 @@ a.source__site--link:hover .source__out {
  * is the one place a reader sees the colour before it starts answering. It
  * inherits its tint from `data-persona` on `.app` like every other orb.
  */
+/* THE ONE THING IN THE THREAD WITH NO MEASURE.
+ *
+ * Every answer sits in `--reading-width` and the composer is centred on the
+ * same column, but this ran the full width of the workspace with zero
+ * horizontal padding — so at 1440px the greeting's avatar touched the rail's
+ * hairline on one side and the fourth starter card ended exactly on the
+ * window's edge on the other, with no gutter anywhere. The greeting is the
+ * first thing a reader sees; it belongs in the same column as everything that
+ * follows it.
+ *
+ * A little wider than `--reading-width`: four starter cards at 660px wrap two
+ * up, which is right, but the greeting itself reads better with the room. */
 .welcome {
 	display: flex;
 	flex-direction: column;
@@ -7981,7 +8000,7 @@ a.source__site--link:hover .source__out {
 
 .welcome__sub {
 	margin: 4px 0 0;
-	color: var(--ink-soft, #4a5561);
+	color: var(--slate);
 	font-size: 1rem;
 }
 
@@ -8054,7 +8073,10 @@ a.source__site--link:hover .source__out {
 }
 
 .welcome__card-blurb {
-	color: var(--ink-soft, #4a5561);
+	/* `--slate`, not `var(--ink-soft, #4a5561)`: `--ink-soft` is declared
+	   nowhere, so the fallback always won -- and it is a cool grey that belongs
+	   to no palette here. The size and tracking below are the composition's. */
+	color: var(--slate);
 	font-size: 0.855rem;
 	line-height: 1.42;
 	/* The blurb explains the title; a hair of tracking keeps it legible at a
@@ -8246,45 +8268,36 @@ a.source__site--link:hover .source__out {
  * treatment and the smaller one the landing's single-viewport rule allows.
  * Nothing else is scaled by hand.
  */
+/* Elevation declared once. This carried a hairline AND a wide soft shadow --
+   the ghost card -- and a 38px radius, which is off a scale whose cards sit at
+   14-16px and whose largest panel is 20px. The shadow is what lifts it off the
+   photograph, so the shadow is what stays. */
 .guide-selector {
 	--guide-avatar: 230px;
 	--guide-gap: 36px;
 	width: 100%;
 	background: rgb(255 255 255 / 0.94);
-	border: 1px solid rgb(87 57 137 / 0.12);
-	border-radius: 38px;
-	box-shadow: 0 18px 48px rgb(52 32 86 / 0.1);
+	border-radius: 20px;
+	box-shadow: 0 18px 48px rgb(53 29 90 / 0.12);
 	padding: 42px 60px 54px;
 }
 
 .guide-selector--compact {
 	--guide-avatar: 66px;
 	--guide-gap: 14px;
-	border-radius: 24px;
-	padding: 14px 24px 16px;
+	border-radius: 16px;
+	padding: 16px 24px 18px;
 }
 
 .guide-selector__heading {
-	display: flex;
-	align-items: center;
-	gap: 18px;
 	font-size: 38px;
 	font-weight: 700;
-	color: #1a103c;
+	color: var(--ink);
 	margin: 0 0 48px;
-}
-.guide-selector__heading-icon {
-	color: #3b82f6;
-	font-size: 42px;
-	display: inline-flex;
 }
 .guide-selector--compact .guide-selector__heading {
 	font-size: 16px;
-	gap: 9px;
 	margin: 0 0 11px;
-}
-.guide-selector--compact .guide-selector__heading-icon {
-	font-size: 19px;
 }
 
 .guide-selector__grid {
@@ -8319,8 +8332,15 @@ a.source__site--link:hover .source__out {
 .guide-card:hover {
 	transform: translateY(-6px);
 }
+/* The ring, not the guide's colour.
+ *
+ * `--guide-color` is what each guide is remembered by, and three of the five
+ * are light: Zion's gold is 1.9:1 on white, so the focus indicator on his card
+ * — the thing that tells a keyboard reader where they are — was effectively
+ * invisible. It stays the guide's colour on the AVATAR, where it is identity;
+ * the focus ring is the one plum every focus ring in this product is. */
 .guide-card:focus-visible {
-	outline: 3px solid var(--guide-color);
+	outline: 3px solid var(--plum);
 	outline-offset: 8px;
 	border-radius: 20px;
 }
@@ -8343,9 +8363,13 @@ a.source__site--link:hover .source__out {
    than the space it has. They wrap here instead of being shortened: the label
    is the thing that tells a reader the row is for them, and "Parents" is not
    the same promise as "Parents & guardians". */
+/* 8.5px was the size that let the two long labels wrap inside a 66px column,
+   and 8.5px uppercase letterspaced is not a size anybody reads -- least of all
+   the parents and the seven-year-olds this row is for. 10px, still two lines,
+   still one row height. */
 .guide-selector--compact .guide-card__pill {
-	font-size: 8.5px;
-	padding: 3px 7px;
+	font-size: 10px;
+	padding: 3px 6px;
 	border-radius: 6px;
 	margin-bottom: 7px;
 	white-space: normal;
@@ -8371,7 +8395,7 @@ a.source__site--link:hover .source__out {
 	background: #fff;
 	border: 4px solid var(--guide-color);
 	box-shadow:
-		0 10px 28px rgb(35 21 72 / 0.1),
+		0 10px 28px rgb(53 29 90 / 0.1),
 		0 0 0 5px rgb(255 255 255 / 0.8);
 	transition:
 		box-shadow 180ms ease,
@@ -8380,7 +8404,7 @@ a.source__site--link:hover .source__out {
 .guide-selector--compact .guide-card__avatar {
 	border-width: 3px;
 	box-shadow:
-		0 6px 16px rgb(35 21 72 / 0.12),
+		0 6px 16px rgb(53 29 90 / 0.12),
 		0 0 0 3px rgb(255 255 255 / 0.85);
 }
 .guide-card__avatar img {
@@ -8392,7 +8416,7 @@ a.source__site--link:hover .source__out {
 }
 .guide-card:hover .guide-card__avatar {
 	box-shadow:
-		0 16px 38px rgb(35 21 72 / 0.15),
+		0 16px 38px rgb(53 29 90 / 0.15),
 		0 0 0 6px color-mix(in srgb, var(--guide-color) 12%, white);
 }
 
@@ -8401,7 +8425,7 @@ a.source__site--link:hover .source__out {
 	font-size: 25px;
 	line-height: 1.1;
 	font-weight: 750;
-	color: #1a103c;
+	color: var(--ink);
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
@@ -8421,7 +8445,7 @@ a.source__site--link:hover .source__out {
 .guide-card[aria-pressed="true"] .guide-card__avatar {
 	border-width: 6px;
 	box-shadow:
-		0 14px 36px rgb(35 21 72 / 0.16),
+		0 14px 36px rgb(53 29 90 / 0.16),
 		0 0 0 7px color-mix(in srgb, var(--guide-color) 15%, white);
 }
 .guide-selector--compact .guide-card[aria-pressed="true"] .guide-card__avatar {
@@ -8454,7 +8478,7 @@ a.source__site--link:hover .source__out {
 	max-width: min(15rem, 46vw);
 	padding: 8px 12px;
 	border-radius: 10px;
-	background: #1a103c;
+	background: var(--ink);
 	color: #fff;
 	font-size: 12.5px;
 	line-height: 1.35;
@@ -8481,12 +8505,12 @@ a.source__site--link:hover .source__out {
 	background: transparent;
 	cursor: pointer;
 	font-size: 15px;
-	color: #6b6383;
+	color: var(--quiet);
 	text-decoration: underline;
 	text-underline-offset: 3px;
 }
 .guide-selector__skip button:hover {
-	color: #c22f99;
+	color: var(--magenta);
 }
 .guide-selector--compact .guide-selector__skip {
 	margin-top: 10px;
@@ -8579,7 +8603,7 @@ a.source__site--link:hover .source__out {
 	cursor: pointer;
 	font-size: 12.5px;
 	font-weight: 600;
-	color: var(--ink-soft, rgb(72 41 119 / 0.7));
+	color: var(--slate);
 	text-align: left;
 }
 .rail__history-toggle:hover {
@@ -8738,6 +8762,826 @@ a.source__site--link:hover .source__out {
 	}
 }
 
+/* ── Section views ─────────────────────────────────────────────────────────
+   About, For Parents, For Educators, Explore, My Journey and Chat History.
+
+   Six pages reached from one nav, and until now six independent pages wearing
+   a shared header. Between them they had four content measures (max-w-2xl,
+   4xl, 5xl and none), three padding recipes, five page-title recipes, five
+   subtitle recipes, six card recipes, and two of them were painted near-black
+   on a product whose root declares `color-scheme: light only`. A reader moving
+   from "For Parents" to "My Journey" changed worlds.
+
+   One shell here, used by all six. What each view still owns is its content —
+   which is the only thing that should differ between them. */
+
+.view {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+	background: #fff;
+	color: var(--ink);
+}
+
+/* The scenic wash, which was pasted inline into three of the six views as an
+   identical twenty-line `background` string. One declaration, one place. */
+.view::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	overflow: hidden;
+	pointer-events: none;
+	background:
+		linear-gradient(
+			to bottom,
+			rgb(255 255 255 / 0.12) 0%,
+			rgb(255 255 255 / 0.58) 38%,
+			rgb(255 255 255 / 0.92) 72%,
+			#fff 100%
+		),
+		image-set(
+			url("/images/hero-bg.webp") type("image/webp"),
+			url("/images/hero-bg.jpg") type("image/jpeg")
+		)
+		center top / cover no-repeat;
+	filter: saturate(0.85) brightness(1.12);
+}
+
+.view > * {
+	position: relative;
+	z-index: 1;
+}
+
+/* One measure. 56rem holds the two-column card rows these views use and keeps
+   a full-width paragraph inside the 65–75 characters a reader tracks. */
+.view__main {
+	flex: 1;
+	width: 100%;
+	max-width: 56rem;
+	margin-inline: auto;
+	padding: 48px 24px 72px;
+}
+
+.view__head {
+	margin-bottom: 40px;
+}
+
+.view__title {
+	margin: 0 0 12px;
+	font-family: var(--font-display);
+	font-weight: 500;
+	font-size: clamp(2.25rem, 1.6rem + 2.4vw, 3rem);
+	line-height: 1.05;
+	letter-spacing: -0.015em;
+	color: var(--ink);
+	text-wrap: balance;
+}
+
+.view__lede {
+	margin: 0;
+	max-width: 46ch;
+	font-size: 1.125rem;
+	line-height: 1.55;
+	color: var(--slate);
+	text-wrap: pretty;
+}
+
+/* One card. Elevation is declared once, on the border — these sit on a
+   photograph, where a soft shadow under a hairline reads as a smudge. */
+.panel {
+	background: #fff;
+	border: 1px solid var(--wash-12);
+	border-radius: 16px;
+	padding: 28px;
+}
+
+/* Stacked panels breathe; the row keeps its own gap.
+   Scoped to direct children of the page: unscoped, `.panel + .panel` also hit
+   the second card INSIDE a `.panel-row`, pushing it 20px below the first. */
+.view__main > .panel + .panel,
+.view__main > .panel + .panel-row,
+.view__main > .panel-row + .panel,
+.view__main > .panel-row + .panel-row,
+.view__main > .panel-row + .view__cta {
+	margin-top: 20px;
+}
+
+.panel-row {
+	display: grid;
+	/* 240, not 280: at the 56rem measure a 280px floor fits only two tracks, so
+	   About's three pillars broke 2 + 1 with an orphan on its own row. */
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 20px;
+	/* The two cards in a row hold different amounts of copy, and a row whose
+	   cards end at different heights reads as unfinished. */
+	align-items: stretch;
+}
+
+/* `align-items: stretch` is not enough when the card is a `<button>`: Chrome's
+   UA rules keep form controls at their content height and centre them in the
+   track, so the story cards sat at two different tops AND two different
+   heights. An explicit height is the only thing buttons honour here. */
+.panel-row > * {
+	align-self: stretch;
+	height: 100%;
+}
+
+.panel__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	margin-bottom: 18px;
+	border-radius: 12px;
+	background: var(--wash-8);
+	color: var(--plum);
+	font-size: 1.375rem;
+}
+
+.panel__title {
+	margin: 0 0 10px;
+	font-size: 1.125rem;
+	font-weight: 700;
+	line-height: 1.25;
+	color: var(--ink);
+}
+
+.panel p {
+	margin: 0 0 12px;
+	color: var(--prose);
+	line-height: 1.6;
+	text-wrap: pretty;
+}
+
+.panel p:last-child {
+	margin-bottom: 0;
+}
+
+/* One bullet. Parents had green ticks in one card and typed "•" characters in
+   the card beside it. */
+.panel__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.panel__list li {
+	position: relative;
+	padding-left: 20px;
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	color: var(--prose);
+}
+
+.panel__list li::before {
+	content: "";
+	position: absolute;
+	left: 4px;
+	top: 0.62em;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--magenta);
+}
+
+.panel__label {
+	margin: 18px 0 8px;
+	font-size: 0.9375rem;
+	font-weight: 700;
+	color: var(--ink);
+}
+
+/* The tag row on For Educators. */
+.view__tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 18px;
+}
+
+.view__tags span {
+	padding: 5px 12px;
+	border-radius: 999px;
+	background: var(--wash-6);
+	color: var(--plum);
+	font-size: 0.8125rem;
+	font-weight: 600;
+}
+
+/* The closing call to action. It was a plum gradient carrying a gold pill that
+   turned white on hover — the only gold button and the only hover inversion in
+   the product. */
+.view__cta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 20px;
+	margin-top: 32px;
+	padding: 28px;
+	border-radius: 16px;
+	background: var(--plum-deep);
+	color: #fff;
+}
+
+.view__cta h2 {
+	margin: 0 0 6px;
+	font-size: 1.375rem;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.view__cta p {
+	margin: 0;
+	color: rgb(255 255 255 / 0.8);
+	line-height: 1.5;
+}
+
+.view__cta a {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	padding: 0 22px;
+	border-radius: 999px;
+	background: #fff;
+	color: var(--plum-deep);
+	font-weight: 700;
+	text-decoration: none;
+	transition: background-color var(--swift);
+}
+
+.view__cta a:hover {
+	background: var(--gold);
+	color: var(--ink);
+}
+
+.view__cta a:focus-visible {
+	outline: 2px solid #fff;
+	outline-offset: 3px;
+}
+
+/* The source line under About. */
+.view__source {
+	margin-top: 40px;
+	text-align: center;
+	color: var(--quiet);
+	font-size: 0.9375rem;
+}
+
+.view__source a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 44px;
+	padding: 0 16px;
+	margin-left: 4px;
+	border-radius: 999px;
+	color: var(--magenta);
+	font-weight: 700;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	transition: color var(--swift);
+}
+
+.view__source a:hover {
+	color: var(--plum);
+}
+
+@media (max-width: 640px) {
+	.view__main {
+		padding: 32px 20px 56px;
+	}
+
+	.view__head {
+		margin-bottom: 28px;
+	}
+
+	.panel {
+		padding: 22px;
+	}
+
+	.view__cta {
+		padding: 22px;
+	}
+}
+
+/* ── The course, as five stages ────────────────────────────────────────────
+   A numbered list, not a decorated row: the order is the information. The rail
+   is drawn on the list itself so it can never end up behind the card it is in,
+   which is what `-z-10` did to the version this replaces. */
+
+.journey {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 0;
+	margin: 4px 0 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: stage;
+}
+
+/* The rail runs between the first and last dot, not edge to edge. */
+.journey::before {
+	content: "";
+	position: absolute;
+	top: 21px;
+	left: 10%;
+	right: 10%;
+	height: 2px;
+	background: var(--wash-12);
+}
+
+.journey__step {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 0 4px;
+	text-align: center;
+}
+
+.journey__dot {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	background: #fff;
+	border: 2px solid var(--wash-18);
+	color: var(--plum);
+	font-size: 1.25rem;
+}
+
+.journey__label {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--ink);
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+	/* Five 44px dots and five labels do not fit across 350px of card. Stacked,
+	   the rail becomes vertical and the order still reads. */
+	.journey {
+		grid-template-columns: 1fr;
+		gap: 14px;
+	}
+
+	.journey::before {
+		top: 22px;
+		bottom: 22px;
+		left: 21px;
+		right: auto;
+		width: 2px;
+		height: auto;
+	}
+
+	.journey__step {
+		flex-direction: row;
+		align-items: center;
+		gap: 14px;
+		padding: 0;
+		text-align: left;
+	}
+
+	.journey__label {
+		font-size: 0.9375rem;
+	}
+}
+
+/* ── Chat history ──────────────────────────────────────────────────────────
+   One row shape, shared by the real rows and by the skeletons that stand in
+   for them, so the list does not change shape when it arrives. */
+
+.history__groups {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+}
+
+.history__group-label {
+	margin: 0 0 10px;
+	font-size: 0.875rem;
+	font-weight: 700;
+	color: var(--quiet);
+}
+
+.history__list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.history__row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	min-height: 64px;
+	padding: 12px 16px;
+	border: 1px solid var(--wash-12);
+	border-radius: 14px;
+	background: #fff;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color var(--swift),
+		background-color var(--swift);
+}
+
+.history__row:hover {
+	border-color: var(--wash-30);
+	background: var(--wash-3);
+}
+
+.history__row:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 2px;
+}
+
+.history__row--ghost {
+	cursor: default;
+	/* A pulse, not a sweeping sheen: the shimmer gradient is decoration that
+	   claims progress it does not know about. */
+	animation: historyGhost 1.4s ease-in-out infinite;
+}
+
+@keyframes historyGhost {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.55;
+	}
+}
+
+.history__mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: var(--wash-8);
+	color: var(--plum);
+	font-size: 1.25rem;
+}
+
+.history__ghost-lines {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex: 1;
+}
+
+.history__ghost-lines span {
+	display: block;
+	height: 10px;
+	border-radius: 999px;
+	background: var(--wash-9);
+}
+
+.history__ghost-lines span:first-child {
+	width: 62%;
+}
+
+.history__ghost-lines span:last-child {
+	width: 34%;
+}
+
+.history__text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+
+.history__title {
+	font-weight: 600;
+	color: var(--ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.history__date {
+	font-size: 0.8125rem;
+	color: var(--quiet);
+}
+
+.history__chevron {
+	flex-shrink: 0;
+	color: var(--faint);
+	transition: color var(--swift);
+}
+
+.history__row:hover .history__chevron {
+	color: var(--plum);
+}
+
+.history__empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	padding: 48px 24px;
+	border: 1px solid var(--wash-12);
+	border-radius: 16px;
+	text-align: center;
+	color: var(--slate);
+}
+
+.history__empty p {
+	margin: 0;
+}
+
+.history__empty-mark {
+	font-size: 2.25rem;
+	color: var(--wash-32);
+}
+
+.history__empty-hint {
+	font-size: 0.9375rem;
+	color: var(--quiet);
+}
+
+.history__retry {
+	margin-top: 6px;
+	min-height: 44px;
+	padding: 0 20px;
+	border: 1px solid var(--control-line);
+	border-radius: 999px;
+	background: #fff;
+	color: var(--plum);
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color var(--swift);
+}
+
+.history__retry:hover {
+	background: var(--wash-6);
+}
+
+/* ── Miracle Mountain ──────────────────────────────────────────────────────
+   The story cards are buttons, and they are built to look like buttons: one
+   surface, one hover, and a play mark that says what the tap does. The version
+   this replaces was a `<div>` wearing a pointer cursor and a scale transform. */
+
+.stories__card {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color var(--swift),
+		background-color var(--swift);
+}
+
+.stories__card:hover {
+	border-color: var(--wash-30);
+	background: var(--wash-3);
+}
+
+.stories__card:focus-visible {
+	outline: 2px solid var(--magenta);
+	outline-offset: 2px;
+}
+
+/* The artwork slot. A tinted field and a play mark, not a stock illustration
+   and not a Phosphor weather glyph standing in for a film still. */
+.stories__art {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 132px;
+	margin-bottom: 4px;
+	border-radius: 12px;
+	background: linear-gradient(140deg, var(--wash-9), var(--wash-m-10));
+	color: var(--magenta);
+	font-size: 2rem;
+	transition: color var(--swift);
+}
+
+.stories__card:hover .stories__art {
+	color: var(--magenta-deep);
+}
+
+.stories__title {
+	font-family: var(--font-display);
+	font-size: 1.375rem;
+	font-weight: 500;
+	line-height: 1.15;
+	color: var(--ink);
+	text-wrap: balance;
+}
+
+/* Below the title, not above it. As a kicker it was the first thing read on
+   a card whose subject is its name. */
+.stories__meta {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--magenta);
+}
+
+.stories__blurb {
+	font-size: 0.9375rem;
+	line-height: 1.55;
+	color: var(--prose);
+	text-wrap: pretty;
+}
+
+.stories__card--ghost {
+	cursor: default;
+	animation: historyGhost 1.4s ease-in-out infinite;
+}
+
+.stories__ghost-line {
+	display: block;
+	height: 12px;
+	border-radius: 999px;
+	background: var(--wash-9);
+}
+
+.stories__ghost-line--short {
+	width: 45%;
+}
+
+.stories__player {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.stories__video {
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	margin-bottom: 18px;
+	border-radius: 12px;
+	background: var(--plum-deep);
+}
+
+.stories__close {
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	margin-top: 6px;
+	padding: 0 4px;
+	border: 0;
+	background: none;
+	color: var(--plum);
+	font-weight: 600;
+	cursor: pointer;
+	transition: color var(--swift);
+}
+
+.stories__close:hover {
+	color: var(--magenta);
+}
+
+/* ── The section-view header ─────────────────────────────────────────────── */
+
+.view-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+	width: 100%;
+	max-width: 56rem;
+	margin-inline: auto;
+	padding: 20px 24px 0;
+}
+
+.view-head__mark {
+	display: inline-flex;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	border-radius: 8px;
+}
+
+.view-head__mark img {
+	display: block;
+	height: 44px;
+	width: auto;
+}
+
+.view-head__mark:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 4px;
+}
+
+/* 44px, from the label's own box rather than from padding that would push the
+   words off the optical line the mark sits on. */
+.view-head__back {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	margin-right: -12px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 999px;
+	background: none;
+	color: var(--plum);
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		color var(--swift),
+		background-color var(--swift);
+}
+
+.view-head__back:hover {
+	color: var(--magenta);
+	background: var(--wash-6);
+}
+
+.view-head__back:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+	.view-head {
+		padding: 14px 20px 0;
+	}
+
+	.view-head__mark img {
+		height: 36px;
+	}
+}
+
+/* The way back into an account nobody can get into.
+   Quiet, because it is the third choice on the screen, and 44px because it is
+   the only one that matters to the reader who needs it. */
+.auth__quiet-link {
+	align-self: center;
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	margin-top: 2px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 999px;
+	background: none;
+	color: var(--plum);
+	font: inherit;
+	font-size: 0.875rem;
+	font-weight: 600;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	cursor: pointer;
+	transition: color var(--swift);
+}
+
+.auth__quiet-link:hover:not(:disabled) {
+	color: var(--magenta);
+}
+
+.auth__quiet-link:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* "Working" was signalled by the button fading out — which is what a DISABLED
+   button looks like, so the one moment the reader most needs to know something
+   is happening looked like the moment nothing could. */
+.auth__spin {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	border: 2px solid rgb(255 255 255 / 0.35);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: authSpin 700ms linear infinite;
+}
+
+@keyframes authSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
 
 /* ── The empty-state welcome ──────────────────────────────────────────────
  *
@@ -8793,7 +9637,7 @@ a.source__site--link:hover .source__out {
 	font-size: clamp(34px, 4vw, 62px);
 	line-height: 1.05;
 	letter-spacing: -0.025em;
-	color: #1a103c;
+	color: var(--ink);
 	max-width: 640px;
 	margin: 0;
 	text-wrap: balance;
@@ -8805,21 +9649,15 @@ a.source__site--link:hover .source__out {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* The exact gradient from "take you!": pink -> indigo -> the body colour,
- * clipped to the glyphs and set italic. Changing one means changing both. */
+/* The same treatment as "take you?" on the landing, and the rule this file
+ * already set for itself -- "changing one means changing both" -- is why it is
+ * not a gradient any more. That span was a three-stop clip through pink, plum
+ * and the body ink; it is one flat brand colour on the landing now, so it is
+ * one flat brand colour here. The italic display face carries the emphasis. */
 .welcome-title__accent {
 	font-style: italic;
-	background-image: linear-gradient(
-		to right,
-		#c22f99,
-		#482977,
-		#1a103c
-	);
-	background-clip: text;
-	-webkit-background-clip: text;
-	color: transparent;
-	/* The italic's overhang clips against the background box without this,
-	 * which is why the landing span carries `pr-2`. */
+	color: var(--magenta);
+	/* The italic's overhang needs the room whether or not it is clipped. */
 	padding-right: 0.5rem;
 }
 
@@ -8828,16 +9666,24 @@ a.source__site--link:hover .source__out {
 	font-size: clamp(17px, 1.6vw, 24px);
 	line-height: 1.4;
 	font-weight: 500;
-	color: #342c4d;
+	color: var(--prose);
 }
+
+/* Three accents, and all three are ASPIRE's.
+ *
+ * They were magenta, then Tailwind's blue-500, then rose-500 -- the same two
+ * off-brand hues that the four landing cards were carrying before this pass
+ * took them out, arriving back on the surface next door. The brand has three
+ * colours and this line needs exactly three. Each measured on the welcome's
+ * near-white ground: 5.05:1, 9.40:1, 5.92:1. */
 .welcome-tagline__ask {
-	color: #c22f99;
+	color: var(--magenta);
 }
 .welcome-tagline__play {
-	color: #3b82f6;
+	color: var(--plum);
 }
 .welcome-tagline__explore {
-	color: #f43f5e;
+	color: var(--gold-ink);
 }
 
 /* Interface copy, not a chat message: no bubble, no avatar, quieter than the
@@ -8879,6 +9725,21 @@ a.source__site--link:hover .source__out {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	/* Still a mark that something is in flight, without the rotation. */
+	.auth__spin {
+		animation: authPulse 1.2s ease-in-out infinite;
+	}
+
+	@keyframes authPulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
+	}
+
 	.welcome-zone__orb {
 		animation: none;
 	}

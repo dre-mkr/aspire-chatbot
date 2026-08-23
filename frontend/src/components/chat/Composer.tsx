@@ -24,7 +24,8 @@ const VoiceSettings = lazy(() =>
 const TOUCH = "(hover: none)";
 
 interface ComposerProps {
-	onSend: (text: string) => void;
+	/** Returns whether the question was accepted; see `submit` below. */
+	onSend: (text: string) => boolean;
 	/** A reply is in flight: send is unavailable and becomes a stop control. */
 	busy: boolean;
 	onStop: () => void;
@@ -128,8 +129,16 @@ export function Composer({
 		// attached; before that the field is the only one that has the question.
 		const text = (draft || fieldRef.current?.value || "").trim();
 		if (!text || busy) return;
-		onSend(text);
-		onDraftChange("");
+		// Only clear the box if the question was actually taken. It used to clear
+		// unconditionally, so a send the conversation refused -- one already in
+		// flight, or a thread with no id yet -- deleted what the reader had
+		// typed and left them with an empty box and no explanation.
+		const accepted = onSend(text);
+		if (accepted) onDraftChange("");
+		// Send moves focus to nowhere otherwise: the button either disables or
+		// swaps to Stop under the pointer, and the browser drops focus to <body>,
+		// which strands a keyboard reader at the top of the document.
+		fieldRef.current?.focus();
 	}
 
 	function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {

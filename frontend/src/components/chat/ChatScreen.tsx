@@ -23,6 +23,7 @@ import {
 	isFreshThread,
 	type PendingTurn,
 	takePendingTurn,
+	takeVoiceStart,
 } from "#/lib/aspire/handoff";
 import {
 	displayTitle,
@@ -253,6 +254,18 @@ export function ChatScreen() {
 		};
 	}, [voice.autoSpeak, voice.available, voice.play]);
 
+	/**
+	 * Arrived by tapping the landing page's microphone: open the mic, not a
+	 * blank box. `start` puts the consent panel up first for a reader who has
+	 * not been asked yet, so this cannot reach the device without permission.
+	 * `takeVoiceStart` clears as it reads, so a re-run cannot open it twice.
+	 */
+	const voiceStart = voice.start;
+	useEffect(() => {
+		if (!threadId) return;
+		if (takeVoiceStart(threadId)) voiceStart();
+	}, [threadId, voiceStart]);
+
 	const threadRef = useRef<HTMLDivElement>(null);
 
 	// The game lives on the server, keyed by this thread.
@@ -450,9 +463,9 @@ export function ChatScreen() {
 
 	// simpleMode is read at send time, so toggling it changes the next answer, not past ones.
 	const ask = useCallback(
-		(question: string) => {
+		(question: string): boolean => {
 			stopPlayback();
-			send(question, simpleMode);
+			return send(question, simpleMode);
 		},
 		[send, simpleMode, stopPlayback],
 	);
@@ -761,6 +774,11 @@ export function ChatScreen() {
 				data-persona={persona || "guest"}
 				data-band={band ?? identity?.ageBand ?? undefined}
 				data-rail={railClosed ? "collapsed" : "expanded"}
+				/* Separate from `data-rail` on purpose. `data-rail` is derived from
+				   a media query, which is false until React has mounted; this is
+				   derived from a reader's own action, so it is correct in the very
+				   first byte of HTML. Below 860px it is what opens the drawer. */
+				data-drawer={drawerOpen ? "open" : "shut"}
 			>
 				<div className="atmosphere" aria-hidden="true">
 					<span />

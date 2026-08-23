@@ -1,79 +1,139 @@
+import { useEffect, useRef, useState } from "react";
+import {
+	type AspireVideo,
+	fetchVideos,
+	runtime,
+	videoSrc,
+} from "#/lib/aspire/videos";
 import { ViewHeader } from "./ViewHeader";
+
+/**
+ * Miracle Mountain: the ASPIRE films, from the catalog that actually holds them.
+ *
+ * THE TWO STORIES WERE TYPED INTO THIS FILE, AND THE CARDS DID NOTHING.
+ * Each carried `cursor-pointer`, a hover shadow and a `group-hover:scale-105`
+ * on its artwork — every signal a reader has for "this is a control" — with no
+ * click handler behind any of it. A card that lifts under the cursor and then
+ * ignores the click is worse than a card that sits still, because the reader
+ * concludes the page is broken rather than that the card is a picture.
+ *
+ * They are driven from `/api/videos` now, which is the same catalog the
+ * assistant matches on, so a film added to the programme appears here without
+ * anyone remembering to retype its running time. And they play.
+ */
 export function StoriesView({ onBack }: { onBack: () => void }) {
+	const [videos, setVideos] = useState<Array<AspireVideo> | null>(null);
+	const [failed, setFailed] = useState(false);
+	const [playing, setPlaying] = useState<AspireVideo | null>(null);
+	const playerRef = useRef<HTMLVideoElement>(null);
+
+	useEffect(() => {
+		let live = true;
+		fetchVideos()
+			.then((rows) => {
+				if (live) setVideos(rows);
+			})
+			.catch(() => {
+				if (live) setFailed(true);
+			});
+		return () => {
+			live = false;
+		};
+	}, []);
+
+	// A story chosen is a story started; nobody taps a film to look at a paused
+	// first frame.
+	useEffect(() => {
+		if (playing) playerRef.current?.play().catch(() => undefined);
+	}, [playing]);
+
 	return (
-		<div className="absolute inset-0 z-50 bg-white/95 backdrop-blur-xl overflow-y-auto pt-8 px-4 pb-24 md:px-8">
-			<div className="max-w-5xl mx-auto">
-				{/* "Back to Ecosystem" was the wording here, which is a word from a
-            product deck rather than anything a reader recognises. Every other
-            surface says "Back to ASPIRE"; so does this one now. */}
-				<ViewHeader onBack={onBack} />
-				<div className="flex items-center gap-4 mb-8">
-					<div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#c22f99] to-[#8a1c6a] flex items-center justify-center text-white shadow-lg">
-						<i className="ph-duotone ph-book-open-text text-4xl"></i>
-					</div>
-					<div>
-						<h2 className="font-display text-4xl font-bold text-ink">
-							Miracle Mountain
-						</h2>
-						<p className="text-slate text-lg">
-							Interactive financial tales of St. Kitts & Nevis
-						</p>
-					</div>
+		<div className="view">
+			<ViewHeader onBack={onBack} />
+
+			<main className="view__main">
+				<div className="view__head">
+					{/* Was an `h2` with no `h1` above it anywhere on the page, set in
+					 * Instrument Serif's bold — a weight the file does not carry, so
+					 * the browser synthesised one by smearing the strokes. */}
+					<h1 className="view__title">Miracle Mountain</h1>
+					<p className="view__lede">
+						Interactive financial tales of St. Kitts &amp; Nevis.
+					</p>
 				</div>
 
-				{/* THE TWO STORIES ADVERTISED HERE DID NOT EXIST.
-				 *
-				 * "The Magic Coins" and "The Sugar Mas Budget" were invented during a
-				 * design pass, along with an Episode 1 / Episode 2 unlock mechanic that
-				 * the product has no concept of. Imani was cast as the traveller; Imani
-				 * is the guardian persona, not a character in anything.
-				 *
-				 * These are the two films that actually exist, with their real titles,
-				 * settings and running times, taken from backend/app/videos/catalog.py.
-				 * Neither is locked and there is nothing to unlock.
-				 */}
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-					<div className="bg-white rounded-3xl border border-plum/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden hover:shadow-[0_20px_40px_rgb(194,47,153,0.15)] transition-shadow cursor-pointer group">
-						<div className="h-48 bg-gradient-to-br from-pink-100 to-rose-50 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-							<i className="ph-duotone ph-cloud-rain text-6xl text-pink-500"></i>
-						</div>
-						<div className="p-6 relative bg-white">
-							<span className="text-xs font-bold uppercase tracking-wider text-magenta mb-2 block">
-								Basseterre, St. Kitts &middot; 4 min
-							</span>
-							<h3 className="text-xl font-display font-bold text-ink mb-2">
-								The Adventures of Captain Careful and the Quest for Scarcity
-							</h3>
-							<p className="text-slate text-sm">
-								A thunderstorm leaves Basseterre short of supplies, and Captain
-								Careful helps the community decide what matters most: sharing
-								what there is, saving water, and telling a need apart from a
-								want.
-							</p>
-						</div>
+				{playing ? (
+					<section className="panel stories__player">
+						{/* biome-ignore lint/a11y/useMediaCaption: the catalog carries no
+						    caption tracks yet; the description below stands in. */}
+						<video
+							ref={playerRef}
+							key={playing.id}
+							src={videoSrc(playing)}
+							controls
+							playsInline
+							className="stories__video"
+						/>
+						<h2 className="panel__title">{playing.title}</h2>
+						<p>{playing.description}</p>
+						<button
+							type="button"
+							className="stories__close"
+							onClick={() => setPlaying(null)}
+						>
+							<i className="ph-bold ph-arrow-left" aria-hidden="true" /> All
+							stories
+						</button>
+					</section>
+				) : failed ? (
+					<div className="history__empty" role="alert">
+						<i
+							className="ph-duotone ph-cloud-warning history__empty-mark"
+							aria-hidden="true"
+						/>
+						<p>The story library is not answering just now.</p>
 					</div>
-
-					<div className="bg-white rounded-3xl border border-plum/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden hover:shadow-[0_20px_40px_rgb(194,47,153,0.15)] transition-shadow cursor-pointer group">
-						<div className="h-48 bg-gradient-to-br from-amber-100 to-yellow-50 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-							<i className="ph-duotone ph-magic-wand text-6xl text-amber-500"></i>
-						</div>
-						<div className="p-6 relative bg-white">
-							<span className="text-xs font-bold uppercase tracking-wider text-magenta mb-2 block">
-								Nevis &middot; 6 min
-							</span>
-							<h3 className="text-xl font-display font-bold text-ink mb-2">
-								Monique's Saving Adventure
-							</h3>
-							<p className="text-slate text-sm">
-								Monique lives on Nevis and wants the Wand of Wisdom, which costs
-								100 magic dollars. She learns that earning takes work, that time
-								is worth something too, and that waiting for the thing you
-								actually want beats spending on the thing you don't.
-							</p>
-						</div>
+				) : videos === null ? (
+					<div className="panel-row" aria-busy="true">
+						<span className="sr-only">Loading the story library</span>
+						{[0, 1].map((n) => (
+							<div className="panel stories__card stories__card--ghost" key={n}>
+								<span className="stories__art" />
+								<span className="stories__ghost-line" />
+								<span className="stories__ghost-line stories__ghost-line--short" />
+							</div>
+						))}
 					</div>
-				</div>
-			</div>
+				) : videos.length === 0 ? (
+					<div className="history__empty">
+						<i
+							className="ph-duotone ph-film-slate history__empty-mark"
+							aria-hidden="true"
+						/>
+						<p>No stories have been published yet.</p>
+					</div>
+				) : (
+					<div className="panel-row">
+						{videos.map((video) => (
+							<button
+								type="button"
+								key={video.id}
+								className="panel stories__card"
+								onClick={() => setPlaying(video)}
+							>
+								<span className="stories__art" aria-hidden="true">
+									<i className="ph-fill ph-play" />
+								</span>
+								<span className="stories__title">{video.title}</span>
+								<span className="stories__meta">
+									{video.setting} &middot; {runtime(video.duration_seconds)}
+								</span>
+								<span className="stories__blurb">{video.description}</span>
+							</button>
+						))}
+					</div>
+				)}
+			</main>
 		</div>
 	);
 }

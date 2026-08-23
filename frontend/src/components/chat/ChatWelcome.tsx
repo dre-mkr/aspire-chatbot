@@ -223,11 +223,12 @@ export function ChatWelcome({
 				<div className="welcome-zone__orb orb" aria-hidden="true" />
 
 				{/* THE SAME TREATMENT AS THE LANDING HEADLINE, and deliberately so:
-				 * `font-display font-medium` in #1A103C with the emphatic half in
-				 * the italic pink-to-indigo gradient, exactly as "take you!" is set
-				 * on "Where will your money take you!". The two headlines are the
-				 * reader's first and second impression of the same product, and
-				 * they should look like it. */}
+				 * `font-display font-medium` in the ink token with the emphatic
+				 * half italic in one flat brand colour, exactly as "take you?" is
+				 * set on "Where will your money take you?". The two headlines are
+				 * the reader's first and second impression of the same product,
+				 * and they should look like it -- which is why the gradient came
+				 * off both together. */}
 				<h1 className="welcome-title font-display font-medium tracking-tight">
 					{welcome.lead}
 					<span className="welcome-title__accent">{welcome.accent}</span>{" "}

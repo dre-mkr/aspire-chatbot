@@ -51,7 +51,7 @@ export function Brandmark({
 						: "relative w-full max-w-[280px] md:max-w-[340px] mb-4 group"
 				}
 			>
-				<div className="absolute inset-0 bg-[#c22f99]/10 blur-2xl rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+				<div className="absolute inset-0 bg-magenta/10 blur-2xl rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
 				{/* Falling stars behind the mark, in both lockups.
 				 *
@@ -69,13 +69,13 @@ export function Brandmark({
 					}
 				>
 					<i
-						className={`ph-fill ph-star absolute text-[#fed141] falling-star falling-star-1 drop-shadow-md ${variant === "header" ? "text-sm" : "text-2xl"}`}
+						className={`ph-fill ph-star absolute text-gold falling-star falling-star-1 drop-shadow-md ${variant === "header" ? "text-sm" : "text-2xl"}`}
 					></i>
 					<i
-						className={`ph-fill ph-star absolute text-[#fed141] falling-star falling-star-2 drop-shadow-md ${variant === "header" ? "text-xs" : "text-xl"}`}
+						className={`ph-fill ph-star absolute text-gold falling-star falling-star-2 drop-shadow-md ${variant === "header" ? "text-xs" : "text-xl"}`}
 					></i>
 					<i
-						className={`ph-fill ph-star absolute text-[#fed141] falling-star falling-star-3 drop-shadow-md ${variant === "header" ? "text-sm" : "text-2xl"}`}
+						className={`ph-fill ph-star absolute text-gold falling-star falling-star-3 drop-shadow-md ${variant === "header" ? "text-sm" : "text-2xl"}`}
 					></i>
 				</div>
 

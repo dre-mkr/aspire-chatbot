@@ -195,9 +195,8 @@ function QuestionPanel({
 
 	return (
 		<div className="elig__step">
-			<p className="game__eyebrow">
+			<p className="elig__progress">
 				<span>{progress}</span>
-				<span className="game__rule" aria-hidden="true" />
 				{/* Reads the question, and only the question. */}
 				{speakAvailable && onSpeak ? (
 					<button

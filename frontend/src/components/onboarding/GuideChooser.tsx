@@ -1,55 +1,30 @@
-import { type ReactElement, useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRightIcon } from "#/components/icons";
-import { type PersonaId, personaById } from "#/lib/aspire/personas";
 import {
-	CloudMark,
-	GeneralMark,
-	RocketMark,
-	ScholarMark,
-	StarMark,
-} from "./GuideMascots";
+	CHOOSABLE_GUIDES,
+	type Guide,
+	type PersonaId,
+} from "#/lib/aspire/personas";
+import { GeneralMark } from "./GuideMascots";
 
 /**
- * One guide, in the order a family meets them: youngest reader outwards.
+ * THIS LIST OFFERED FOUR GUIDES. The product has five.
  *
- * The name is not written here. It lives in `PERSONAS`, which mirrors the
- * backend's `names.py`, and is read below -- a guide's label changed twice in
- * two commits and this file was the copy that kept the old one. What is written
- * here is what this screen alone knows: the mascot, and blurbs pitched at a
- * family choosing rather than at the composer menu.
+ * It predated the Skye/Kaleb split and had never been updated: `stella` was
+ * listed once, labelled "Ages 5–12", while every other surface splits that
+ * range into Skye at 5–8 and Kaleb at 9–12. So an eleven-year-old who answered
+ * this dialog was given Skye, and the same eleven-year-old choosing from the
+ * landing row was given Kaleb — two different voices, two different reading
+ * levels, from the same question asked twice.
+ *
+ * It also drew its own mascots: a cloud, a rocket, a star and a scholar, for
+ * five guides who have illustrated faces used everywhere else in the product.
+ * A reader met an abstract shape here and a person on the next screen.
+ *
+ * Both are gone. The list is `GUIDES`, the faces are the guides' own, and the
+ * only mark still drawn here is the one for General — which is not a person.
  */
-const GUIDES: ReadonlyArray<{
-	id: PersonaId;
-	who: string;
-	blurb: string;
-	Mark: (props: { className?: string }) => ReactElement;
-}> = [
-	{
-		id: "stella",
-		who: "Ages 5–12",
-		blurb: "Simple words, shorter answers and easy explanations.",
-		Mark: CloudMark,
-	},
-	{
-		id: "orion",
-		who: "Ages 13–18",
-		blurb: "Fuller explanations, games, challenges and activities.",
-		Mark: RocketMark,
-	},
-	{
-		id: "aurora",
-		who: "Parent or guardian",
-		blurb: "Practical answers about the programme and your child's learning.",
-		Mark: StarMark,
-	},
-	{
-		id: "nova",
-		who: "Teacher or educator",
-		blurb: "Clear explanations and teaching support you can use with learners.",
-		Mark: ScholarMark,
-	},
-];
 
 /**
  * Who is reading, asked once, before the first question.
@@ -67,8 +42,14 @@ export function GuideChooser({
 	onChoose,
 	onSkip,
 }: {
-	/** `null` is the general option: balanced answers, no band. */
-	onChoose: (persona: PersonaId | null) => void;
+	/**
+	 * `null` is the general option: balanced answers, no band.
+	 *
+	 * The guide row rides along because a persona key alone cannot say which of
+	 * Skye and Kaleb was chosen — they are one key and two bands, which is
+	 * exactly the distinction this dialog used to lose.
+	 */
+	onChoose: (persona: PersonaId | null, guide?: Guide) => void;
 	onSkip: () => void;
 }) {
 	const titleId = useId();
@@ -161,24 +142,42 @@ export function GuideChooser({
 				</div>
 
 				<ul className="guide__list">
-					{GUIDES.map((guide) => (
-						<li key={guide.id}>
+					{CHOOSABLE_GUIDES.map((guide: Guide) => (
+						<li key={guide.guideId}>
 							<button
 								type="button"
-								className="guide-card"
-								onClick={() => onChoose(guide.id)}
+								className="guide__card"
+								onClick={() => onChoose(guide.persona, guide)}
 							>
-								<guide.Mark className="guide-card__mark" />
-								<span className="guide-card__text">
+								<span className="guide__card-face" aria-hidden="true">
+									<picture>
+										<source
+											srcSet={`/guides/${guide.guideId}.webp`}
+											type="image/webp"
+										/>
+										<img
+											src={`/guides/${guide.guideId}.png`}
+											alt=""
+											width={480}
+											height={480}
+											loading="lazy"
+											decoding="async"
+										/>
+									</picture>
+								</span>
+								<span className="guide__card-text">
 									<span
-										className={`guide-card__who guide-card__who--${guide.id}`}
+										className="guide__card-who"
+										style={{ color: guide.pillFg }}
 									>
-										{guide.who}
+										{guide.audience}
 									</span>
-									<span className="guide-card__name">
-										Meet <b>{personaById(guide.id)?.name ?? guide.who}</b>
+									<span className="guide__card-name">
+										Meet <b>{guide.name}</b>
 									</span>
-									<span className="guide-card__blurb">{guide.blurb}</span>
+									<span className="guide__card-blurb">
+										{guide.chooserBlurb}
+									</span>
 								</span>
 								<ChevronRightIcon />
 							</button>
@@ -192,15 +191,15 @@ export function GuideChooser({
 
 				<button
 					type="button"
-					className="guide-card guide-card--general"
+					className="guide__card guide__card--general"
 					onClick={() => onChoose(null)}
 				>
-					<GeneralMark className="guide-card__mark" />
-					<span className="guide-card__text">
-						<span className="guide-card__name">
+					<GeneralMark className="guide__card-mark" />
+					<span className="guide__card-text">
+						<span className="guide__card-name">
 							Continue with ASPIRE AI <b>General</b>
 						</span>
-						<span className="guide-card__blurb">
+						<span className="guide__card-blurb">
 							Balanced answers for a mixed audience.
 						</span>
 					</span>

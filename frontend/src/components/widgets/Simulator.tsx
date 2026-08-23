@@ -45,9 +45,14 @@ export function Simulator({
 		};
 	}, [touched, values, result, onSettle]);
 
-	const display =
-		result?.display ??
-		(widget.output_unit === "xcd_cents" ? moneyDisplay(0) : "—");
+	/* A missing result is not a result of zero.
+	 *
+	 * When the formula is absent or fails to evaluate, this printed
+	 * `moneyDisplay(0)` — "EC$0.00" — in the answer's own typeface and weight,
+	 * next to a label reading "After one year you have". A child moving the
+	 * sliders and watching a confident EC$0.00 learns something false about
+	 * saving. An em dash is not an answer, and reads as one. */
+	const display = result?.display ?? "—";
 
 	return (
 		<Panel
@@ -133,11 +138,23 @@ export function Simulator({
 						display: "block",
 						fontSize: "calc(var(--band-type, 16px) + 8px)",
 						fontWeight: 800,
-						color: "var(--plum-deep)",
+						color: result ? "var(--plum-deep)" : "var(--quiet)",
 					}}
 				>
 					{display}
 				</span>
+				{result ? null : (
+					<span
+						style={{
+							display: "block",
+							marginBlockStart: "0.25rem",
+							fontSize: "calc(var(--band-type, 16px) - 3px)",
+							color: "var(--slate)",
+						}}
+					>
+						We could not work this one out.
+					</span>
+				)}
 			</output>
 
 			{widget.visual === "stacked_bars" && result ? (
