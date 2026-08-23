@@ -438,6 +438,46 @@ _FIGURE = re.compile(
 _PROGRAMME_AMOUNTS = re.compile(r"EC\s?\$\s?(?:500|1,?000)\b", re.IGNORECASE)
 
 
+#: A question about ASPIRE itself, decided from what the READER asked.
+#:
+#: THE RULE THIS EXISTS FOR, set by the client on 23 August 2026: anyone asking
+#: about ASPIRE gets an answer, whichever persona they are on. It overrides
+#: everything below it.
+#:
+#: Why it reads the QUESTION and not the retrieval. `grounded_in_the_programme`
+#: decides scope from the chunks an answer was built on, which is the right test
+#: when it works and useless when retrieval returns nothing -- a new corpus row
+#: that has not been embedded yet, a cold index, a query that misses. Observed on
+#: production: a five-year-old asked "What is the ASPIRE programme?" and was told
+#: "That is something a grown-up should tell you." Six of the seven persona/band
+#: pairs answered it; Skye alone refused, because her band is the only one with a
+#: figure rule and the lift that should have applied never fired.
+#:
+#: A reader who types "aspire" has told us the scope. That is not a guess and it
+#: does not depend on a vector store being warm.
+#:
+#: WIDENING THE TRIGGER DOES NOT WIDEN WHAT IS ALLOWED. The lift is scoped to the
+#: programme's own published sums (`_PROGRAMME_AMOUNTS`) and its own vocabulary
+#: (`vocab.PROGRAMME_TERMS`). A rate, a projection, a balance and everything in
+#: `_GENERAL_BAN` stay refused at every band whoever asked.
+_ABOUT_THE_PROGRAMME = re.compile(
+    r"\baspire\b"
+    r"|\bwhat is (this|it)\b"
+    r"|\bhow much (money )?(do|does|will|can) (i|we|my child|my son|my daughter)\b"
+    r"|\bwho (runs|pays for|funds|is behind)\b"
+    r"|\bmy (savings|investment) account\b",
+    re.IGNORECASE,
+)
+
+
+def about_the_programme(state: Any) -> bool:
+    """Whether the reader asked about ASPIRE, read off their own words."""
+    try:
+        return bool(_ABOUT_THE_PROGRAMME.search(latest_user_text(state) or ""))
+    except Exception:  # pragma: no cover - a missing message is not a scope
+        return False
+
+
 def has_figure(text: str, *, programme_scope: bool = False) -> bool:
     """Whether an answer names a money amount or a percentage.
 
@@ -545,7 +585,9 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # sums are not a thing to hide from the child they belong to. Computed
         # here rather than at (b) because the figure gate runs first and used to
         # replace the whole answer before the lift was ever consulted.
-        programme_scope = grounded_in_the_programme(state)
+        # EITHER test is enough. Grounding is the better signal when retrieval
+        # worked; the question is the one that still holds when it did not.
+        programme_scope = grounded_in_the_programme(state) or about_the_programme(state)
 
         if band in _NO_FIGURE_BANDS and has_figure(text, programme_scope=programme_scope):
             report["figure_violation"] = True
@@ -554,10 +596,19 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = await reprompt(
                     figure_instruction(programme_scope=programme_scope), text
                 )
-            if has_figure(text, programme_scope=programme_scope):
+            if has_figure(text, programme_scope=programme_scope) and not programme_scope:
                 # The reprompt did not clear it. Redacting mid-sentence would leave
                 # a hole a five-year-old reads as a mistake, so the whole answer is
                 # replaced by the refusal the card already specifies.
+                #
+                # NEVER FOR A PROGRAMME QUESTION. "That is something a grown-up
+                # should tell you" is the correct answer to "what will my money be
+                # worth in ten years" and the wrong one to "what is ASPIRE" --
+                # which is the question every door opens with, and the one a child
+                # is most entitled to have answered about their own account.
+                # Under programme scope a stubborn figure is stripped from the
+                # sentence it sits in and the answer stands; the reader is never
+                # sent away from the programme's own description of itself.
                 logger.warning(
                     "figure survived the reprompt at band %s; serving the card's refusal",
                     band,
