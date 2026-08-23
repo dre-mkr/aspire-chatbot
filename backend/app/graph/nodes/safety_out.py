@@ -208,6 +208,47 @@ def over_cap(
 #: Sentence terminators, including the ones that end a spoken sentence in the three shipped locales.
 _SENTENCE_END = re.compile(r"[.!?…]['\")\]]*\s")
 
+#: Words whose trailing period does NOT end a sentence.
+#:
+#: `St` is why this exists and is not a nicety. The country is St. Kitts and
+#: Nevis and the bank is the St. Kitts-Nevis-Anguilla National Bank, so the
+#: abbreviation appears in most of what this product says. Without this set,
+#: "Your money is kept safe at the St. Kitts-Nevis-Anguilla National Bank"
+#: truncated to "Your money is kept safe at the St." -- a complete sentence by
+#: the regex, and nonsense to the child who asked where their money was.
+#:
+#: The youngest band has the tightest cap (35 words), so it truncates most
+#: often, which put the worst version of this in front of the readers least
+#: able to make sense of it.
+_ABBREVIATIONS: frozenset[str] = frozenset(
+    {
+        # Place and title, English.
+        "st", "mt", "ft", "ave", "rd", "blvd",
+        "mr", "mrs", "ms", "dr", "prof", "rev", "hon", "sgt", "jr", "sr",
+        # Latin, which the lesson copy uses freely.
+        "e.g", "i.e", "etc", "cf", "vs", "viz", "approx", "no",
+        # Spanish and French titles, for the other two shipped locales.
+        "sra", "srta", "ud", "uds", "mme", "mlle", "m", "dre",
+        # Clock time, which splits either side of the period.
+        "a.m", "p.m",
+    }
+)
+
+
+def _ends_a_sentence(window: str, terminator: int) -> bool:
+    """Whether the period at `terminator` closes a sentence or an abbreviation."""
+    if window[terminator] != ".":
+        # `!`, `?` and `…` are never abbreviations.
+        return True
+    preceding = window[:terminator].split()
+    if not preceding:
+        return True
+    word = preceding[-1].lower().lstrip("(\u201c\"'")
+    if word in _ABBREVIATIONS:
+        return False
+    # A lone initial: "J. Smith", "R. L. Bradshaw".
+    return not (len(word) == 1 and word.isalpha())
+
 
 def truncate_at_sentence(text: str, max_words: int) -> str:
     """The longest prefix within the cap that ends on a complete sentence."""
@@ -218,7 +259,7 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
     budget = " ".join(words[:max_words])
     # Search the original text, so the terminator's trailing whitespace is there to match.
     window = text[: len(budget) + 1]
-    ends = list(_SENTENCE_END.finditer(window))
+    ends = [m for m in _SENTENCE_END.finditer(window) if _ends_a_sentence(window, m.start())]
     if ends:
         return window[: ends[-1].end()].strip()
     return budget.rstrip(",;:") + "…"

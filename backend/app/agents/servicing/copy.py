@@ -52,3 +52,32 @@ CHIPS: Final[dict[str, list[str]]] = {
     "es": ["Sobre el programa", "Hablar con el equipo"],
     "fr": ["À propos du programme", "Parler à l'équipe"],
 }
+
+
+#: The same answer for a reader whose word cap cannot hold the long one.
+#:
+#: A guardian's cap follows their CHILD's band, so the parent of a six-year-old
+#: is capped at 35 words. The full answer is 88, and truncation took the reply
+#: apart in the worst possible order: the apology survived and the bank, the
+#: portal, the email and both phone numbers -- the entire answer -- were cut.
+#:
+#: So the short form drops the portal and the second number rather than let the
+#: truncator choose. What a parent chasing a missing payment actually needs is
+#: one address and one number, and those are what fit.
+ACCOUNT_ELSEWHERE_BRIEF: Final[dict[str, str]] = {
+    "en": (
+        "I cannot see accounts from here. ASPIRE savings are held at the "
+        "National Bank, and statements come every quarter. For anything else "
+        "the ASPIRE team can help: aspire@gov.kn or +1 (869) 667-5566."
+    ),
+    "es": (
+        "No puedo ver cuentas desde aquí. Los ahorros de ASPIRE están en el "
+        "National Bank y los estados llegan cada trimestre. Para lo demás, el "
+        "equipo de ASPIRE ayuda: aspire@gov.kn o +1 (869) 667-5566."
+    ),
+    "fr": (
+        "Je ne peux pas voir les comptes d'ici. L'épargne ASPIRE est à la "
+        "National Bank et les relevés arrivent chaque trimestre. Pour le reste, "
+        "l'équipe ASPIRE aide : aspire@gov.kn ou +1 (869) 667-5566."
+    ),
+}

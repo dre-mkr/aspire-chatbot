@@ -372,6 +372,44 @@ class TestSafetyOutLength:
         text = "One two three. Four five six. Seven eight nine ten eleven twelve."
         assert so.truncate_at_sentence(text, 7) == "One two three. Four five six."
 
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "ASPIRE is a savings programme for young people who live in "
+            "St. Kitts and Nevis, and joining it is free for every child.",
+            "Your money is kept safe at the St. Kitts-Nevis-Anguilla National "
+            "Bank, which is a real bank you can visit with a grown-up.",
+            "Saving means putting money away for later, e.g. for a bicycle you "
+            "want, instead of spending it all today on sweets.",
+            "Ask a grown-up, i.e. a parent or a teacher, to help you open your "
+            "very own ASPIRE account at the bank.",
+        ],
+    )
+    async def test_an_abbreviation_is_not_a_sentence_end(self, text):
+        """The country's own name used to cut a reply in half.
+
+        `St.` is a sentence end to a regex and the middle of a bank's name to a
+        child. At the 5-8 cap this produced "Your money is kept safe at the
+        St." -- which reads as a finished sentence, passes every gate, and
+        answers nothing. The country is St. Kitts and Nevis, so the abbreviation
+        is unavoidable in almost anything this product says.
+        """
+        for cap in range(6, 22):
+            out = so.truncate_at_sentence(text, cap)
+            last = out.rstrip("…").split()[-1].lower() if out.rstrip("…").split() else ""
+            assert last not in {"st", "e.g", "i.e"}, (
+                f"truncated to {out!r} at cap {cap}, ending on an abbreviation"
+            )
+
+    async def test_a_real_sentence_end_still_wins(self):
+        """The abbreviation guard must not stop ordinary truncation working."""
+        text = "Saving is keeping money for later. Spending is using it now. Both are fine."
+        assert so.truncate_at_sentence(text, 8) == "Saving is keeping money for later."
+
+    async def test_an_initial_does_not_end_a_sentence(self):
+        text = "The bank is named after R. L. Bradshaw, who led the country many years ago."
+        assert not so.truncate_at_sentence(text, 8).rstrip("…").endswith(" R.")
+
     async def test_truncation_falls_back_to_a_word_cut_with_an_ellipsis(self):
         text = " ".join(str(number) for number in range(30))
         assert so.truncate_at_sentence(text, 5).endswith("…")

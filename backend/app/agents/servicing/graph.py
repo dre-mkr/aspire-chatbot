@@ -19,17 +19,36 @@ from typing import Any
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
-from app.agents.servicing.copy import ACCOUNT_ELSEWHERE, CHIPS
+from app.agents.servicing.copy import (
+    ACCOUNT_ELSEWHERE,
+    ACCOUNT_ELSEWHERE_BRIEF,
+    CHIPS,
+)
 from app.graph.state import AspireState
 
 
+def answer_for(locale: str, band: str) -> str:
+    """The longest form of the answer this reader's cap can actually hold.
+
+    Choosing here rather than letting `safety_out` truncate is the whole point.
+    The full answer opens by saying what cannot be done and closes with where
+    to go instead, so a truncator working front-to-back keeps the apology and
+    discards the bank, the portal, the email and both phone numbers.
+    """
+    from app.graph.nodes.safety_out import over_cap
+
+    full = ACCOUNT_ELSEWHERE.get(locale, ACCOUNT_ELSEWHERE["en"])
+    if not over_cap(full, band, "servicing_agent"):
+        return full
+    return ACCOUNT_ELSEWHERE_BRIEF.get(locale, ACCOUNT_ELSEWHERE_BRIEF["en"])
+
+
 def point_at_the_account(state: AspireState) -> dict[str, Any]:
-    """Name the three places that hold what was asked for."""
+    """Name the places that hold what was asked for."""
     locale = str(state.get("locale") or "en")
+    band = str(state.get("age_band") or "adult")
     return {
-        "messages": [
-            AIMessage(content=ACCOUNT_ELSEWHERE.get(locale, ACCOUNT_ELSEWHERE["en"]))
-        ],
+        "messages": [AIMessage(content=answer_for(locale, band))],
         "quick_replies": CHIPS.get(locale, CHIPS["en"]),
         "active_agent": "servicing_agent",
     }
