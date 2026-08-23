@@ -1157,6 +1157,13 @@ def make_ground_check(threshold: float | None = None):
             for chunk in chunks
             if chunk.kb_id in grounded_citations
         ]
+        # "Where this came from", in the language the reader is reading.
+        #
+        # Same problem as the chips and the same answer: what a citation SAYS
+        # is corpus text, and the corpus is English. A Spanish answer opened a
+        # source panel written in English. What a citation POINTS AT is not
+        # translated -- a site's name, its host and its URL are what they are.
+        citations = await localise_citations(citations, str(state.get("locale") or "en"))
         # The best chunk's calibrated relevance, or the fused score when dense never ran.
         groundedness = min(
             1.0,
@@ -1175,6 +1182,52 @@ def make_ground_check(threshold: float | None = None):
         )
 
     return ground_check
+
+
+async def localise_citations(citations: list[Citation], locale: str) -> list[Citation]:
+    """Translate the reader-facing half of each citation. Never raises.
+
+    Three fields carry corpus prose -- the row's title, the question it answers
+    and the extract shown under it. The rest is provenance: `site`, `page`,
+    `domain`, `source_url` and `updated` are the identity of a document, and
+    translating those would be a different kind of wrong, so they are passed
+    through untouched.
+
+    Batched into one call for the whole panel and cached by exact text, like
+    the chips, so a source a hundred readers see is paid for once.
+    """
+    if locale == "en" or not citations:
+        return citations
+
+    from app.agent import localise_lines
+
+    fields = ("title", "question", "snippet")
+    originals = [
+        value
+        for citation in citations
+        for name in fields
+        if (value := (getattr(citation, name, "") or "").strip())
+    ]
+    if not originals:
+        return citations
+
+    try:
+        translated = await localise_lines(originals, locale)
+    except Exception:
+        logger.warning("Could not localise the source panel; leaving it as it is.", exc_info=True)
+        return citations
+
+    by_original = dict(zip(originals, translated, strict=True))
+    return [
+        citation.model_copy(
+            update={
+                name: by_original.get(value, value)
+                for name in fields
+                if (value := (getattr(citation, name, "") or "").strip())
+            }
+        )
+        for citation in citations
+    ]
 
 
 def citation_for(chunk: KBChunk) -> Citation:
@@ -1304,7 +1357,19 @@ def follow_up_chips(
         if chunk.kb_id in cited
     ]
     seen: list[set[str]] = []
-    chips: list[str] = []
+    # Two buckets, filled in one pass and drained in order.
+    #
+    # `_permitted` already decided what this reader MAY see, which is a safety
+    # question and answers a different one: everything is permitted to everyone,
+    # so it sorts nothing. This sorts by whether the question is FOR them.
+    #
+    # An educator asking how to prepare a lesson was offered "Is a phone a need
+    # or a want?" -- a nine-year-old's question, correct, permitted, and absurd
+    # in front of a teacher. The corpus already tags every row with its
+    # audience; nothing was reading the tag.
+    audience = reader_audience(state)
+    mine: list[str] = []
+    theirs: list[str] = []
 
     for chunk in [*chunks, *(state.get("qa_related") or [])]:
         if chunk.kb_id in cited:
@@ -1321,11 +1386,28 @@ def follow_up_chips(
             continue
 
         seen.append(words)
-        chips.append(question)
-        if len(chips) == FOLLOW_UP_CHIPS:
+        (mine if _for_this_reader(chunk, audience) else theirs).append(question)
+        if len(mine) == FOLLOW_UP_CHIPS:
             break
 
-    return chips
+    # Anything tagged for someone else is a fallback, not a filter: a thin
+    # corpus slice must not leave a reader with no follow-ups at all.
+    return [*mine, *theirs][:FOLLOW_UP_CHIPS]
+
+
+def _for_this_reader(chunk: KBChunk, audience: str) -> bool:
+    """Whether this row's audience is the one the reader is in.
+
+    `general` counts for everyone -- it is the corpus saying "anyone", not a
+    fourth audience. An untagged row counts too, for the same reason.
+    """
+    tags = chunk.metadata.get("audience")
+    if not tags:
+        return True
+    if isinstance(tags, str):
+        tags = [tags]
+    have = {str(tag).strip().lower() for tag in tags}
+    return bool(have & _AUDIENCE_FAMILY.get(audience, {audience, "general"}))
 
 
 #: Above this overlap, two questions are the same question.
@@ -1361,6 +1443,86 @@ def _restates(candidate: set[str], other: set[str]) -> bool:
         return candidate == other
     shared = len(candidate & other)
     return shared / min(len(candidate), len(other)) >= _RESTATEMENT
+
+
+#: Which corpus audience a reader's own words put them in.
+#:
+#: The persona is a starting point, not a fact about the person. The same adult
+#: is a teacher on Monday and a parent on Tuesday, and can say so in the middle
+#: of a conversation -- so the role they STATE wins over the one they picked
+#: from a menu, and it can change again on the next turn.
+_ROLE_SAID: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"\bas\s+(?:an?|the)\s+(?:teacher|educator|tutor|instructor|head\s*teacher)\b"
+            r"|\bmy\s+(?:own\s+)?(?:class|students|pupils|school|form\s*\d)\b"
+            r"|\bi\s+teach\b"
+            r"|\bcomo\s+(?:docente|maestra?|profesora?)\b|\bmis?\s+(?:alumnos?|clase)\b"
+            r"|\ben\s+tant\s+qu(?:e|')\s*(?:enseignant|professeur)\b|\bmes?\s+(?:[eé]l[eè]ves|classe)\b",
+            re.IGNORECASE,
+        ),
+        "teacher",
+    ),
+    (
+        re.compile(
+            r"\bas\s+(?:an?|the)\s+(?:parent|guardian|mother|father|mum|mom|dad)\b"
+            r"|\bmy\s+(?:own\s+)?(?:child|children|son|daughter|kid|kids)\b"
+            r"|\bi\s+have\s+(?:a|\d+|two|three|four)\s+(?:child|children|kids?|sons?|daughters?)\b"
+            r"|\bcomo\s+(?:madre|padre)\b|\bmis?\s+(?:propios?\s+)?hijos?\b|\btengo\s+\d+\s+hijos?\b"
+            r"|\ben\s+tant\s+qu(?:e|')\s*(?:parent|m[eè]re|p[eè]re)\b|\bmes?\s+(?:propres?\s+)?(?:enfants?|fils|filles?)\b"
+            r"|\bj'ai\s+(?:un|une|deux|trois|\d+)\s+(?:enfants?|fils|filles?)\b",
+            re.IGNORECASE,
+        ),
+        "parent",
+    ),
+)
+
+#: Where each persona starts, before the reader says otherwise.
+_AUDIENCE_BY_PERSONA: dict[str, str] = {
+    "nova": "teacher",
+    "aurora": "parent",
+    "stella": "child",
+    "kaleb": "student",
+    "orion": "student",
+    "guest": "general",
+}
+
+
+#: Which corpus tags each reader counts as their own.
+#:
+#: `general` is in every one: it is the corpus saying "anyone", not a fourth
+#: audience. `child` and `student` share a family because they are the same
+#: reader at different ages, and the word caps -- not the tag -- are what keep
+#: a nine-year-old's answer at nine years old. Splitting them would demote half
+#: a learner's follow-ups for no gain.
+_AUDIENCE_FAMILY: dict[str, set[str]] = {
+    "teacher": {"teacher", "general"},
+    "parent": {"parent", "general"},
+    "student": {"student", "child", "general"},
+    "child": {"child", "student", "general"},
+    "general": {"general", "student", "child", "parent", "teacher"},
+}
+
+
+def stated_role(state: AspireState) -> str | None:
+    """The role this reader has told us they are in, latest first, or None."""
+    for message in reversed(state.get("messages") or []):
+        if getattr(message, "type", None) != "human":
+            continue
+        text = getattr(message, "content", "")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        for pattern, role in _ROLE_SAID:
+            if pattern.search(text):
+                return role
+    return None
+
+
+def reader_audience(state: AspireState) -> str:
+    """The corpus audience whose questions belong in front of this reader."""
+    return stated_role(state) or _AUDIENCE_BY_PERSONA.get(
+        str(state.get("persona") or "guest"), "general"
+    )
 
 
 def _asked_questions(state: AspireState) -> list[set[str]]:

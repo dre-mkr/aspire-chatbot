@@ -264,6 +264,32 @@ _ASKS_SOMETHING = re.compile(
 )
 
 
+#: A reader describing themselves, which no check question asks them to do.
+_ABOUT_THE_READER = re.compile(
+    r"^\W*(?:well|so|okay|ok|actually)?\W*(?:"
+    r"as\s+(?:an?|the)\s+\w+"
+    r"|i\s+(?:have|want|need|am|was|would\s+like|work|teach|run|'m)\b"
+    r"|my\s+(?:child|children|son|daughter|kid|kids|class|students|school|pupils)\b"
+    r"|we\s+(?:have|are|want|need)\b"
+    # Spanish
+    r"|(?:yo\s+)?(?:tengo|quiero|necesito|soy|trabajo)\b"
+    r"|como\s+(?:docente|maestra?|profesora?|madre|padre)\b"
+    r"|mis?\s+(?:hijos?|hijas?|alumnos?|clase)\b"
+    # French
+    r"|j'?(?:ai|e\s+(?:veux|suis|travaille))\b"
+    r"|en\s+tant\s+qu"
+    r"|mes?\s+(?:enfants?|fils|filles?|[eé]l[eè]ves|classe)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_about_the_reader(state: AspireState) -> bool:
+    """Whether this turn describes the reader rather than answering a question."""
+    text = (_latest_user_text(state) or "").strip()
+    return bool(text) and bool(_ABOUT_THE_READER.search(text))
+
+
 def _is_a_question_not_an_answer(state: AspireState) -> bool:
     """Whether this turn asks something rather than answering the last thing."""
     text = (_latest_user_text(state) or "").strip()
@@ -329,10 +355,30 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
     # everything else. A quiz answer is short and declarative -- "Saving",
     # "true", "I think a loan" -- and none of those match, so a lesson under way
     # is protected exactly as before.
+    # ...and neither is a reader telling you about THEMSELVES.
+    #
+    # The question escape above was half of it. Measured on production again,
+    # 23 August 2026, both adult personas, both still trapped because neither
+    # message is a question:
+    #
+    #   Imani  "Well I have 2 children"
+    #          -> "Think about which plan survives contact with December."
+    #                                         [Let me try again | Show me the answer]
+    #   Azuri  "As an educator I want to prepare a lesson"
+    #          -> answered as a learner, with learner chips.
+    #
+    # A parent volunteering that they have two children was graded as a wrong
+    # answer and offered a hint. That is the same one-way door, entered by a
+    # statement rather than a question.
+    #
+    # A quiz answer is about the MATERIAL -- "Saving", "true", "I think a loan".
+    # These are about the READER, which no check question ever asks for. "I
+    # think" is deliberately not in the set: it is how a learner hedges before
+    # answering, and it must stay inside the lesson.
     if (
         active in TEACHING_AGENTS
         and decision.agent not in TEACHING_AGENTS
-        and _is_a_question_not_an_answer(state)
+        and (_is_a_question_not_an_answer(state) or _is_about_the_reader(state))
     ):
         logger.info(
             "Letting %s take session %s from %s at %.2f: the reader asked a "
