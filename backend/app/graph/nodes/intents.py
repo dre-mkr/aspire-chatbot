@@ -438,10 +438,70 @@ def asks_for_a_video(message: str) -> bool:
     return any(pattern.search(folded) for pattern in _ASKS_FOR_VIDEO)
 
 
+#: One misspelling away from a game name, for readers who are seven.
+#:
+#: "Ah dat me a say word scamble" launched nothing. `_NAMED_GAME` is exact, so
+#: one missing letter turned a game request into a general question, and the
+#: reader got a paragraph ABOUT Word Scramble -- including an improvised
+#: scrambled word in prose -- instead of the game. They had to retype it
+#: correctly to play.
+#:
+#: The primary readers of this product are five to twelve years old and type
+#: like it. A game name is also a safe place to be forgiving: the worst case is
+#: launching a game somebody half-named, which the card lets them leave.
+_FUZZY_GAME: dict[str, str] = {
+    "scramble": "scramble",
+    "unscramble": "scramble",
+    "letras": "scramble",
+    "millionaire": "millionaire",
+    "millonario": "millionaire",
+    "millionnaire": "millionaire",
+    "hangman": "hangman",
+    "ahorcado": "hangman",
+}
+
+#: Below this and a short word matches too much: "gamble" is not "scramble".
+_FUZZY_CUTOFF = 0.82
+
+#: The second half of "true or false", where the first half is already evidence.
+_FUZZY_PAIRED_CUTOFF = 0.8
+
+#: Shorter than this and the edit distance stops being evidence of anything.
+_FUZZY_MIN_LENGTH = 5
+
+
+def _fuzzy_game(folded: str) -> str | None:
+    """A game name that survived one typo, or None."""
+    from difflib import get_close_matches
+
+    for token in re.findall(r"[a-z]+", folded):
+        if len(token) < _FUZZY_MIN_LENGTH:
+            continue
+        if token in _FUZZY_GAME:
+            return _FUZZY_GAME[token]
+        near = get_close_matches(token, _FUZZY_GAME, n=1, cutoff=_FUZZY_CUTOFF)
+        if near:
+            return _FUZZY_GAME[near[0]]
+
+    # "true or fasle" -- two words, so it needs both halves rather than one.
+    #
+    # A looser cutoff here than above, and safely so: "true" has already been
+    # found, which is the anchor. "fasle" and "flase" -- the two ways this is
+    # actually mistyped -- both score exactly 0.800 against "false".
+    words = re.findall(r"[a-z]+", folded)
+    if any(word in ("true", "verdadero", "vrai") for word in words):
+        for token in words:
+            if len(token) >= _FUZZY_MIN_LENGTH and get_close_matches(
+                token, ("false", "falso", "faux"), n=1, cutoff=_FUZZY_PAIRED_CUTOFF
+            ):
+                return "true_false"
+    return None
+
+
 def named_game(message: str) -> str | None:
     """Which game they named, or None if they just said "a game"."""
     folded = fold(message)
     for pattern, name in _NAMED_GAME:
         if pattern.search(folded):
             return name
-    return None
+    return _fuzzy_game(folded)
