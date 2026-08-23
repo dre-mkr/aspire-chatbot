@@ -417,13 +417,48 @@ _FIGURE = re.compile(
 )
 
 
-def has_figure(text: str) -> bool:
-    """Whether an answer names a money amount or a percentage."""
+#: The programme's OWN published sums, which a five-year-old may hear.
+#:
+#: THE EXCEPTION, and it is deliberately two numbers wide. The client's ruling is
+#: that awareness and sensitisation about ASPIRE is not banned for any persona,
+#: and that includes its savings and investment products. Under the blanket rule
+#: a five-year-old asking "how much money does ASPIRE give me?" was told "that is
+#: something a grown-up should tell you" -- about her own account, funded in her
+#: name, which every adult around her can read on a poster.
+#:
+#: EC$500 and EC$1,000 are fixed, published, and never change per child: the Act
+#: mandates the same seed for every eligible child. They are facts about what she
+#: owns, not a rate she cannot check.
+#:
+#: What stays forbidden at 5-8 is everything the card's rationale actually
+#: targets: a RATE or percentage (2 percent), a PROJECTION (EC$510.05 after a
+#: year), and any specific balance. Those are the figures "this reader cannot
+#: check and does not need". The exception widens the rule by exactly the two
+#: numbers the programme puts on its own posters, and not by one more.
+_PROGRAMME_AMOUNTS = re.compile(r"EC\s?\$\s?(?:500|1,?000)\b", re.IGNORECASE)
+
+
+def has_figure(text: str, *, programme_scope: bool = False) -> bool:
+    """Whether an answer names a money amount or a percentage.
+
+    With `programme_scope`, the programme's own published sums are not counted.
+    Everything else still is -- a percentage is a percentage whoever is asking.
+    """
+    if programme_scope:
+        text = _PROGRAMME_AMOUNTS.sub(" ", text)
     return bool(_FIGURE.search(text))
 
 
-def figure_instruction() -> str:
+def figure_instruction(*, programme_scope: bool = False) -> str:
     """The reprompt. Names the rule rather than the offending string."""
+    if programme_scope:
+        return (
+            "Keep the programme's own amounts -- EC$500 and EC$1,000 -- because "
+            "they are what this child owns and they are published. Remove "
+            "everything else with a number in it: no rate, no percentage, no "
+            "projected total after a year, no account balance. Say those ideas in "
+            "words instead -- 'it grows a little while it waits', not a figure."
+        )
     return (
         "Remove every money amount and every percentage from the answer. Say the "
         "idea in words instead -- 'the bank adds a little', not a figure. If the "
@@ -506,12 +541,20 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Every other rule on that card has a backstop: the vocabulary ladder has
         # `vocab.check`, the links have `_NO_LINK_PERSONAS`. This is that, for the
         # one rule that had none.
-        if band in _NO_FIGURE_BANDS and has_figure(text):
+        # Grounded in ASPIRE's own facts? Then the programme's own published
+        # sums are not a thing to hide from the child they belong to. Computed
+        # here rather than at (b) because the figure gate runs first and used to
+        # replace the whole answer before the lift was ever consulted.
+        programme_scope = grounded_in_the_programme(state)
+
+        if band in _NO_FIGURE_BANDS and has_figure(text, programme_scope=programme_scope):
             report["figure_violation"] = True
             if reprompt is not None:
                 timing.note_reprompt("figure")
-                text = await reprompt(figure_instruction(), text)
-            if has_figure(text):
+                text = await reprompt(
+                    figure_instruction(programme_scope=programme_scope), text
+                )
+            if has_figure(text, programme_scope=programme_scope):
                 # The reprompt did not clear it. Redacting mid-sentence would leave
                 # a hole a five-year-old reads as a mistake, so the whole answer is
                 # replaced by the refusal the card already specifies.
@@ -528,7 +571,6 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Grounded in ASPIRE's own facts? Then the programme's own vocabulary is
         # not a thing to hide from the child it belongs to. `_GENERAL_BAN` and
         # the cards' figure rules are untouched by this -- see `vocab.check`.
-        programme_scope = grounded_in_the_programme(state)
         violations = vocab.check(text, band, programme_scope=programme_scope)
         if violations:
             report["vocab_violations"] = sorted({v.term for v in violations})
