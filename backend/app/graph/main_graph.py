@@ -58,22 +58,89 @@ _NOT_BUILT: dict[str, str] = {
 }
 
 
+#: What somebody asking about an existing account is told.
+#:
+#: `servicing_agent` IS NOT BUILT AND CANNOT BE, not here. It is meant to answer
+#: balance, statements, a changed detail, a payment that has not arrived -- and
+#: this system holds none of that. The tables are documents, users, auth tokens,
+#: conversations, messages and eligibility outcomes. There is no balance, no
+#: account number, no statement. Participant accounts are at the
+#: St. Kitts-Nevis-Anguilla National Bank, and an integration with them is not
+#: ASPIRE's to build unilaterally.
+#:
+#: So this is not a stub waiting to be filled in. It is the correct answer, and
+#: it is reachable by exactly the two audiences with an account to service:
+#: `orion` at 16-18, who may self-register from 12, and `aurora`, the guardian.
+#: They were getting "I cannot help with that one here yet" -- a placeholder,
+#: which tells a parent chasing a missing payment nothing at all.
+#:
+#: What it says instead is where the answer actually lives. Quarterly valuation
+#: statements are published; the portal shows account activity; the bank holds
+#: the account. All three are in the corpus and none of them needed this agent.
+_ACCOUNT_ELSEWHERE: dict[str, str] = {
+    "en": (
+        "I cannot see anyone's account from here — balances and statements are "
+        "not something this assistant holds. Your ASPIRE savings are at the "
+        "St. Kitts-Nevis-Anguilla National Bank, participants receive quarterly "
+        "valuation statements, and account activity is on the ASPIRE portal at "
+        "aspire.gov.kn. For anything the portal does not answer — a payment that "
+        "has not arrived, a detail that needs changing — the ASPIRE team is the "
+        "right place: aspire@gov.kn, +1 (869) 667-5566, or +1 (869) 762-1947. "
+        "Is there something about the programme itself I can help with?"
+    ),
+    "es": (
+        "No puedo ver la cuenta de nadie desde aquí: este asistente no tiene "
+        "saldos ni estados de cuenta. Los ahorros de ASPIRE están en el "
+        "St. Kitts-Nevis-Anguilla National Bank, los participantes reciben "
+        "estados de valoración trimestrales, y la actividad de la cuenta está en "
+        "el portal de ASPIRE, aspire.gov.kn. Para lo que el portal no resuelva "
+        "— un pago que no ha llegado, un dato que hay que cambiar — el equipo de "
+        "ASPIRE es el lugar: aspire@gov.kn, +1 (869) 667-5566 o "
+        "+1 (869) 762-1947. ¿Puedo ayudarte con algo del programa en sí?"
+    ),
+    "fr": (
+        "Je ne peux voir le compte de personne d'ici : cet assistant ne détient "
+        "ni soldes ni relevés. L'épargne ASPIRE se trouve à la "
+        "St. Kitts-Nevis-Anguilla National Bank, les participants reçoivent des "
+        "relevés d'évaluation trimestriels, et l'activité du compte est sur le "
+        "portail ASPIRE, aspire.gov.kn. Pour ce que le portail ne règle pas — un "
+        "paiement qui n'est pas arrivé, une information à modifier — l'équipe "
+        "ASPIRE est la bonne adresse : aspire@gov.kn, +1 (869) 667-5566 ou "
+        "+1 (869) 762-1947. Puis-je vous aider sur le programme lui-même ?"
+    ),
+}
+
+#: Agents with a real answer of their own, even though no subgraph exists.
+_ANSWERED_WITHOUT_A_SUBGRAPH: dict[str, dict[str, str]] = {
+    "servicing_agent": _ACCOUNT_ELSEWHERE,
+}
+
+
 def make_stub(name: str):
     """A placeholder agent, which must not read as a placeholder."""
 
     async def stub(state: AspireState) -> dict[str, Any]:
-        # WARNING, not INFO.
-        logger.warning(
-            "Stub agent %s handled a turn for session %s; the reader was "
-            "deflected. Routing should have excluded it.",
-            name,
-            state.get("session_id"),
-        )
         locale = str(state.get("locale") or "en")
+        answer = _ANSWERED_WITHOUT_A_SUBGRAPH.get(name)
+        if answer is not None:
+            # INFO: this agent has no subgraph and does not need one. The reader
+            # is not being deflected, they are being sent where the answer is.
+            logger.info(
+                "%s answered for session %s without a subgraph.",
+                name,
+                state.get("session_id"),
+            )
+        else:
+            # WARNING, not INFO.
+            logger.warning(
+                "Stub agent %s handled a turn for session %s; the reader was "
+                "deflected. Routing should have excluded it.",
+                name,
+                state.get("session_id"),
+            )
+            answer = _NOT_BUILT
         return {
-            "messages": [
-                AIMessage(content=_NOT_BUILT.get(locale, _NOT_BUILT["en"]))
-            ],
+            "messages": [AIMessage(content=answer.get(locale, answer["en"]))],
             "active_agent": name,
         }
 

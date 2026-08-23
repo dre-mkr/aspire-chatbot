@@ -53,14 +53,18 @@ class TestNoRouterPathTerminatesAtEscalation:
             return
         assert routable(granted), f"{persona}/{band}/{status} has no routable agent"
 
-    async def test_stella_keeps_teaching_and_nova_keeps_qa(self):
+    async def test_stella_keeps_teaching_and_nova_gained_it(self):
         # QA leads every row now; Stella keeps the lesson machine right behind it.
         assert routable(allowed_agents("stella", "9-12", "prospect", user_id="u")) == [
             "qa_agent_limited",
             "learn_agent",
         ]
+        # Azuri used to be `["qa_agent"]` alone -- the teacher persona was the
+        # one the router could never send to a lesson. It now reaches both
+        # teaching agents; servicing and registration remain out.
         assert routable(allowed_agents("nova", "adult", "prospect", user_id="u")) == [
-            "qa_agent"
+            "qa_agent",
+            "learning_preview",
         ]
 
     async def test_the_anonymous_row_survives_too(self):

@@ -180,11 +180,26 @@ def test_a_guardian_or_teacher_gets_a_game_rather_than_a_403(client, persona):
 
 
 def test_an_unauthored_language_is_422(client):
+    """A language a GAME has no set for.
+
+    Was any of Spanish or French, when every seed was English. Two games are now
+    authored in both, so the refusal has to be asked of one that is not --
+    `hangman` -- or it tests nothing.
+    """
     response = client.post(
-        "/api/games/start", json={"thread_id": THREAD, "language": "es"}
+        "/api/games/start",
+        json={"thread_id": THREAD, "language": "es", "game_type": "hangman"},
     )
     assert response.status_code == 422
     assert response.json()["detail"]["reason"] == "no_set_for_language"
+
+def test_an_authored_language_starts(client):
+    """The other half, so the 422 above cannot pass by everything being broken."""
+    response = client.post(
+        "/api/games/start",
+        json={"thread_id": THREAD + "-es", "language": "es", "game_type": "word_scramble"},
+    )
+    assert response.status_code == 200
 
 
 def test_an_unknown_persona_is_ignored_not_rejected(client):

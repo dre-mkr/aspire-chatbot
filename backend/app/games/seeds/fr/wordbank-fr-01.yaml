@@ -1,0 +1,97 @@
+# ASPIRE mots mêlés — jeu en français
+#
+# ÉCRIT EN FRANÇAIS. Ce sont les mots qu'un enfant d'ici entend à la maison
+# quand on parle d'argent, pas la traduction d'une liste anglaise. Les accents
+# disparaissent du mot à deviner — un tableau en majuscules n'en porte pas —
+# mais restent dans l'indice et la définition, qui se lisent.
+#
+# `PRET`, `DIVIDENDE`, `PORTEFEUILLE` et `INFLATION` n'apparaissent pas : ils
+# sont interdits à 9-12. `INTERET` oui, parce que le client l'a autorisé pour
+# le programme.
+
+id: wordbank-fr-01
+game_type: word_scramble
+language: fr
+title: Les mots de l'argent qui valent la peine
+source: ASPIRE — mots mêlés écrits en français
+
+closing:
+  lead: Ce sont les mots que les adultes emploient quand ils parlent sérieusement d'argent.
+  text: >-
+    Les reconnaître, c'est presque tout l'avantage. Il n'est pas nécessaire de
+    les employer pour avoir l'air savant ; il faut les comprendre pour que
+    personne ne puisse s'en servir afin de te presser sur quelque chose que tu
+    n'as pas encore saisi.
+
+entries:
+  - id: wbfr-01-epargner
+    word: EPARGNER
+    scramble: GNEREPAR
+    hint: ce que tu fais quand tu gardes de l'argent au lieu de le dépenser
+    definition: mettre de l'argent de côté aujourd'hui pour l'avoir plus tard
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: wbfr-01-banque
+    word: BANQUE
+    scramble: QUEBAN
+    hint: l'endroit où l'argent est en sécurité et grandit doucement
+    definition: le lieu qui garde ton argent et tient le compte de ce que tu as
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: wbfr-01-interet
+    word: INTERET
+    scramble: TERETIN
+    hint: ce que la banque ajoute parce que tu laisses l'argent tranquille
+    definition: ce que tu gagnes en laissant de l'argent à la banque, ou ce que tu paies pour utiliser celui d'un autre
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbfr-01-budget
+    word: BUDGET
+    scramble: GETBUD
+    hint: le plan que tu fais avant que l'argent ne parte
+    definition: un plan qui dit à quoi sert chaque partie de l'argent, fait avant de dépenser
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbfr-01-compte
+    word: COMPTE
+    scramble: PTECOM
+    hint: ce que la banque ouvre à ton nom
+    definition: le registre que la banque tient de l'argent qui t'appartient
+    difficulty_band: warmup
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbfr-01-parts
+    word: PARTS
+    scramble: TRAPS
+    hint: de petits morceaux d'une entreprise que quelqu'un peut posséder
+    definition: des morceaux d'une entreprise ; en avoir un fait de toi le propriétaire d'un bout
+    difficulty_band: stretch
+    persona_bands: [orion, guest]
+    age_bands: ["13-15", "16-18"]
+
+  - id: wbfr-01-rarete
+    word: RARETE
+    scramble: TERARE
+    hint: pourquoi on ne peut pas avoir tout ce qu'on veut
+    definition: il n'y a jamais assez de tout pour tout le monde, donc choisir une chose c'est en laisser une autre
+    difficulty_band: stretch
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbfr-01-gagner
+    word: GAGNER
+    scramble: GNERGA
+    hint: ce que tu fais par ton travail avant de pouvoir garder quoi que ce soit
+    definition: recevoir de l'argent pour un travail accompli
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]

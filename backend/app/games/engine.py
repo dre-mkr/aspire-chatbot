@@ -73,36 +73,38 @@ class NoContentAvailable(GameError):
 
 #: What a player is told when the games exist but not yet in their language.
 #:
-#: EVERY seed file is English. Spanish and French have no entries at all, in any
-#: of the four games, for any persona -- nothing was authored rather than
-#: anything being broken. Until this message existed, asking for a game in
-#: French produced the developer's own sentence, "No hangman set has been
-#: authored in fr yet", which reads to a child as a fault and to a parent as a
-#: product that does not work.
+#: TRUE OF TWO GAMES NOW, not four. `true_false` and `word_scramble` have sets
+#: written in Spanish and in French -- written, not translated: the Spanish
+#: scramble answers AHORRAR, not a rendered SAVE. `hangman` and `millionaire`
+#: are still English only.
 #:
-#: So it says three things, in the reader's own language: the games are here,
-#: they are not in this language YET, and they are coming. A child who is told
-#: to come back will come back. A child shown an error will not, and neither
-#: will the adult watching over their shoulder.
+#: Which is why this no longer says "the games are only in English". That was
+#: true when it was written and became a lie the moment the first Spanish set
+#: landed -- the exact failure this note was added to warn about, arriving on
+#: schedule. It now says THIS game, and points at the two that are ready.
 #:
-#: DELETE THIS the day Spanish and French seeds land. It is a promise with a
-#: date attached to nothing, and a promise nobody keeps is worse than the error
-#: it replaced.
+#: Before any of it existed, asking for a game in French produced the
+#: developer's own sentence, "No hangman set has been authored in fr yet",
+#: which reads to a child as a fault and to a parent as a product that does not
+#: work.
+#:
+#: DELETE THIS the day the remaining two are authored, and re-read the wording
+#: the day only one of them is.
 _NOT_YET_IN_LANGUAGE: dict[str, str] = {
     "en": (
-        "The games are only in English at the moment. Spanish and French ones "
-        "are being written now, so check back soon — and you can play in "
-        "English any time in the meantime."
+        "This game is only in English so far. Others are ready in your "
+        "language — try true or false, or the word scramble — and this one is "
+        "being written, so check back soon."
     ),
     "es": (
-        "Por ahora los juegos solo están en inglés. Ya se están preparando los "
-        "de español y francés, así que vuelve pronto — y mientras tanto puedes "
-        "jugar en inglés cuando quieras."
+        "Este juego todavía solo está en inglés. Hay otros que ya están en "
+        "español: prueba verdadero o falso, o las palabras revueltas. Este se "
+        "está preparando, así que vuelve pronto."
     ),
     "fr": (
-        "Pour l'instant, les jeux ne sont qu'en anglais. Ceux en français et en "
-        "espagnol sont en préparation, alors reviens bientôt — et en attendant, "
-        "tu peux jouer en anglais quand tu veux."
+        "Ce jeu n'existe pour l'instant qu'en anglais. D'autres sont déjà prêts "
+        "en français : essaie vrai ou faux, ou les mots mêlés. Celui-ci est en "
+        "préparation, alors reviens bientôt."
     ),
 }
 

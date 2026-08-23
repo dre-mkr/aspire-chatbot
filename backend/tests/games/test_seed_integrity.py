@@ -116,10 +116,67 @@ def test_every_entry_targets_at_least_one_persona(game):
         assert all(isinstance(p, Persona) for p in entry.persona_bands)
 
 
-def test_spanish_and_french_are_empty_pending_authoring(game):
-    """Not a gap — a deliberate refusal to machine-translate a letter puzzle."""
-    assert game.sets_for(Language.ES) == []
-    assert game.sets_for(Language.FR) == []
+#: Games with sets authored in Spanish and French. The other two are English
+#: only, and the engine says so in the reader's own language rather than erroring.
+AUTHORED_IN_EVERY_LANGUAGE = frozenset({"true_false", "word_scramble"})
+
+
+def test_spanish_and_french_are_authored_or_honestly_absent(game):
+    """Was `== []`, with the note "a deliberate refusal to machine-translate".
+
+    That refusal still stands and is the point of this test. What changed is
+    that two of the four games now have sets WRITTEN in Spanish and in French --
+    a scramble whose answer is AHORRAR, not a translated SAVE -- so emptiness is
+    no longer the only honest state.
+
+    The other two remain English-only and must stay visibly so: the engine tells
+    the reader the game is not in their language yet and that English works
+    meanwhile. Silence would be the failure; a machine translation would be the
+    worse one.
+    """
+    for language in (Language.ES, Language.FR):
+        sets = game.sets_for(language)
+        if game.game_type in AUTHORED_IN_EVERY_LANGUAGE:
+            assert sets, f"{game.game_type} lost its {language.value} sets"
+        else:
+            assert sets == [], (
+                f"{game.game_type} gained {language.value} content — if it was "
+                f"authored, add it to AUTHORED_IN_EVERY_LANGUAGE deliberately"
+            )
+
+
+def test_a_translated_puzzle_would_not_pass(game):
+    """The refusal, made checkable rather than left as a comment.
+
+    A machine translation of the English sets would carry the English answers
+    through. These assert the target language actually decides the words.
+    """
+    if game.game_type != "word_scramble":
+        return
+    english = {
+        entry.word
+        for game_set in game.sets_for(Language.EN)
+        for entry in game_set.entries
+    }
+    for language in (Language.ES, Language.FR):
+        words = {
+            entry.word
+            for game_set in game.sets_for(language)
+            for entry in game_set.entries
+        }
+        assert words, f"no {language.value} words"
+        shared = words & english
+        # A COGNATE IS NOT A TRANSLATION. `BUDGET` is the French word for a
+        # budget -- French did not borrow it back from this file -- and refusing
+        # it would mean writing around the language rather than in it. What a
+        # machine translation looks like is different in kind: MOST of the
+        # answers carried across, because it translated a list rather than
+        # choosing words a child here would meet.
+        assert len(shared) <= len(words) // 4, (
+            f"{language.value} shares {sorted(shared)} with English, which is "
+            f"{len(shared)} of {len(words)} — past a cognate or two that is a "
+            f"translated list, and a scramble is a puzzle about letters"
+        )
 
 
 # --- loader rejects bad content -------------------------------------------

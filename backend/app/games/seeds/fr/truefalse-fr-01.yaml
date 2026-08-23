@@ -1,0 +1,141 @@
+# ASPIRE vrai ou faux — jeu en français
+#
+# ÉCRIT EN FRANÇAIS, PAS TRADUIT. Le client a demandé une conversation en
+# français qui sonne juste, et une traduction de l'anglais s'entend : le rythme
+# reste anglais et les exemples viennent d'ailleurs. Les chiffres et les règles
+# du programme sont ceux qui sont publiés — EC$500 et EC$500, cinq ans ou 18
+# ans selon ce qui arrive en dernier — parce que ce sont des faits, pas du style.
+#
+# BANDES. Chaque entrée porte ses `age_bands`. Rien ici n'emploie `intérêts
+# composés`, `prêt`, `dividende`, `portefeuille` ni `inflation` : ils sont
+# interdits à 9-12 et la barrière les retirerait de toute façon. `pour cent`
+# n'apparaît pas dans les entrées 5-8.
+
+id: truefalse-fr-01
+game_type: true_false
+language: fr
+title: Vrai ou faux — l'argent et ASPIRE
+source: ASPIRE knowledge base
+
+closing:
+  lead: Tu en sais maintenant plus que beaucoup d'adultes là-dessus.
+  text: >-
+    Ce que tu viens de revoir, ce sont les trois choses qui décident presque
+    tout : ce qui t'appartient, quand tu pourras t'en servir, et pourquoi
+    attendre a de la valeur. Personne ne naît en le sachant. Cela s'apprend une
+    question à la fois, comme tu viens de le faire.
+
+entries:
+  - id: tffr-01-moities
+    statement: Les EC$1 000 d'ASPIRE sont tous placés sur un compte d'épargne.
+    answer: false
+    topic: Les deux moitiés
+    topic_line: " — la moitié épargnée, la moitié investie."
+    takeaway: EC$500 sont épargnés. EC$500 achètent des parts d'entreprises publiques.
+    explanation: >-
+      Les EC$1 000 sont partagés en deux. EC$500 vont sur un compte d'épargne à
+      la National Bank. Les autres EC$500 achètent des parts d'entreprises qui
+      appartiennent à l'État. Deux moitiés, deux rôles différents.
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15", "16-18"]
+
+  - id: tffr-01-attendre
+    statement: Tu peux retirer l'argent d'ASPIRE quand tu veux.
+    answer: false
+    topic: Quand il arrive
+    topic_line: " — à la fin du programme, pas avant."
+    takeaway: Cinq ans au minimum, ou jusqu'à 18 ans. Selon ce qui arrive en dernier.
+    explanation: >-
+      L'argent reste jusqu'à la fin du programme : cinq ans au minimum, ou
+      jusqu'à tes 18 ans, selon ce qui arrive en dernier. Si tu entres à 15 ans,
+      tu finis à 20. Ce que ta famille ajoute attend aussi.
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15", "16-18"]
+
+  - id: tffr-01-gratuit
+    statement: Ta famille doit payer pour que tu entres dans ASPIRE.
+    answer: false
+    topic: Le coût
+    topic_line: " — cela ne coûte rien."
+    takeaway: L'inscription est gratuite et l'argent vient du Gouvernement.
+    explanation: >-
+      Cela ne coûte rien. L'inscription est gratuite et les EC$1 000 sont versés
+      par le Gouvernement de Saint-Christophe-et-Niévès pour chaque enfant qui
+      remplit les conditions. Aucune famille ne paie pour entrer.
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, orion, guest]
+    age_bands: ["5-8", "9-12", "13-15", "16-18"]
+
+  - id: tffr-01-pareil
+    statement: Certains enfants reçoivent plus d'argent d'ASPIRE que d'autres.
+    answer: false
+    topic: Tous pareil
+    topic_line: " — la même somme pour chaque enfant."
+    takeaway: La loi impose la même somme de départ à chaque enfant qui y a droit.
+    explanation: >-
+      Tout le monde reçoit la même chose. La loi ASPIRE de 2024 impose la même
+      somme de départ pour chaque enfant qui remplit les conditions, sans
+      distinction. Personne ne reçoit plus qu'un autre.
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15", "16-18"]
+
+  - id: tffr-01-garder
+    statement: Épargner, c'est garder de l'argent pour plus tard au lieu de le dépenser aujourd'hui.
+    answer: true
+    topic: Épargner
+    topic_line: " — garder aujourd'hui pour avoir demain."
+    takeaway: Épargner, c'est ne pas dépenser maintenant, exprès.
+    explanation: >-
+      C'est exactement cela. Épargner, c'est mettre de côté aujourd'hui pour
+      l'avoir plus tard. Le difficile n'est pas de le comprendre, c'est de le
+      faire quand quelque chose te plaît beaucoup.
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: tffr-01-besoin
+    statement: Un jouet neuf est un besoin.
+    answer: false
+    topic: Besoin ou envie
+    topic_line: " — l'un sert à vivre, l'autre à se faire plaisir."
+    takeaway: Manger, boire, se vêtir et se loger sont des besoins. Un jouet est une envie.
+    explanation: >-
+      Un jouet est une envie. Les besoins, c'est ce qu'il faut pour vivre : de
+      quoi manger, de quoi boire, des vêtements, un toit. Les envies ne sont pas
+      un problème, mais les besoins passent d'abord quand l'argent ne suffit pas
+      pour les deux.
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: tffr-01-prudence
+    statement: Si quelqu'un te promet de gagner de l'argent et que tu ne peux rien perdre, il faut accepter vite.
+    answer: false
+    topic: Prudence
+    topic_line: " — ce qu'on ne dit pas ne disparaît pas."
+    takeaway: Un placement peut toujours baisser. Qui dit le contraire cache quelque chose.
+    explanation: >-
+      Un placement peut monter ou baisser ; c'est vrai à chaque fois. Celui qui
+      laisse cette partie hors de la phrase ne l'a pas fait disparaître : il l'a
+      cachée. La précipitation fait partie du procédé. Montre-le à une personne
+      adulte avant de répondre.
+    difficulty_band: core
+    persona_bands: [orion, guest]
+    age_bands: ["13-15", "16-18"]
+
+  - id: tffr-01-douze
+    statement: À partir de 12 ans tu peux t'inscrire toi-même à ASPIRE.
+    answer: true
+    topic: S'inscrire
+    topic_line: " — dès 12 ans, tout seul."
+    takeaway: Dès 12 ans tu peux ouvrir ton propre compte sur aspire.gov.kn ou en agence.
+    explanation: >-
+      Oui. Dès 12 ans tu peux t'inscrire toi-même, sur aspire.gov.kn ou dans une
+      agence. Avant cet âge, c'est ta mère, ton père ou la personne qui s'occupe
+      de toi. Beaucoup de jeunes de ton âge ignorent qu'ils peuvent déjà le faire.
+    difficulty_band: core
+    persona_bands: [orion, guest]
+    age_bands: ["13-15", "16-18"]

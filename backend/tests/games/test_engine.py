@@ -58,11 +58,23 @@ def test_unknown_game_type_is_refused(engine):
         engine.start(SESSION, game_type="sudoku")
 
 
-def test_language_without_a_set_is_refused(engine):
-    """Better no puzzle than a wrong one."""
+def test_language_without_a_set_is_refused(store, sink, settings):
+    """Better no puzzle than a wrong one.
+
+    Built on `hangman` rather than the shared `engine` fixture, which is word
+    scramble: Spanish and French are no longer empty everywhere. `true_false`
+    and `word_scramble` are authored in both, so asked of either this would
+    assert nothing. Hangman is still English only and is the honest subject.
+    """
+    from app.games.engine import GameEngine
+    from app.games.hangman import HangmanGame
+
+    only_hangman = GameEngine(
+        games=[HangmanGame(settings)], store=store, sink=sink, settings=settings
+    )
     for language in (Language.ES, Language.FR):
         with pytest.raises(NoContentAvailable):
-            engine.start(SESSION, language=language)
+            only_hangman.start(SESSION, language=language, game_type="hangman")
 
 
 # --- persona gate ----------------------------------------------------------

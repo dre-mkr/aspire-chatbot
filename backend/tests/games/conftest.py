@@ -42,7 +42,18 @@ def sink() -> MemoryEventSink:
 
 @pytest.fixture
 def engine(game, store, sink, settings) -> GameEngine:
-    return GameEngine(games=[game], store=store, sink=sink, settings=settings)
+    """Word scramble, plus hangman.
+
+    Hangman is here so a test can still ask about a language that has no set.
+    `true_false` and `word_scramble` are authored in Spanish and French now, so
+    the scramble alone can no longer be asked that question -- and a test that
+    cannot fail is worse than one that is missing.
+    """
+    from app.games.hangman import HangmanGame
+
+    return GameEngine(
+        games=[game, HangmanGame(settings)], store=store, sink=sink, settings=settings
+    )
 
 
 @pytest.fixture

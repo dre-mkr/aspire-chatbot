@@ -157,9 +157,23 @@ class TestTheRowsThemselves:
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
     def test_nova(self, band, status):
-        """Neither servicing nor registration: both act on another person's account."""
+        """Teaching yes; servicing and registration no.
+
+        The exclusion this docstring always named -- servicing and registration
+        both act on another person's account -- is unchanged and is the whole
+        of it. What used to sit alongside it was the ABSENCE of any teaching
+        agent, which nothing argued for: the teacher persona could neither
+        teach nor be taught, while `aurora`, a parent, held `learning_preview`
+        and could see the lessons Azuri delivers.
+
+        A teacher has the stronger claim on the preview -- the guardian is
+        curious about the lesson, the teacher is delivering it -- and on the
+        tutor, because working out how compounding lands before standing in
+        front of Form 3 is the ordinary case.
+        """
         assert allowed_agents("nova", band, status, user_id=USER) == [
             "qa_agent",
+            "learning_preview",
             "escalate_agent",
         ]
 
@@ -277,21 +291,54 @@ class TestEveryoneNeverWidens:
     result is a set the caller's own band already had.
     """
 
-    #: What the band's own default persona is granted, for comparison.
-    DEFAULT_FOR_BAND = {
-        "5-8": "stella",
-        "9-12": "stella",
-        "13-15": "orion",
-        "16-18": "orion",
-        "adult": "nova",
+    #: Every persona that can really hold each band. `guest` must be a subset
+    #: of ALL of them, which is the property the class docstring states.
+    PERSONAS_AT_BAND = {
+        "5-8": ("stella",),
+        "9-12": ("kaleb",),
+        "13-15": ("orion",),
+        "16-18": ("orion",),
+        "adult": ("aurora", "nova"),
     }
 
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
-    def test_it_matches_the_bands_own_default_persona(self, band, status):
-        assert allowed_agents("guest", band, status, user_id=USER) == allowed_agents(
-            self.DEFAULT_FOR_BAND[band], band, status, user_id=USER
-        )
+    def test_it_grants_nothing_the_band_did_not_already_have(self, band, status):
+        """The property, as the docstring states it.
+
+        This replaced an equality check against a single "default persona for
+        the band", which was a STRONGER claim than the class ever argued for and
+        was true only by accident: `guest` at `adult` returned `list(_NOVA)`, so
+        it matched Azuri's row because it WAS Azuri's row. Widening Azuri
+        widened guest with it -- the escalation this class exists to stop --
+        and the equality is what surfaced it.
+
+        Its lookup table had also drifted from the app in two places: it said
+        `9-12 -> stella` where `DEFAULT_PERSONA` says `kaleb`, and
+        `adult -> nova` where it says `aurora`. Repairing the table would have
+        kept a claim the class does not make; asserting the subset against every
+        persona that can hold the band is what it does make, and it is stricter
+        for the adult band, which has two.
+        """
+        theirs = set(allowed_agents("guest", band, status, user_id=USER))
+        for persona in self.PERSONAS_AT_BAND[band]:
+            row = set(allowed_agents(persona, band, status, user_id=USER))
+            assert theirs <= row, (
+                f"guest/{band} reaches {sorted(theirs - row)}, which "
+                f"{persona}/{band} does not grant"
+            )
+
+    def test_the_adult_visitor_row_is_its_own_thing(self):
+        """Named, so the reuse cannot come back by accident.
+
+        `guest` at `adult` is factual answers and a way to reach a person. Not
+        registration, which is Aurora's; not teaching, which needs a band this
+        reader has not given.
+        """
+        assert allowed_agents("guest", "adult", "prospect", user_id=USER) == [
+            "qa_agent",
+            "escalate_agent",
+        ]
 
     @pytest.mark.parametrize("band", ALL_BANDS)
     @pytest.mark.parametrize("status", ALL_STATUSES)
@@ -320,7 +367,7 @@ class TestEveryoneNeverWidens:
     #: `account.DEFAULT_PERSONA` and `account.ROLE_PERSONA`.
     REAL_PAIRS = [
         ("stella", "5-8"),
-        ("stella", "9-12"),
+        ("kaleb", "9-12"),
         ("orion", "13-15"),
         ("orion", "16-18"),
         ("aurora", "adult"),

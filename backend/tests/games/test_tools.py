@@ -57,8 +57,22 @@ def test_list_games_describes_what_actually_exists(engine):
             "name": "Unscramble These Words",
             "items": 52,
             "supports_hints": True,
+            # `es` and `fr` now, because the word scramble is authored in both
+            # -- AHORRAR and EPARGNER, chosen rather than translated.
+            "languages": ["en", "es", "fr"],
+        },
+        {
+            # Hangman joined the fixture so a test can still ask about a
+            # language with no set. It is English only, and listing it as such
+            # is what lets the reader be told so rather than shown an error.
+            "id": "hangman",
+            "name": "Hangman",
+            # 4, not the authored total: hangman has a round_size, so 
+            # is the length of a round rather than the size of the bank.
+            "items": 4,
+            "supports_hints": True,
             "languages": ["en"],
-        }
+        },
     ]
 
 
@@ -107,7 +121,10 @@ def test_starting_twice_declines_cleanly():
 
 
 def test_an_unauthored_language_declines_cleanly():
-    payload = tools_module.start_game.invoke({"language": "es"}, config=cfg())
+    """`hangman` — Spanish and French are authored for two of the four games now."""
+    payload = tools_module.start_game.invoke(
+        {"game_type": "hangman"}, config=cfg(language="es")
+    )
     assert payload["ok"] is False
     assert payload["reason"] == "no_set_for_language"
 
