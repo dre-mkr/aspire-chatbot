@@ -1,0 +1,204 @@
+# ASPIRE quiz ladder — Kaleb set 1 (ages 9-12)
+#
+# WRITTEN FOR KALEB, NOT INHERITED. Until this file existed Kaleb was the only
+# persona who could not start this game: production returned
+# `no_set_for_language` for kaleb/9-12 while stella and orion both dealt a round.
+#
+# Pitched between the two banks that already exist. Stella's set stops at the
+# notes in a hand; Orion's goes to compounding and the rule of 72, both of which
+# use `compound` -- banned at 9-12, so neither the question nor the explanation
+# may go there. What is left is the honest middle: what interest IS without
+# pricing it up, the two halves of the ASPIRE contribution, needs before wants,
+# scarcity, and the one guard rail this age genuinely needs, which is that an
+# offer promising no risk is lying.
+#
+# Every factual claim traces to a row of data/knowledge_base.csv, named in
+# `source_document`. Rates carry their date: the ECCU minimum savings rate has
+# moved twice since 1985 and a card implying a number is permanent teaches the
+# wrong thing twice.
+
+id: millionaire-kaleb-01
+game_type: millionaire
+language: en
+title: What the money is actually doing
+source: ASPIRE knowledge base
+
+closing:
+  lead: You already own some of this. That is the part worth sitting with.
+  text: >-
+    Every eligible child in the Federation has EC$1,000 in their name — half
+    saved, half invested — and none of it was earned. What happens to it between
+    now and the day you can reach it depends mostly on whether you understand
+    what it is doing. The questions here are the ones that decide that: what
+    interest is, what owning a share means, and why anyone promising money with
+    no risk is selling you something.
+
+entries:
+  - id: millionaire-kaleb-01-what-interest-is
+    language: en
+    question: What is interest on a savings account?
+    choices:
+      - A fee the bank charges you for holding your money
+      - Money the bank pays you for keeping your savings with it
+      - A tax the government takes from money you save
+      - The amount you are allowed to take out each month
+    answer_index: 1
+    explanation: >-
+      Interest is what a bank pays you for the use of your deposit. You do
+      nothing to earn it except leave the money alone. In the ECCU there is a
+      floor under it: banks may not pay less than 2 percent a year on savings, a
+      rate in force since 2015, and it is credited twice a year.
+    topic: Saving
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-020, FIN-037, FIN-058)
+
+  - id: millionaire-kaleb-01-the-split
+    language: en
+    question: ASPIRE puts EC$1,000 in a child's name. How is it split?
+    choices:
+      - All EC$1,000 into one savings account
+      - EC$500 saved and EC$500 invested in shares
+      - EC$500 saved and EC$500 given to the family as cash
+      - It is paid out at EC$100 a year for ten years
+    answer_index: 1
+    explanation: >-
+      Half and half. EC$500 goes into a savings account at the
+      St. Kitts-Nevis-Anguilla National Bank, and EC$500 is invested in shares of
+      local government-owned entities. None of it arrives as spendable cash, and
+      the ASPIRE Act, 2024 says every eligible child gets the same amount.
+    topic: The ASPIRE programme
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-078, ASP-288, ASP-095)
+
+  - id: millionaire-kaleb-01-owning-a-share
+    language: en
+    question: If you own shares in a company, what do you actually own?
+    choices:
+      - A promise from the company to pay you back later
+      - Nothing until the company decides to give you something
+      - A small piece of the company itself
+      - A place in a queue to buy something cheaply
+    answer_index: 2
+    explanation: >-
+      A share is a piece of the company. Owning one makes you a part-owner,
+      which is why the invested half of an ASPIRE account matters: every
+      participant genuinely owns a small piece of local government-owned
+      entities, rather than being owed money by them.
+    topic: Investing
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-095, ASP-276, FIN-118)
+
+  - id: millionaire-kaleb-01-no-risk-offer
+    language: en
+    question: Somebody offers to double your money with no risk at all. What should you think?
+    choices:
+      - It is a good deal and you should move quickly
+      - Every investment can lose value, so the offer is not honest
+      - It is fine as long as a friend recommended them
+      - Banks do this too, so it must be normal
+    answer_index: 1
+    explanation: >-
+      Values can go down as well as up — that is true of every investment there
+      is. An offer that removes the risk has not removed it, it has hidden it or
+      invented it. The pressure to decide fast is part of the trick. Anything
+      like this is worth showing to an adult before you answer.
+    topic: Staying safe with money
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-095, FIN-265)
+
+  - id: millionaire-kaleb-01-needs-first
+    language: en
+    question: You have EC$40. Lunch for the week costs EC$25 and a game costs EC$35. What does budgeting say?
+    choices:
+      - Buy the game, then work out lunch afterwards
+      - Cover lunch first, because it is a need
+      - Split the money evenly between the two
+      - Buy neither and save the whole EC$40
+    answer_index: 1
+    explanation: >-
+      Needs come before wants when the money will not stretch to both — and here
+      it will not, because EC$25 and EC$35 is EC$60. Lunch is a need. That leaves
+      EC$15, which is the beginning of saving for the game rather than the end of
+      the question. Saving the whole EC$40 is not the answer either, because then
+      you do not eat.
+    topic: Budgeting
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-011, FIN-013, FIN-002)
+
+  - id: millionaire-kaleb-01-when-you-get-it
+    language: en
+    question: When can an ASPIRE participant reach the money?
+    choices:
+      - On their next birthday
+      - After five years, or at 18 — whichever comes later
+      - As soon as a parent asks the bank for it
+      - Never, it stays in the programme forever
+    answer_index: 1
+    explanation: >-
+      A minimum of five years in the programme, or until they turn 18, whichever
+      of those comes later. Join at 6 and you finish at 18. Join at 15 and you
+      finish at 20. Anything a family adds themselves is released at the same
+      time, not before.
+    topic: The ASPIRE programme
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-00A, ASP-00B, ASP-00C)
+
+  - id: millionaire-kaleb-01-scarcity
+    language: en
+    question: Why does anyone need to budget at all?
+    choices:
+      - Because banks require it before opening an account
+      - Because there is never enough for everything, so every choice costs another
+      - Because it is a school subject
+      - Because money loses value if you do not write it down
+    answer_index: 1
+    explanation: >-
+      This is scarcity. There is never enough of everything for everyone, so
+      choosing to use money on one thing is always choosing not to use it on
+      something else. A budget is just that choice made on purpose and in
+      advance, rather than by accident once the money has gone.
+    topic: Budgeting
+    difficulty_band: stretch
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-002, FIN-011)
+
+  - id: millionaire-kaleb-01-adding-your-own
+    language: en
+    question: Can a family add their own money to an ASPIRE savings account?
+    choices:
+      - No, the account is locked to the government's EC$500
+      - Yes, and it can be taken back out at any time
+      - Yes, but it is released only when the programme is completed
+      - Only in the first year after joining
+    answer_index: 2
+    explanation: >-
+      Extra deposits are allowed and encouraged. What surprises people is the
+      second half: money a family adds cannot be withdrawn early either. It is
+      released with everything else on completion — five years, or 18, whichever
+      is later — so it should be money nobody needs back sooner.
+    topic: The ASPIRE programme
+    difficulty_band: stretch
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-00C, ASP-00B)

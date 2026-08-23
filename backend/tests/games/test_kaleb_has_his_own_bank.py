@@ -126,3 +126,123 @@ class TestTheTagIsWhatMakesFilteringPossible:
         from app.games.engine import GameEngine
 
         assert "serves every band" in (GameEngine._servable.__doc__ or "")
+
+
+class TestEveryGameTypeCanActuallyBeServed:
+    """The hole the aggregate count could not see.
+
+    `test_he_has_items_of_his_own` asserts Kaleb has at least ten seed entries.
+    He had twelve — six word-scramble and six true/false — and ZERO hangman and
+    ZERO millionaire. The suite stayed green while production returned
+    `no_set_for_language` for kaleb/9-12 on both, and returned a round for
+    stella and orion on the same request. Measured on aspire.eccugenai.app,
+    23 August 2026.
+
+    Removing a persona from `_CONTENT_BANK` is what makes this reachable: while
+    he borrowed Stella's bank he was served the wrong content, and once he
+    stopped he was served none. A per-persona total cannot tell those apart. A
+    per-GAME-TYPE total is the only count that can.
+    """
+
+    @staticmethod
+    def _games():
+        from app.games import hangman, millionaire, scramble, truefalse
+
+        import inspect
+
+        found = {}
+        for name, module in {
+            "hangman": hangman,
+            "millionaire": millionaire,
+            "word_scramble": scramble,
+            "truefalse": truefalse,
+        }.items():
+            cls = next(
+                obj
+                for obj in vars(module).values()
+                if inspect.isclass(obj) and hasattr(obj, "sets_for")
+            )
+            found[name] = cls()
+        return found
+
+    @pytest.mark.parametrize(
+        "game_type", ["hangman", "millionaire", "word_scramble", "truefalse"]
+    )
+    def test_kaleb_can_be_dealt_a_round_of_every_game(self, game_type: str):
+        from app.domain import Language, Persona
+
+        game = self._games()[game_type]
+        items = [
+            entry
+            for game_set in game.sets_for(Language.EN)
+            for entry in game_set.entries
+            if Persona.KALEB in entry.persona_bands
+        ]
+        assert items, (
+            f"no {game_type} entry lists `kaleb`, so the engine raises "
+            f"NoContentAvailable when a 9-12 reader asks for it. He is not in "
+            f"`_CONTENT_BANK`, so there is nothing to fall back to."
+        )
+
+    @pytest.mark.parametrize(
+        "game_type", ["hangman", "millionaire", "word_scramble", "truefalse"]
+    )
+    def test_no_persona_outside_the_content_bank_is_left_with_nothing(
+        self, game_type: str
+    ):
+        """The general form, so the next persona to be split cannot repeat it.
+
+        A persona in `_CONTENT_BANK` borrows and is fine. A persona out of it
+        must have its own entries for every game, or that game is a hard error
+        for that reader alone.
+        """
+        from app.domain import Language, Persona
+        from app.games.engine import _CONTENT_BANK
+
+        game = self._games()[game_type]
+        empty = []
+        for persona in (Persona.STELLA, Persona.KALEB, Persona.ORION, Persona.GUEST):
+            if persona in _CONTENT_BANK:
+                continue
+            served = [
+                entry
+                for game_set in game.sets_for(Language.EN)
+                for entry in game_set.entries
+                if persona in entry.persona_bands
+            ]
+            if not served:
+                empty.append(persona.value)
+        assert not empty, (
+            f"{game_type} has no entries for {empty}, and none of them borrow a "
+            f"bank — the engine raises NoContentAvailable for those readers"
+        )
+
+    def test_his_hangman_words_are_not_skyes(self):
+        """The whole point of the split, checked on the words themselves."""
+        from app.domain import Language, Persona
+
+        game = self._games()["hangman"]
+        words = {
+            entry.word
+            for game_set in game.sets_for(Language.EN)
+            for entry in game_set.entries
+            if hasattr(entry, "word")
+        }
+        skye = {
+            entry.word
+            for game_set in game.sets_for(Language.EN)
+            for entry in game_set.entries
+            if hasattr(entry, "word") and Persona.STELLA in entry.persona_bands
+        }
+        kaleb = {
+            entry.word
+            for game_set in game.sets_for(Language.EN)
+            for entry in game_set.entries
+            if hasattr(entry, "word") and Persona.KALEB in entry.persona_bands
+        }
+        assert kaleb, "no hangman words for Kaleb"
+        assert not (kaleb & skye), (
+            f"Kaleb and Skye share hangman words {sorted(kaleb & skye)} — the "
+            f"5-8 list reads as a demotion to a reader in secondary school"
+        )
+        assert words  # the set is non-empty at all
