@@ -212,7 +212,6 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [menuOpen]);
 
-
 	/**
 	 * Who is signed in, from the same store the chat rail reads.
 	 *
@@ -438,24 +437,24 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			<header className="landing-head relative z-10 w-full px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
 				<div className="flex items-center gap-8">
 					<Brandmark variant="header" />
-						{/* One nav, one weight.
-						 *
-						 * "Explore" was magenta and bold, "Journey" was ink/70 and NOT
-						 * bold, and the other three were ink/70 AND bold — three
-						 * treatments across five peers, with the magenta one reading as
-						 * the current page on a page it is not. */}
-						<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
-							{NAV.map((item) => (
-								<button
-									key={item.view}
-									type="button"
-									onClick={() => setActiveView(item.view)}
-									className="text-ink/70 hover:text-magenta transition-colors cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-magenta"
-								>
-									{item.label}
-								</button>
-							))}
-						</nav>
+					{/* One nav, one weight.
+					 *
+					 * "Explore" was magenta and bold, "Journey" was ink/70 and NOT
+					 * bold, and the other three were ink/70 AND bold — three
+					 * treatments across five peers, with the magenta one reading as
+					 * the current page on a page it is not. */}
+					<nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
+						{NAV.map((item) => (
+							<button
+								key={item.view}
+								type="button"
+								onClick={() => setActiveView(item.view)}
+								className="text-ink/70 hover:text-magenta transition-colors cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-magenta"
+							>
+								{item.label}
+							</button>
+						))}
+					</nav>
 				</div>
 				{/* `gap-3`, not `gap-4`: this row carries one more control than it
 				    did — the phone menu button — and four of them at 44px need the
@@ -506,7 +505,10 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 						aria-label="View learning history"
 						className="w-11 h-11 rounded-full border border-[var(--control-line)] flex items-center justify-center text-plum bg-white hover:bg-magenta/10 hover:text-magenta hover:border-magenta transition-colors cursor-pointer"
 					>
-						<i className="ph-duotone ph-magic-wand text-lg" aria-hidden="true"></i>
+						<i
+							className="ph-duotone ph-magic-wand text-lg"
+							aria-hidden="true"
+						></i>
 					</button>
 
 					{/* THE PHONE HAD NO NAVIGATION AT ALL.
@@ -841,7 +843,10 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 									className="bg-white/90 backdrop-blur-xl border border-[var(--control-line)] rounded-2xl p-3 flex flex-col items-start gap-2 hover:border-magenta transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-magenta"
 								>
 									<div className="w-11 h-11 rounded-xl bg-plum/5 flex items-center justify-center text-plum">
-										<i className={`${ask.icon} text-2xl`} aria-hidden="true"></i>
+										<i
+											className={`${ask.icon} text-2xl`}
+											aria-hidden="true"
+										></i>
 									</div>
 									<div className="text-left mt-1">
 										<div className="text-sm font-bold text-ink leading-tight mb-0.5">

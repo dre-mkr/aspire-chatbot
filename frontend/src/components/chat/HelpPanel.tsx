@@ -247,8 +247,9 @@ function HelpContent() {
 					are four: <strong>Word scramble</strong>, where you unscramble a money
 					word; <strong>True or false</strong>, which explains the answer after
 					each round; <strong>Millionaire</strong>, four choices a question; and{" "}
-					<strong>Hangman</strong>, one letter at a time. You can ask for a clue,
-					skip a question, or leave at any point — your score is kept either way.
+					<strong>Hangman</strong>, one letter at a time. You can ask for a
+					clue, skip a question, or leave at any point — your score is kept
+					either way.
 				</p>
 				<p className="help__note">
 					Questions are matched to who you are using ASPIRE AI as, so a younger

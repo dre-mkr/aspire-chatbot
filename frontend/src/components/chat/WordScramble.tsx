@@ -14,8 +14,8 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
-import { GAME_COPY } from "./game-copy";
 import { GameHead } from "./GameHead";
+import { GAME_COPY } from "./game-copy";
 
 /** The word scramble, played in the thread. */
 

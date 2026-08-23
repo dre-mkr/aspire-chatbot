@@ -12,8 +12,8 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
-import { GAME_COPY } from "./game-copy";
 import { GameHead } from "./GameHead";
+import { GAME_COPY } from "./game-copy";
 
 /** Hangman, played in the thread. */
 
@@ -216,127 +216,128 @@ export function Hangman({
 				) : null}
 
 				{complete ? (
-				<Complete
-					covered={covered}
-					summary={summary}
-					closing={summary?.closing ?? null}
-					onExit={leave}
-				/>
-			) : settled ? (
-				<div className="game__resolved">
-					<p className="game__word">
-						<span aria-hidden="true">
-							{settled.reveal.answer.split("").join(" ")}
-						</span>
-						{/* The spaced letters are for the eye. A screen reader gets the
+					<Complete
+						covered={covered}
+						summary={summary}
+						closing={summary?.closing ?? null}
+						onExit={leave}
+					/>
+				) : settled ? (
+					<div className="game__resolved">
+						<p className="game__word">
+							<span aria-hidden="true">
+								{settled.reveal.answer.split("").join(" ")}
+							</span>
+							{/* The spaced letters are for the eye. A screen reader gets the
 						    word, because "S A V E" is read out as four letters. */}
-						<span className="sr-only">{settled.reveal.answer}</span>
-					</p>
-					<p className="game__result" data-outcome={settled.outcome}>
-						<span className="game__result-icon" aria-hidden="true">
-							{settled.outcome === "correct" ? <CheckIcon /> : null}
-						</span>
-						{settled.outcome === "correct"
-							? COPY.got(settled.reveal.answer)
-							: settled.outcome === "skipped"
-								? COPY.shown(settled.reveal.answer)
-								: COPY.lost(settled.reveal.answer)}
-					</p>
-					<div className="game__meaning">
-						<span className="game__meaning-label">
-							<SparkIcon size={13} />
-							{COPY.meaning}
-						</span>
-						<p className="game__meaning-text">{settled.reveal.explanation}</p>
+							<span className="sr-only">{settled.reveal.answer}</span>
+						</p>
+						<p className="game__result" data-outcome={settled.outcome}>
+							<span className="game__result-icon" aria-hidden="true">
+								{settled.outcome === "correct" ? <CheckIcon /> : null}
+							</span>
+							{settled.outcome === "correct"
+								? COPY.got(settled.reveal.answer)
+								: settled.outcome === "skipped"
+									? COPY.shown(settled.reveal.answer)
+									: COPY.lost(settled.reveal.answer)}
+						</p>
+						<div className="game__meaning">
+							<span className="game__meaning-label">
+								<SparkIcon size={13} />
+								{COPY.meaning}
+							</span>
+							<p className="game__meaning-text">{settled.reveal.explanation}</p>
+						</div>
+						<div className="game__actions">
+							<button
+								type="button"
+								className="game__btn game__btn--go"
+								onClick={() => setSettled(null)}
+								disabled={busy}
+							>
+								{summary ? COPY.last : COPY.next}
+							</button>
+						</div>
 					</div>
-					<div className="game__actions">
-						<button
-							type="button"
-							className="game__btn game__btn--go"
-							onClick={() => setSettled(null)}
-							disabled={busy}
-						>
-							{summary ? COPY.last : COPY.next}
-						</button>
-					</div>
-				</div>
-			) : (
-				<>
-					{/*
+				) : (
+					<>
+						{/*
 					  The board is read as a word, not as a row of letters. Without the
 					  label a screen reader says "H underscore N G underscore A N",
 					  which is not what is on the screen and not a word.
 					*/}
-					<p className="game__word">
-						<span aria-hidden="true">{board}</span>
-						<span className="sr-only">
-							{`The word so far: ${board.replace(/_/g, "blank")}`}
-						</span>
-					</p>
+						<p className="game__word">
+							<span aria-hidden="true">{board}</span>
+							<span className="sr-only">
+								{`The word so far: ${board.replace(/_/g, "blank")}`}
+							</span>
+						</p>
 
-					<Lives left={livesLeft} of={LIVES} />
+						<Lives left={livesLeft} of={LIVES} />
 
-					{state.hints.length ? (
-						<ul className="game__hints">
-							{state.hints.map((line) => (
-								<li key={line}>
-									<LampIcon /> {line}
-								</li>
-							))}
-						</ul>
-					) : null}
+						{state.hints.length ? (
+							<ul className="game__hints">
+								{state.hints.map((line) => (
+									<li key={line}>
+										<LampIcon /> {line}
+									</li>
+								))}
+							</ul>
+						) : null}
 
-					<div className="hangman__keys">
-						{ALPHABET.map((letter) => {
-							const used = tried.includes(letter);
-							const hit = used && board.includes(letter);
-							return (
+						<div className="hangman__keys">
+							{ALPHABET.map((letter) => {
+								const used = tried.includes(letter);
+								const hit = used && board.includes(letter);
+								return (
+									<button
+										key={letter}
+										type="button"
+										className="hangman__key"
+										data-used={used || undefined}
+										data-hit={hit || undefined}
+										onClick={() => guessLetter(letter)}
+										disabled={busy || used || !asking}
+										// A tried letter says which way it went in colour alone,
+										// which is nothing to a screen reader and nothing to a
+										// reader who cannot tell the two washes apart. The name
+										// says it in words.
+										aria-label={
+											hit
+												? `${letter}, in the word`
+												: used
+													? `${letter}, not in the word`
+													: letter
+										}
+									>
+										{letter}
+									</button>
+								);
+							})}
+						</div>
+
+						<div className="game__actions">
+							{state.supports_hints &&
+							state.hint_level < state.max_hint_level ? (
 								<button
-									key={letter}
 									type="button"
-									className="hangman__key"
-									data-used={used || undefined}
-									data-hit={hit || undefined}
-									onClick={() => guessLetter(letter)}
-									disabled={busy || used || !asking}
-									// A tried letter says which way it went in colour alone,
-									// which is nothing to a screen reader and nothing to a
-									// reader who cannot tell the two washes apart. The name
-									// says it in words.
-									aria-label={
-										hit
-											? `${letter}, in the word`
-											: used
-												? `${letter}, not in the word`
-												: letter
-									}
+									className="game__btn game__btn--ghost"
+									onClick={hint}
+									disabled={busy}
 								>
-									{letter}
+									<LampIcon /> {COPY.hint}
 								</button>
-							);
-						})}
-					</div>
-
-					<div className="game__actions">
-						{state.supports_hints && state.hint_level < state.max_hint_level ? (
+							) : null}
 							<button
 								type="button"
 								className="game__btn game__btn--ghost"
-								onClick={hint}
+								onClick={reveal}
 								disabled={busy}
 							>
-								<LampIcon /> {COPY.hint}
+								{COPY.skip}
 							</button>
-						) : null}
-						<button
-							type="button"
-							className="game__btn game__btn--ghost"
-							onClick={reveal}
-							disabled={busy}
-						>
-							{COPY.skip}
-						</button>
-					</div>
+						</div>
 					</>
 				)}
 			</div>

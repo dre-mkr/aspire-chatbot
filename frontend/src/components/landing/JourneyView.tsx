@@ -47,7 +47,9 @@ export function JourneyView({
 				</div>
 
 				<section className="panel">
-					<h2 className="panel__title">Your progress lives with your account</h2>
+					<h2 className="panel__title">
+						Your progress lives with your account
+					</h2>
 					<p>Sign in and your badges, lessons and coins follow you here.</p>
 					{/* The empty state named an action and gave no way to take it. */}
 					{onSignIn ? (
