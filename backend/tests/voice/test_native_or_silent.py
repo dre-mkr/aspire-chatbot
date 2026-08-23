@@ -67,13 +67,18 @@ class TestWhatCountsAsNative:
         assert profile.voice_id == "stella-es"
 
     def test_an_understudys_per_language_id_carries_nativeness(self):
-        """Kaleb understudies Stella. If her Spanish is cast, his Spanish is a
-        Spanish-cast voice -- the wrong character, which is the tradeoff every
-        understudy already is, but never the wrong language."""
-        registry = build_registry(_settings(voice_stella_es="stella-es"))
-        profile = registry[(Persona.KALEB, Language.ES)]
+        """Guest understudies Orion. If Orion's Spanish is cast, Guest's Spanish
+        is a Spanish-cast voice -- the wrong character, which is the tradeoff
+        every understudy already is, but never the wrong language.
+
+        Kaleb used to be the example here and no longer qualifies: he is in
+        `_NEVER_BORROWS_A_VOICE`, so his Spanish is silent whoever else is cast.
+        See `TestKalebNeverBorrows` below.
+        """
+        registry = build_registry(_settings(voice_orion_es="orion-es"))
+        profile = registry[(Persona.GUEST, Language.ES)]
         assert profile.native is True
-        assert profile.voice_id == "stella-es"
+        assert profile.voice_id == "orion-es"
 
     def test_an_understudys_base_id_does_not(self):
         registry = build_registry(_settings())
@@ -94,19 +99,31 @@ class TestBootIsUnchanged:
 class TestTheAudit:
     def test_uncast_pairs_names_exactly_the_silent_ones(self):
         pairs = uncast_pairs(_settings(voice_stella_es="stella-es"))
-        # Stella ES is cast; Kaleb ES rides it via the understudy. Everything
-        # else non-English is silent until somebody casts it.
+        # Stella ES is cast. Everything else non-English is silent until
+        # somebody casts it -- and Kaleb is silent in every language, English
+        # included, because he has no voice of his own to be native in.
         assert (Persona.STELLA, Language.ES) not in pairs
-        assert (Persona.KALEB, Language.ES) not in pairs
+        assert (Persona.KALEB, Language.ES) in pairs
         assert (Persona.STELLA, Language.FR) in pairs
-        assert all(language is not Language.EN for _, language in pairs)
+        assert all(
+            language is not Language.EN
+            for persona, language in pairs
+            if persona is not Persona.KALEB
+        )
 
     def test_a_fully_cast_deployment_has_no_uncast_pairs(self):
+        """FULLY cast now includes `VOICE_KALEB`.
+
+        The fixture used to call a deployment fully cast while never giving
+        Kaleb a voice at all -- he rode Stella's. That is the thing this build
+        stopped doing, so a deployment is not complete until he has his own.
+        """
         cast = {
             f"voice_{p.value}_{lang.value}": f"{p.value}-{lang.value}"
             for p in Persona
             for lang in (Language.ES, Language.FR)
         }
+        cast["voice_kaleb"] = "voice-kaleb"
         assert uncast_pairs(_settings(**cast)) == []
 
 
@@ -131,9 +148,52 @@ class TestTheEndpointRefuses:
         registry = build_registry(_settings(voice_stella_fr="stella-fr"))
         _require_native(registry[(Persona.STELLA, Language.FR)])  # no raise
 
-    def test_english_is_never_refused(self):
+    def test_english_is_never_refused_for_a_persona_with_its_own_voice(self):
+        """The base ids ARE the English casting, so English plays.
+
+        Kaleb is excluded because in this fixture he HAS no base id -- he would
+        be speaking in Skye's voice, and the whole point of
+        `_NEVER_BORROWS_A_VOICE` is that he does not. Give him one and the rule
+        below shows English coming straight back on.
+        """
         from app.voice.router import _require_native
 
         registry = build_registry(_settings())
         for persona in Persona:
+            if persona is Persona.KALEB:
+                continue
             _require_native(registry[(persona, Language.EN)])
+
+    def test_kalebs_english_comes_back_the_moment_he_is_cast(self):
+        from app.voice.router import _require_native
+
+        registry = build_registry(_settings(voice_kaleb="voice-kaleb"))
+        _require_native(registry[(Persona.KALEB, Language.EN)])  # no raise
+
+
+class TestKalebNeverBorrows:
+    """He boots on the understudy id and is refused audio in it.
+
+    The trade this makes is real and worth naming: until `VOICE_KALEB` is set,
+    the 9-12 band has NO audio at all rather than Skye's. That is the same
+    choice already made for an uncast language -- text intact, no sound, rather
+    than sound that tells the reader this was not built for them.
+    """
+
+    @pytest.mark.parametrize("language", list(Language))
+    def test_he_is_silent_in_every_language_until_he_is_cast(self, language):
+        registry = build_registry(_settings(voice_stella_es="stella-es",
+                                            voice_stella_fr="stella-fr"))
+        assert registry[(Persona.KALEB, language)].native is False
+
+    def test_he_still_boots(self):
+        """Silencing him must never take the app down."""
+        validate_registry(_settings())
+        registry = build_registry(_settings())
+        assert (Persona.KALEB, Language.EN) in registry
+
+    def test_casting_him_ends_it(self):
+        registry = build_registry(_settings(voice_kaleb="voice-kaleb"))
+        profile = registry[(Persona.KALEB, Language.EN)]
+        assert profile.native is True
+        assert profile.voice_id == "voice-kaleb"
