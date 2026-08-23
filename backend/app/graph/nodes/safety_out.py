@@ -725,7 +725,11 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = truncate_at_sentence(text, cap)
 
         # ── (c) PII ─────────────────────────────────────────────────────────
-        kinds = pii.kinds_in(text)
+        # `outbound=True`: a date only counts as a date of birth when something
+        # in the sentence says whose it is. Without it, every published date in
+        # the corpus -- ASPIRE's founding, the Bill passing the National
+        # Assembly, 57 more -- left here as "[a date of birth]".
+        kinds = pii.kinds_in(text, outbound=True)
         if kinds:
             report["pii_redacted"] = kinds
             logger.warning(
@@ -734,7 +738,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 state.get("session_id"),
                 ", ".join(kinds),
             )
-            text = pii.redact(text)
+            text = pii.redact(text, outbound=True)
 
         # ── (d) links and images ────────────────────────────────────────────
         if strips_links(persona, band):
