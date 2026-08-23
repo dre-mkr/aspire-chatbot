@@ -3,16 +3,38 @@ name: Deploy
 # Every push to main updates the VPS. The build itself happens on the box —
 # this job only opens an SSH session and runs deploy/update.sh, so the Actions
 # log is that script's output.
+# `verify` runs on pull requests as well as on pushes, and the reason is a
+# 13-day outage nobody saw.
+#
+# This workflow used to trigger on `push: main` only, which made `verify` a
+# POST-merge gate: it could stop a deploy, but it could never stop a merge. So
+# eleven auto-fixable formatting errors landed on main, `verify` went red, the
+# `deploy` job was skipped rather than run, and every subsequent merge inherited
+# a pipeline that had already failed. Twenty-five consecutive red runs, none of
+# them caused by the change that triggered them, none of them blocking anything
+# a reviewer could see. Nothing gated a pull request at all.
+#
+# `deploy` is guarded on the event below so a pull request can only ever verify.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 # Deploys are serialised. Cancelling an in-flight one is worse than queueing:
 # it could stop between the asset swap and the service restart.
+#
+# Pull requests must NOT share that queue. One group for everything would put
+# every PR's verify behind every other PR's, and behind production deploys --
+# turning a 4-minute check into an unbounded wait. So pushes keep the single
+# serialised production group, and each PR branch gets its own group where a
+# newer commit cancels the run it supersedes.
 concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+  group: >-
+    ${{ github.event_name == 'push'
+        && 'deploy-production'
+        || format('verify-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   # Nothing used to gate this workflow. 487 backend tests and a clean typecheck
@@ -114,6 +136,12 @@ jobs:
 
   deploy:
     needs: verify
+    # A pull request verifies. Only a push to main deploys.
+    #
+    # `needs: verify` alone would NOT have been enough once `pull_request` was
+    # added above: the deploy job would have run on every PR that passed verify
+    # and shipped an unmerged branch to production.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
