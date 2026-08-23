@@ -182,3 +182,77 @@ class TestTheChildRowsLeadWithTheDefinitiveAnswer:
             assert not asks_what_it_is, (
                 f"{row['id']} deflects a programme question: {row['question']!r}"
             )
+
+
+class TestTheScopeReachesEverySurface:
+    """The lift existed in one place and three surfaces did not have it.
+
+    A turn is one thing to a reader. When the prose may say `investment` under
+    the programme lift and the chip beneath it may not, the widget beside it may
+    not, and the lesson about it will not load, the ladder is contradicting
+    itself inside a single screen.
+    """
+
+    def test_chips_get_the_same_scope_as_the_prose(self):
+        from app.graph.nodes.safety_out import chips_within_band
+
+        chips = ["What is ASPIRE?", "Where is my investment?", "How much do I get?"]
+        kept, dropped = chips_within_band(chips, "5-8")
+        assert "Where is my investment?" in dropped, "the blanket rule should still bite"
+
+        kept, dropped = chips_within_band(chips, "5-8", programme_scope=True)
+        assert not dropped, f"a programme chip was deleted: {dropped}"
+        assert len(kept) == 3
+
+    def test_a_widget_may_label_the_half_the_sentence_just_named(self):
+        from app.widgets.validate import GateContext
+        from app.safety import vocab
+
+        blanket = GateContext(age_band="5-8")
+        scoped = GateContext(age_band="5-8", programme_scope=True)
+        assert blanket.programme_scope is False
+        assert scoped.programme_scope is True
+        assert vocab.check("EC$500 invested", "5-8")
+        assert not vocab.check("EC$500 invested", "5-8", programme_scope=True)
+
+    @pytest.mark.parametrize(
+        "band,word",
+        [("5-8", "investment"), ("5-8", "interest"), ("9-12", "compound"), ("9-12", "dividend")],
+    )
+    def test_a_lesson_may_be_authored_about_what_it_teaches(self, band: str, word: str):
+        """This one failed at LOAD, not at reply time — the module refused to exist."""
+        from app.safety import vocab
+
+        assert not vocab.check(word, band, programme_scope=True), (
+            f"a concept teaching {word!r} at {band} would not load"
+        )
+
+    @pytest.mark.parametrize(
+        "band,word", [("5-8", "inflation"), ("5-8", "loan"), ("9-12", "loan")]
+    )
+    def test_but_only_the_terms_the_programme_uses_about_itself(self, band, word):
+        from app.safety import vocab
+
+        assert vocab.check(word, band, programme_scope=True), (
+            f"{word!r} is not a programme term and should still be refused at {band}"
+        )
+
+    def test_the_authored_curriculum_still_loads(self):
+        """The change must not have turned the validator off."""
+        from app.curriculum.schema import load_all
+
+        curriculum = load_all()
+        assert curriculum.modules and curriculum.lessons and curriculum.concepts
+
+    def test_a_module_naming_a_general_ban_term_is_still_rejected(self):
+        from app.curriculum.schema import Concept
+
+        with pytest.raises(ValueError):
+            Concept(
+                id="bad_concept",
+                name="Bad",
+                band_min="5-8",
+                band_max="adult",
+                module_id="module_01_saving",
+                vocabulary=["crypto"],
+            )

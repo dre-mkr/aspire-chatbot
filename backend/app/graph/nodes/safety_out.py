@@ -278,7 +278,9 @@ def quick_replies_ok(replies: list[str]) -> bool:
     return all(0 < word_count(reply) <= QUICK_REPLY_MAX_WORDS for reply in replies)
 
 
-def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[str]]:
+def chips_within_band(
+    replies: list[str], band: str, *, programme_scope: bool = False
+) -> tuple[list[str], list[str]]:
     """Split chips into those this band may be offered, and those it may not.
 
     THE LADDER STOPPED AT THE PROSE. `quick_replies_ok` measures how many chips
@@ -292,6 +294,12 @@ def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[st
     route nothing was watching. It is also silent: the chip is well-formed, the
     count is right, the build is green.
 
+    SCOPE REACHES THE CHIPS TOO. Without it, an answer could say `investment`
+    under the programme lift while the chip offering to explore it was deleted
+    underneath -- "Where is my investment?" dropped at 5-8 on a turn whose own
+    prose had just used the word. The reply survived and the invitation to
+    follow it did not, which is the ladder contradicting itself inside one turn.
+
     DROPPED WHOLE rather than stripped. `safety_out` blanks a banned term inside
     prose because a sentence with a hole still carries the rest of its meaning.
     A three-word chip does not -- "I think a" is not an option anybody can tap,
@@ -302,7 +310,7 @@ def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[st
     kept: list[str] = []
     dropped: list[str] = []
     for reply in replies:
-        if vocab.check(reply, band):
+        if vocab.check(reply, band, programme_scope=programme_scope):
             dropped.append(reply)
         else:
             kept.append(reply)
@@ -526,9 +534,14 @@ def make_safety_out(reprompt: Reprompt | None = None):
         locale = state.get("locale", "en")
         original = text_of(last)
         replies = list(state.get("quick_replies") or [])
+        # Read here rather than at gate (b), because the chips are checked before
+        # anything else and they need the same scope the prose gets.
+        programme_scope = grounded_in_the_programme(state) or about_the_programme(state)
         # Before anything measures them: a chip carrying a term this band may not
         # hear is not a chip that got through, it is a chip that was never checked.
-        replies, banned_chips = chips_within_band(replies, band)
+        replies, banned_chips = chips_within_band(
+            replies, band, programme_scope=programme_scope
+        )
         report: dict[str, Any] = {}
         if banned_chips:
             report["quick_replies_banned"] = banned_chips
@@ -585,10 +598,6 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # sums are not a thing to hide from the child they belong to. Computed
         # here rather than at (b) because the figure gate runs first and used to
         # replace the whole answer before the lift was ever consulted.
-        # EITHER test is enough. Grounding is the better signal when retrieval
-        # worked; the question is the one that still holds when it did not.
-        programme_scope = grounded_in_the_programme(state) or about_the_programme(state)
-
         if band in _NO_FIGURE_BANDS and has_figure(text, programme_scope=programme_scope):
             report["figure_violation"] = True
             if reprompt is not None:

@@ -110,6 +110,13 @@ class StreamInterceptor:
     #: Band and locale, needed by validation gates 3 and 6.
     age_band: str = "5-8"
     locale: str = "en"
+    #: Whether this turn is about ASPIRE itself.
+    #:
+    #: Set from the reader's own question at the top of the turn, the same way
+    #: `safety_out` decides it, so a widget beside a programme answer is held to
+    #: the same ladder the prose is. Without it a label reading "EC$500
+    #: invested" was refused at 5-8 on a turn whose sentence had just said it.
+    programme_scope: bool = False
     #: Whether widget sentinels are honoured at all.
     widgets_enabled: bool = True
 
@@ -312,7 +319,12 @@ class StreamInterceptor:
 
         from app.widgets.validate import validate_widget
 
-        result = validate_widget(raw, age_band=self.age_band, locale=self.locale)
+        result = validate_widget(
+            raw,
+            age_band=self.age_band,
+            locale=self.locale,
+            programme_scope=self.programme_scope,
+        )
         if not result.ok:
             logger.info(
                 "Widget dropped at gate %s: %s", result.gate, result.reason

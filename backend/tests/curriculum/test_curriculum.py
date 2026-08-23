@@ -183,7 +183,19 @@ class TestValidationFailsLoudly:
         return path
 
     def test_a_concept_may_not_teach_a_word_its_band_cannot_hear(self, tmp_path):
-        """The authoring mistake this catches: "compound" in a 9-12 concept."""
+        """The authoring mistake this catches: `loan` in a 9-12 concept.
+
+        It used to be `compound`, and that example is now the client's ruling
+        rather than a mistake: for educational purposes the ban lifts, and a
+        lesson about compounding is the one context where the word is the point.
+        The validator reads a concept under `programme_scope`, so the terms the
+        programme uses about itself may be taught at the band that meets them.
+
+        `loan` is outside that set, so the guard still has teeth — and it needs
+        them here more than anywhere, because this fails at LOAD: a rejected
+        concept does not get stripped at reply time, it stops the module
+        existing.
+        """
         path = self._write(
             tmp_path,
             """
@@ -195,7 +207,7 @@ class TestValidationFailsLoudly:
               - id: growth
                 name: Growth
                 band_min: "9-12"
-                vocabulary: [compound]
+                vocabulary: [loan]
             lessons:
               - id: l1
                 module_id: bad_module

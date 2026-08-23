@@ -49,6 +49,14 @@ class GateContext:
     #: How many widgets this turn has already emitted, for gate 7.
     widgets_this_turn: int = 0
     simulators_this_turn: int = 0
+    #: Whether this turn is about ASPIRE itself.
+    #:
+    #: The prose gets the programme lift and, until this existed, the widget
+    #: beside it did not: a label reading "EC$500 invested" was refused at 5-8
+    #: on a turn whose own sentence had just said it. A picture of the split
+    #: that cannot name the invested half is not a safer picture, it is a
+    #: broken one.
+    programme_scope: bool = False
 
 
 # ── band policy ──────────────────────────────────────────────────────────────
@@ -335,7 +343,9 @@ def gate_copy(widget: Any, context: GateContext) -> GateResult:
     a11y_cap = BAND_A11Y_WORDS.get(context.age_band, 120)
 
     for path, text, is_label in _strings(widget):
-        violations = vocab.check(text, context.age_band)
+        violations = vocab.check(
+            text, context.age_band, programme_scope=context.programme_scope
+        )
         if violations:
             return GateResult.fail(
                 "copy",
@@ -390,6 +400,7 @@ def validate_widget(
     locale: str = "en",
     widgets_this_turn: int = 0,
     simulators_this_turn: int = 0,
+    programme_scope: bool = False,
 ) -> GateResult:
     """Run every gate in order. First failure wins and names itself."""
     context = GateContext(
@@ -397,6 +408,7 @@ def validate_widget(
         locale=locale,
         widgets_this_turn=widgets_this_turn,
         simulators_this_turn=simulators_this_turn,
+        programme_scope=programme_scope,
     )
 
     for gate in _PARSE_GATES:
