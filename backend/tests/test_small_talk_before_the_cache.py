@@ -112,17 +112,200 @@ class TestItStillSpeaksAsTheRightGuide:
 
 
 class TestTheStreamCallsItBeforeTheCache:
-    """Structural: the ordering is the fix, so the ordering is the test."""
+    """BEHAVIOURAL, not positional.
 
-    def test_layer_zero_precedes_layer_one_in_the_source(self):
-        from pathlib import Path
+    The first version of this asserted that `small_talk_answer(` appeared
+    earlier in stream.py than `cached_answer(`. That passes for the wrong
+    reasons and fails for the wrong reasons: extracting either into a helper,
+    or adding a second cache probe, changes the answer without changing the
+    behaviour. It proves the source is arranged a certain way, not that the
+    reader gets the greeting.
 
-        source = (
-            Path(__file__).resolve().parents[1] / "app" / "api" / "stream.py"
-        ).read_text(encoding="utf-8")
-        small_talk_at = source.index("small_talk_answer(")
-        cache_at = source.index("cached_answer(")
-        assert small_talk_at < cache_at, (
-            "the cache is consulted before small talk again; a poisoned entry "
-            "for 'hi' would be served in preference to the greeting"
+    So this poisons the cache with the exact string production was serving and
+    asserts the greeting wins anyway.
+    """
+
+    @pytest.fixture
+    def client(self, monkeypatch):
+        import os
+
+        os.environ.setdefault(
+            "SESSION_SECRET", "test-only-secret-not-for-production-at-least-32-bytes"
         )
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.api import stream as stream_module
+        from app.api.stream import router
+
+        async def no_checkpointer():
+            return None
+
+        monkeypatch.setattr(stream_module, "get_checkpointer", no_checkpointer)
+
+        # THE POISON, verbatim from production on 23 August 2026.
+        async def always_a_registration_step(*args, **kwargs):
+            return stream_module.turn_service.CachedTurn(
+                reply="And how are you related to the child?",
+                citations=[],
+                quick_replies=["Mother", "Father", "Grandmother", "Grandfather"],
+            )
+
+        monkeypatch.setattr(
+            stream_module.turn_service, "cached_answer", always_a_registration_step
+        )
+
+        async def noop(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(stream_module.turn_service, "open_conversation", noop)
+        monkeypatch.setattr(stream_module.turn_service, "persist_turn", noop)
+
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+
+    @staticmethod
+    def _say(client, message, **claims):
+        from app.api.stream import parse_sse
+        from app.graph.identity import mint_session_token
+
+        base = {
+            "session_id": "sess-order",
+            "user_id": "u-1",
+            "device_id": "d-1",
+            "persona": "kaleb",
+            "age_band": "9-12",
+            "account_status": "beneficiary",
+            "locale": "en",
+        }
+        base.update(claims)
+        headers = {"Authorization": f"Bearer {mint_session_token(**base)}"}
+        with client.stream(
+            "POST", "/v2/chat/stream", json={"message": message}, headers=headers
+        ) as response:
+            events = parse_sse("".join(chunk for chunk in response.iter_text()))
+        text = "".join(
+            e["data"]["t"] for e in events if e["event"] == "token"
+        )
+        return text, events
+
+    @pytest.mark.parametrize("message", ["hi", "thanks", "ok", "bye", "who are you"])
+    def test_the_greeting_beats_a_poisoned_cache_entry(self, client, message):
+        text, _ = self._say(client, message)
+        assert "related to the child" not in text, (
+            f"{message!r} was answered from the cache; layer 0 did not run first"
+        )
+        assert text.strip(), f"{message!r} produced no reply at all"
+
+    def test_the_reply_is_the_conversational_one(self, client):
+        text, _ = self._say(client, "hi")
+        assert "Hello!" in text
+
+    def test_identity_still_names_the_guide_through_the_wire(self, client):
+        text, _ = self._say(client, "who are you")
+        assert "Kaleb" in text
+
+    def test_it_reports_itself_as_small_talk(self, client):
+        _text, events = self._say(client, "hi")
+        assert events[-1]["data"]["usage"]["agent"] == "small_talk"
+
+    def test_a_real_question_still_reaches_the_cache(self, client):
+        """The fix must not have turned the cache off for everything else."""
+        text, _ = self._say(client, "What is the minimum savings rate?")
+        assert "related to the child" in text, (
+            "a non-small-talk question no longer consults the cache at all"
+        )
+
+    def test_a_refused_pair_is_still_refused_rather_than_greeted(self, client):
+        """orion at 5-8 is not a combination this product serves."""
+        text, _ = self._say(client, "hi", persona="orion", age_band="5-8")
+        assert "Hello!" not in text
+
+
+
+class TestTheCopyLivesInAFileAndFailsSafely:
+    """The words moved to `data/small_talk.yaml`; the behaviour did not.
+
+    The point is that the people best placed to fix the Spanish and the French
+    are not going to open a `.py` file. The risk that buys is a badly edited
+    YAML taking the greeting down, so every way of editing it badly is checked
+    here, and every one of them costs the wording of one reply and nothing else.
+    """
+
+    @pytest.fixture
+    def restore(self):
+        from app.agents.qa import nodes
+
+        original = nodes.COPY_PATH.read_text(encoding="utf-8")
+        yield
+        nodes.COPY_PATH.write_text(original, encoding="utf-8")
+        nodes._copy.cache_clear()
+
+    @staticmethod
+    def _with(content):
+        from app.agents.qa import nodes
+
+        nodes._copy.cache_clear()
+        if content is None:
+            nodes.COPY_PATH.unlink()
+        else:
+            nodes.COPY_PATH.write_text(content, encoding="utf-8")
+
+    def test_the_file_is_actually_read(self):
+        from app.agents.qa.nodes import COPY_PATH, reply_for
+
+        assert COPY_PATH.exists(), f"{COPY_PATH} is missing"
+        assert reply_for("greeting", "fr").startswith("Bonjour")
+
+    @pytest.mark.parametrize("kind", ["greeting", "thanks", "ack", "identity", "repeat", "bye"])
+    @pytest.mark.parametrize("locale", ["en", "es", "fr"])
+    def test_every_kind_has_every_language(self, kind: str, locale: str):
+        from app.agents.qa.nodes import reply_for
+
+        assert reply_for(kind, locale).strip()
+
+    @pytest.mark.parametrize(
+        "label,content",
+        [
+            ("file deleted", None),
+            ("empty file", ""),
+            ("broken YAML", "a:\n b:\n  - 'x\n bad"),
+            ("a list at the top level", "- a\n- b"),
+            ("a bare string", "just a string"),
+            ("null", "null"),
+            ("replies is a list", "replies:\n  - a"),
+            ("replies is a string", "replies: nope"),
+            ("identity_named is a list", "identity_named:\n  - a"),
+            ("a kind maps to a string", "replies:\n  greeting: nope"),
+            ("a value is a number", "replies:\n  greeting:\n    en: 42"),
+            ("template names the wrong field", "identity_named:\n  en: 'I am {nam}'"),
+            ("template has an unclosed brace", "identity_named:\n  en: 'I am {name'"),
+            ("template is positional", "identity_named:\n  en: 'I am {0}'"),
+            ("template never uses the name", "identity_named:\n  en: 'Hello there.'"),
+            ("only one language present", "replies:\n  greeting:\n    en: Hi!"),
+        ],
+    )
+    def test_a_bad_edit_costs_one_reply_and_nothing_else(self, restore, label, content):
+        from app.agents.qa.nodes import reply_for, small_talk_answer
+
+        self._with(content)
+        assert reply_for("greeting", "en").strip(), f"{label} took the greeting down"
+        named = small_talk_answer(
+            "who are you", locale="fr", persona="nova", age_band="adult"
+        )
+        assert named and "Azuri" in named, f"{label} took the identity line down"
+
+    def test_a_good_edit_actually_reaches_the_reader(self, restore):
+        from app.agents.qa.nodes import reply_for
+
+        self._with("replies:\n  greeting:\n    en: Welcome to ASPIRE!\n")
+        assert reply_for("greeting", "en") == "Welcome to ASPIRE!"
+        # and the languages it did not mention still work
+        assert reply_for("greeting", "fr").startswith("Bonjour")
+
+    def test_it_is_read_once_not_per_turn(self):
+        """`lru_cache` — a greeting must not cost a file read."""
+        from app.agents.qa.nodes import _copy
+
+        assert _copy() is _copy()

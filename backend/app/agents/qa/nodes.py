@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from functools import lru_cache
+
 import hashlib
 import logging
 import re
@@ -1392,17 +1396,34 @@ _NO_NAME_TO_GIVE: Final[frozenset[str]] = frozenset({"guest"})
 
 
 def _identity_reply(state: AspireState, locale: str) -> str:
-    """The identity line, named where there is a name to give."""
+    """The identity line, named where there is a name to give.
+
+    NORMALISED FIRST, because a token minted before the split is still valid.
+    `TOKEN_TTL` is seven days, so for a week after `kaleb.9-12.md` took that
+    band there are live sessions whose token still says `stella` at 9-12.
+    Access already migrates them -- `allowed_agents` calls
+    `normalise_persona_band` before it does anything else -- but state carries
+    the raw claim, so the identity line looked it up unmigrated and answered
+    "I'm Skye" to a reader being served Kaleb's card, Kaleb's agents and
+    Kaleb's game bank.
+
+    The name has to agree with the card, or the split is only half applied in
+    the one place a reader would actually notice it.
+    """
+    from app.domain import normalise_persona_band
     from app.prompting.personas.names import display_name
 
-    persona = str(state.get("persona") or "").strip().lower()
+    band = str(state.get("age_band") or "")
+    persona = normalise_persona_band(
+        str(state.get("persona") or "").strip().lower(), band
+    )
     if persona and persona not in _NO_NAME_TO_GIVE:
-        name = display_name(persona, str(state.get("age_band") or ""))
+        name = display_name(persona, band)
         if name:
-            template = _IDENTITY_NAMED.get(locale) or _IDENTITY_NAMED["en"]
+            named = _copy()["__identity_named__"]
+            template = named.get(locale) or named.get("en") or _IDENTITY_NAMED["en"]
             return template.format(name=name)
-    generic = _SMALL_TALK_REPLIES["identity"]
-    return generic.get(locale) or generic["en"]
+    return reply_for("identity", locale)
 
 
 _SMALL_TALK_RE: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
@@ -1410,6 +1431,106 @@ _SMALL_TALK_RE: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
     (kind, re.compile(rf"^[\s\W]*{pattern}[\s\W]*$", re.I))
     for kind, pattern in _SMALL_TALK
 )
+
+
+#: Where the words live. The behaviour stays in code; the copy does not.
+COPY_PATH: Final[Path] = (
+    Path(__file__).resolve().parents[3] / "data" / "small_talk.yaml"
+)
+
+
+@lru_cache(maxsize=1)
+def _copy() -> dict[str, dict[str, str]]:
+    """The small-talk wording, read once per process.
+
+    PER-KEY FALLBACK, not all-or-nothing. A missing file, broken YAML, a
+    language somebody forgot or a mistyped placeholder each cost the wording of
+    ONE reply; every other key still comes from the file, and the missing one
+    comes from the table below. Losing a greeting because one line was
+    mis-indented would be the worse failure, and this is the shape that stops
+    it -- the same choice `app.sources.registry` makes for the same reason.
+
+    Merged over the in-code table rather than replacing it, so the built-in
+    wording is always the floor.
+    """
+    merged: dict[str, dict[str, str]] = {
+        kind: dict(langs) for kind, langs in _SMALL_TALK_REPLIES.items()
+    }
+    merged["__identity_named__"] = dict(_IDENTITY_NAMED)
+
+    try:
+        import yaml
+
+        raw = yaml.safe_load(COPY_PATH.read_text(encoding="utf-8")) or {}
+        # Valid YAML that is not a mapping -- a list, a bare string -- parses
+        # cleanly and then has no `.get`. Checked rather than caught, so the log
+        # says what is actually wrong with the file.
+        if not isinstance(raw, dict):
+            logger.error(
+                "%s is valid YAML but not a mapping (%s); using the built-in "
+                "wording.", COPY_PATH.name, type(raw).__name__,
+            )
+            return merged
+    except FileNotFoundError:
+        logger.warning("No small-talk copy at %s; using the built-in wording.", COPY_PATH)
+        return merged
+    except Exception:
+        logger.error(
+            "%s could not be read; using the built-in wording.", COPY_PATH.name,
+            exc_info=True,
+        )
+        return merged
+
+    replies = raw.get("replies")
+    if not isinstance(replies, dict):
+        if replies is not None:
+            logger.error(
+                "%s: `replies` is %s, not a mapping; using the built-in wording.",
+                COPY_PATH.name, type(replies).__name__,
+            )
+        replies = {}
+    for kind, langs in replies.items():
+        if kind in merged and isinstance(langs, dict):
+            for lang, text in langs.items():
+                if isinstance(text, str) and text.strip():
+                    merged[kind][lang] = text.strip()
+
+    named = raw.get("identity_named")
+    if not isinstance(named, dict):
+        if named is not None:
+            logger.error(
+                "%s: `identity_named` is %s, not a mapping; using the built-in "
+                "wording.", COPY_PATH.name, type(named).__name__,
+            )
+        named = {}
+    for lang, template in named.items():
+        if not isinstance(template, str) or not template.strip():
+            continue
+        # A template that cannot render is worse than no template: it would
+        # raise on a live turn. Proven here, once, at load.
+        try:
+            rendered = template.format(name="Test")
+        except (KeyError, IndexError, ValueError):
+            logger.error(
+                "small_talk.yaml identity_named[%s] does not render with {name}; "
+                "keeping the built-in wording for that language.", lang,
+            )
+            continue
+        if "Test" not in rendered:
+            logger.error(
+                "small_talk.yaml identity_named[%s] never uses {name}; keeping "
+                "the built-in wording for that language.", lang,
+            )
+            continue
+        merged["__identity_named__"][lang] = template.strip()
+
+    return merged
+
+
+def reply_for(kind: str, locale: str) -> str:
+    """One conversational reply, in the reader's language where there is one."""
+    langs = _copy().get(kind) or _SMALL_TALK_REPLIES.get(kind) or {}
+    return langs.get(locale) or langs.get("en") or ""
 
 
 def small_talk_kind(text: str) -> str | None:
@@ -1459,8 +1580,7 @@ def small_talk_answer(
         return _identity_reply(
             {"persona": persona, "age_band": age_band}, locale
         )
-    replies = _SMALL_TALK_REPLIES[kind]
-    return replies.get(locale) or replies["en"]
+    return reply_for(kind, locale)
 
 
 def _small_talk_reply(state: AspireState) -> Command | None:
@@ -1481,11 +1601,10 @@ def _small_talk_reply(state: AspireState) -> Command | None:
     for kind, pattern in _SMALL_TALK_RE:
         if pattern.match(text):
             locale = str(state.get("locale") or "en")
-            replies = _SMALL_TALK_REPLIES[kind]
             reply = (
                 _identity_reply(state, locale)
                 if kind == "identity"
-                else (replies.get(locale) or replies["en"])
+                else reply_for(kind, locale)
             )
             logger.info(
                 "Answering a %s turn conversationally rather than opening a ticket.",

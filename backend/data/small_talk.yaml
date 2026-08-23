@@ -1,0 +1,72 @@
+# ASPIRE conversational replies — the closed class answered before retrieval.
+#
+# WHAT THIS FILE IS. Six kinds of message that need no lookup: a greeting, a
+# thank-you, an acknowledgement, "who are you", "say that again", a goodbye.
+# They are answered from here, before the cache and before the router, at the
+# cost of one regex pass.
+#
+# WHY IT IS A FILE AND NOT PYTHON. This is the only copy in the product a
+# reader is guaranteed to see, in a Federation with three languages, and the
+# people best placed to fix the Spanish and the French are not going to open a
+# .py file. The behaviour lives in code; the words live here.
+#
+# HOW IT FAILS. Safely, and quietly. A missing file, broken YAML, a missing
+# language or a mistyped placeholder each cost the wording of one reply and
+# nothing else -- the built-in wording is used for that key instead. Losing a
+# greeting because one line of YAML was mis-indented would be the worse
+# failure, so it cannot happen. `tests/test_small_talk_before_the_cache.py`
+# checks every fallback.
+#
+# EDITING.
+#   * Keep all three languages. A missing one silently serves English.
+#   * `identity_named` MUST contain {name} exactly once and nothing else in
+#     braces. A typo there is caught and the reply falls back, but it means the
+#     guide stops introducing itself, so check it.
+#   * Do not add new keys here expecting them to work. The six kinds are
+#     matched by patterns in code; a seventh needs a pattern too.
+
+meta:
+  document: ASPIRE small-talk copy
+  version: "2026-08-23"
+  languages: [en, es, fr]
+
+# "Who are you?" answered by the guide who is actually speaking.
+# {name} is filled from the same table the persona cards read, so renaming a
+# guide stays the one-line change that table exists to guarantee.
+identity_named:
+  en: "I'm {name}, your ASPIRE guide. I can tell you about the programme — saving, the accounts, and how to join. What would you like to know?"
+  es: "Soy {name}, tu guía de ASPIRE. Puedo contarte sobre el programa: el ahorro, las cuentas y cómo unirte. ¿Qué te gustaría saber?"
+  fr: "Je suis {name}, ton guide ASPIRE. Je peux te parler du programme : l'épargne, les comptes et comment s'inscrire. Que veux-tu savoir ?"
+
+replies:
+  greeting:
+    en: "Hello! I can tell you about ASPIRE — saving money, and how the programme works. What would you like to know?"
+    es: "¡Hola! Puedo contarte sobre ASPIRE: cómo ahorrar dinero y cómo funciona el programa. ¿Qué te gustaría saber?"
+    fr: "Bonjour ! Je peux te parler d'ASPIRE : comment épargner et comment le programme fonctionne. Que veux-tu savoir ?"
+
+  thanks:
+    en: "You're welcome! Ask me anything else about ASPIRE."
+    es: "¡De nada! Pregúntame lo que quieras sobre ASPIRE."
+    fr: "Avec plaisir ! Pose-moi d'autres questions sur ASPIRE."
+
+  ack:
+    en: "Got it. What else would you like to know about ASPIRE?"
+    es: "Entendido. ¿Qué más te gustaría saber sobre ASPIRE?"
+    fr: "D'accord. Que veux-tu savoir d'autre sur ASPIRE ?"
+
+  # Used only when the reader has no named guide -- `guest`. Every other
+  # persona gets `identity_named` above.
+  identity:
+    en: "I'm the ASPIRE assistant. I answer questions about the programme — saving, the accounts, and how to join. What would you like to know?"
+    es: "Soy el asistente de ASPIRE. Respondo preguntas sobre el programa: el ahorro, las cuentas y cómo unirte. ¿Qué te gustaría saber?"
+    fr: "Je suis l'assistant ASPIRE. Je réponds aux questions sur le programme : l'épargne, les comptes et comment s'inscrire. Que veux-tu savoir ?"
+
+  repeat:
+    en: "Of course — ask me again and I'll explain it a different way."
+    es: "Claro, pregúntamelo otra vez y te lo explico de otra manera."
+    fr: "Bien sûr — repose-moi la question et je l'expliquerai autrement."
+
+  bye:
+    en: "Bye for now! Come back any time you have a question about ASPIRE."
+    es: "¡Hasta pronto! Vuelve cuando tengas una pregunta sobre ASPIRE."
+    fr: "À bientôt ! Reviens quand tu as une question sur ASPIRE."
