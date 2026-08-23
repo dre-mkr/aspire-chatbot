@@ -144,11 +144,26 @@ class TestTheHappyTurn:
         assert directive > last_token
 
     def test_done_reports_the_agent_and_whether_to_speak(self, client):
-        _status, events = post(client, auth=token(age_band="5-8"), message="hi")
+        """`hi` used to stand in for any message here. It no longer can.
+
+        A greeting is now answered by the small-talk short-circuit ahead of the
+        cache, so it reports `small_talk` rather than whichever agent the router
+        would have picked. That is the point of the change, not a regression --
+        so this test asks something only an agent can answer.
+        """
+        _status, events = post(
+            client, auth=token(age_band="5-8"), message="how does saving grow?"
+        )
         usage = events[-1]["data"]["usage"]
         assert usage["agent"] == "learn_agent"
         assert usage["speak"] is True
         assert usage["elapsed_ms"] >= 0
+
+    def test_small_talk_reports_itself_and_still_speaks_at_the_young_bands(self, client):
+        _status, events = post(client, auth=token(age_band="5-8"), message="hi")
+        usage = events[-1]["data"]["usage"]
+        assert usage["agent"] == "small_talk"
+        assert usage["speak"] is True
 
     def test_an_older_band_does_not_auto_speak(self, client):
         _status, events = post(

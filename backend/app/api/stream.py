@@ -15,6 +15,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
+from app.agents.qa import nodes as qa_nodes
 from app import timing
 from app import turn as turn_service
 from app.auth import bearer_token
@@ -171,6 +172,78 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
         simple_mode=simple_mode,
         owner_id=owner_id,
     )
+
+    # ── layer 0: small talk, before the cache is consulted ──
+    #
+    # ORDER IS THE WHOLE POINT. The cache is keyed on the question, so a turn
+    # that was misrouted once is served from the shelf for ever after -- and a
+    # greeting is the single most likely thing to be asked twice.
+    #
+    # Measured on production, fresh sessions, 23 August 2026:
+    #   "hi"     -> "And how are you related to the child?"          78ms, cache
+    #   "thanks" -> "Pick the closest one -- mother, father, ..."     78ms, cache
+    #   "bye"    -> the same                                         73ms, cache
+    #
+    # The small-talk short-circuit exists precisely to answer "hi". It lived
+    # inside the QA agent, three layers below this one, so it never ran: the
+    # cache answered first, every time, with a registration form question.
+    #
+    # A greeting, a thank-you, an acknowledgement, an identity question, a
+    # "say that again" or a goodbye is a CLOSED class. It never needed
+    # retrieval, it never needed the router, and it must never be answered from
+    # a shelf. Answering it here costs one regex pass.
+    #
+    # TWO PRECONDITIONS, both learned the hard way when this was first written
+    # without them:
+    #
+    #   * A REFUSED persona/band pair must still be refused. `orion` at 5-8 is
+    #     not a combination this product serves, and it has to hear so however
+    #     it opens the conversation. The cache never had this problem because
+    #     its key carries persona and band, so a refused pair simply has an
+    #     empty shelf. A closed list has no such accident protecting it.
+    #   * `speak` is BAND-DEPENDENT -- `hydrate` sets it for 5-8 and 9-12 only.
+    #     Hardcoding it here made a sixteen-year-old's greeting speak aloud.
+    from app.graph.access import allowed_agents, is_denied
+
+    reachable = allowed_agents(
+        claims.persona,
+        claims.age_band,
+        claims.account_status,
+        user_id=claims.user_id,
+    )
+    if (
+        message
+        and not interaction
+        and not _wants_card(message)
+        and not is_denied(reachable)
+    ):
+        aside = qa_nodes.small_talk_answer(
+            message,
+            locale=claims.locale,
+            persona=claims.persona,
+            age_band=claims.age_band,
+        )
+        if aside is not None:
+            logger.info(
+                "small talk answered before the cache for session=%s", thread_id
+            )
+            timing.annotate(small_talk=True)
+            yield interceptor.token(aside).encode()
+            yield interceptor.done(
+                {
+                    "elapsed_ms": int((time.monotonic() - started) * 1000),
+                    "agent": "small_talk",
+                    # The same rule `hydrate` applies: the youngest two bands.
+                    "speak": claims.age_band in ("5-8", "9-12"),
+                    "thread_id": record.thread_id,
+                    **interceptor.stats(),
+                }
+            ).encode()
+            record.reply = aside
+            record.agent = "small_talk"
+            await turn_service.open_conversation(record)
+            await turn_service.persist_turn(record)
+            return
 
     # ── layer 1: this exact question, from this exact audience ──
     # Consulted before anything is embedded or generated.
