@@ -77,11 +77,21 @@ class NoContentAvailable(GameError):
 #: the 13-18 material, which is the closest thing to an adult register already
 #: written. Delete an entry here the day its own seeds land.
 _CONTENT_BANK: dict[Persona, Persona] = {
-    # Kaleb reads from Stella's bank because that is where his items already
-    # are: every seed entry written for a 9-12 reader lists `stella` in its
-    # `persona_bands`, from when he was one. Rewriting those lists is an
-    # editorial pass on the seeds, not part of giving him a key.
-    Persona.KALEB: Persona.STELLA,
+    # KALEB IS NOT HERE ANY MORE, and why he was is worth recording.
+    #
+    # He was mapped to Stella on the stated grounds that "every seed entry
+    # written for a 9-12 reader lists `stella` in its `persona_bands`, from when
+    # he was one". That was not true. Stella's bank is 5-8 material throughout
+    # -- its hangman words are MONEY, COIN, SAVE, SPEND, SHARE, BANK, GOAL,
+    # NEEDS, which is the 5-8 allow-list word for word -- and NOT ONE of the 158
+    # seed entries carried an `age_bands` tag, so the band filter that was meant
+    # to sort this could never fire.
+    #
+    # A twelve-year-old was being asked to unscramble COIN and to answer "What
+    # is a bank?". Kaleb's card names that failure exactly: simplifying the
+    # words reads as a demotion and loses this reader.
+    #
+    # He has his own sets now, written for his card and tagged `9-12`.
     Persona.AURORA: Persona.ORION,
     Persona.NOVA: Persona.ORION,
 }

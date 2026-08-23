@@ -1,0 +1,79 @@
+# ASPIRE word scramble — Kaleb set 1 (ages 9-12)
+#
+# WRITTEN FOR KALEB, NOT INHERITED FROM SKYE. Until now this band was served
+# Stella's bank, which is COIN, BANK, SPEND, GOAL -- the 5-8 allow-list, word
+# for word. Kaleb's card names that failure exactly: "simplifying the words
+# reads as a demotion and loses this reader", and "default to the OLDER end of
+# this band. This reader is in secondary school."
+#
+# So these are the words his ladder actually opens: interest, budget, deposit,
+# earn -- real terms, defined in passing, never in a box. `loan`, `compound`,
+# `dividend` and `portfolio` stay out; they are banned at 9-12 and the gate
+# would strip them from the hint anyway.
+
+id: wordbank-kaleb-01
+game_type: word_scramble
+language: en
+title: Money words worth knowing
+source: ASPIRE — word scramble written for Kaleb's card, 9-12
+
+entries:
+  - id: wordbank-kaleb-01-interest
+    language: en
+    word: INTEREST
+    scramble: TERESTIN
+    hint: what the bank adds for leaving your money alone
+    definition: what you earn for leaving money in the bank, or pay for borrowing it
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-01-budget
+    language: en
+    word: BUDGET
+    scramble: DGETBU
+    hint: telling your money where to go before you spend it
+    definition: a plan for what comes in against what goes out
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-01-deposit
+    language: en
+    word: DEPOSIT
+    scramble: POSITDE
+    hint: money you put in, rather than take out
+    definition: money paid into an account
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-01-savings
+    language: en
+    word: SAVINGS
+    scramble: VINGSSA
+    hint: the half of your ASPIRE money that sits still
+    definition: money set aside rather than spent
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-01-shares
+    language: en
+    word: SHARES
+    scramble: RESHAS
+    hint: small pieces of a company that somebody can own
+    definition: units of ownership in a business
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-01-earn
+    language: en
+    word: EARN
+    scramble: RNEA
+    hint: what you do for money rather than being given it
+    definition: to receive money for work done
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
