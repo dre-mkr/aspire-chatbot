@@ -1692,7 +1692,16 @@ _SMALL_TALK: Final[tuple[tuple[str, str], ...]] = (
     ("greeting", r"(hi|hey|hello|good\s+(morning|afternoon|evening)|hola|buenos\s+d[ií]as|bonjour|salut)"),
     ("thanks", r"(thanks|thank\s+you|ty|cheers|gracias|merci)"),
     ("ack", r"(ok|okay|k|sure|got\s+it|cool|nice|yes|no|yeah|yep|vale|d'accord)"),
-    ("identity", r"(who\s+are\s+you|what\s+are\s+you|qui\s+es-tu|qui[eé]n\s+eres)"),
+    # "what is your name" was missing, which is the phrasing most people
+    # actually use -- so the persona could say its name only to somebody who
+    # asked "who are you". The short-circuit sits above the response cache, so
+    # the miss did not just skip the reply: it fell through to a cached refusal.
+    ("identity", r"(who\s+are\s+you|what\s+are\s+you"
+                 r"|what(\s+is|'?s)\s+your\s+name|what\s+do\s+(i|we)\s+call\s+you"
+                 r"|do\s+you\s+have\s+a\s+name|tell\s+me\s+your\s+name"
+                 r"|qui\s+es-tu|qui\s+[eê]tes-vous|comment\s+t[ue]\s+t'?appelles"
+                 r"|quel\s+est\s+ton\s+nom"
+                 r"|qui[eé]n\s+eres|c[oó]mo\s+te\s+llamas|cu[aá]l\s+es\s+tu\s+nombre)"),
     ("repeat", r"((can|could)\s+you\s+)?(say\s+that\s+again|repeat\s+that|explain\s+that\s+(again|more\s+simply)|"
                r"sorry,?\s+(can|could)\s+you\s+explain\s+that\s+more\s+simply|"
                r"wait,?\s+i\s+don'?t\s+understand|i\s+don'?t\s+understand|"

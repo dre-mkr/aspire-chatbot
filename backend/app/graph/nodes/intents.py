@@ -403,11 +403,24 @@ def wants_lesson(message: str) -> bool:
 
 
 def wants_game(message: str) -> bool:
-    """Whether this message is asking to play, rather than asking about playing."""
+    """Whether this message is asking to play, rather than asking about playing.
+
+    Naming a game IS asking to play it, including when the name is misspelled.
+    Without that second clause the typo tolerance in `named_game` was
+    unreachable: this gate runs FIRST, and `_open_game` -- which is where
+    `named_game` is called -- is only reached when this returns True.
+
+    Measured on production after the fix shipped: "word scamble" was still not
+    a game request, so a nine-year-old got the Word Scramble answer key printed
+    at them as prose instead of a game. The unit was right and the path was
+    not, which is what comes of testing `named_game` on its own.
+    """
     folded = fold(message)
     if not _is_a_command(folded):
         return False
-    return any(pattern.search(folded) for pattern in _PLAY)
+    if any(pattern.search(folded) for pattern in _PLAY):
+        return True
+    return named_game(message) is not None
 
 
 def wants_story(message: str) -> bool:

@@ -63,3 +63,41 @@ class TestAGameNameSurvivesATypo:
     def test_the_exact_names_are_unchanged(self, message, expected):
         """Fuzzy matching is a fallback; it must not move what already worked."""
         assert intents.named_game(message) == expected
+
+
+class TestTheGateReachesTheMatcher:
+    """The typo tolerance was unreachable: this gate runs before it."""
+
+    @pytest.mark.parametrize(
+        "message", ["word scamble", "scamble", "scrambel", "hangmen", "millionare"]
+    )
+    def test_a_misspelled_name_is_a_request_to_play(self, message):
+        from app.graph.nodes.intents import named_game, wants_game
+
+        assert named_game(message) is not None, "the matcher understands it"
+        assert wants_game(message), (
+            "...and the gate must let it through, or `_open_game` -- where the "
+            "matcher is called -- is never reached at all"
+        )
+
+    @pytest.mark.parametrize(
+        "message", ["word scramble", "hangman", "I want to play a game", "let's play"]
+    )
+    def test_what_already_worked_still_does(self, message):
+        from app.graph.nodes.intents import wants_game
+
+        assert wants_game(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "what is compound interest",
+            "a million dollars in savings",
+            "is the programme free",
+            "my balance please",
+        ],
+    )
+    def test_and_a_question_is_still_not_a_game(self, message):
+        from app.graph.nodes.intents import wants_game
+
+        assert not wants_game(message)
