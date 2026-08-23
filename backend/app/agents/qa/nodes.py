@@ -601,8 +601,33 @@ def _story_instruction(state: AspireState) -> str | None:
         return None
     persona = str(state.get("persona") or "guest")
     shape = _STORY_BY_PERSONA.get(persona, _STORY_BY_PERSONA["guest"])
+    # Which page of the story this is. Beat one opens, the middle carries on
+    # from what the reader has already been told, and the last one has to land:
+    # a story with no ending is a treadmill with a character on it.
+    arc = state.get("story_arc") or {}
+    beat = int(arc.get("beat") or 1)
+    from app.graph.nodes.cards import STORY_BEATS
+
+    if beat == 1:
+        page = ""
+    elif beat >= STORY_BEATS:
+        page = (
+            "This is the LAST part. The reader has stayed with this story, so "
+            "finish it: resolve what the character was deciding and end on the "
+            "money idea it turned on. Do not leave it open.\n"
+        )
+    else:
+        page = (
+            f"This is part {beat}. Carry on the SAME story, with the same "
+            "character and the same situation the reader has already been "
+            "told about -- do not restart it or introduce a new character. "
+            "Move it on: something happens, and it follows from the decision "
+            "before it.\n"
+        )
+
     return (
         f"The reader has asked for a story about: {topic}\n"
+        f"{page}"
         f"{shape}\n"
         "Set it in Saint Kitts and Nevis and use EC dollars. Invent the "
         "characters freely; do NOT invent anything about the ASPIRE programme "
@@ -1227,7 +1252,7 @@ FOLLOW_UP_CHIPS = 3
 CHIP_MAX_CHARS = CHIP_LABEL_CHARS
 
 
-#: Where a story goes next, per locale.
+#: Where a story goes next, per locale, while the arc is still open.
 #:
 #: A story used to end and stop. The shapes in `_STORY_BY_PERSONA` tell the
 #: model not to add a question at the end -- rightly, because an invented quiz
@@ -1238,10 +1263,21 @@ CHIP_MAX_CHARS = CHIP_LABEL_CHARS
 #: Chips rather than prose, for the same reason the instruction exists: these
 #: are written here, so a story can invite the next turn without the model
 #: being free to invent a programme fact on the way out.
+#:
+#: Every line has to be a phrase the intent it triggers actually matches --
+#: `story_continues` for the first, `story_ends` for the last. Tested, because
+#: a chip that reads well and routes nowhere is worse than no chip.
 _STORY_FOLLOW_UPS: dict[str, list[str]] = {
-    "en": ["What would you do?", "Tell me another", "What does it teach?"],
-    "es": ["¿Qué harías tú?", "Cuéntame otra", "¿Qué nos enseña?"],
-    "fr": ["Que ferais-tu ?", "Raconte-m'en une autre", "Qu'est-ce que ça apprend ?"],
+    "en": ["What happens next?", "What would you do?", "That's enough"],
+    "es": ["¿Qué pasa después?", "¿Qué harías tú?", "Ya basta"],
+    "fr": ["Et après ?", "Que ferais-tu ?", "Ça suffit"],
+}
+
+#: And at the last beat, where "what happens next" would be a lie.
+_STORY_ENDED: dict[str, list[str]] = {
+    "en": ["Tell me another story", "What does it teach?"],
+    "es": ["Cuéntame otra historia", "¿Qué nos enseña?"],
+    "fr": ["Raconte-moi une autre histoire", "Qu'est-ce que ça apprend ?"],
 }
 
 
@@ -1253,8 +1289,12 @@ def follow_up_chips(
     # "Is the ASPIRE application always open?" is a fine chip after a policy
     # answer and a non-sequitur after a story about a girl and a laptop.
     if state.get("story_topic"):
+        from app.graph.nodes.cards import STORY_BEATS
+
         locale = str(state.get("locale") or "en")
-        return list(_STORY_FOLLOW_UPS.get(locale, _STORY_FOLLOW_UPS["en"]))
+        beat = int((state.get("story_arc") or {}).get("beat") or 1)
+        table = _STORY_ENDED if beat >= STORY_BEATS else _STORY_FOLLOW_UPS
+        return list(table.get(locale, table["en"]))
 
     asked = _asked_questions(state)
     # What the answer covered, by question not by id: two rows can ask the same thing.

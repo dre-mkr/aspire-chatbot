@@ -318,11 +318,76 @@ _STORY_TOPICS: dict[str, list[str]] = {
     "fr": ["Économiser pour quelque chose", "Besoins et envies", "Gagner son argent"],
 }
 
+#: What is said when the reader ends the story themselves.
+_STORY_CLOSED: dict[str, str] = {
+    "en": "That's a good place to stop. Ask me for another whenever you like.",
+    "es": "Es un buen momento para parar. Pídeme otra cuando quieras.",
+    "fr": "C'est un bon endroit pour s'arrêter. Demande-m'en une autre quand tu veux.",
+}
+
 _STORY_ASK: dict[str, str] = {
     "en": "I can do that. What would you like the story to be about?",
     "es": "Claro. ¿Sobre qué te gustaría que fuera el cuento?",
     "fr": "Bien sûr. De quoi aimerais-tu que parle l'histoire ?",
 }
+
+
+#: How many beats a story may run to before it has to land.
+#:
+#: Not a limit on the reader's patience -- they end it whenever they like -- but
+#: on the model's. A story with no last page stops being a story; by the sixth
+#: beat there has to be an ending, or the arc is just a treadmill with a
+#: character on it.
+STORY_BEATS = 6
+
+#: Carrying on, in the reader's own words. The chip sends the first of these.
+_STORY_MORE = re.compile(
+    r"\bwhat happens next\b|\bwhat next\b|\bkeep going\b|\bgo on\b|\bcontinue\b"
+    r"|\bmore\b|\bthen what\b"
+    r"|\bqu[eé] pasa despu[eé]s\b|\bsigue\b|\bcontin[uú]a\b|\bm[aá]s\b"
+    r"|\bet apr[eè]s\b|\bla suite\b|\bcontinue[rz]?\b|\bencore\b",
+    re.IGNORECASE,
+)
+
+#: Stopping, in the reader's own words. Checked BEFORE `_STORY_MORE`, because
+#: "no more" contains "more" and means its opposite.
+_STORY_ENOUGH = re.compile(
+    r"\bthat\'?s enough\b|\benough\b|\bno more\b|\bstop\b|\bi\'?m done\b|\bdone\b"
+    r"|\bya basta\b|\bbasta\b|\bsuficiente\b|\bno m[aá]s\b|\bpara\b"
+    r"|\b[cç]a suffit\b|\bassez\b|\bstop\b|\bplus rien\b",
+    re.IGNORECASE,
+)
+
+
+def story_continues(message: str) -> bool:
+    """Whether this asks for the next beat of the story already running."""
+    if _STORY_ENOUGH.search(message):
+        return False
+    return bool(_STORY_MORE.search(message))
+
+
+def story_ends(message: str) -> bool:
+    """Whether this asks for the story to stop."""
+    return bool(_STORY_ENOUGH.search(message))
+
+
+#: Thinking about the story rather than advancing or leaving it.
+#:
+#: The middle chip is the pedagogy -- "What would you do?" is the question the
+#: whole story exists to provoke -- and without this it was the one chip that
+#: broke the thread: not a continue, not a stop, so the arc was dropped as a
+#: change of subject and the next "what happens next" had nothing to continue.
+_STORY_REFLECT = re.compile(
+    r"\bwhat would you do\b|\bwhat does it teach\b|\bwhat would i do\b"
+    r"|\bqu[eé] har[ií]as\b|\bqu[eé] nos ense[nñ]a\b"
+    r"|\bque ferais-tu\b|\bqu\'?est-ce que [cç]a apprend\b",
+    re.IGNORECASE,
+)
+
+
+def story_reflects(message: str) -> bool:
+    """Whether this thinks about the story without ending or advancing it."""
+    return bool(_STORY_REFLECT.search(message))
 
 
 def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
@@ -342,6 +407,46 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     if locale not in _STORY_ASK:
         locale = "en"
 
+    # ── a story already running ─────────────────────────────────────────────
+    #
+    # Checked before everything else, because while an arc is open the same
+    # words mean something different: "more" is the next beat, not a new story.
+    arc = state.get("story_arc")
+    if arc:
+        if story_ends(message):
+            return {
+                "story_arc": None,
+                "active_agent": _holding_agent(state),
+                "messages": [AIMessage(content=_STORY_CLOSED[locale])],
+                "quick_replies": _STORY_TOPICS[locale],
+                "safety_flags": {"card": "story_closed"},
+            }
+        if story_continues(message):
+            beat = int(arc.get("beat") or 1) + 1
+            # Not a card: the router runs and an agent writes the next beat,
+            # with the story instruction and the story word cap applied.
+            return {
+                "story_topic": str(arc.get("topic") or ""),
+                "story_arc": {"topic": arc.get("topic"), "beat": beat},
+                "awaiting_story_topic": False,
+            }
+        # Thinking about the story is not leaving it. Empty update, so the
+        # router answers the question while the arc stays exactly where it was
+        # -- the reader can still ask what happens next afterwards.
+        if story_reflects(message):
+            return {}
+
+        # Anything else is a change of subject, and the arc is dropped rather
+        # than left open to swallow the next unrelated "more". No `card` flag
+        # and no message, so `_after_cards` sends this on to the router and the
+        # question is answered normally -- the arc closing is not an event the
+        # reader needs told about.
+        #
+        # A fresh "tell me a story" falls through instead, to the topic ask
+        # below, which starts a new arc rather than continuing the old one.
+        if not wants_story(message):
+            return {"story_arc": None}
+
     if state.get("awaiting_story_topic"):
         topic = message.strip()
         # Asking for a story again is not a topic; ask once more rather than
@@ -357,7 +462,14 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 "quick_replies": _STORY_TOPICS[locale],
                 "safety_flags": {"card": "story_topic"},
             }
-        return {"awaiting_story_topic": False, "story_topic": topic[:120]}
+        # Beat one, and the arc opens here. `story_topic` is cleared by
+        # `hydrate` next turn; `story_arc` is not, which is what lets the story
+        # have a second page.
+        return {
+            "awaiting_story_topic": False,
+            "story_topic": topic[:120],
+            "story_arc": {"topic": topic[:120], "beat": 1},
+        }
 
     if not wants_story(message):
         return None

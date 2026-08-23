@@ -138,8 +138,18 @@ _STORY: tuple[re.Pattern[str], ...] = tuple(
         r"\bi want (?:a|another) story\b",
         r"\b(?:can|could) (?:you|we) (?:tell|hear|have)(?: me| us)?(?: a)? story\b",
         r"\bstory time\b",
-        r"\b(?:cuenta|cuentame|dime)(?: un)? cuento\b",
-        r"\b(?:raconte|raconte-moi)(?: une)? histoire\b",
+        # Spanish covered "cuento" but not "historia", and required "un"
+        # exactly -- so "cuentame una historia", the ordinary way to ask, was
+        # not a story request at all. `fold` strips the accents before these
+        # run, which is why they are written without them.
+        r"\b(?:cuenta|cuentame|dime|narra|nos cuentas)\b[^.?!]{0,12}?"
+        r"\b(?:cuento|historia)\b",
+        r"\b(?:otro cuento|otra historia)\b",
+        r"\bquiero (?:un cuento|una historia)\b",
+        # Same for French: "raconte" was required, and "une autre histoire" --
+        # what the follow-up chip says -- matched nothing.
+        r"\b(?:raconte|racontez|dis)\b[^.?!]{0,14}?\bhistoire\b",
+        r"\b(?:une autre histoire|encore une histoire)\b",
     )
 )
 

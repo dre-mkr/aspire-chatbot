@@ -185,6 +185,19 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: A story still being told, across turns: {"topic": str, "beat": int}.
+    #:
+    #: `story_topic` is cleared by `hydrate` on every turn, deliberately -- left
+    #: set, every later question would be answered as another story. That is
+    #: right for a story that ends when it ends, and it is why a story could not
+    #: continue: nothing survived the turn that told it.
+    #:
+    #: This does survive, like `locale_override` and for the same reason. It
+    #: holds the thread the reader is in the middle of, and `hydrate` must never
+    #: clear it -- only the reader ends an arc, by saying so or by reaching the
+    #: last beat.
+    story_arc: dict[str, Any] | None
+
     #: Every video already offered in this conversation, whether or not it was
     #: watched.
     #:
@@ -297,6 +310,7 @@ def initial_state(
         auto_language=True,
         awaiting_story_topic=False,
         story_topic=None,
+        story_arc=None,
         offered_video=None,
         suggested_step=None,
         videos_offered=[],
