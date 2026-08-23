@@ -115,7 +115,7 @@ _VIDEOS: Final[tuple[Video, ...]] = (
         duration_seconds=262,
         setting="Basseterre, St. Kitts",
         filename="captain-careful-and-the-quest-for-scarcity.mp4",
-        personas=(Persona.STELLA, Persona.ORION, Persona.GUEST),
+        personas=(Persona.STELLA, Persona.KALEB, Persona.ORION, Persona.GUEST),
         strong=(
             "scarcity",
             "scarce",
@@ -167,7 +167,7 @@ _VIDEOS: Final[tuple[Video, ...]] = (
         duration_seconds=355,
         setting="Nevis",
         filename="moniques-saving-adventure.mp4",
-        personas=(Persona.STELLA, Persona.ORION, Persona.GUEST),
+        personas=(Persona.STELLA, Persona.KALEB, Persona.ORION, Persona.GUEST),
         strong=(
             "saving",
             "savings",
@@ -438,14 +438,24 @@ def requested(
     the client's own best demo of this product, and the offer filter would have
     refused it.
     """
-    if language is not Language.EN:
+    # Gate on the CAPTION TRACK, not on the locale. Every other video path was
+    # moved onto `has_subtitle` when the multilingual work landed; this one kept
+    # the older `language is not Language.EN` test, which is the same answer
+    # today and the wrong one the morning the .vtt files arrive -- offers would
+    # start working in Spanish and French while an outright request went on
+    # returning nothing.
+    playable = tuple(v for v in _VIDEOS if has_subtitle(v, language))
+    if not playable:
         return ()
 
     index = _term_index()
     subject = _REQUEST_NOISE.sub(" ", _fold(text or ""))
+    playable_ids = {video.id for video in playable}
     hits: dict[str, int] = {}
     for word in _WORD.findall(subject):
         for video_id, is_strong in index.get(word, ()):
+            if video_id not in playable_ids:
+                continue  # named, but there is no track to watch it with
             hits[video_id] = hits.get(video_id, 0) + (2 if is_strong else 1)
 
     if not hits:
@@ -453,4 +463,4 @@ def requested(
     best = max(hits.values())
     # Everything at the top score. One winner plays; a tie is offered as a
     # choice, which is a better answer than the silence a tie produces above.
-    return tuple(video for video in _VIDEOS if hits.get(video.id, 0) == best)
+    return tuple(video for video in playable if hits.get(video.id, 0) == best)

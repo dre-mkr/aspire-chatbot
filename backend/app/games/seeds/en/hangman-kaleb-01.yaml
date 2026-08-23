@@ -1,0 +1,147 @@
+# ASPIRE hangman — Kaleb set 1 (ages 9-12)
+#
+# WRITTEN FOR KALEB, NOT INHERITED FROM SKYE. Removing him from `_CONTENT_BANK`
+# stopped him being served the 5-8 bank and, until this file existed, left him
+# the only persona on the system who could not play hangman at all: production
+# returned `no_set_for_language` for kaleb/9-12 while stella and orion both
+# started a round. Fixing the wrong-content problem had created a no-content one.
+#
+# Skye's eight words are MONEY, COIN, SAVE, SPEND, SHARE, BANK, GOAL, NEEDS --
+# the 5-8 allow-list word for word. NONE of them are repeated here. Kaleb's card
+# says "simplifying the words reads as a demotion and loses this reader" and
+# "default to the OLDER end of this band. This reader is in secondary school."
+#
+# So these are the terms his own ladder opens: INTEREST, BUDGET, DEPOSIT,
+# SAVINGS, SHARES, ACCOUNT, SCARCITY, EARNINGS. `loan`, `compound`, `dividend`,
+# `portfolio` and `inflation` stay out -- all five are on the enforced 9-12 ban
+# list and the gate would strip them from a hint anyway.
+#
+# A round serves four of the eight at random, so no hint may count the words or
+# point at another entry -- the player will not have seen it.
+
+id: hangman-kaleb-01
+game_type: hangman
+language: en
+title: Money words worth knowing
+source: ASPIRE knowledge base
+
+closing:
+  lead: These are the words the grown-up conversations use.
+  text: >-
+    Every one of these turns up when somebody talks seriously about money — in a
+    bank, on the news, or at home working out what a family can afford. Knowing
+    what they mean is most of the advantage. You do not have to use them to
+    sound clever; you have to recognise them so nobody can use them to hurry you
+    into something you have not understood.
+
+entries:
+  - id: hangman-kaleb-01-interest
+    language: en
+    word: INTEREST
+    hint: what a bank adds to your savings for leaving them alone
+    definition: >-
+      Money a bank pays you for keeping your savings with it. You do nothing to
+      earn it except not spend. In the ECCU the lowest a bank may pay is 2
+      percent a year, credited twice.
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-020, FIN-037, FIN-058)
+
+  - id: hangman-kaleb-01-budget
+    language: en
+    word: BUDGET
+    hint: a plan for money you have not spent yet
+    definition: >-
+      A plan you make before the money goes, saying what each part of it is for.
+      Making one is how you find out whether what you want actually fits inside
+      what you have.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-011, FIN-013)
+
+  - id: hangman-kaleb-01-deposit
+    language: en
+    word: DEPOSIT
+    hint: what you are doing when you put money into an account
+    definition: >-
+      Money you put into a bank account. ASPIRE opens every eligible child's
+      savings account with EC$500 already in it, and a family can add more
+      whenever they like.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-00C, ASP-078)
+
+  - id: hangman-kaleb-01-savings
+    language: en
+    word: SAVINGS
+    hint: money you have deliberately not spent
+    definition: >-
+      Money kept back for later instead of used now. Half of what ASPIRE gives
+      every eligible child — EC$500 — sits as exactly this, in an account at the
+      St. Kitts-Nevis-Anguilla National Bank.
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-078, ASP-084)
+
+  - id: hangman-kaleb-01-shares
+    language: en
+    word: SHARES
+    hint: small pieces of a company that somebody can own
+    definition: >-
+      Pieces of a company. Owning one makes you part-owner of that company. The
+      other EC$500 of an ASPIRE account buys these in local government-owned
+      entities, so every participant owns a small piece of something real.
+    difficulty_band: stretch
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-095, ASP-276)
+
+  - id: hangman-kaleb-01-account
+    language: en
+    word: ACCOUNT
+    hint: where a bank keeps your money and keeps a record of it
+    definition: >-
+      A record a bank keeps of money that belongs to you, so you can add to it,
+      check it and eventually take it out. Every ASPIRE participant has two: one
+      for saving and one for investing.
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (ASP-078, FIN-104)
+
+  - id: hangman-kaleb-01-scarcity
+    language: en
+    word: SCARCITY
+    hint: why you cannot have everything you want, however you plan
+    definition: >-
+      There is never enough of everything for everyone, so every choice to use
+      something means not using it on something else. It is the reason budgeting
+      exists at all.
+    difficulty_band: stretch
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-002, FIN-011)
+
+  - id: hangman-kaleb-01-earnings
+    language: en
+    word: EARNINGS
+    hint: what you get for work you have done
+    definition: >-
+      Money you receive for doing work. It is where almost everybody's money
+      starts, and what a budget is built on top of.
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+    volatility: stable
+    source_document: ASPIRE knowledge base (FIN-005, FIN-011)

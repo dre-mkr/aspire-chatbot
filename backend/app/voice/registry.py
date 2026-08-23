@@ -122,6 +122,30 @@ _VOICE_UNDERSTUDY: dict[Persona, Persona] = {
     Persona.KALEB: Persona.STELLA,
 }
 
+#: Personas that may BOOT on a borrowed id but must never be HEARD in one.
+#:
+#: The understudy map exists so a new persona cannot take the app down at
+#: startup, and that job it still does. What it must not also do is put another
+#: character's voice in this one's mouth.
+#:
+#: Guest is not in this set and should not be. It has no artwork, no name of its
+#: own -- "Guest" is the absence of one -- and no character for a borrowed voice
+#: to contradict. It is also the voice an unknown visitor hears first, so
+#: silencing it would cost more than it protects.
+#:
+#: Kaleb is the opposite on every count. He has his own avatar, a boy of about
+#: eleven; his own card; and, since the split, his own game banks. A reader
+#: looking at his face while Skye's voice comes out is being told two different
+#: things at once, and the picture is the one they believe. The client's ruling
+#: on the game banks was that Kaleb and Skye are DIFFERENT PERSONAS; a shared
+#: voice is that same borrowing, in the one channel where it cannot be missed.
+#:
+#: So he resolves, he boots, and he is SILENT until `VOICE_KALEB` is set --
+#: text intact, no audio, exactly as `native=False` already behaves for a
+#: language nobody has cast. Setting `VOICE_KALEB` ends it; nothing else needs
+#: to change and this set can then be emptied.
+_NEVER_BORROWS_A_VOICE: frozenset[Persona] = frozenset({Persona.KALEB})
+
 
 class VoiceRegistryError(RuntimeError):
     """Raised at startup when a persona x language pair has no voice."""
@@ -148,7 +172,14 @@ def _resolve_voice_id(
     understudy = _VOICE_UNDERSTUDY.get(persona)
     if understudy is None:
         return None
-    return _resolve_voice_id(settings, understudy, language)
+    borrowed = _resolve_voice_id(settings, understudy, language)
+    if borrowed is None:
+        return None
+    voice_id, native = borrowed
+    if persona in _NEVER_BORROWS_A_VOICE:
+        # Boots on the id, is refused at request time. See the note on the set.
+        return voice_id, False
+    return voice_id, native
 
 
 def build_registry(

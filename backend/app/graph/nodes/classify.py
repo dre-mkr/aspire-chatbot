@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import json
 import logging
 from typing import Any
@@ -49,7 +51,10 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
     "learning_sample": (
         "A signed-out visitor who wants to understand how something works, or to "
         "try a short taste of a lesson: \"how does saving grow?\", \"show me what "
-        "you teach\". Explaining a mechanism, not quoting a rule."
+        "you teach\". Explaining a mechanism, not quoting a rule. "
+        "NOT for a question about the programme's rules, about an account, about "
+        "the reader's own circumstances, or about what material exists for a "
+        "class -- those are facts to look up, not mechanisms to explain."
     ),
     "qa_agent": (
         "Looking up a stated fact about ASPIRE: who is eligible, which documents "
@@ -76,7 +81,9 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
     ),
     "register_agent_step1": (
         "Starting an application before signing in -- the first few questions "
-        "only."
+        "only. Only when the reader has said they want to APPLY or sign up. "
+        "NOT for someone who merely mentioned a child, a parent or a name, and "
+        "never for a question about the assistant itself."
     ),
     "servicing_agent": (
         "Something about an account that already exists: balance, statements, "
@@ -86,14 +93,34 @@ AGENT_DESCRIPTIONS: dict[str, str] = {
 
 # `escalate_agent` has no description because `routable()` drops it before the menu is built.
 
+#: What the model says when none of the handlers is right.
+#:
+#: A ROUTER FORCED TO CHOOSE WILL ALWAYS CHOOSE. Given ten handlers and no way
+#: to decline, "What is your name?" does not fail to route -- it routes
+#: confidently, and the nearest description wins. It landed on
+#: `register_agent_step1` ("starting an application, the first few questions"),
+#: whose reply is "And how are you related to the child?".
+#:
+#: Abstaining is not a failure mode here. `_coerce` already knows what to do
+#: with a name it does not recognise: fall back to the row's first agent, which
+#: is Q&A by construction, because Q&A is the default for every reader. Saying
+#: "none" reaches that answer HONESTLY instead of arriving there through a
+#: wrong guess -- and it lands in the log as an abstention rather than as a
+#: hallucination, which is the difference between a signal and noise.
+ABSTAIN: Final[str] = "none"
+
 _SYSTEM = (
-    "You route one message to one handler. Choose from the list you are given "
-    "and nothing else. Reply with JSON only: "
-    '{"agent": "<name from the list>", "confidence": <0.0-1.0>, "reason": '
-    '"<six words or fewer>"}. '
+    "You route one message to one handler. Choose from the list you are given, "
+    'or reply with "none" if no handler on the list is right for it. '
+    "Reply with JSON only: "
+    '{"agent": "<name from the list, or none>", "confidence": <0.0-1.0>, '
+    '"reason": "<six words or fewer>"}. '
     "Confidence is how sure you are that the message belongs to that handler "
     "rather than another one on the list. Use a value below 0.5 when the "
-    "message is short, ambiguous, or could belong to two of them."
+    "message is short, ambiguous, or could belong to two of them. "
+    'Prefer "none" over a handler you are guessing at: a message that is small '
+    "talk, a greeting, a name, or about the assistant itself belongs to no "
+    "handler on this list, and choosing the closest one is worse than saying so."
 )
 
 
@@ -163,6 +190,21 @@ def _coerce(
     if proposed in allowed:
         return Classification(agent=proposed, confidence=confidence, reason=reason)
 
+    if proposed.lower() == ABSTAIN:
+        # INFO, not WARNING. The model was asked whether any handler fits and
+        # said no; that is the option working, not a fault. Logged so a week of
+        # these can be read as a list of what the menu does not cover.
+        logger.info(
+            "Classifier abstained for session %s (%s); using the row default %r.",
+            state.get("session_id"),
+            reason or "no reason given",
+            allowed[0] if allowed else None,
+        )
+        if allowed:
+            return Classification(
+                agent=allowed[0], confidence=confidence, reason=reason, coerced=True
+            )
+
     if proposed:
         # WARNING: a name outside the list is a hallucination or an attempt, and worth watching.
         logger.warning(
@@ -190,6 +232,26 @@ TEACHING_AGENTS: tuple[str, ...] = (
 )
 
 
+#: A message that is asking something, rather than answering something.
+#:
+#: Quiz answers are short and declarative: "Saving", "Spending", "true", "I
+#: think a loan". A question is not, and the difference is what this reads.
+_ASKS_SOMETHING = re.compile(
+    r"\?\s*$"                                     # ends in a question mark
+    r"|^\s*(what|who|when|where|why|how|which|can|could|do|does|did|is|are|"
+    r"should|will|would|am|have|has|tell me|explain)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_a_question_not_an_answer(state: AspireState) -> bool:
+    """Whether this turn asks something rather than answering the last thing."""
+    text = (_latest_user_text(state) or "").strip()
+    if not text:
+        return False
+    return bool(_ASKS_SOMETHING.search(text))
+
+
 def apply_stickiness(decision: Classification, state: AspireState) -> Classification:
     """Keep an ongoing flow unless the proposal clears the threshold."""
     active = state.get("active_agent")
@@ -215,6 +277,46 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
         logger.info(
             "Letting %s take session %s from %s at %.2f: a move into teaching is "
             "exempt from stickiness.",
+            decision.agent,
+            state.get("session_id"),
+            active,
+            decision.confidence,
+        )
+        return decision
+
+    # A QUESTION is never scored as a quiz answer.
+    #
+    # The exemption above is one-way on purpose: teaching is easy to enter and,
+    # by design, hard to leave. What that had no exit for was a reader who is
+    # inside a lesson and asks about something else entirely. Below the
+    # threshold they stayed in the tutor, and the tutor read their question as
+    # an attempt at its last check question.
+    #
+    # Measured on production, 23 August 2026, signed out:
+    #   Azuri  "What have you got for my Form 3 class?"
+    #          -> "You move EC$25 into your account instead of spending it this
+    #             week. What is that?"        [Saving | Spending]
+    #   Azuri  "What are my safeguarding obligations?"
+    #          -> "Close. Ask yourself whether the money left your account or
+    #             moved within it."           [Let me try again | Show me the answer]
+    #   Imani  "Is my money safe?"  -> the same EC$25 quiz question.
+    #
+    # A teacher asking about child safeguarding was told "Close." Both adult
+    # personas were worst hit, because a parent and a teacher ask the most
+    # questions that are not lessons.
+    #
+    # So the door opens both ways for a QUESTION and stays one-way for
+    # everything else. A quiz answer is short and declarative -- "Saving",
+    # "true", "I think a loan" -- and none of those match, so a lesson under way
+    # is protected exactly as before.
+    if (
+        active in TEACHING_AGENTS
+        and decision.agent not in TEACHING_AGENTS
+        and _is_a_question_not_an_answer(state)
+    ):
+        logger.info(
+            "Letting %s take session %s from %s at %.2f: the reader asked a "
+            "question rather than answering one.",
             decision.agent,
             state.get("session_id"),
             active,

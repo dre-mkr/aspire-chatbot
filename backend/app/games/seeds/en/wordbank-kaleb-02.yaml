@@ -1,0 +1,122 @@
+# ASPIRE word scramble — Kaleb bank, set 2 (ages 9–12)
+#
+# A second bank for the same reader as `wordbank-kaleb-01`, not a replacement.
+# A round serves four entries at random, so one set of six meant a nine-year-old
+# met the same words two afternoons running. Skye, Zion and Guest each had two
+# banks. Kaleb had one, which is the last thing the split left uneven.
+#
+# WHERE SET 1 WENT, AND WHERE THIS GOES. Set 1 is the vocabulary of an account:
+# INTEREST, BUDGET, DEPOSIT, SAVINGS, SHARES, EARN — the words on a statement.
+# This one is the vocabulary of a DECISION: what a thing is really worth, what
+# you gave up to get it, what you owe, what you own, and the difference between
+# wanting something now and wanting something more.
+#
+# None of set 1's words are repeated. A second copy would only make the pool
+# shallower where it is meant to be deeper, and the loader would reject the
+# duplicate id anyway.
+#
+# THE 9-12 LADDER, HELD. `loan`, `compound`, `dividend`, `portfolio` and
+# `inflation` are banned at this band and none of them are here — not in a word,
+# a hint or a definition. `OWE` is not `loan`: it is the plain word a child uses
+# for the thing itself, and it is the honest way to teach what borrowing means
+# without reaching for the term the ladder closes.
+#
+# Kaleb's card asks for the OLDER end of this band — "simplifying the words
+# reads as a demotion and loses this reader" — so these are terms a Form 1
+# student would meet without flinching, defined in passing and never in a box.
+
+id: wordbank-kaleb-02
+game_type: word_scramble
+language: en
+title: The words behind a decision
+source: ASPIRE — word scramble written for Kaleb's card, 9-12
+
+closing:
+  lead: Every one of these turns up the moment somebody has to choose.
+  text: >-
+    Set one was the words on a bank statement. These are the words underneath a
+    decision — what a thing is worth, what it cost you to get it, what you still
+    owe and what is genuinely yours. You will meet them long before anyone sits
+    you down to explain them, which is the reason to know them now.
+
+entries:
+  # WORTH, not VALUE. `value` is a wire key -- it carries the payload of a
+  # quick-reply option -- so VALUE passed the games leak guard only because that
+  # guard reads games payloads, where the key does not appear. A word that is
+  # safe by which endpoint happens to be checked is not safe. See
+  # `test_no_answer_is_also_a_wire_key`.
+  - id: wordbank-kaleb-02-worth
+    word: WORTH
+    scramble: THROW
+    hint: how much a thing actually matters to you, whatever the shelf says
+    definition: how much something means to you, which can be far more or far less than it costs
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  # DECIDE, not CHOICE. `choices` is a field in every scramble payload, so the
+  # answer-leak guard cannot tell a leaked word from the wire protocol naming
+  # itself -- and it is right not to try. `OPTION` fails the same way against
+  # `options` in the quick-replies payload. The word had to move, not the test.
+  - id: wordbank-kaleb-02-decide
+    word: DECIDE
+    scramble: CIDEDE
+    hint: what you are doing every time the money will not stretch to both
+    definition: picking one thing and, by picking it, not picking another
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-02-borrow
+    word: BORROW
+    scramble: RROWBO
+    hint: what you are doing when the money is not yours yet
+    definition: to take money that belongs to somebody else, on the understanding it goes back
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-02-owner
+    word: OWNER
+    scramble: NEROW
+    hint: what a share in a company makes you, however small the share
+    definition: the person a thing belongs to — which is what half of an ASPIRE account makes you
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-02-saver
+    word: SAVER
+    scramble: VERSA
+    hint: what you become the moment you leave money alone on purpose
+    definition: somebody who keeps money back for later instead of using it now
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-02-target
+    word: TARGET
+    scramble: GETTAR
+    hint: the number you are saving towards, written down
+    definition: the amount you have decided to reach, which turns saving into something you can measure
+    difficulty_band: warmup
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-02-income
+    word: INCOME
+    scramble: COMEIN
+    hint: everything coming in, before anything goes out
+    definition: the money that arrives — from work, from a gift, from anywhere
+    difficulty_band: core
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]
+
+  - id: wordbank-kaleb-02-tradeoff
+    word: TRADE
+    scramble: DERAT
+    hint: what you are doing when you give up one thing to get another
+    definition: giving up something you have for something you would rather have
+    difficulty_band: stretch
+    persona_bands: [kaleb]
+    age_bands: ["9-12"]

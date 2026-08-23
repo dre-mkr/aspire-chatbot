@@ -89,8 +89,18 @@ not about the deployment. What I can tell you is the shape of the gap:
 1. **Twelve per-language ids for ES and FR** — six personas × two languages. Until
    they are set, both languages speak in whatever the base id is, which is an
    English-trained voice.
-2. **`VOICE_KALEB*`** — four new variables the split introduces. Not urgent:
-   Kaleb understudies Stella, which is exactly the voice this band had yesterday.
+2. **`VOICE_KALEB`** — and it is more urgent than it looks. Kaleb has no base id,
+   so he resolves through the understudy to Stella. In **English** that resolution
+   is marked native, which means **it plays**: Kaleb speaks in Skye's voice today,
+   at his own pace, in production. The understudy was the right call to stop the
+   persona split failing startup, and the argument for leaving it — *"exactly the
+   voice this band had yesterday"* — is the same argument that was made for Kaleb
+   borrowing Skye's game bank, and the client rejected it. Kaleb and Skye are
+   different personas. The game bank has been separated; this has not.
+
+   Unlike the twelve below, setting `VOICE_KALEB` does not turn sound **on**. It
+   stops the wrong voice coming out — a failure that looks like nothing is wrong,
+   which is why it outlives the ones that look broken.
 3. **No per-language delivery tuning** — one pace and one stability per persona,
    shared across all three languages.
 

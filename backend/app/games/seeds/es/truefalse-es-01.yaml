@@ -1,0 +1,138 @@
+# ASPIRE ¿verdadero o falso? — conjunto en español
+#
+# ESCRITO EN ESPAÑOL, NO TRADUCIDO. El cliente pidió una conversación en español
+# nativa, y una traducción del inglés se nota: el ritmo es inglés y los ejemplos
+# no son de aquí. Las cifras y las reglas del programa son las publicadas —
+# EC$500 y EC$500, cinco años o los 18, lo que llegue más tarde — porque son
+# hechos, no redacción.
+#
+# BANDAS. Cada entrada lleva su `age_bands`. Nada aquí usa `interés compuesto`,
+# `préstamo`, `dividendo`, `cartera` ni `inflación`: están prohibidos a los 9-12
+# y la barrera los quitaría de todos modos. `por ciento` no aparece en las
+# entradas de 5-8.
+
+id: truefalse-es-01
+game_type: true_false
+language: es
+title: Verdadero o falso — el dinero y ASPIRE
+source: ASPIRE knowledge base
+
+closing:
+  lead: Ya sabes más que la mayoría de los adultos sobre esto.
+  text: >-
+    Lo que acabas de repasar son las tres cosas que deciden casi todo: qué es
+    tuyo, cuándo puedes usarlo y por qué esperar tiene valor. Nadie nace
+    sabiéndolo. Se aprende una pregunta a la vez, como acabas de hacer.
+
+entries:
+  - id: tfes-01-mitades
+    statement: Los EC$1.000 de ASPIRE están todos en una cuenta de ahorros.
+    answer: false
+    topic: Las dos mitades
+    topic_line: " — la mitad ahorrada, la mitad invertida."
+    takeaway: EC$500 se ahorran. EC$500 compran acciones de empresas del Estado.
+    explanation: >-
+      Los EC$1.000 se parten en dos. EC$500 van a una cuenta de ahorros en el
+      National Bank. Los otros EC$500 compran acciones de empresas que pertenecen
+      al Estado. Dos mitades, con dos trabajos distintos.
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15", "16-18"]
+
+  - id: tfes-01-esperar
+    statement: Puedes sacar el dinero de ASPIRE cuando quieras.
+    answer: false
+    topic: Cuándo llega
+    topic_line: " — al terminar el programa, no antes."
+    takeaway: Cinco años como mínimo, o hasta los 18. Lo que llegue más tarde.
+    explanation: >-
+      El dinero se queda hasta que termines el programa: cinco años como mínimo,
+      o hasta que cumplas 18, lo que llegue más tarde. Si entras a los 15,
+      terminas a los 20. Lo que tu familia añada por su cuenta también espera.
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15", "16-18"]
+
+  - id: tfes-01-gratis
+    statement: Tu familia tiene que pagar para que entres en ASPIRE.
+    answer: false
+    topic: El costo
+    topic_line: " — no cuesta nada."
+    takeaway: La inscripción es gratis y el dinero lo pone el Gobierno.
+    explanation: >-
+      No cuesta nada. La inscripción es gratuita y los EC$1.000 los aporta el
+      Gobierno de San Cristóbal y Nieves para cada niño que cumple los
+      requisitos. Ninguna familia paga por entrar.
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, orion, guest]
+    age_bands: ["5-8", "9-12", "13-15", "16-18"]
+
+  - id: tfes-01-igual
+    statement: Algunos niños reciben más dinero de ASPIRE que otros.
+    answer: false
+    topic: Todos igual
+    topic_line: " — la misma cantidad para cada niño."
+    takeaway: La ley obliga a dar lo mismo a cada niño que cumple los requisitos.
+    explanation: >-
+      Todos reciben lo mismo. La Ley ASPIRE de 2024 exige la misma cantidad
+      inicial para cada niño que cumple los requisitos, sin distinciones. Nadie
+      recibe más que otro.
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15", "16-18"]
+
+  - id: tfes-01-guardar
+    statement: Ahorrar es guardar dinero para más adelante en vez de gastarlo hoy.
+    answer: true
+    topic: Ahorrar
+    topic_line: " — guardar hoy para tener mañana."
+    takeaway: Ahorrar es no gastar ahora, a propósito.
+    explanation: >-
+      Eso es exactamente. Ahorrar es apartar algo hoy para tenerlo después. Lo
+      difícil no es entenderlo, es hacerlo cuando algo te gusta mucho.
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: tfes-01-necesidad
+    statement: Un juguete nuevo es una necesidad.
+    answer: false
+    topic: Necesidad o deseo
+    topic_line: " — una es para vivir, la otra para disfrutar."
+    takeaway: Comida, agua, ropa y casa son necesidades. Un juguete es un deseo.
+    explanation: >-
+      Un juguete es un deseo. Las necesidades son lo que hace falta para vivir:
+      comida, agua, ropa, un techo. Los deseos están bien, pero las necesidades
+      van primero cuando el dinero no alcanza para las dos cosas.
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: tfes-01-riesgo
+    statement: Si alguien te promete que vas a ganar dinero y que no puedes perder, conviene aceptar rápido.
+    answer: false
+    topic: Cuidado
+    topic_line: " — el riesgo no desaparece porque no lo mencionen."
+    takeaway: Toda inversión puede bajar. Quien dice lo contrario esconde algo.
+    explanation: >-
+      Toda inversión puede subir o bajar; eso es cierto siempre. Quien deja esa
+      parte fuera de la frase no la ha quitado de verdad: la ha escondido. La
+      prisa forma parte del truco. Enséñaselo a una persona adulta antes de
+      responder.
+    difficulty_band: core
+    persona_bands: [orion, guest]
+    age_bands: ["13-15", "16-18"]
+
+  - id: tfes-01-doce
+    statement: A partir de los 12 años puedes inscribirte tú mismo en ASPIRE.
+    answer: true
+    topic: Inscribirse
+    topic_line: " — desde los 12, por tu cuenta."
+    takeaway: Desde los 12 puedes abrir tu propia cuenta en aspire.gov.kn o en una sucursal.
+    explanation: >-
+      Sí. Desde los 12 años puedes inscribirte por tu cuenta, en aspire.gov.kn o
+      en una sucursal. Antes de esa edad lo hace tu madre, tu padre o quien te
+      cuide. Mucha gente de tu edad no sabe que ya puede hacerlo.
+    difficulty_band: core
+    persona_bands: [orion, guest]
+    age_bands: ["13-15", "16-18"]

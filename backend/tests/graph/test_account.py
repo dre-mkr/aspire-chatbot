@@ -39,9 +39,17 @@ _PERSONAS_TS = (
     Path(__file__).resolve().parents[3] / "frontend/src/lib/aspire/personas.ts"
 )
 
-#: The id, name and audience of each entry in the PERSONAS literal.
+#: The persona and audience of each entry in the GUIDES literal.
+#:
+#: It read the PERSONAS literal until `audience` was lifted out of it, leaving
+#: this regex matching nothing at all -- which the `assert advertised` below
+#: caught. GUIDES is where a guide is described now, and `persona` is the key
+#: the matrix is asked about. `band` is present on some rows and not others.
 _ENTRY = re.compile(
-    r'id:\s*"(?P<id>\w+)",\s*name:\s*"[^"]*",\s*audience:\s*"(?P<audience>[^"]*)"'
+    r'persona:\s*"(?P<id>\w+)",\s*'
+    r'(?:band:\s*"[^"]*",\s*)?'
+    r'name:\s*"[^"]*",\s*'
+    r'audience:\s*"(?P<audience>[^"]*)"'
 )
 #: "Ages 5–12" -- en dash in the file, hyphen allowed so a reformat is not a false failure.
 _AGES = re.compile(r"Ages\s+(\d+)\s*[–-]\s*(\d+)")

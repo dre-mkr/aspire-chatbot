@@ -67,8 +67,56 @@ _AURORA: Final[tuple[str, ...]] = (
     "learning_preview",
 )
 
-#: Staff and partners.
-_NOVA: Final[tuple[str, ...]] = ("qa_agent", "escalate_agent")
+#: What an adult who has NOT said who they are may reach.
+#:
+#: Factual answers and a way to reach a person. Registration is Aurora's alone
+#: and stays there; teaching belongs to a reader whose band is known.
+#:
+#: THIS USED TO BE `_NOVA` ITSELF, and the reuse was invisible until Azuri's row
+#: was widened: `guest` at `adult` returned `list(_NOVA)`, so giving the teacher
+#: persona a tutor silently gave one to every unidentified adult as well, and
+#: `TestEveryoneNeverWidens` caught it -- guest granting something the persona
+#: it stands in for does not is precisely the escalation that test exists to
+#: stop. Two rows that happened to be equal are now two rows.
+_ADULT_MINIMUM: Final[tuple[str, ...]] = ("qa_agent", "escalate_agent")
+
+
+#: Teachers and educators.
+#:
+#: Was `("qa_agent", "escalate_agent")` under the label "Staff and partners" --
+#: two agents, the most restricted signed-in row in the system: answer a
+#: question, or fetch a human. THE TEACHER PERSONA WAS THE ONE THAT COULD
+#: NEITHER TEACH NOR BE TAUGHT, while `aurora` -- a parent -- held
+#: `learning_preview` and could see the lessons Azuri delivers.
+#:
+#: `learning_preview` is the adult-facing view of what a child is taught. A
+#: teacher has a stronger claim on it than a guardian does: the guardian is
+#: curious about it, the teacher is delivering it. Withholding it meant Azuri
+#: could describe ASPIRE's teaching and never show any.
+#:
+#: NOT `learn_agent`, and the reason is a constraint rather than a judgement.
+#:
+#: `_narrowing` lets an adult PICK a plainer persona only when that persona's
+#: row is a subset of their own, which is what stops picking one being a way to
+#: reach more. `aurora` has no `learn_agent`. Give one to `nova` and the subset
+#: breaks: a guardian can no longer choose Azuri's register, and an educator
+#: ROLE stops resolving to Azuri at all. Both were live test failures, and both
+#: are real behaviour, not bookkeeping.
+#:
+#: Fixing that properly means giving the tutor to `aurora` as well -- which may
+#: well be right, since a parent learning what compounding is sits squarely in
+#: what ASPIRE is for. It is a decision about the GUARDIAN persona, taken on
+#: purpose rather than as a side effect of widening the teacher's, and it is not
+#: this change.
+#:
+#: STILL NOT REGISTRATION OR SERVICING. A teacher enrolling children on their
+#: behalf, or reading an account that is not theirs, is a safeguarding question
+#: with an owner, and that owner is not this file.
+_NOVA: Final[tuple[str, ...]] = (
+    "qa_agent",
+    "learning_preview",
+    "escalate_agent",
+)
 
 #: No proven identity.
 _ANONYMOUS: Final[tuple[str, ...]] = (
@@ -183,8 +231,9 @@ def allowed_agents(
         if age_band == "16-18":
             return list(_ORION_16_18)
         # `adult`: factual answers and a way to reach a person. Registration is
-        # Aurora's alone and stays there.
-        return list(_NOVA)
+        # Aurora's alone and stays there, and so is teaching -- a tutor needs a
+        # band, and this reader has not given one.
+        return list(_ADULT_MINIMUM)
 
     # `nova`, by elimination: the persona set's other four members are handled above.
     return list(_NOVA)

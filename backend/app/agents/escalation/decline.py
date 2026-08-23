@@ -81,6 +81,11 @@ _OFFER: dict[str, str] = {
 
 _CHILD_BANDS = frozenset({"5-8", "9-12"})
 
+#: The longest a decline chip may be before it is dropped instead of cut.
+#: Matches the widest label the existing chips already ship -- "Can I withdraw
+#: funds from the ASPIRE savings account?" is 52 characters and renders fine.
+_MAX_CHIP_CHARS = 64
+
 
 def _band(state: AspireState) -> str:
     return str(state.get("age_band") or "adult")
@@ -160,12 +165,36 @@ def decline_text(state: AspireState, chunks: list[KBChunk]) -> str:
 
 
 def decline_chips(state: AspireState, chunks: list[KBChunk]) -> list[str]:
-    """Chips under a decline."""
+    """Chips under a decline.
+
+    THE CHIP IS THE OFFER, so it has to be tappable. This used to return the
+    first four words of the topic, which produced labels like "What is the best"
+    and "What is a contingency" -- observed on production, 23 August 2026, under
+    a decline whose own prose had just quoted the whole question in full. The
+    reader saw the complete question and then a fragment of it on the button.
+
+    That is the failure `chips_within_band` already describes for a chip with a
+    banned word cut out of it: "I think a" is not an option anybody can tap, and
+    offering it is worse than offering one fewer. Truncating for length produces
+    exactly the same unusable thing for a different reason.
+
+    So the topic goes on the chip WHOLE, with its question mark, and a topic too
+    long to fit is dropped rather than cut. `_chip` in the stream layer already
+    shortens at a word boundary for display; what it must never be handed is a
+    label that has stopped being a question.
+    """
     topic = nearest_topic(chunks)
     if not topic:
         return []
-    words = topic.rstrip("?").split()
-    return [" ".join(words[:4])]
+    label = topic.strip()
+    if not label:
+        return []
+    if not label.endswith("?"):
+        label = label.rstrip(".") + "?"
+    # Longer than a chip can carry: no label at all beats half a question.
+    if len(label) > _MAX_CHIP_CHARS:
+        return []
+    return [label]
 
 
 def decline_update(state: AspireState, chunks: list[KBChunk]) -> dict[str, Any]:

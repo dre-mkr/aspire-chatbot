@@ -71,6 +71,49 @@ class NoContentAvailable(GameError):
     reason = "no_set_for_language"
 
 
+#: What a player is told when the games exist but not yet in their language.
+#:
+#: TRUE OF TWO GAMES NOW, not four. `true_false` and `word_scramble` have sets
+#: written in Spanish and in French -- written, not translated: the Spanish
+#: scramble answers AHORRAR, not a rendered SAVE. `hangman` and `millionaire`
+#: are still English only.
+#:
+#: Which is why this no longer says "the games are only in English". That was
+#: true when it was written and became a lie the moment the first Spanish set
+#: landed -- the exact failure this note was added to warn about, arriving on
+#: schedule. It now says THIS game, and points at the two that are ready.
+#:
+#: Before any of it existed, asking for a game in French produced the
+#: developer's own sentence, "No hangman set has been authored in fr yet",
+#: which reads to a child as a fault and to a parent as a product that does not
+#: work.
+#:
+#: DELETE THIS the day the remaining two are authored, and re-read the wording
+#: the day only one of them is.
+_NOT_YET_IN_LANGUAGE: dict[str, str] = {
+    "en": (
+        "This game is only in English so far. Others are ready in your "
+        "language — try true or false, or the word scramble — and this one is "
+        "being written, so check back soon."
+    ),
+    "es": (
+        "Este juego todavía solo está en inglés. Hay otros que ya están en "
+        "español: prueba verdadero o falso, o las palabras revueltas. Este se "
+        "está preparando, así que vuelve pronto."
+    ),
+    "fr": (
+        "Ce jeu n'existe pour l'instant qu'en anglais. D'autres sont déjà prêts "
+        "en français : essaie vrai ou faux, ou les mots mêlés. Celui-ci est en "
+        "préparation, alors reviens bientôt."
+    ),
+}
+
+
+def _not_yet_in_this_language(language: Language) -> str:
+    """The reader-facing version of "nothing authored in that language"."""
+    return _NOT_YET_IN_LANGUAGE.get(language.value, _NOT_YET_IN_LANGUAGE["en"])
+
+
 #: Whose bank a persona is served from when it has none of its own.
 #:
 #: Guardians and teachers have no authored sets. Until they do, they are served
@@ -321,9 +364,7 @@ class GameEngine:
         game = self._game(game_type)
         sets = game.sets_for(language)
         if not sets:
-            raise NoContentAvailable(
-                f"No {game_type} set has been authored in {language.value} yet."
-            )
+            raise NoContentAvailable(_not_yet_in_this_language(language))
 
         # Every set with something servable for this player, in filename order.
         #

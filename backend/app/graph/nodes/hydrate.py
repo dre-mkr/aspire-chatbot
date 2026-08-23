@@ -23,13 +23,40 @@ def spoof_attempt(body: dict[str, Any] | None) -> list[str]:
 
 
 def identity_from(claims: SessionClaims) -> dict[str, Any]:
-    """The identity fields, as a state update."""
+    """The identity fields, as a state update.
+
+    THE PERSONA IS MIGRATED HERE, ONCE, and this is the only place it can be.
+
+    `TOKEN_TTL` is seven days, so for a week after `kaleb.9-12.md` took the 9-12
+    band there are live sessions whose token still says `stella` at that band.
+    `allowed_agents` migrates them for routing and always did -- but it migrates
+    a local copy, and state kept the raw claim. Everything downstream reads
+    state.
+
+    Measured on the tree, 23 August 2026, for a legacy `stella/9-12` token:
+
+      agents    correct -- access normalises its own copy
+      CARD      Skye's 5-8 card, to a reader in secondary school. This is the
+                exact defect the split existed to fix, arriving through the one
+                door nobody had shut
+      GAMES     Skye's 5-8 bank -- MONEY, COIN, SAVE -- not Kaleb's
+      VOICE     resolved as `stella`, marked native, and PLAYED. Kaleb's whole
+                never-borrow rule was bypassed by the token saying stella
+      identity  correct, but only because it had been patched separately
+
+    Patching each site would have meant six fixes and a seventh waiting for the
+    next reader of `state["persona"]`. Migrating at the seam means state is
+    never wrong, and `normalise_persona_band` is idempotent, so access doing it
+    again downstream costs nothing.
+    """
+    from app.domain import normalise_persona_band
+
     return {
         "session_id": claims.session_id,
         "user_id": claims.user_id,
         "identity_proven": claims.identity_proven,
         "device_id": claims.device_id,
-        "persona": claims.persona,
+        "persona": normalise_persona_band(claims.persona, claims.age_band),
         "age_band": claims.age_band,
         "account_status": claims.account_status,
         "locale": claims.locale,

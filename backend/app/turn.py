@@ -232,12 +232,38 @@ LESSON_AGENTS: frozenset[str] = frozenset(
     {"learn_agent", "learning_preview", "learning_sample"}
 )
 
+#: Agents whose reply is a POSITION IN A FLOW, not an answer to a question.
+#:
+#: A registration turn only means anything in sequence. "And how are you related
+#: to the child?" is step two of a form; served to somebody who asked something
+#: else, it is not a partial answer but a non-sequitur that also looks like the
+#: assistant has started collecting their details.
+#:
+#: This is not hypothetical. On 23 August 2026 the classifier routed the bare
+#: question "What is your name?" to `register_agent_step1`, the reply was cached
+#: against that question, and it was then served from cache to FIVE of the seven
+#: persona/band pairs -- Skye at 5-8 among them. A five-year-old asking the
+#: guide's name was shown "And how are you related to the child?" over chips
+#: reading Mother, Father, Grandmother, Grandfather. Reproduced 3/3 on fresh
+#: sessions against production.
+#:
+#: One misroute is a bug. A CACHED misroute is that bug made permanent for
+#: everybody who ever asks the same thing, and it survives fixing the router.
+#: Lessons and stories are already excluded for the weaker version of this
+#: reason -- they were written for the reader who asked. A form step was not
+#: written for a reader at all.
+REGISTRATION_AGENTS: frozenset[str] = frozenset(
+    {"register_agent", "register_agent_step1"}
+)
+
 
 def cacheable(record: TurnRecord) -> bool:
     """Whether this turn may be served to somebody else later."""
     if record.card or not record.reply.strip():
         return False
     if record.agent in LESSON_AGENTS:
+        return False
+    if record.agent in REGISTRATION_AGENTS:
         return False
     # A story was written for the reader who asked for it, about the topic they
     # chose. Replaying it to the next person who happens to type the same topic

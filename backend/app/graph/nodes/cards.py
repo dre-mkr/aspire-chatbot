@@ -29,7 +29,7 @@ from app.schemas.directives import (
     directive_payload,
 )
 from app.videos import by_id
-from app.videos.catalog import all_videos, requested
+from app.videos.catalog import all_videos, has_subtitle, requested
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +398,22 @@ def _play(state: AspireState, video: Any) -> dict[str, Any]:
     }
 
 
+def _language_of(state: AspireState) -> Any:
+    """The reader's language, from the state's locale.
+
+    Imported inside the function on purpose: this module also imports an
+    unrelated `Language` from `app.eligibility.models` further down, and the two
+    enums are not the same. An unknown locale falls back to English rather than
+    raising -- a bad locale must not take the turn down.
+    """
+    from app.domain import Language
+
+    try:
+        return Language(str(state.get("locale") or "en"))
+    except ValueError:
+        return Language.EN
+
+
 def _video_choice(state: AspireState, videos: tuple[Any, ...]) -> dict[str, Any]:
     """Ask which one, with a chip per video.
 
@@ -468,14 +484,24 @@ def _open_video(state: AspireState, message: str) -> dict[str, Any] | None:
         # turns later must not reach back and open a player.
         return {"offered_video": None} if offered else None
 
-    matches = requested(message)
+    # `requested` was taking a `language` nobody passed, so its caption gate
+    # never ran and a French reader typing "montre-moi une vidéo" was handed a
+    # menu of two films with no track they could follow. The locale is on the
+    # state; pass it.
+    language = _language_of(state)
+    matches = requested(message, language=language)
     if len(matches) == 1:
         return _play(state, matches[0])
     # None named, or a tie. Both are the same answer: show what there is rather
     # than the silence a tie used to produce. `relevant_to` returns None in both
     # cases, correctly, because it is deciding whether to interrupt -- and that
     # is exactly why this path does not use it.
-    return _video_choice(state, matches or all_videos())
+    shelf = matches or tuple(v for v in all_videos() if has_subtitle(v, language))
+    if not shelf:
+        # Nothing in this language has a caption track. Let the turn be answered
+        # normally rather than offering a shelf they cannot watch.
+        return {"offered_video": None} if offered else None
+    return _video_choice(state, shelf)
 
 
 def _asked_for_a_person(message: str) -> dict[str, Any] | None:

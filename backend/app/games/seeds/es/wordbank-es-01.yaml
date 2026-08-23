@@ -1,0 +1,95 @@
+# ASPIRE palabras revueltas — conjunto en español
+#
+# ESCRITO EN ESPAÑOL. Las palabras son las que un niño de aquí oye en casa
+# cuando se habla de dinero, no la traducción de una lista inglesa. Las tildes
+# se quitan de la palabra a adivinar — un tablero en mayúsculas no las lleva —
+# pero se conservan en la pista y en la definición, que sí se leen.
+#
+# `PRESTAMO`, `DIVIDENDO`, `CARTERA` e `INFLACION` no aparecen: están prohibidas
+# a los 9-12. `INTERES` sí, porque el cliente la levantó para el programa.
+
+id: wordbank-es-01
+game_type: word_scramble
+language: es
+title: Palabras del dinero que vale la pena saber
+source: ASPIRE — palabras revueltas escritas en español
+
+closing:
+  lead: Son las palabras que usan los adultos cuando hablan en serio de dinero.
+  text: >-
+    Reconocerlas es casi toda la ventaja. No hace falta usarlas para parecer
+    listo; hace falta entenderlas para que nadie pueda usarlas y meterte prisa
+    con algo que no has comprendido del todo.
+
+entries:
+  - id: wbes-01-ahorrar
+    word: AHORRAR
+    scramble: RRAHORA
+    hint: lo que haces cuando guardas dinero en vez de gastarlo
+    definition: guardar dinero hoy para tenerlo más adelante
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: wbes-01-banco
+    word: BANCO
+    scramble: NCOBA
+    hint: el sitio donde el dinero está seguro y va creciendo
+    definition: el lugar que guarda tu dinero y lleva la cuenta de lo que tienes
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
+
+  - id: wbes-01-interes
+    word: INTERES
+    scramble: TERESIN
+    hint: lo que el banco añade por dejar el dinero tranquilo
+    definition: lo que ganas por dejar dinero en el banco, o lo que pagas por usar el de otro
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbes-01-presupuesto
+    word: PRESUPUESTO
+    scramble: PUESTOPRESU
+    hint: el plan que haces antes de que el dinero se vaya
+    definition: un plan que dice para qué es cada parte del dinero, hecho antes de gastarlo
+    difficulty_band: core
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbes-01-cuenta
+    word: CUENTA
+    scramble: TACUEN
+    hint: lo que el banco abre a tu nombre
+    definition: el registro que el banco lleva del dinero que es tuyo
+    difficulty_band: warmup
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbes-01-acciones
+    word: ACCIONES
+    scramble: NESACCIO
+    hint: trozos pequeños de una empresa que alguien puede tener
+    definition: partes de una empresa; tener una te hace dueño de un trocito de ella
+    difficulty_band: stretch
+    persona_bands: [orion, guest]
+    age_bands: ["13-15", "16-18"]
+
+  - id: wbes-01-escasez
+    word: ESCASEZ
+    scramble: SEZESCA
+    hint: por qué no se puede tener todo lo que uno quiere
+    definition: nunca hay de todo para todos, así que elegir una cosa es dejar otra
+    difficulty_band: stretch
+    persona_bands: [kaleb, orion, guest]
+    age_bands: ["9-12", "13-15"]
+
+  - id: wbes-01-ganar
+    word: GANAR
+    scramble: NARGA
+    hint: lo que haces con tu trabajo antes de poder guardar nada
+    definition: recibir dinero por un trabajo hecho
+    difficulty_band: warmup
+    persona_bands: [stella, kaleb, guest]
+    age_bands: ["5-8", "9-12"]
