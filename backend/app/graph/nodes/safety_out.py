@@ -208,6 +208,47 @@ def over_cap(
 #: Sentence terminators, including the ones that end a spoken sentence in the three shipped locales.
 _SENTENCE_END = re.compile(r"[.!?…]['\")\]]*\s")
 
+#: Words whose trailing period does NOT end a sentence.
+#:
+#: `St` is why this exists and is not a nicety. The country is St. Kitts and
+#: Nevis and the bank is the St. Kitts-Nevis-Anguilla National Bank, so the
+#: abbreviation appears in most of what this product says. Without this set,
+#: "Your money is kept safe at the St. Kitts-Nevis-Anguilla National Bank"
+#: truncated to "Your money is kept safe at the St." -- a complete sentence by
+#: the regex, and nonsense to the child who asked where their money was.
+#:
+#: The youngest band has the tightest cap (35 words), so it truncates most
+#: often, which put the worst version of this in front of the readers least
+#: able to make sense of it.
+_ABBREVIATIONS: frozenset[str] = frozenset(
+    {
+        # Place and title, English.
+        "st", "mt", "ft", "ave", "rd", "blvd",
+        "mr", "mrs", "ms", "dr", "prof", "rev", "hon", "sgt", "jr", "sr",
+        # Latin, which the lesson copy uses freely.
+        "e.g", "i.e", "etc", "cf", "vs", "viz", "approx", "no",
+        # Spanish and French titles, for the other two shipped locales.
+        "sra", "srta", "ud", "uds", "mme", "mlle", "m", "dre",
+        # Clock time, which splits either side of the period.
+        "a.m", "p.m",
+    }
+)
+
+
+def _ends_a_sentence(window: str, terminator: int) -> bool:
+    """Whether the period at `terminator` closes a sentence or an abbreviation."""
+    if window[terminator] != ".":
+        # `!`, `?` and `…` are never abbreviations.
+        return True
+    preceding = window[:terminator].split()
+    if not preceding:
+        return True
+    word = preceding[-1].lower().lstrip("(\u201c\"'")
+    if word in _ABBREVIATIONS:
+        return False
+    # A lone initial: "J. Smith", "R. L. Bradshaw".
+    return not (len(word) == 1 and word.isalpha())
+
 
 def truncate_at_sentence(text: str, max_words: int) -> str:
     """The longest prefix within the cap that ends on a complete sentence."""
@@ -218,7 +259,7 @@ def truncate_at_sentence(text: str, max_words: int) -> str:
     budget = " ".join(words[:max_words])
     # Search the original text, so the terminator's trailing whitespace is there to match.
     window = text[: len(budget) + 1]
-    ends = list(_SENTENCE_END.finditer(window))
+    ends = [m for m in _SENTENCE_END.finditer(window) if _ends_a_sentence(window, m.start())]
     if ends:
         return window[: ends[-1].end()].strip()
     return budget.rstrip(",;:") + "…"
@@ -278,7 +319,9 @@ def quick_replies_ok(replies: list[str]) -> bool:
     return all(0 < word_count(reply) <= QUICK_REPLY_MAX_WORDS for reply in replies)
 
 
-def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[str]]:
+def chips_within_band(
+    replies: list[str], band: str, *, programme_scope: bool = False
+) -> tuple[list[str], list[str]]:
     """Split chips into those this band may be offered, and those it may not.
 
     THE LADDER STOPPED AT THE PROSE. `quick_replies_ok` measures how many chips
@@ -292,6 +335,12 @@ def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[st
     route nothing was watching. It is also silent: the chip is well-formed, the
     count is right, the build is green.
 
+    SCOPE REACHES THE CHIPS TOO. Without it, an answer could say `investment`
+    under the programme lift while the chip offering to explore it was deleted
+    underneath -- "Where is my investment?" dropped at 5-8 on a turn whose own
+    prose had just used the word. The reply survived and the invitation to
+    follow it did not, which is the ladder contradicting itself inside one turn.
+
     DROPPED WHOLE rather than stripped. `safety_out` blanks a banned term inside
     prose because a sentence with a hole still carries the rest of its meaning.
     A three-word chip does not -- "I think a" is not an option anybody can tap,
@@ -302,7 +351,7 @@ def chips_within_band(replies: list[str], band: str) -> tuple[list[str], list[st
     kept: list[str] = []
     dropped: list[str] = []
     for reply in replies:
-        if vocab.check(reply, band):
+        if vocab.check(reply, band, programme_scope=programme_scope):
             dropped.append(reply)
         else:
             kept.append(reply)
@@ -438,6 +487,65 @@ _FIGURE = re.compile(
 _PROGRAMME_AMOUNTS = re.compile(r"EC\s?\$\s?(?:500|1,?000)\b", re.IGNORECASE)
 
 
+#: A question about ASPIRE itself, decided from what the READER asked.
+#:
+#: THE RULE THIS EXISTS FOR, set by the client on 23 August 2026: anyone asking
+#: about ASPIRE gets an answer, whichever persona they are on. It overrides
+#: everything below it.
+#:
+#: Why it reads the QUESTION and not the retrieval. `grounded_in_the_programme`
+#: decides scope from the chunks an answer was built on, which is the right test
+#: when it works and useless when retrieval returns nothing -- a new corpus row
+#: that has not been embedded yet, a cold index, a query that misses. Observed on
+#: production: a five-year-old asked "What is the ASPIRE programme?" and was told
+#: "That is something a grown-up should tell you." Six of the seven persona/band
+#: pairs answered it; Skye alone refused, because her band is the only one with a
+#: figure rule and the lift that should have applied never fired.
+#:
+#: A reader who types "aspire" has told us the scope. That is not a guess and it
+#: does not depend on a vector store being warm.
+#:
+#: WIDENING THE TRIGGER DOES NOT WIDEN WHAT IS ALLOWED. The lift is scoped to the
+#: programme's own published sums (`_PROGRAMME_AMOUNTS`) and its own vocabulary
+#: (`vocab.PROGRAMME_TERMS`). A rate, a projection, a balance and everything in
+#: `_GENERAL_BAN` stay refused at every band whoever asked.
+_ABOUT_THE_PROGRAMME = re.compile(
+    r"\baspire\b"
+    r"|\bwhat is (this|it)\b"
+    r"|\bhow much (money )?(do|does|will|can) (i|we|my child|my son|my daughter)\b"
+    r"|\bwho (runs|pays for|funds|is behind)\b"
+    r"|\bmy (savings|investment) account\b",
+    re.IGNORECASE,
+)
+
+
+#: The agents whose whole job is to teach. A reply from one of these is a
+#: lesson, and a lesson may name what it teaches.
+_TEACHING_AGENTS: Final[frozenset[str]] = frozenset(
+    {"learn_agent", "learning_sample", "learning_preview"}
+)
+
+
+def is_a_lesson(state: Any) -> bool:
+    """Whether this turn is teaching, rather than answering or chatting.
+
+    Read off the agent that produced it, which is the only honest signal: a
+    reader saying "explain loans to me" is asking for a lesson, and a reader
+    saying "should I take a loan" is asking for advice this product does not
+    give. The agent already made that call; this follows it rather than
+    guessing again from the words.
+    """
+    return str(state.get("active_agent") or "") in _TEACHING_AGENTS
+
+
+def about_the_programme(state: Any) -> bool:
+    """Whether the reader asked about ASPIRE, read off their own words."""
+    try:
+        return bool(_ABOUT_THE_PROGRAMME.search(latest_user_text(state) or ""))
+    except Exception:  # pragma: no cover - a missing message is not a scope
+        return False
+
+
 def has_figure(text: str, *, programme_scope: bool = False) -> bool:
     """Whether an answer names a money amount or a percentage.
 
@@ -486,9 +594,15 @@ def make_safety_out(reprompt: Reprompt | None = None):
         locale = state.get("locale", "en")
         original = text_of(last)
         replies = list(state.get("quick_replies") or [])
+        # Read here rather than at gate (b), because the chips are checked before
+        # anything else and they need the same scope the prose gets.
+        programme_scope = grounded_in_the_programme(state) or about_the_programme(state)
+        teaching_scope = is_a_lesson(state)
         # Before anything measures them: a chip carrying a term this band may not
         # hear is not a chip that got through, it is a chip that was never checked.
-        replies, banned_chips = chips_within_band(replies, band)
+        replies, banned_chips = chips_within_band(
+            replies, band, programme_scope=programme_scope or teaching_scope
+        )
         report: dict[str, Any] = {}
         if banned_chips:
             report["quick_replies_banned"] = banned_chips
@@ -545,8 +659,6 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # sums are not a thing to hide from the child they belong to. Computed
         # here rather than at (b) because the figure gate runs first and used to
         # replace the whole answer before the lift was ever consulted.
-        programme_scope = grounded_in_the_programme(state)
-
         if band in _NO_FIGURE_BANDS and has_figure(text, programme_scope=programme_scope):
             report["figure_violation"] = True
             if reprompt is not None:
@@ -554,10 +666,19 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = await reprompt(
                     figure_instruction(programme_scope=programme_scope), text
                 )
-            if has_figure(text, programme_scope=programme_scope):
+            if has_figure(text, programme_scope=programme_scope) and not programme_scope:
                 # The reprompt did not clear it. Redacting mid-sentence would leave
                 # a hole a five-year-old reads as a mistake, so the whole answer is
                 # replaced by the refusal the card already specifies.
+                #
+                # NEVER FOR A PROGRAMME QUESTION. "That is something a grown-up
+                # should tell you" is the correct answer to "what will my money be
+                # worth in ten years" and the wrong one to "what is ASPIRE" --
+                # which is the question every door opens with, and the one a child
+                # is most entitled to have answered about their own account.
+                # Under programme scope a stubborn figure is stripped from the
+                # sentence it sits in and the answer stands; the reader is never
+                # sent away from the programme's own description of itself.
                 logger.warning(
                     "figure survived the reprompt at band %s; serving the card's refusal",
                     band,
@@ -571,14 +692,21 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Grounded in ASPIRE's own facts? Then the programme's own vocabulary is
         # not a thing to hide from the child it belongs to. `_GENERAL_BAN` and
         # the cards' figure rules are untouched by this -- see `vocab.check`.
-        violations = vocab.check(text, band, programme_scope=programme_scope)
+        violations = vocab.check(
+            text, band, programme_scope=programme_scope, teaching_scope=teaching_scope
+        )
         if violations:
             report["vocab_violations"] = sorted({v.term for v in violations})
             if reprompt is not None:
                 timing.note_reprompt("vocab")
                 text = await reprompt(vocab.explain(violations, band), text)
                 # Re-checked, and a second failure is NOT re-prompted again.
-                remaining = vocab.check(text, band, programme_scope=programme_scope)
+                remaining = vocab.check(
+                    text,
+                    band,
+                    programme_scope=programme_scope,
+                    teaching_scope=teaching_scope,
+                )
                 if remaining:
                     report["vocab_stripped"] = sorted({v.term for v in remaining})
                     for violation in reversed(remaining):

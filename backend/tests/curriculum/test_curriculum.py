@@ -183,7 +183,19 @@ class TestValidationFailsLoudly:
         return path
 
     def test_a_concept_may_not_teach_a_word_its_band_cannot_hear(self, tmp_path):
-        """The authoring mistake this catches: "compound" in a 9-12 concept."""
+        """The authoring mistake this catches: `inflation` in a 9-12 concept.
+
+        It used to be `compound`, then `loan`, and both are now the client's
+        rulings rather than mistakes: for educational purposes the ban lifts,
+        and `loan` was named explicitly on 23 August as usable in tutorials
+        across all personas. A lesson about borrowing cannot be written without
+        the word.
+
+        `inflation` is outside `TEACHING_TERMS`, so the guard still has teeth —
+        and it needs them here more than anywhere, because this fails at LOAD:
+        a rejected concept is not stripped at reply time, it stops the module
+        existing at all.
+        """
         path = self._write(
             tmp_path,
             """
@@ -195,7 +207,7 @@ class TestValidationFailsLoudly:
               - id: growth
                 name: Growth
                 band_min: "9-12"
-                vocabulary: [compound]
+                vocabulary: [inflation]
             lessons:
               - id: l1
                 module_id: bad_module

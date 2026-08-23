@@ -129,6 +129,11 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
     game_score = body.get("__game_result")
     resume = body.get("__upload_result")
     message = str(body.get("message") or "").strip()
+    # Decided from the reader's own words, once, at the top of the turn, so the
+    # widget gate and the prose gate apply the same ladder to the same turn.
+    from app.graph.nodes.safety_out import _ABOUT_THE_PROGRAMME
+
+    interceptor.programme_scope = bool(_ABOUT_THE_PROGRAMME.search(message))
     # The reader's "Explain it simply" control. An answer-shaping request, so it
     # travels in the body; `hydrate` puts the same value into graph state.
     simple_mode = bool(body.get("simple_mode"))

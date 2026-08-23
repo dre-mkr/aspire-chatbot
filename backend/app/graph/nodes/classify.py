@@ -140,7 +140,27 @@ class Classification(BaseModel):
 UNROUTABLE: frozenset[str] = frozenset({"escalate_agent"})
 
 #: Agents the access matrix grants that have no implementation behind them.
-UNBUILT: frozenset[str] = frozenset({"servicing_agent"})
+#:
+#: EMPTY NOW, and `servicing_agent` leaving it is the point.
+#:
+#: It was here because it had no subgraph, and routing a reader to a placeholder
+#: was worse than answering their account question from the corpus. That reversed
+#: the moment the placeholder became an answer: it now names where a balance
+#: actually lives -- quarterly statements, the portal, the National Bank, the
+#: team -- in three languages, which is the true answer and the only one this
+#: system can honestly give. There is no balance in this database to look up.
+#:
+#: What the exclusion cost while it stood: "what is my balance", "my deposit has
+#: not shown up yet", "can you send me a statement" and "i need to change the
+#: address on the account" all went to `qa_agent`, which answered them from the
+#: corpus -- general facts about how ASPIRE accounts work, to someone asking
+#: about theirs. Four of the five misses in
+#: `test_routing_accuracy_against_the_labelled_set` were exactly these, and they
+#: were unwinnable: the labelled set asks for an agent `routable` forbade.
+#:
+#: A stub with nothing to say belongs here. A stub whose answer is the right
+#: one does not.
+UNBUILT: frozenset[str] = frozenset()
 
 
 def routable(allowed: list[str]) -> list[str]:

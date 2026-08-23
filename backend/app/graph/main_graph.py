@@ -17,6 +17,7 @@ from app.graph.nodes.guard import guard
 from app.graph.nodes.hydrate import make_hydrate
 from app.graph.nodes.safety_in import safety_in
 from app.graph.nodes.safety_out import make_safety_out
+from app.agents.servicing.copy import ACCOUNT_ELSEWHERE
 from app.graph.state import AspireState
 from app.safety import pii
 from app.messages import text_of
@@ -75,40 +76,10 @@ _NOT_BUILT: dict[str, str] = {
 #: which tells a parent chasing a missing payment nothing at all.
 #:
 #: What it says instead is where the answer actually lives. Quarterly valuation
-#: statements are published; the portal shows account activity; the bank holds
-#: the account. All three are in the corpus and none of them needed this agent.
-_ACCOUNT_ELSEWHERE: dict[str, str] = {
-    "en": (
-        "I cannot see anyone's account from here — balances and statements are "
-        "not something this assistant holds. Your ASPIRE savings are at the "
-        "St. Kitts-Nevis-Anguilla National Bank, participants receive quarterly "
-        "valuation statements, and account activity is on the ASPIRE portal at "
-        "aspire.gov.kn. For anything the portal does not answer — a payment that "
-        "has not arrived, a detail that needs changing — the ASPIRE team is the "
-        "right place: aspire@gov.kn, +1 (869) 667-5566, or +1 (869) 762-1947. "
-        "Is there something about the programme itself I can help with?"
-    ),
-    "es": (
-        "No puedo ver la cuenta de nadie desde aquí: este asistente no tiene "
-        "saldos ni estados de cuenta. Los ahorros de ASPIRE están en el "
-        "St. Kitts-Nevis-Anguilla National Bank, los participantes reciben "
-        "estados de valoración trimestrales, y la actividad de la cuenta está en "
-        "el portal de ASPIRE, aspire.gov.kn. Para lo que el portal no resuelva "
-        "— un pago que no ha llegado, un dato que hay que cambiar — el equipo de "
-        "ASPIRE es el lugar: aspire@gov.kn, +1 (869) 667-5566 o "
-        "+1 (869) 762-1947. ¿Puedo ayudarte con algo del programa en sí?"
-    ),
-    "fr": (
-        "Je ne peux voir le compte de personne d'ici : cet assistant ne détient "
-        "ni soldes ni relevés. L'épargne ASPIRE se trouve à la "
-        "St. Kitts-Nevis-Anguilla National Bank, les participants reçoivent des "
-        "relevés d'évaluation trimestriels, et l'activité du compte est sur le "
-        "portail ASPIRE, aspire.gov.kn. Pour ce que le portail ne règle pas — un "
-        "paiement qui n'est pas arrivé, une information à modifier — l'équipe "
-        "ASPIRE est la bonne adresse : aspire@gov.kn, +1 (869) 667-5566 ou "
-        "+1 (869) 762-1947. Puis-je vous aider sur le programme lui-même ?"
-    ),
-}
+#: The servicing copy lives with the agent that speaks it. This alias is the
+#: registration-failure fallback below, so a reader still gets the real answer
+#: if `app.agents.servicing.graph` ever fails to import.
+_ACCOUNT_ELSEWHERE = ACCOUNT_ELSEWHERE
 
 #: Agents with a real answer of their own, even though no subgraph exists.
 _ANSWERED_WITHOUT_A_SUBGRAPH: dict[str, dict[str, str]] = {
@@ -165,6 +136,7 @@ def register_all() -> None:
         "app.agents.escalation.graph",
         "app.agents.learn.graph",
         "app.agents.register.graph",
+        "app.agents.servicing.graph",
     )
     for path in modules:
         if any(name in AGENT_BUILDERS for name in _PROVIDES.get(path, ())):
@@ -186,6 +158,7 @@ _PROVIDES: dict[str, tuple[str, ...]] = {
     "app.agents.escalation.graph": ("escalate_agent",),
     "app.agents.learn.graph": ("learn_agent", "learning_preview", "learning_sample"),
     "app.agents.register.graph": ("register_agent", "register_agent_step1"),
+    "app.agents.servicing.graph": ("servicing_agent",),
 }
 
 

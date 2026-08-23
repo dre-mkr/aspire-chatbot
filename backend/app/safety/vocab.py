@@ -342,16 +342,44 @@ PROGRAMME_TERMS: Final[frozenset[str]] = frozenset(
 )
 
 
+#: What a LESSON may name, which is not the same set as what the programme may.
+#:
+#: A SECOND SCOPE, and the reason it is second is worth having. Programme scope
+#: is ASPIRE describing itself: the EC$500 split, the shares, the interest its
+#: own savings half earns. Teaching scope is a lesson naming the thing it is
+#: teaching, which is a different question with a different answer.
+#:
+#: `loan` is the case that separates them, added on the client's ruling of
+#: 23 August 2026: "loan can be used in education tutorials etc across all
+#: personas". ASPIRE lends nobody anything, so `loan` is not a programme term
+#: and never will be. But a lesson about borrowing cannot be written without it,
+#: and a child who is going to meet the word on a poster before they meet it in
+#: a classroom is better served knowing what it means.
+#:
+#: The ban outside a lesson stands, and stands for the same reason it always
+#: did: a guide that wanders into lending at a nine-year-old has changed the
+#: subject to something nobody asked about. Naming it in a lesson is teaching.
+#: Reaching for it in ordinary talk is drift.
+TEACHING_TERMS: Final[frozenset[str]] = PROGRAMME_TERMS | frozenset({"loan"})
+
+
 def check(
     text: str,
     band: str,
     *,
     programme_scope: bool = False,
+    teaching_scope: bool = False,
 ) -> list[VocabViolation]:
     """Every banned term in `text` for this band, in the order they appear.
 
     `programme_scope` says this answer is grounded in the Golden Record -- the
     sourced ASPIRE facts -- and lifts `PROGRAMME_TERMS` for it.
+
+    `teaching_scope` says this is a LESSON, and lifts `TEACHING_TERMS`, which is
+    the same set plus `loan`. ASPIRE lends nobody anything, so `loan` is not a
+    programme term; a lesson about borrowing cannot be written without it. The
+    wider scope contains the narrower, so a lesson about ASPIRE needs only this
+    one.
 
     WHAT IT NEVER LIFTS, and the distinction is the whole of the rule:
 
@@ -368,15 +396,18 @@ def check(
         return []
 
     patterns = _PATTERNS.get(band, _PATTERNS["adult"])
-    if programme_scope:
+    # Teaching scope is the wider of the two and contains the narrower, so a
+    # lesson about ASPIRE gets both without the caller having to pass both.
+    lifted = TEACHING_TERMS if teaching_scope else PROGRAMME_TERMS
+    if programme_scope or teaching_scope:
         patterns = {
             term: pattern
             for term, pattern in patterns.items()
-            # `_GENERAL_BAN` keys are never in PROGRAMME_TERMS, so this cannot
-            # reach them. Stated as a filter over the band's own terms rather
-            # than a lookup, so adding a scam phrase to the general list can
-            # never accidentally make it liftable.
-            if term not in PROGRAMME_TERMS or term in _GENERAL_BAN
+            # `_GENERAL_BAN` keys are in neither set, so this cannot reach them.
+            # Stated as a filter over the band's own terms rather than a lookup,
+            # so adding a scam phrase to the general list can never accidentally
+            # make it liftable.
+            if term not in lifted or term in _GENERAL_BAN
         }
     # Scanned folded, REPORTED against the original. `strip_accents` removes
     # combining marks without changing how many characters precede any given

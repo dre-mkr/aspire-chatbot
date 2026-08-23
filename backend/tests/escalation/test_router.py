@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 
 from app.graph.access import ACCOUNT_STATUSES, AGE_BANDS, PERSONAS, allowed_agents
@@ -158,15 +160,33 @@ class TestUnbuiltAgentsAreNotDestinations:
         )
 
     async def test_a_stub_is_never_offered_to_the_router(self):
-        """The end-to-end property, on the row that actually granted it."""
-        from app.graph.nodes.classify import routable
+        """The end-to-end property, stated without depending on which agent is one.
+
+        This used to name `servicing_agent`, which was the only stub. It has a
+        builder now -- one node that tells a reader where their balance actually
+        lives -- so the example became a ruling: the test asserted an agent was
+        unreachable, and would have failed the moment someone made it work.
+
+        The property is what matters, so it is tested against a name declared
+        unbuilt here rather than one that happens to be unbuilt today.
+        """
+        from app.graph.nodes.classify import UNROUTABLE, routable
 
         granted = allowed_agents("aurora", "adult", "beneficiary", user_id="u")
         assert "servicing_agent" in granted, (
             "this test is meaningless if the matrix stopped granting it"
         )
-        assert "servicing_agent" not in routable(granted)
-        assert routable(granted), "the row must keep something to route to"
+
+        pretend_unbuilt = frozenset({"servicing_agent"})
+        with mock.patch("app.graph.nodes.classify.UNBUILT", pretend_unbuilt):
+            assert "servicing_agent" not in routable(granted)
+            assert routable(granted), "the row must keep something to route to"
+
+        # And with nothing declared unbuilt, everything routable is offered.
+        with mock.patch("app.graph.nodes.classify.UNBUILT", frozenset()):
+            offered = routable(granted)
+        assert "servicing_agent" in offered
+        assert not set(offered) & UNROUTABLE
 
     async def test_filtering_is_independent_of_registration_order(self):
         """`routable` must not change with what has been imported so far."""

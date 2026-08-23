@@ -62,9 +62,35 @@ class Concept(_Node):
 
     @model_validator(mode="after")
     def _vocabulary_is_permitted_at_band_min(self) -> "Concept":
-        """A concept may not teach a word its youngest band cannot hear."""
+        """A concept may not teach a word its youngest band cannot hear.
+
+        TEACHING SCOPE, and it is the reason a lesson can exist at all.
+
+        The client's ruling: for educational purposes the ban lifts. It had not
+        reached here, and here fails HARDER than anywhere else -- this is a
+        load-time validator, so a concept whose vocabulary contained
+        `investment` at 5-8, or `compound` or `dividend` at 9-12, did not get
+        stripped at reply time. **The module refused to load**, and the tutor
+        had nothing to teach at all.
+
+        Which put the ladder in an impossible position: `investment` is banned
+        at 5-8 precisely so a guide does not wander into it, and a LESSON about
+        it is the one context where the word is the point. A curriculum that
+        cannot name what it teaches is not a safer curriculum.
+
+        So a concept is read under TEACHING scope -- the wider of the two, and
+        the right one here, because a concept is a lesson. It lifts
+        `vocab.TEACHING_TERMS`, which is the programme's own vocabulary plus
+        `loan`: ASPIRE lends nobody anything, so `loan` is not a programme term,
+        and a lesson about borrowing cannot be written without it.
+
+        `_GENERAL_BAN` still rejects a module at load, and so does anything
+        outside that set -- a concept about `inflation` at 5-8 is still refused,
+        because that is neither what the programme calls itself nor what a
+        lesson at that band is for.
+        """
         for word in self.vocabulary:
-            if vocab.check(word, self.band_min):
+            if vocab.check(word, self.band_min, teaching_scope=True):
                 raise ValueError(
                     f"{self.id}: vocabulary {word!r} is banned at {self.band_min}"
                 )
