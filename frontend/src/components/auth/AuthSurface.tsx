@@ -22,10 +22,15 @@ interface AuthSurfaceProps {
 }
 
 /** What the panel says. Deliberately concrete rather than marketing. */
-const STATS = [
-	{ value: "5–18", label: "Ages supported" },
-	{ value: "2", label: "Islands" },
-];
+/**
+ * THE STAT ROW IS GONE, and it was the tell.
+ *
+ * "5–18 / Ages supported" beside "2 / Islands", set large in a display face
+ * over small grey labels: the hero-metric template, and the second figure is
+ * the number of islands in the country, which nobody signing in needs and
+ * which is not a fact about the programme. What the panel is actually for is
+ * saying who runs this and what it does; both are already in the lines above.
+ */
 
 export function AuthSurface({
 	title,
@@ -69,10 +74,6 @@ export function AuthSurface({
 			{/* Supplementary to the task: somebody is here to sign in, not to read
 			    the pitch. Announced as `complementary` so it can be skipped over. */}
 			<aside className="auth__panel" aria-label="About ASPIRE">
-				{/* Ambient only: two blurred washes that give the gradient depth. */}
-				<div className="auth__orb auth__orb--a" aria-hidden="true" />
-				<div className="auth__orb auth__orb--b" aria-hidden="true" />
-
 				<div className="auth__panel-inner">
 					<img
 						className="auth__logo"
@@ -91,15 +92,6 @@ export function AuthSurface({
 						The ASPIRE assistant answers questions about money, your modules and
 						the programme itself — in plain words, at your own pace.
 					</p>
-
-					<div className="auth__stats">
-						{STATS.map((stat) => (
-							<div className="auth__stat" key={stat.label}>
-								<span className="auth__stat-value">{stat.value}</span>
-								<span className="auth__stat-label">{stat.label}</span>
-							</div>
-						))}
-					</div>
 
 					<span className="auth__gov">
 						A programme of the Government of St. Kitts and Nevis.

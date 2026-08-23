@@ -4,11 +4,31 @@ import type { ColourToken } from "../../../lib/stream/types";
 
 export type { ColourToken };
 
-/** The five tokens, as the CSS variables the stylesheet defines. */
+/**
+ * The five tokens, as the CSS variables the stylesheet defines.
+ *
+ * ONE INK, not five. Each token used to carry its own text colour — plum-deep,
+ * prose, warn-ink, quiet, prose — so a timeline of three structurally identical
+ * points rendered its three labels in three different colours, and a reader
+ * learned a colour vocabulary the widget did not mean. The fill and the line
+ * are what carry the token's meaning; the words are words. `caution` keeps its
+ * own ink because there it is load-bearing for contrast against the warm fill.
+ *
+ * `line` is a CONTROL BOUNDARY on most of these widgets — the edge of a
+ * tappable panel — so it has to clear the 3:1 that WCAG 1.4.11 asks. It was
+ * `--hairline` (1.19:1) for `muted` and for the default, which is a boundary
+ * nobody can see. `--control-line` is the token the project already keeps for
+ * exactly this, and it is 3.0:1 over these fills.
+ *
+ * `dot` is the same colour at full strength, for the places a token has to be
+ * legible as a MARK rather than as a surface — a point on a timeline track,
+ * where a 10%-alpha line disappears into the track it sits on.
+ */
 export function tone(token: ColourToken | undefined): {
 	fill: string;
 	line: string;
 	ink: string;
+	dot: string;
 } {
 	switch (token) {
 		case "accent":
@@ -17,30 +37,37 @@ export function tone(token: ColourToken | undefined): {
 				fill: "var(--wash-m-16)",
 				line: "var(--magenta)",
 				ink: "var(--plum-deep)",
+				dot: "var(--magenta)",
 			};
 		case "positive":
 			return {
 				fill: "color-mix(in srgb, var(--success) 12%, transparent)",
-				line: "var(--success)",
-				ink: "var(--prose)",
+				line: "var(--success-ink)",
+				ink: "var(--plum-deep)",
+				dot: "var(--success-ink)",
 			};
 		case "caution":
 			return {
-				fill: "color-mix(in srgb, var(--warn) 12%, transparent)",
+				/* 7%, not 12%: `--warn-ink` on the 12% fill measures 4.21:1, under
+				   the 4.5:1 its own label has to clear. */
+				fill: "var(--warn-wash)",
 				line: "var(--warn)",
 				ink: "var(--warn-ink)",
+				dot: "var(--warn-ink)",
 			};
 		case "muted":
 			return {
 				fill: "var(--wash-3)",
-				line: "var(--hairline)",
-				ink: "var(--quiet)",
+				line: "var(--control-line)",
+				ink: "var(--plum-deep)",
+				dot: "var(--wash-32)",
 			};
 		default:
 			return {
 				fill: "var(--wash-6)",
-				line: "var(--hairline)",
-				ink: "var(--prose)",
+				line: "var(--control-line)",
+				ink: "var(--plum-deep)",
+				dot: "var(--plum)",
 			};
 	}
 }

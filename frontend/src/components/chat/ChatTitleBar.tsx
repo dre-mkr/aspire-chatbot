@@ -84,11 +84,19 @@ export function ChatTitleBar({
 						}
 					}}
 				/>
+			) : !title ? (
+				/* A new chat has no title until the first answer names it. This
+				 * rendered as a full-width, focusable button with no text and no
+				 * accessible name — so the first thing a keyboard reader met on
+				 * every new conversation was a control announced as "button", with
+				 * nothing after it. It is a caption until there is a name to edit. */
+				<p className="titlebar__title titlebar__title--empty">New chat</p>
 			) : (
 				<button
 					type="button"
 					className="titlebar__title"
 					title={title}
+					aria-label={`Rename this chat, currently "${title}"`}
 					onClick={() => {
 						setDraft(title);
 						openedWith.current = title;

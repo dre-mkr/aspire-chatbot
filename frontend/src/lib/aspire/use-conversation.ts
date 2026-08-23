@@ -677,16 +677,26 @@ export function useConversation({
 		[ask, dropStream],
 	);
 
+	/**
+	 * Returns whether the question was accepted.
+	 *
+	 * It returned nothing, and the composer cleared the box on every call — so
+	 * a question typed while a reply was still streaming, or before the thread
+	 * had an id, was silently deleted. The reader watched their own sentence
+	 * vanish and had to retype it from memory. The three guarded exits below
+	 * are the three ways that happened.
+	 */
 	const send = useCallback(
-		(raw: string, simpleMode = false) => {
+		(raw: string, simpleMode = false): boolean => {
 			const text = raw.trim();
-			if (!text) return;
+			if (!text) return false;
 			// Ignore a second question while one is in flight, rather than discarding the first reply.
-			if (isThinkingRef.current || cursor.current) return;
+			if (isThinkingRef.current || cursor.current) return false;
 			// Conversations are opened at `/`, which mints the id; this hook only continues them.
-			if (!threadRef.current) return;
+			if (!threadRef.current) return false;
 
 			dispatch(text, simpleMode);
+			return true;
 		},
 		[dispatch],
 	);

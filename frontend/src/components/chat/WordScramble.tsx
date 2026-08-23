@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	CheckIcon,
-	ExitIcon,
 	RetryIcon,
 	ShuffleIcon,
 	SparkIcon,
@@ -15,6 +14,8 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
+import { GAME_COPY } from "./game-copy";
+import { GameHead } from "./GameHead";
 
 /** The word scramble, played in the thread. */
 
@@ -25,24 +26,18 @@ const COPY = {
 	// persona now, so the count is the only honest half of that subtitle.
 	sub: (total: number) =>
 		`${total} ${total === 1 ? "word" : "words"} to unscramble`,
-	leave: "Leave game",
-	close: "Close",
+	...GAME_COPY,
 	lead: "Unscramble these letters.",
 	help: "Click a letter to place it, or drag it into a slot.",
 	clue: "Clue",
 	noClues: "No clues left",
 	shuffle: "Shuffle",
-	skip: "Skip this word",
 	check: "Check it",
 	wrong: "Same letters, different order — take one out and try another spot.",
-	meaning: "What it means in ASPIRE terms",
 	next: "Next word",
 	last: (total: number) => `See all ${total}`,
 	revealed: (word: string) => `No trouble — the word was ${word}.`,
 	completeLead: (total: number) => `That is the set — all ${total}.`,
-	together: "What they mean together",
-	exit: "Back to chat",
-	exitNote: "Ask me about any of these words whenever you want.",
 } as const;
 
 type Copy = typeof COPY;
@@ -273,42 +268,16 @@ export function WordScramble({
 			className="game"
 			aria-label={`${copy.title}, word ${state.prompt.position} of ${state.prompt.total}`}
 		>
-			<header className="game__head">
-				<span className="game__badge" aria-hidden="true">
-					<SparkIcon />
-				</span>
-				<span className="game__title">{copy.title}</span>
-				<span className="game__sub">{copy.sub(state.prompt.total)}</span>
-
-				{/* Decorative: the section label already names the word, so bare dots would be noise. */}
-				<div className="game__steps" aria-hidden="true">
-					{Array.from({ length: state.prompt.total }, (_, i) => {
-						const n = i + 1;
-						const done = n < state.prompt.position;
-						const now = n === state.prompt.position && !complete;
-						return (
-							<span
-								key={n}
-								className="game__step"
-								data-state={done ? "done" : now ? "now" : "next"}
-								title={`Word ${n}`}
-							>
-								{done ? <CheckIcon /> : now ? n : null}
-							</span>
-						);
-					})}
-				</div>
-
-				<button
-					type="button"
-					className="game__leave"
-					onClick={leave}
-					disabled={busy}
-				>
-					<ExitIcon />
-					{complete ? copy.close : copy.leave}
-				</button>
-			</header>
+			<GameHead
+				title={copy.title}
+				sub={copy.sub(state.prompt.total)}
+				position={state.prompt.position}
+				total={state.prompt.total}
+				complete={complete}
+				leaveLabel={complete ? copy.close : copy.leave}
+				onLeave={leave}
+				busy={busy}
+			/>
 
 			<div className="game__body">
 				{failure ? (

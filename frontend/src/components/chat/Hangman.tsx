@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExitIcon, LampIcon, SparkIcon } from "#/components/icons";
+import { CheckIcon, LampIcon, SparkIcon } from "#/components/icons";
 import { playCoin, playMiss } from "#/lib/aspire/game-sound";
 import {
 	type Closing,
@@ -12,6 +12,8 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
+import { GAME_COPY } from "./game-copy";
+import { GameHead } from "./GameHead";
 
 /** Hangman, played in the thread. */
 
@@ -26,18 +28,14 @@ const LIVES = 6;
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 const COPY = {
+	title: "Hangman",
 	sub: (total: number) => `${total} ${total === 1 ? "word" : "words"}`,
-	leave: "Leave game",
-	close: "Close",
-	hint: "Give me a clue",
-	skip: "Show me the word",
-	meaning: "What it means",
+	...GAME_COPY,
+	/* Word scramble says "Clue · 1 of 2" and this said "Give me a clue"; the
+	   count is the useful half, so both say the same thing now. */
+	hint: "Clue",
 	next: "Next word",
-	last: "See them all",
 	completeLead: "That is all of them.",
-	together: "What ties them together",
-	exit: "Back to chat",
-	exitNote: "Ask me to go deeper on any of these whenever you want.",
 	got: (word: string) => `${word} — you got it.`,
 	lost: (word: string) => `Out of guesses. The word was ${word}.`,
 	shown: (word: string) => `The word was ${word}.`,
@@ -191,24 +189,33 @@ export function Hangman({
 	const asking = settled === null && !complete;
 
 	return (
-		<section className="game game--hangman" aria-live="polite">
-			<header className="game__head">
-				<div>
-					<h3 className="game__title">Hangman</h3>
-					<p className="game__sub">{COPY.sub(state.prompt.total)}</p>
-				</div>
-				<button
-					type="button"
-					className="game__leave"
-					onClick={leave}
-					disabled={busy}
-				>
-					<ExitIcon />
-					{complete ? COPY.close : COPY.leave}
-				</button>
-			</header>
+		<section
+			className="game game--hangman"
+			aria-live="polite"
+			aria-label={`${COPY.title}, word ${state.prompt.position} of ${state.prompt.total}`}
+		>
+			<GameHead
+				title={COPY.title}
+				sub={COPY.sub(state.prompt.total)}
+				position={state.prompt.position}
+				total={state.prompt.total}
+				complete={complete}
+				leaveLabel={complete ? COPY.close : COPY.leave}
+				onLeave={leave}
+				busy={busy}
+			/>
 
-			{complete ? (
+			{/* `.game` sets `overflow: hidden` and this content had no `.game__body`
+			 * to sit in, so the 26-key alphabet ran under the card's right edge and
+			 * the last key of each row was clipped. */}
+			<div className="game__body">
+				{failure ? (
+					<p className="game__failure" role="alert">
+						{failure}
+					</p>
+				) : null}
+
+				{complete ? (
 				<Complete
 					covered={covered}
 					summary={summary}
@@ -225,23 +232,33 @@ export function Hangman({
 						    word, because "S A V E" is read out as four letters. */}
 						<span className="sr-only">{settled.reveal.answer}</span>
 					</p>
-					<p className="game__verdict" data-outcome={settled.outcome}>
+					<p className="game__result" data-outcome={settled.outcome}>
+						<span className="game__result-icon" aria-hidden="true">
+							{settled.outcome === "correct" ? <CheckIcon /> : null}
+						</span>
 						{settled.outcome === "correct"
 							? COPY.got(settled.reveal.answer)
 							: settled.outcome === "skipped"
 								? COPY.shown(settled.reveal.answer)
 								: COPY.lost(settled.reveal.answer)}
 					</p>
-					<p className="game__meaning-label">{COPY.meaning}</p>
-					<p className="game__meaning-text">{settled.reveal.explanation}</p>
-					<button
-						type="button"
-						className="game__btn game__btn--go"
-						onClick={() => setSettled(null)}
-						disabled={busy}
-					>
-						{summary ? COPY.last : COPY.next}
-					</button>
+					<div className="game__meaning">
+						<span className="game__meaning-label">
+							<SparkIcon size={13} />
+							{COPY.meaning}
+						</span>
+						<p className="game__meaning-text">{settled.reveal.explanation}</p>
+					</div>
+					<div className="game__actions">
+						<button
+							type="button"
+							className="game__btn game__btn--go"
+							onClick={() => setSettled(null)}
+							disabled={busy}
+						>
+							{summary ? COPY.last : COPY.next}
+						</button>
+					</div>
 				</div>
 			) : (
 				<>
@@ -320,10 +337,9 @@ export function Hangman({
 							{COPY.skip}
 						</button>
 					</div>
-				</>
-			)}
-
-			{failure ? <p className="game__failure">{failure}</p> : null}
+					</>
+				)}
+			</div>
 		</section>
 	);
 }
@@ -341,6 +357,11 @@ function Lives({ left, of }: { left: number; of: number }) {
 						data-spent={i >= left || undefined}
 					/>
 				))}
+			</span>
+			{/* Six dots under a word mean nothing on their own. A screen reader was
+			    told what they were and a child looking at them was not. */}
+			<span className="hangman__lives-label" aria-hidden="true">
+				{left} {left === 1 ? "guess" : "guesses"} left
 			</span>
 			<span className="sr-only">{`${left} of ${of} guesses left.`}</span>
 		</p>
@@ -361,11 +382,20 @@ function Complete({
 	const got = covered.filter((c) => c.outcome === "correct").length;
 	return (
 		<div className="game__complete">
-			<p className="game__eyebrow">
-				<SparkIcon /> {COPY.completeLead}
+			<p className="game__result" data-correct>
+				<span className="game__stars" aria-hidden="true">
+					{[0, 1, 2, 3].map((i) => (
+						<SparkIcon
+							key={i}
+							size={16}
+							style={{ animationDelay: `${i * 300}ms` }}
+						/>
+					))}
+				</span>
+				{COPY.completeLead}
 			</p>
-			<p className="game__count">
-				{got} of {summary?.total ?? covered.length} without help.
+			<p className="game__score">
+				{got} of {summary?.total ?? covered.length} without help
 			</p>
 			<ul className="game__recap">
 				{covered.map((entry) => (
@@ -379,20 +409,24 @@ function Complete({
 				))}
 			</ul>
 			{closing ? (
-				<div className="game__closing">
-					<p className="game__closing-lead">{COPY.together}</p>
-					<p className="game__closing-head">{closing.lead}</p>
-					<p className="game__closing-text">{closing.text}</p>
+				<div className="game__meaning">
+					<span className="game__meaning-label">
+						<SparkIcon size={13} />
+						{closing.lead || COPY.together}
+					</span>
+					<p className="game__meaning-text">{closing.text}</p>
 				</div>
 			) : null}
-			<button
-				type="button"
-				className="game__btn game__btn--go"
-				onClick={onExit}
-			>
-				{COPY.exit}
-			</button>
-			<p className="game__exit-note">{COPY.exitNote}</p>
+			<div className="game__actions">
+				<button
+					type="button"
+					className="game__btn game__btn--go"
+					onClick={onExit}
+				>
+					{COPY.exit}
+				</button>
+				<span className="game__count">{COPY.exitNote}</span>
+			</div>
 		</div>
 	);
 }
