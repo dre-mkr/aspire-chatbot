@@ -67,7 +67,7 @@ class TestEveryBand:
     @pytest.mark.parametrize(
         ("band", "term"),
         [
-            ("5-8", "interest"),
+            ("5-8", "dividend"),  # `interest` was lifted at 5-8 on 22 Aug 2026
             ("5-8", "credit"),
             ("9-12", "loan"),
             ("9-12", "compound"),

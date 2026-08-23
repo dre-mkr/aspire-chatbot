@@ -101,13 +101,34 @@ class TestTheVocabularyLadder:
         want = set(spine["vocabulary_ladder"]["general_ban"])
         assert set(vocab._GENERAL_BAN) == want
 
-    def test_the_youngest_band_still_bans_the_word_its_card_teaches_around(
-        self, spine
-    ):
-        """The 5-8 card teaches what interest IS without naming it, and that
-        only works while the gate behind it holds."""
-        assert "interest" in spine["vocabulary_ladder"]["ban"]["5-8"]
-        assert [v.term for v in vocab.check("what interest is", "5-8")] == ["interest"]
+    def test_the_youngest_band_may_name_interest_and_never_price_it(self, spine):
+        """This test used to assert the opposite, and the reversal is the point.
+
+        `interest` was banned at 5-8 and the card taught around it. On 22 August
+        2026 it was lifted, and the spine records the decision under `lifted:`
+        rather than merely applying it -- a term leaving a ban list is a
+        child-safety call and should leave a trail.
+
+        What did not move is the figure, which is what keeps the lift safe.
+        """
+        assert "interest" in spine["vocabulary_ladder"]["allow"]["5-8"]
+        assert "interest" not in spine["vocabulary_ladder"]["ban"]["5-8"]
+        assert not vocab.check("what interest is", "5-8")
+
+        # The register says so, and says what came with it.
+        record = next(
+            entry
+            for entry in spine["vocabulary_ladder"]["lifted"]
+            if entry["term"] == "interest"
+        )
+        assert record["from_band"] == "5-8"
+        assert "percent" in record["not_lifted_with_it"]
+
+        # And `percent` still holds the line the lift leans on.
+        assert "percent" in spine["vocabulary_ladder"]["ban"]["5-8"]
+        assert [v.term for v in vocab.check("two percent a year", "5-8")] == [
+            "percent"
+        ]
 
 
 class TestTheCardsTheSpineNames:

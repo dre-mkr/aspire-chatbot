@@ -135,17 +135,40 @@ word_caps_enforced:
 # ---------------------------------------------------------------------------
 vocabulary_ladder:
   allow:
-    "5-8":   [save, spend, share, money, bank, coin, goal, wait]
-    "9-12":  [interest, budget, need, want, goal, deposit, earn]
+    "5-8":   [save, spend, share, money, bank, coin, goal, wait, interest]
+    "9-12":  [budget, need, want, goal, deposit, earn]
     "13-15": [compound interest, inflation, budget, credit, debit, risk]
     "16-18": []
     adult:   []
   ban:
-    "5-8":   [interest, compound, investment, inflation, dividend, credit, loan, percent, portfolio]
+    "5-8":   [compound, investment, inflation, dividend, credit, loan, percent, portfolio]
     "9-12":  [compound, inflation, dividend, portfolio, credit score, loan]
     "13-15": [derivative, leverage, amortisation]
     "16-18": []
     adult:   []
+  # ── the register of lifts ──────────────────────────────────────────────
+  # A term leaving a ban list is a child-safety decision, so it is recorded
+  # rather than merely applied. Anything here was ON a ban list and is not.
+  lifted:
+    - term: interest
+      from_band: "5-8"
+      to: allow
+      date: 2026-08-22
+      decided_by: client
+      why: >-
+        A five-year-old can hold the idea through a piggy bank -- the bank keeps
+        your money and adds a little, and the little bit has a name. What a
+        child that age cannot do is check a number.
+      not_lifted_with_it: >-
+        The FIGURE. `percent` and `%` remain banned at 5-8 in all three
+        languages, and Skye's red line 3 is untouched: no rate, no percentage,
+        no balance, no projection, not even a sourced one. Naming a thing and
+        pricing it are different permissions; this granted one of them.
+      also_unchanged: >-
+        compound, investment, inflation, dividend, credit, loan and portfolio
+        all still fire at 5-8. `compound` at 9-12 remains open and is still the
+        ASPIRE team's decision.
+
   general_ban:
     - guaranteed return
     - get rich

@@ -36,9 +36,8 @@ from app.safety import vocab
 #: sentence a model would actually produce gets caught, not that a dictionary
 #: lookup succeeds.
 SAYS_IT_ANYWAY: list[tuple[str, str, str, str]] = [
-    ("5-8", "interest", "en", "The bank pays you interest every year."),
-    ("5-8", "interest", "es", "El banco te paga un interés cada año."),
-    ("5-8", "interest", "fr", "La banque te verse un intérêt chaque année."),
+    # NOT `interest` -- lifted at 5-8 on 22 August 2026. The FIGURE did not
+    # move, and `percent` is now the load-bearing ban at this band.
     ("5-8", "percent", "en", "You get two percent of your money."),
     ("5-8", "percent", "es", "Recibes un porcentaje de tu dinero."),
     ("5-8", "percent", "fr", "Tu reçois un pourcentage de ton argent."),
@@ -128,9 +127,9 @@ class TestTheKeysStayEnglish:
         developer reads and the word the persona card lists all drift apart by
         locale.
         """
-        found = vocab.check("La banque te verse un intérêt.", "5-8")
-        assert [v.term for v in found] == ["interest"]
-        assert found[0].matched == "intérêt", "the MATCH is what was actually said"
+        found = vocab.check("La banque te verse un dividende.", "5-8")
+        assert [v.term for v in found] == ["dividend"]
+        assert found[0].matched == "dividende", "the MATCH is what was actually said"
 
     def test_the_shipped_locales_are_the_ones_covered(self):
         """If a fourth locale is added, this test is the reminder.
@@ -165,8 +164,8 @@ class TestAccentsAreOptionalButTheGateIsNot:
     @pytest.mark.parametrize(
         ("band", "term", "text"),
         [
-            ("5-8", "interest", "El banco te paga un interes cada ano."),
-            ("5-8", "interest", "La banque te verse un interet chaque annee."),
+            ("5-8", "percent", "El banco anade un porcentaje cada ano."),
+            ("5-8", "percent", "La banque ajoute un pourcentage chaque annee."),
             ("5-8", "investment", "Es una inversion del gobierno."),
             ("5-8", "investment", "C est un investissement."),
             ("9-12", "compound", "Se llama interes compuesto."),
@@ -200,13 +199,56 @@ class TestAccentsAreOptionalButTheGateIsNot:
     def test_the_violation_reports_what_was_actually_written(self):
         """The gate matches folded; the caller blanks the original. If these
         drifted apart the blanking would land on the wrong characters."""
-        found = vocab.check("El banco paga interés hoy.", "5-8")
-        assert [v.term for v in found] == ["interest"]
-        assert found[0].matched == "interés"
+        found = vocab.check("El banco paga un dividendo hoy.", "5-8")
+        assert [v.term for v in found] == ["dividend"]
+        assert found[0].matched == "dividendo"
 
     @pytest.mark.parametrize(
         "word", ["interés", "año", "français", "École", "naïve", "sécurité"]
     )
     def test_folding_preserves_length_so_offsets_stay_true(self, word):
         assert len(vocab.strip_accents(word)) == len(word)
+
+class TestTheOneWordThatWasLifted:
+    """`interest` at 5-8, by a decision of 22 August 2026.
+
+    Pinned in every locale, because the lift has to be as multilingual as the
+    ban was -- and because the FIGURE staying banned is what makes it safe.
+    """
+
+    @pytest.mark.parametrize(
+        ("locale", "text"),
+        [
+            ("en", "The bank keeps it safe and adds a little. That is interest."),
+            ("es", "El banco lo guarda y le añade un poquito. Eso es el interés."),
+            ("fr", "La banque le garde et en ajoute un peu. C'est l'intérêt."),
+            ("es", "Eso se llama interes."),
+            ("fr", "Ca s appelle un interet."),
+        ],
+    )
+    def test_the_word_passes_at_5_8(self, locale, text):
+        assert not vocab.check(text, "5-8")
+
+    @pytest.mark.parametrize(
+        ("locale", "text"),
+        [
+            ("en", "The bank adds two percent every year."),
+            ("es", "El banco añade un porcentaje cada año."),
+            ("fr", "La banque ajoute un pourcentage chaque année."),
+            ("en", "It adds 2% a year."),
+        ],
+    )
+    def test_the_figure_does_not(self, locale, text):
+        """A card allowed to name a thing drifts toward pricing it unless
+        something says no. This is that something."""
+        assert [v.term for v in vocab.check(text, "5-8")] == ["percent"]
+
+    @pytest.mark.parametrize(
+        "word",
+        ["compound", "investment", "inflation", "dividend", "loan", "portfolio"],
+    )
+    def test_nothing_else_moved_with_it(self, word):
+        assert vocab.check(f"this one is about {word}", "5-8"), (
+            f"only `interest` was lifted at 5-8; {word} should still fire"
+        )
 

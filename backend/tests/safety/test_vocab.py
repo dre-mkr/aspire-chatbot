@@ -42,8 +42,10 @@ class TestTheLadder:
     def test_it_accumulates_upward(self):
         assert "save" in vocab.concepts_for("5-8")
         assert "save" in vocab.concepts_for("13-15")
+        # `interest` moved to the youngest rung on 22 August 2026, so it is on
+        # both -- accumulation is exactly what carries it upward.
+        assert "interest" in vocab.concepts_for("5-8")
         assert "interest" in vocab.concepts_for("9-12")
-        assert "interest" not in vocab.concepts_for("5-8")
         assert "compound interest" in vocab.concepts_for("13-15")
         assert "compound interest" not in vocab.concepts_for("9-12")
 
@@ -112,7 +114,10 @@ class TestBannedTerms:
     @pytest.mark.parametrize(
         "term",
         [
-            "interest",
+            # `interest` was here until 22 August 2026, when it was lifted at
+            # this band -- a piggy bank is a picture a five-year-old owns.
+            # `percent` below is what still holds the line, and it is the one
+            # that matters: the idea is teachable at five, the arithmetic is not.
             "compound",
             "investment",
             "inflation",

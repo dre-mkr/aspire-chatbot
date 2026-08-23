@@ -79,8 +79,24 @@ _GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
 # `_ALLOW` is what a band adds to everything the younger bands already allow.
 
 _ALLOW: Final[dict[str, tuple[str, ...]]] = {
-    "5-8": ("save", "spend", "share", "money", "bank", "coin", "goal", "wait"),
-    "9-12": ("interest", "budget", "need", "want", "goal", "deposit", "earn"),
+    # `interest` sits on the YOUNGEST rung by a decision of 22 August 2026.
+    #
+    # It was banned here and taught from 9-12. The call is that a five-year-old
+    # can hold the idea through a piggy bank: the bank keeps your money and adds
+    # a little, and the little bit has a name. What a child that age cannot do is
+    # CHECK a number -- so the WORD moved and the FIGURE did not. `percent` and
+    # `%` are still banned at 5-8, in all three languages, and Skye's red line 3
+    # is untouched: no rate, no percentage, no balance, no projection, not even a
+    # sourced one.
+    #
+    # Naming a thing and pricing it are different permissions. This granted one.
+    "5-8": (
+        "save", "spend", "share", "money", "bank", "coin", "goal", "wait",
+        "interest",
+    ),
+    # `interest` is not repeated here: `concepts_for` accumulates from the
+    # youngest rung up, so a band inherits it. This table is what a band ADDS.
+    "9-12": ("budget", "need", "want", "goal", "deposit", "earn"),
     "13-15": (
         "compound interest",
         "inflation",
@@ -111,10 +127,10 @@ _ALLOW: Final[dict[str, tuple[str, ...]]] = {
 #: Adding a language means adding variants here, and nowhere else.
 _BAN: Final[dict[str, dict[str, tuple[str, ...]]]] = {
     "5-8": {
-        "interest": (
-            "interest", "interests",
-            "interés", "intereses", "intérêt", "intérêts",
-        ),
+        # `interest` was here until 22 August 2026. Lifted -- see the note in
+        # `_ALLOW`. `percent` below is what still holds the line at this band,
+        # and it is the one that matters: the idea is teachable to a
+        # five-year-old, the arithmetic is not.
         "compound": (
             "compound", "compounds", "compounded", "compounding",
             "compuesto", "compuestos", "capitalización", "capitalizado",

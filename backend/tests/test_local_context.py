@@ -361,14 +361,38 @@ class TestTheCardsAskForMoreThanTheOutboundGateAllows:
     reads this file.
     """
 
-    def test_the_5_8_card_no_longer_names_the_word_its_gate_strips(self):
-        """Settled: the card yielded, and the gate is unchanged behind it."""
+    def test_the_5_8_card_may_name_interest_but_never_price_it(self):
+        """Settled the other way round: the GATE moved, and only by one word.
+
+        `interest` was lifted from `_BAN["5-8"]` on 22 August 2026 -- a piggy
+        bank is a picture a five-year-old already owns. What was NOT lifted is
+        the figure, and that is the half this test exists for: a card allowed to
+        name a thing will drift toward pricing it unless something says no.
+        """
         card = _read(_DIR / BAND_CARDS[("stella", "5-8")])
-        assert "what interest is" not in card
-        # The idea survives; only the noun is gone.
+
+        # The word is teachable now, and the card uses it.
+        assert "interest" in card.lower()
+        assert not vocab.check("that little bit is called interest", "5-8")
+
+        # The idea it always taught is still there, in front of the noun.
         assert "money left alone gets bigger" in card
-        # And the gate still holds, which is what made the card wrong, not weak.
-        assert [v.term for v in vocab.check("what interest is", "5-8")] == ["interest"]
+
+        # And the price is still refused, in every locale the product answers in.
+        for text in (
+            "The bank adds two percent every year.",
+            "El banco añade un porcentaje cada año.",
+            "La banque ajoute un pourcentage chaque année.",
+        ):
+            assert [v.term for v in vocab.check(text, "5-8")] == ["percent"], (
+                "the figure ban is what makes naming interest safe at this band"
+            )
+
+        # Nothing else on the 5-8 rung moved with it.
+        for word in ("compound", "investment", "dividend", "loan", "portfolio"):
+            assert vocab.check(f"this is about {word}", "5-8"), (
+                f"{word} should still be banned at 5-8 -- only `interest` moved"
+            )
 
     def test_the_9_12_card_no_longer_names_the_word_its_gate_strips(self):
         """Settled the same way 5-8 was: the card yielded, the gate did not.
