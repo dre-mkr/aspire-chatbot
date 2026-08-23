@@ -6,7 +6,7 @@ import re
 
 import json
 import logging
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, Field
 
@@ -114,13 +114,33 @@ _SYSTEM = (
     'or reply with "none" if no handler on the list is right for it. '
     "Reply with JSON only: "
     '{"agent": "<name from the list, or none>", "confidence": <0.0-1.0>, '
-    '"reason": "<six words or fewer>"}. '
+    '"reason": "<six words or fewer>", "role": "<see below, or empty>"}. '
     "Confidence is how sure you are that the message belongs to that handler "
     "rather than another one on the list. Use a value below 0.5 when the "
     "message is short, ambiguous, or could belong to two of them. "
     'Prefer "none" over a handler you are guessing at: a message that is small '
     "talk, a greeting, a name, or about the assistant itself belongs to no "
     "handler on this list, and choosing the closest one is worse than saying so."
+    "\n\n"
+    'Also return "role": who the reader is speaking AS, if this message says or '
+    "clearly implies it. One of:\n"
+    "  teacher  - has a class of their own: \"my Form 2s\", \"my Grade 4s\", "
+    "\"period 3\", \"how do I teach this\", asking for an activity or worksheet\n"
+    "  educator - responsible beyond one classroom: \"our school\", \"my staff\", "
+    "\"the department\", policy, rolling it out, adopting it, what it costs, who "
+    "is accountable, data, consent, safeguarding\n"
+    "  parent   - speaking about their own child: \"my daughter\", \"I have two "
+    "children\", \"as a parent\"\n"
+    "  learner  - speaking about their own money and learning\n"
+    '  ""       - nothing in this message says which. Common, and the right '
+    "answer whenever the reader has only named a TOPIC: asking about lessons "
+    "does not make someone a teacher, and asking about saving does not make "
+    "them a learner.\n"
+    "Saying what they HAVE is stating a role, even without the words "
+    '"as a": "I have two children" and "J\'ai deux enfants" are parent; '
+    '"my Form 2s" is teacher. Saying what they WANT is not.\n'
+    "The same person can be more than one and can change between messages, so "
+    "read only THIS message, not the conversation."
 )
 
 
@@ -130,6 +150,13 @@ class Classification(BaseModel):
     agent: str
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str = ""
+    #: Who the reader spoke as this turn, if they said. See `_SYSTEM`.
+    #:
+    #: A field on the call that already happens, rather than a second call or a
+    #: pattern list. The patterns this replaces could only match what somebody
+    #: thought of in advance -- they had "mes enfants" and not "j'ai deux
+    #: enfants", which is exactly the phrasing a French parent uses.
+    role: str = ""
     #: True when the model's choice was discarded.
     coerced: bool = False
     #: True when stickiness kept the turn in `active_agent` against a differing proposal.
@@ -178,7 +205,15 @@ def agent_menu(allowed: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _parse(raw: str) -> tuple[str, float, str] | None:
+#: The only role values the router may return. Anything else is dropped.
+#:
+#: A closed set, checked here rather than trusted: this value chooses which
+#: slice of the corpus a reader is offered, and a model inventing "headmaster"
+#: would silently mean "no role at all" further down. Better to know.
+ROLES: frozenset[str] = frozenset({"teacher", "educator", "parent", "learner"})
+
+
+def _parse(raw: str) -> tuple[str, float, str, str] | None:
     """Read the model's JSON, tolerating the wrappers small models add."""
     text = raw.strip()
     start = text.find("{")
@@ -197,7 +232,16 @@ def _parse(raw: str) -> tuple[str, float, str] | None:
         confidence = float(data.get("confidence", 0.0))
     except (TypeError, ValueError):
         confidence = 0.0
-    return agent, max(0.0, min(1.0, confidence)), str(data.get("reason") or "")[:120]
+    role = str(data.get("role") or "").strip().lower()
+    if role and role not in ROLES:
+        logger.info("Router returned an unknown role %r; ignoring it.", role[:40])
+        role = ""
+    return (
+        agent,
+        max(0.0, min(1.0, confidence)),
+        str(data.get("reason") or "")[:120],
+        role,
+    )
 
 
 def _coerce(
@@ -262,6 +306,32 @@ _ASKS_SOMETHING = re.compile(
     r"should|will|would|am|have|has|tell me|explain)\b",
     re.IGNORECASE,
 )
+
+
+#: A reader describing themselves, which no check question asks them to do.
+_ABOUT_THE_READER = re.compile(
+    r"^\W*(?:well|so|okay|ok|actually)?\W*(?:"
+    r"as\s+(?:an?|the)\s+\w+"
+    r"|i\s+(?:have|want|need|am|was|would\s+like|work|teach|run|'m)\b"
+    r"|my\s+(?:child|children|son|daughter|kid|kids|class|students|school|pupils)\b"
+    r"|we\s+(?:have|are|want|need)\b"
+    # Spanish
+    r"|(?:yo\s+)?(?:tengo|quiero|necesito|soy|trabajo)\b"
+    r"|como\s+(?:docente|maestra?|profesora?|madre|padre)\b"
+    r"|mis?\s+(?:hijos?|hijas?|alumnos?|clase)\b"
+    # French
+    r"|j'?(?:ai|e\s+(?:veux|suis|travaille))\b"
+    r"|en\s+tant\s+qu"
+    r"|mes?\s+(?:enfants?|fils|filles?|[eé]l[eè]ves|classe)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_about_the_reader(state: AspireState) -> bool:
+    """Whether this turn describes the reader rather than answering a question."""
+    text = (_latest_user_text(state) or "").strip()
+    return bool(text) and bool(_ABOUT_THE_READER.search(text))
 
 
 def _is_a_question_not_an_answer(state: AspireState) -> bool:
@@ -329,10 +399,30 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
     # everything else. A quiz answer is short and declarative -- "Saving",
     # "true", "I think a loan" -- and none of those match, so a lesson under way
     # is protected exactly as before.
+    # ...and neither is a reader telling you about THEMSELVES.
+    #
+    # The question escape above was half of it. Measured on production again,
+    # 23 August 2026, both adult personas, both still trapped because neither
+    # message is a question:
+    #
+    #   Imani  "Well I have 2 children"
+    #          -> "Think about which plan survives contact with December."
+    #                                         [Let me try again | Show me the answer]
+    #   Azuri  "As an educator I want to prepare a lesson"
+    #          -> answered as a learner, with learner chips.
+    #
+    # A parent volunteering that they have two children was graded as a wrong
+    # answer and offered a hint. That is the same one-way door, entered by a
+    # statement rather than a question.
+    #
+    # A quiz answer is about the MATERIAL -- "Saving", "true", "I think a loan".
+    # These are about the READER, which no check question ever asks for. "I
+    # think" is deliberately not in the set: it is how a learner hedges before
+    # answering, and it must stay inside the lesson.
     if (
         active in TEACHING_AGENTS
         and decision.agent not in TEACHING_AGENTS
-        and _is_a_question_not_an_answer(state)
+        and (_is_a_question_not_an_answer(state) or _is_about_the_reader(state))
     ):
         logger.info(
             "Letting %s take session %s from %s at %.2f: the reader asked a "
@@ -497,7 +587,13 @@ def make_classify(invoke=None):
             if parsed is None:
                 decision = _coerce("", 0.0, "unparseable", state)
             else:
-                decision = _coerce(*parsed, state)
+                agent, confidence, reason, role = parsed
+                decision = _coerce(agent, confidence, reason, state)
+                if role:
+                    # Carried even when the agent choice was coerced or made
+                    # sticky: who is speaking is a separate question from which
+                    # handler answers, and the reader said it either way.
+                    decision = decision.model_copy(update={"role": role})
 
         decision = apply_stickiness(decision, state)
 

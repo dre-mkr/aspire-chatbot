@@ -530,7 +530,16 @@ class TestTheStoryFlowIsAlwaysAskedFor:
                 }
             )
         )
-        assert update == {"awaiting_story_topic": False, "story_topic": "saving money"}
+        # `story_arc` joined this update when stories gained a second page: it
+        # is the field that survives `hydrate`, which clears `story_topic` every
+        # turn. The property under test is unchanged -- no `card` flag and no
+        # message, so `_after_cards` sends this to the router and an agent does
+        # the telling.
+        assert update["awaiting_story_topic"] is False
+        assert update["story_topic"] == "saving money"
+        assert update["story_arc"] == {"topic": "saving money", "beat": 1}
+        assert "messages" not in update
+        assert "card" not in (update.get("safety_flags") or {})
 
     def test_an_ordinary_question_never_starts_a_story(self):
         from langchain_core.messages import HumanMessage

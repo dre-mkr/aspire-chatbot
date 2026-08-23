@@ -106,6 +106,114 @@ async def suggest_title(question: str, answer: str, language: str = "en") -> str
     return title[:48].strip()
 
 
+# --- Translating retrieved text on the way out ---
+
+#: The languages chips and source labels are translated into.
+_CHIP_LANGUAGES = {"es": "Spanish", "fr": "French"}
+
+
+class _Translated(BaseModel):
+    """Structured shape for the chip-translation call."""
+
+    lines: list[str] = PydanticField(
+        description=(
+            "The translated lines, in the SAME ORDER and the SAME NUMBER as the "
+            "input. Translate each line on its own; never merge, split, drop or "
+            "reorder them."
+        ),
+    )
+
+
+@lru_cache(maxsize=1)
+def _translate_model():
+    return build_chat_model().with_structured_output(_Translated)
+
+
+_TRANSLATE_PROMPT = (
+    "You translate short user-interface strings for a financial-education "
+    "service run by the Government of Saint Kitts and Nevis, read by children "
+    "and their guardians.\n\n"
+    "Rules:\n"
+    "- Return exactly as many lines as you were given, in the same order.\n"
+    "- Keep each line short enough to sit on a button.\n"
+    "- Keep it plain. These are read by children as young as five.\n"
+    "- Do NOT translate: ASPIRE, EC$, the names of places, banks and people.\n"
+    "- A question stays a question."
+)
+
+
+async def translate_lines(lines: list[str], language: str) -> list[str] | None:
+    """Translate short UI strings, or None if the call failed or was refused.
+
+    None rather than a partial list on purpose. A half-translated chip row --
+    two Spanish, one English -- reads worse than three English ones, so the
+    caller keeps the originals unless every line came back.
+    """
+    spoken = _CHIP_LANGUAGES.get(language)
+    if not spoken or not lines:
+        return None
+    try:
+        result = await _translate_model().ainvoke(
+            [
+                {"role": "system", "content": _TRANSLATE_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Translate into {spoken}:\n"
+                    + "\n".join(lines),
+                },
+            ]
+        )
+    except Exception:
+        logger.warning("Chip translation failed; keeping the originals.", exc_info=True)
+        return None
+
+    out = [line.strip() for line in (result.lines or [])]
+    # A model that dropped or invented a line cannot be used: the caller pairs
+    # these back up by position.
+    if len(out) != len(lines) or not all(out):
+        logger.warning(
+            "Chip translation returned %d lines for %d; keeping the originals.",
+            len(out),
+            len(lines),
+        )
+        return None
+    return out
+
+
+async def localise_lines(lines: list[str], language: str) -> list[str]:
+    """`lines` in `language`, translating only what is not already cached.
+
+    Returns the input unchanged for English, for an unknown language, or on any
+    failure. This sits on the answer path, so it degrades to the status quo
+    rather than costing anyone their chips.
+    """
+    if language not in _CHIP_LANGUAGES or not lines:
+        return lines
+
+    from app import cache
+
+    known: dict[str, str] = {}
+    for line in lines:
+        hit = await cache.get_translation(line, language)
+        if hit:
+            known[line] = hit
+
+    missing = [line for line in lines if line not in known]
+    if missing:
+        fresh = await translate_lines(missing, language)
+        if fresh is None:
+            # Nothing new could be translated. Rather than mix languages, only
+            # use the cache if it happened to cover everything.
+            if len(known) != len(lines):
+                return lines
+        else:
+            for original, translated in zip(missing, fresh, strict=True):
+                known[original] = translated
+                await cache.put_translation(original, language, translated)
+
+    return [known.get(line, line) for line in lines]
+
+
 @lru_cache(maxsize=1)
 def _summary_model():
     return build_chat_model()

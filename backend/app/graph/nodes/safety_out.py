@@ -538,6 +538,44 @@ def is_a_lesson(state: Any) -> bool:
     return str(state.get("active_agent") or "") in _TEACHING_AGENTS
 
 
+#: Card turns that are teaching by another name.
+#:
+#: A game IS the lesson for a nine-year-old, and so is a video, and so is a
+#: story. They are separate features only in the code.
+_TEACHING_CARDS: Final[frozenset[str]] = frozenset(
+    {"game", "video", "video_menu", "story_topic", "story_closed"}
+)
+
+
+def teaches(state: Any) -> bool:
+    """Whether this turn is teaching, by any of the ways this product teaches.
+
+    `is_a_lesson` reads the agent, which is right for a tutor turn and blind to
+    every other way the material reaches a reader: a story, a game, an
+    activity, a video. All four are teaching. They are separate features in the
+    code and one thing to the child.
+
+    Without this, the vocabulary ladder cut them off at the knees. "Loan" is
+    barred below 13 unless something lifts it, so a story about borrowing --
+    told to a nine-year-old, ending on what borrowing cost the character -- had
+    the one word it was about excised on the way out. A word-scramble whose
+    answer is a money word had the same problem, from the other direction.
+
+    The lift is `TEACHING_TERMS`, not a licence. `_GENERAL_BAN` still holds
+    absolutely, nothing here may invent a programme fact, and the word caps and
+    every other gate are untouched. It means a lesson may name the thing it is
+    teaching -- which is the least a lesson can do.
+    """
+    if is_a_lesson(state):
+        return True
+    if state.get("story_topic") or state.get("story_arc"):
+        return True
+    if state.get("offered_video"):
+        return True
+    flags = state.get("safety_flags") or {}
+    return str(flags.get("card") or "") in _TEACHING_CARDS
+
+
 def about_the_programme(state: Any) -> bool:
     """Whether the reader asked about ASPIRE, read off their own words."""
     try:
@@ -597,7 +635,9 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Read here rather than at gate (b), because the chips are checked before
         # anything else and they need the same scope the prose gets.
         programme_scope = grounded_in_the_programme(state) or about_the_programme(state)
-        teaching_scope = is_a_lesson(state)
+        # ASPIRE itself is the fifth: a question about the programme may name
+        # interest, credit and a loan, because the programme is made of them.
+        teaching_scope = teaches(state) or programme_scope
         # Before anything measures them: a chip carrying a term this band may not
         # hear is not a chip that got through, it is a chip that was never checked.
         replies, banned_chips = chips_within_band(
@@ -725,7 +765,11 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 text = truncate_at_sentence(text, cap)
 
         # ── (c) PII ─────────────────────────────────────────────────────────
-        kinds = pii.kinds_in(text)
+        # `outbound=True`: a date only counts as a date of birth when something
+        # in the sentence says whose it is. Without it, every published date in
+        # the corpus -- ASPIRE's founding, the Bill passing the National
+        # Assembly, 57 more -- left here as "[a date of birth]".
+        kinds = pii.kinds_in(text, outbound=True)
         if kinds:
             report["pii_redacted"] = kinds
             logger.warning(
@@ -734,7 +778,7 @@ def make_safety_out(reprompt: Reprompt | None = None):
                 state.get("session_id"),
                 ", ".join(kinds),
             )
-            text = pii.redact(text)
+            text = pii.redact(text, outbound=True)
 
         # ── (d) links and images ────────────────────────────────────────────
         if strips_links(persona, band):
@@ -798,6 +842,33 @@ def make_safety_out(reprompt: Reprompt | None = None):
         # Widgets back in.
         if widgets:
             text = original if text == prose_in else sentinel.reattach(text, widgets)
+
+        # ── (g) the retrieved half of the reply, in the reader's language ───
+        #
+        # The answer is GENERATED, so it already follows a reader who wrote
+        # Spanish. Chips are RETRIEVED -- `follow_up_chips` lifts them verbatim
+        # from a corpus that is English-only -- so they could not follow, and a
+        # Spanish answer arrived under three English buttons.
+        #
+        # Only the corpus-derived ones. Story follow-ups, the fallback chip,
+        # game labels and story topics are authored per locale and are already
+        # right; `from_the_corpus` is that distinction stated exactly rather
+        # than guessed at. Translations are cached by exact text, so a chip is
+        # paid for once across every reader who ever sees it.
+        if locale != "en" and replies:
+            from app.sources import from_the_corpus
+
+            retrieved = [chip for chip in replies if from_the_corpus(chip)]
+            if retrieved:
+                from app.agent import localise_lines
+
+                localised = await localise_lines(retrieved, locale)
+                by_original = dict(zip(retrieved, localised, strict=True))
+                translated = [by_original.get(chip, chip) for chip in replies]
+                if translated != replies:
+                    report["chips_localised"] = locale
+                    flags["outbound"] = report
+                replies = translated
 
         update: dict[str, Any] = {"safety_flags": flags, "quick_replies": replies}
 

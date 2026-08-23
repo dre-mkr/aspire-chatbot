@@ -70,10 +70,31 @@ _ACCOUNT = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-#: A FULL date of birth: day, month and year together.
-_DOB = re.compile(
-    r"""
-    \b(?:
+#: The cues that make a date somebody's date of birth rather than a date.
+_BIRTH_CUE = r"""(?:born|birth\s*day|birthdate|date\s+of\s+birth|d\.?o\.?b\.?|b\.)"""
+
+#: A FULL date, day/month/year together, in any of the four shapes below.
+#:
+#: On its own this is NOT personal data, and treating it as such was not a
+#: harmless over-reach -- the same mistake `_aspire_own` exists to undo for the
+#: programme's own phone number. ASPIRE's founding date, the date the ASPIRE
+#: Bill passed the National Assembly, and 57 other published dates all live in
+#: the corpus, and every one of them was being rewritten to "[a date of birth]"
+#: on its way to the reader. The history of a government programme came out as:
+#:
+#:   "announced ... at the Independence 41 National Youth Rally on
+#:    [a date of birth]. The ASPIRE Bill, 2024 ... passed in the National
+#:    Assembly on [a date of birth]."
+#:
+#: So the bare pattern is kept for summaries and tickets, where over-redaction
+#: costs nothing and under-redaction is the expensive mistake, and the OUTBOUND
+#: gate uses `_DOB_ANCHORED` instead -- which still catches "born on 14 March
+#: 2015" and leaves "passed on 28 November 2024" alone. `_NATIONAL_ID` and
+#: `_ACCOUNT` in this file are anchored for exactly this reason; the date
+#: pattern was the one that never was.
+#: The four shapes a full date is written in. Shared by both patterns below.
+_DATE_BODY = r"""
+    (?:
         \d{1,2}[/.\-]\d{1,2}[/.\-](?:19|20)\d{2}          # 14/03/2015
       | (?:19|20)\d{2}[/.\-]\d{1,2}[/.\-]\d{1,2}          # 2015-03-14
       | \d{1,2}(?:st|nd|rd|th)?\s+
@@ -81,7 +102,26 @@ _DOB = re.compile(
         \.?,?\s+(?:19|20)\d{2}                            # 14 March 2015
       | (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*
         \.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+(?:19|20)\d{2}  # March 14, 2015
-    )\b
+    )
+"""
+
+#: Any full date, with no cue that it belongs to a person.
+_DOB = re.compile(rf"\b{_DATE_BODY}\b", re.VERBOSE | re.IGNORECASE)
+
+#: A date carrying a cue that makes it somebody's. What the outbound gate uses.
+#:
+#: The cue is matched but NOT replaced -- only group 1, the date itself, is.
+#: "The child was born on [a date of birth]" reads as a sentence with something
+#: withheld; swallowing the cue gives "The child was [a date of birth]", which
+#: reads as a bug. The placeholder already names what was removed, so keeping
+#: the cue costs no privacy and buys back the grammar.
+_DOB_ANCHORED = re.compile(
+    rf"""
+    \b{_BIRTH_CUE}
+    (?:\s+(?:on|is|was|:))?          # "born on", "date of birth is", "DOB:"
+    [\s:,\-]{{0,4}}
+    ({_DATE_BODY})
+    \b
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -107,6 +147,21 @@ _PATTERNS: Final[tuple[tuple[str, re.Pattern[str], int], ...]] = (
     ("phone", _PHONE, 0),
     ("street_address", _ADDRESS, 0),
     ("national_id", _ID_LIKE, 0),
+)
+
+#: The same table, with the date pattern swapped for the anchored one.
+#:
+#: The split is by DIRECTION, because the two directions have opposite costs.
+#: Into a ticket or a summary, over-redacting a date costs a reader nothing and
+#: under-redacting one writes a child's birthday into a record that outlives the
+#: conversation -- so that path keeps the bare pattern. Out to the reader, over-
+#: redacting rewrites the programme's own published history into nonsense, while
+#: a genuine date of birth can only reach the outbound text by being echoed, and
+#: an echo carries the cue that `_DOB_ANCHORED` needs.
+_PATTERNS_OUTBOUND: Final[tuple[tuple[str, re.Pattern[str], int], ...]] = tuple(
+    ("date_of_birth", _DOB_ANCHORED, 1) if kind == "date_of_birth" else entry
+    for entry in _PATTERNS
+    for kind in (entry[0],)
 )
 
 #: What `redact` leaves behind, per kind.
@@ -155,15 +210,20 @@ def _aspire_own() -> frozenset[str]:
     )
 
 
-def detect(text: str) -> list[PIISpan]:
-    """Every piece of personal data in `text`, in the order it appears."""
+def detect(text: str, *, outbound: bool = False) -> list[PIISpan]:
+    """Every piece of personal data in `text`, in the order it appears.
+
+    `outbound=True` requires a birth cue before a date counts as a date of
+    birth. See `_PATTERNS_OUTBOUND` for why the direction changes the answer.
+    """
     if not text:
         return []
 
     ours = _aspire_own()
 
+    table = _PATTERNS_OUTBOUND if outbound else _PATTERNS
     found: list[tuple[int, int, int, str, str]] = []
-    for priority, (kind, pattern, group) in enumerate(_PATTERNS):
+    for priority, (kind, pattern, group) in enumerate(table):
         for match in pattern.finditer(text):
             start, end = match.span(group)
             if start < 0 or end <= start:
@@ -186,18 +246,20 @@ def detect(text: str) -> list[PIISpan]:
     return spans
 
 
-def kinds_in(text: str) -> list[str]:
+def kinds_in(text: str, *, outbound: bool = False) -> list[str]:
     """The distinct kinds present, in first-appearance order."""
     seen: list[str] = []
-    for span in detect(text):
+    for span in detect(text, outbound=outbound):
         if span.kind not in seen:
             seen.append(span.kind)
     return seen
 
 
-def _rewrite(text: str, replacement: Callable[[PIISpan], str]) -> str:
+def _rewrite(
+    text: str, replacement: Callable[[PIISpan], str], *, outbound: bool = False
+) -> str:
     """Replace every span back-to-front so earlier offsets stay valid."""
-    spans = detect(text)
+    spans = detect(text, outbound=outbound)
     if not spans:
         return text
     out = text
@@ -206,9 +268,11 @@ def _rewrite(text: str, replacement: Callable[[PIISpan], str]) -> str:
     return out
 
 
-def redact(text: str) -> str:
+def redact(text: str, *, outbound: bool = False) -> str:
     """`text` with every detected value replaced by a neutral phrase."""
-    return _rewrite(text, lambda span: _NEUTRAL.get(span.kind, "[removed]"))
+    return _rewrite(
+        text, lambda span: _NEUTRAL.get(span.kind, "[removed]"), outbound=outbound
+    )
 
 
 def redact_for_summary(text: str) -> str:

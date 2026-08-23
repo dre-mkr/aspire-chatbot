@@ -93,3 +93,68 @@ class TestRedaction:
             "[collected: email]",
             "clean",
         ]
+
+
+class TestAPublishedDateIsNotSomebodysBirthday:
+    """The programme's own history was leaving here as "[a date of birth]"."""
+
+    HISTORY = [
+        "The ASPIRE Bill, 2024 passed in the National Assembly on 28 November 2024.",
+        "ASPIRE was announced at the Independence 41 rally on 13 September 2024.",
+        "The scheme opened on 2025-05-08 and closed on 14 May 2025.",
+        "Independence was gained on 19 September 1983.",
+    ]
+
+    BIRTHDAYS = [
+        "The child was born on 14 March 2015.",
+        "My date of birth is 14/03/2015.",
+        "DOB: 2015-03-14",
+        "Her birthday is March 14, 2015.",
+        "born 2015-03-14",
+    ]
+
+    @pytest.mark.parametrize("text", HISTORY)
+    def test_outbound_keeps_a_date_with_no_owner(self, text):
+        assert pii.redact(text, outbound=True) == text
+        assert "date_of_birth" not in pii.kinds_in(text, outbound=True)
+
+    @pytest.mark.parametrize("text", BIRTHDAYS)
+    def test_outbound_still_removes_a_real_one(self, text):
+        out = pii.redact(text, outbound=True)
+        assert "[a date of birth]" in out
+        assert "2015" not in out
+        assert "date_of_birth" in pii.kinds_in(text, outbound=True)
+
+    @pytest.mark.parametrize("text", HISTORY + BIRTHDAYS)
+    def test_a_summary_still_redacts_every_date(self, text):
+        """Into a record that outlives the chat, over-redaction is the cheap error."""
+        assert "date_of_birth" in pii.kinds_in(text)
+
+    def test_the_cue_survives_so_the_sentence_still_reads(self):
+        out = pii.redact("The child was born on 14 March 2015.", outbound=True)
+        assert out == "The child was born on [a date of birth]."
+
+    def test_the_corpus_no_longer_loses_its_dates(self):
+        """Measured against the real knowledge base, not a sample."""
+        import csv
+        from pathlib import Path
+
+        rows = list(
+            csv.DictReader(
+                (Path(__file__).parents[2] / "data" / "knowledge_base.csv").open(
+                    encoding="utf-8"
+                )
+            )
+        )
+        assert rows, "the corpus must be readable for this test to mean anything"
+
+        eaten = [
+            (row.get("id", "?"), blob)
+            for row in rows
+            for blob in (" ".join(str(value) for value in row.values()),)
+            if "date_of_birth" in pii.kinds_in(blob, outbound=True)
+        ]
+        assert not eaten, (
+            f"{len(eaten)} corpus rows still lose a date outbound, e.g. "
+            f"{eaten[0][0]}. A published date is not personal data."
+        )

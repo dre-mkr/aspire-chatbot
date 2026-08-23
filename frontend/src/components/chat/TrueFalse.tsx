@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-	CheckIcon,
-	EyeIcon,
-	LampIcon,
-	SparkIcon,
-} from "#/components/icons";
+import { CheckIcon, EyeIcon, LampIcon, SparkIcon } from "#/components/icons";
 import {
 	type Closing,
 	GameError,
@@ -15,9 +10,9 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
-import { GAME_COPY } from "./game-copy";
-import { GameHead } from "./GameHead";
 import { useMediaQuery } from "#/lib/use-media-query";
+import { GameHead } from "./GameHead";
+import { GAME_COPY } from "./game-copy";
 
 /** True or false, played in the thread. */
 

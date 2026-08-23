@@ -601,8 +601,33 @@ def _story_instruction(state: AspireState) -> str | None:
         return None
     persona = str(state.get("persona") or "guest")
     shape = _STORY_BY_PERSONA.get(persona, _STORY_BY_PERSONA["guest"])
+    # Which page of the story this is. Beat one opens, the middle carries on
+    # from what the reader has already been told, and the last one has to land:
+    # a story with no ending is a treadmill with a character on it.
+    arc = state.get("story_arc") or {}
+    beat = int(arc.get("beat") or 1)
+    from app.graph.nodes.cards import STORY_BEATS
+
+    if beat == 1:
+        page = ""
+    elif beat >= STORY_BEATS:
+        page = (
+            "This is the LAST part. The reader has stayed with this story, so "
+            "finish it: resolve what the character was deciding and end on the "
+            "money idea it turned on. Do not leave it open.\n"
+        )
+    else:
+        page = (
+            f"This is part {beat}. Carry on the SAME story, with the same "
+            "character and the same situation the reader has already been "
+            "told about -- do not restart it or introduce a new character. "
+            "Move it on: something happens, and it follows from the decision "
+            "before it.\n"
+        )
+
     return (
         f"The reader has asked for a story about: {topic}\n"
+        f"{page}"
         f"{shape}\n"
         "Set it in Saint Kitts and Nevis and use EC dollars. Invent the "
         "characters freely; do NOT invent anything about the ASPIRE programme "
@@ -612,11 +637,94 @@ def _story_instruction(state: AspireState) -> str | None:
     )
 
 
+#: What each role came for, in the register the spine sets for them.
+#:
+#: `Azuri · Teachers & Educators` is one persona key holding two jobs, and an
+#: answer written for one lands wrong on the other. A classroom teacher asks
+#: what to do Monday, period 3, with 28 Form 2s. A principal asks whether this
+#: belongs in their school and what they are taking on. Same corpus rows, and
+#: the wrong shape costs a collapsed lesson in one case and a commitment made
+#: on a false premise in the other.
+_ROLE_INSTRUCTION: dict[str, str] = {
+    "teacher": (
+        "The reader is a classroom teacher, speaking as one. Answer for "
+        "DELIVERY: what they do, with which band, using what. Colleague to "
+        "colleague, practical. If a resource, activity or lesson exists, name "
+        "it. Do not open with the programme's rules unless they asked about "
+        "them."
+    ),
+    "educator": (
+        "The reader is responsible beyond one classroom -- a principal, a head "
+        "of department, a coordinator or an officer. Answer for STEWARDSHIP: "
+        "what this commits the school to, who stands behind it, what it costs "
+        "and what it asks of staff. Colleague to colleague, accountable. Be "
+        "plain about what you do not know: a commitment made on a false "
+        "premise is the expensive mistake here."
+    ),
+    "parent": (
+        "The reader is a parent or guardian speaking about their own child. "
+        "Answer for THEIR child, not for children in general, and say what "
+        "they can do next. Never guess at their account."
+    ),
+}
+
+
+def _role_instruction(state: AspireState) -> str | None:
+    """The register this reader's role earns, or None if they have not said."""
+    role = speaking_as(state)
+    if not role:
+        return None
+    return _ROLE_INSTRUCTION.get(role)
+
+
+#: Where this reader stands in the ASPIRE journey, which nothing was reading.
+#:
+#: `account_status` is signed into the session token and used for access
+#: control, and then thrown away. It is the difference between four different
+#: people asking the same words: "how does ASPIRE work" from someone deciding
+#: whether to apply is a different question from the same words typed by a
+#: parent whose child has been enrolled for two years.
+#:
+#: Shaping only. It cannot widen what a reader may see -- `allowed_agents` has
+#: already settled that -- and it must never be used to assert a fact about an
+#: individual account, which this system cannot see.
+_STAGE_INSTRUCTION: dict[str, str] = {
+    "prospect": (
+        "This reader has not applied. They are deciding whether ASPIRE is for "
+        "them, so answer what it is and what joining would mean, and end with "
+        "the next step rather than assuming they have taken it."
+    ),
+    "applicant": (
+        "This reader has applied and is waiting. Answer what happens next and "
+        "in what order. Do not tell them to apply -- they have. You cannot see "
+        "their application, so never state where it has got to."
+    ),
+    "beneficiary": (
+        "This reader is already in the programme. Answer how to USE it rather "
+        "than how to join it, and do not re-explain eligibility unless asked."
+    ),
+    "guardian": (
+        "This reader manages a child's participation. Answer what they can do "
+        "on the child's behalf and where that has to happen."
+    ),
+}
+
+
+def _stage_instruction(state: AspireState) -> str | None:
+    """Where in the journey this reader is standing, or None."""
+    return _STAGE_INSTRUCTION.get(str(state.get("account_status") or ""))
+
+
 def _shaping_instructions(state: AspireState) -> str | None:
     """Every extra system line this turn earns, joined. None when there are none."""
     lines = [
         line
-        for line in (_simple_mode_instruction(state), _story_instruction(state))
+        for line in (
+            _simple_mode_instruction(state),
+            _role_instruction(state),
+            _stage_instruction(state),
+            _story_instruction(state),
+        )
         if line
     ]
     return "\n\n".join(lines) or None
@@ -1132,6 +1240,13 @@ def make_ground_check(threshold: float | None = None):
             for chunk in chunks
             if chunk.kb_id in grounded_citations
         ]
+        # "Where this came from", in the language the reader is reading.
+        #
+        # Same problem as the chips and the same answer: what a citation SAYS
+        # is corpus text, and the corpus is English. A Spanish answer opened a
+        # source panel written in English. What a citation POINTS AT is not
+        # translated -- a site's name, its host and its URL are what they are.
+        citations = await localise_citations(citations, str(state.get("locale") or "en"))
         # The best chunk's calibrated relevance, or the fused score when dense never ran.
         groundedness = min(
             1.0,
@@ -1150,6 +1265,52 @@ def make_ground_check(threshold: float | None = None):
         )
 
     return ground_check
+
+
+async def localise_citations(citations: list[Citation], locale: str) -> list[Citation]:
+    """Translate the reader-facing half of each citation. Never raises.
+
+    Three fields carry corpus prose -- the row's title, the question it answers
+    and the extract shown under it. The rest is provenance: `site`, `page`,
+    `domain`, `source_url` and `updated` are the identity of a document, and
+    translating those would be a different kind of wrong, so they are passed
+    through untouched.
+
+    Batched into one call for the whole panel and cached by exact text, like
+    the chips, so a source a hundred readers see is paid for once.
+    """
+    if locale == "en" or not citations:
+        return citations
+
+    from app.agent import localise_lines
+
+    fields = ("title", "question", "snippet")
+    originals = [
+        value
+        for citation in citations
+        for name in fields
+        if (value := (getattr(citation, name, "") or "").strip())
+    ]
+    if not originals:
+        return citations
+
+    try:
+        translated = await localise_lines(originals, locale)
+    except Exception:
+        logger.warning("Could not localise the source panel; leaving it as it is.", exc_info=True)
+        return citations
+
+    by_original = dict(zip(originals, translated, strict=True))
+    return [
+        citation.model_copy(
+            update={
+                name: by_original.get(value, value)
+                for name in fields
+                if (value := (getattr(citation, name, "") or "").strip())
+            }
+        )
+        for citation in citations
+    ]
 
 
 def citation_for(chunk: KBChunk) -> Citation:
@@ -1227,10 +1388,50 @@ FOLLOW_UP_CHIPS = 3
 CHIP_MAX_CHARS = CHIP_LABEL_CHARS
 
 
+#: Where a story goes next, per locale, while the arc is still open.
+#:
+#: A story used to end and stop. The shapes in `_STORY_BY_PERSONA` tell the
+#: model not to add a question at the end -- rightly, because an invented quiz
+#: about ASPIRE is exactly the failure this product cannot have -- but nothing
+#: took the conversation on from there either. Maya saved for a laptop, and
+#: then nothing.
+#:
+#: Chips rather than prose, for the same reason the instruction exists: these
+#: are written here, so a story can invite the next turn without the model
+#: being free to invent a programme fact on the way out.
+#:
+#: Every line has to be a phrase the intent it triggers actually matches --
+#: `story_continues` for the first, `story_ends` for the last. Tested, because
+#: a chip that reads well and routes nowhere is worse than no chip.
+_STORY_FOLLOW_UPS: dict[str, list[str]] = {
+    "en": ["What happens next?", "What would you do?", "That's enough"],
+    "es": ["¿Qué pasa después?", "¿Qué harías tú?", "Ya basta"],
+    "fr": ["Et après ?", "Que ferais-tu ?", "Ça suffit"],
+}
+
+#: And at the last beat, where "what happens next" would be a lie.
+_STORY_ENDED: dict[str, list[str]] = {
+    "en": ["Tell me another story", "What does it teach?"],
+    "es": ["Cuéntame otra historia", "¿Qué nos enseña?"],
+    "fr": ["Raconte-moi une autre histoire", "Qu'est-ce que ça apprend ?"],
+}
+
+
 def follow_up_chips(
     state: AspireState, chunks: list[KBChunk], cited: set[str]
 ) -> list[str]:
     """More questions the corpus can answer, drawn from the reranked chunks then `qa_related`."""
+    # A story earns its own, because corpus questions do not follow from one.
+    # "Is the ASPIRE application always open?" is a fine chip after a policy
+    # answer and a non-sequitur after a story about a girl and a laptop.
+    if state.get("story_topic"):
+        from app.graph.nodes.cards import STORY_BEATS
+
+        locale = str(state.get("locale") or "en")
+        beat = int((state.get("story_arc") or {}).get("beat") or 1)
+        table = _STORY_ENDED if beat >= STORY_BEATS else _STORY_FOLLOW_UPS
+        return list(table.get(locale, table["en"]))
+
     asked = _asked_questions(state)
     # What the answer covered, by question not by id: two rows can ask the same thing.
     covered = [
@@ -1239,7 +1440,19 @@ def follow_up_chips(
         if chunk.kb_id in cited
     ]
     seen: list[set[str]] = []
-    chips: list[str] = []
+    # Two buckets, filled in one pass and drained in order.
+    #
+    # `_permitted` already decided what this reader MAY see, which is a safety
+    # question and answers a different one: everything is permitted to everyone,
+    # so it sorts nothing. This sorts by whether the question is FOR them.
+    #
+    # An educator asking how to prepare a lesson was offered "Is a phone a need
+    # or a want?" -- a nine-year-old's question, correct, permitted, and absurd
+    # in front of a teacher. The corpus already tags every row with its
+    # audience; nothing was reading the tag.
+    audience = reader_audience(state)
+    mine: list[str] = []
+    theirs: list[str] = []
 
     for chunk in [*chunks, *(state.get("qa_related") or [])]:
         if chunk.kb_id in cited:
@@ -1256,11 +1469,28 @@ def follow_up_chips(
             continue
 
         seen.append(words)
-        chips.append(question)
-        if len(chips) == FOLLOW_UP_CHIPS:
+        (mine if _for_this_reader(chunk, audience) else theirs).append(question)
+        if len(mine) == FOLLOW_UP_CHIPS:
             break
 
-    return chips
+    # Anything tagged for someone else is a fallback, not a filter: a thin
+    # corpus slice must not leave a reader with no follow-ups at all.
+    return [*mine, *theirs][:FOLLOW_UP_CHIPS]
+
+
+def _for_this_reader(chunk: KBChunk, audience: str) -> bool:
+    """Whether this row's audience is the one the reader is in.
+
+    `general` counts for everyone -- it is the corpus saying "anyone", not a
+    fourth audience. An untagged row counts too, for the same reason.
+    """
+    tags = chunk.metadata.get("audience")
+    if not tags:
+        return True
+    if isinstance(tags, str):
+        tags = [tags]
+    have = {str(tag).strip().lower() for tag in tags}
+    return bool(have & _AUDIENCE_FAMILY.get(audience, {audience, "general"}))
 
 
 #: Above this overlap, two questions are the same question.
@@ -1296,6 +1526,150 @@ def _restates(candidate: set[str], other: set[str]) -> bool:
         return candidate == other
     shared = len(candidate & other)
     return shared / min(len(candidate), len(other)) >= _RESTATEMENT
+
+
+#: Which corpus audience a reader's own words put them in.
+#:
+#: The persona is a starting point, not a fact about the person. The same adult
+#: is a teacher on Monday and a parent on Tuesday, and can say so in the middle
+#: of a conversation -- so the role they STATE wins over the one they picked
+#: from a menu, and it can change again on the next turn.
+_ROLE_SAID: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"\bas\s+(?:an?|the)\s+(?:teacher|educator|tutor|instructor|head\s*teacher)\b"
+            r"|\bmy\s+(?:own\s+)?(?:class(?:es|room)?|students|pupils|school)\b"
+            r"|\bmy\s+(?:form|grade|year)\s*\d+\w*"
+            r"|\bi\s+teach\b"
+            r"|\bcomo\s+(?:docente|maestra?|profesora?)\b|\bmis?\s+(?:alumnos?|clase)\b"
+            r"|\ben\s+tant\s+qu(?:e|')\s*(?:enseignant|professeur)\b|\bmes?\s+(?:[eé]l[eè]ves|classe)\b",
+            re.IGNORECASE,
+        ),
+        "teacher",
+    ),
+    # Educator AFTER teacher on purpose. The spine's rule for a principal who
+    # also teaches: "answer the Teacher first and offer the Educator half" --
+    # the practical answer is never wrong to give, and the stewardship answer
+    # is unwelcome when unasked. First match wins, so "my Form 2s" beats "our
+    # school" when both are in one message.
+    (
+        re.compile(
+            r"\bour\s+school\b|\bmy\s+staff\b|\bthe\s+department\b|\bthe\s+cohort\b"
+            r"|\broll(?:ing)?\s+(?:it\s+)?out\b|\badopt(?:ing)?\b|\bacross\s+the\s+school\b"
+            r"|\bwho\s+is\s+accountable\b|\bwhat\s+does\s+it\s+cost\s+(?:us|the\s+school)\b"
+            r"|\bas\s+(?:an?|the)\s+(?:principal|deputy|head|hod|counsellor|facilitator"
+            r"|youth\s+worker|librarian|officer)\b"
+            r"|\bnuestra\s+escuela\b|\bmi\s+personal\b|\bcomo\s+(?:director|directora)\b"
+            r"|\bnotre\s+[eé]cole\b|\bmon\s+personnel\b|\ben\s+tant\s+qu(?:e|')\s*directeur\b",
+            re.IGNORECASE,
+        ),
+        "educator",
+    ),
+    (
+        re.compile(
+            r"\bas\s+(?:an?|the)\s+(?:parent|guardian|mother|father|mum|mom|dad)\b"
+            r"|\bmy\s+(?:own\s+)?(?:child|children|son|daughter|kid|kids)\b"
+            r"|\bi\s+have\s+(?:a|\d+|two|three|four)\s+(?:child|children|kids?|sons?|daughters?)\b"
+            r"|\bcomo\s+(?:madre|padre)\b|\bmis?\s+(?:propios?\s+)?hijos?\b|\btengo\s+\d+\s+hijos?\b"
+            r"|\ben\s+tant\s+qu(?:e|')\s*(?:parent|m[eè]re|p[eè]re)\b|\bmes?\s+(?:propres?\s+)?(?:enfants?|fils|filles?)\b"
+            r"|\bj'ai\s+(?:un|une|deux|trois|\d+)\s+(?:enfants?|fils|filles?)\b",
+            re.IGNORECASE,
+        ),
+        "parent",
+    ),
+)
+
+#: Where each persona starts, before the reader says otherwise.
+_AUDIENCE_BY_PERSONA: dict[str, str] = {
+    "nova": "teacher",
+    "aurora": "parent",
+    "stella": "child",
+    "kaleb": "student",
+    "orion": "student",
+    "guest": "general",
+}
+
+
+#: Which corpus tags each reader counts as their own.
+#:
+#: `general` is in every one: it is the corpus saying "anyone", not a fourth
+#: audience. `child` and `student` share a family because they are the same
+#: reader at different ages, and the word caps -- not the tag -- are what keep
+#: a nine-year-old's answer at nine years old. Splitting them would demote half
+#: a learner's follow-ups for no gain.
+_AUDIENCE_FAMILY: dict[str, set[str]] = {
+    "teacher": {"teacher", "general"},
+    "parent": {"parent", "general"},
+    "student": {"student", "child", "general"},
+    "child": {"child", "student", "general"},
+    "general": {"general", "student", "child", "parent", "teacher"},
+}
+
+
+def stated_role(state: AspireState) -> str | None:
+    """The role this reader has told us they are in, latest first, or None."""
+    for message in reversed(state.get("messages") or []):
+        if getattr(message, "type", None) != "human":
+            continue
+        text = getattr(message, "content", "")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        for pattern, role in _ROLE_SAID:
+            if pattern.search(text):
+                return role
+    return None
+
+
+#: A role, as the corpus tags its rows.
+#:
+#: `educator` collapses onto `teacher` because the corpus has no administrator
+#: tag -- a principal and a classroom teacher read the same rows. The two are
+#: kept apart for the REGISTER of the answer, which `speaking_as` carries, not
+#: for which rows they may see.
+_ROLE_TO_AUDIENCE: dict[str, str] = {
+    "teacher": "teacher",
+    "educator": "teacher",
+    "parent": "parent",
+    "learner": "student",
+}
+
+
+def routed_role(state: AspireState) -> str:
+    """The role the router read off this turn's message, or empty.
+
+    The router is a model call that already happens on every routed turn, so
+    this costs nothing and understands phrasings no pattern list will hold.
+    It only ever sees the CURRENT message, which is the point: a role stated
+    now is the one that counts.
+    """
+    route = (state.get("safety_flags") or {}).get("route") or {}
+    role = str(route.get("role") or "").strip().lower()
+    return role if role in _ROLE_TO_AUDIENCE else ""
+
+
+def speaking_as(state: AspireState) -> str | None:
+    """Which role this reader is in, by the best evidence available.
+
+    A ladder, most authoritative first:
+
+    1. What the ROUTER read off this message. Open-ended, and current.
+    2. What the PATTERNS find in the thread. Narrower, but it reaches back --
+       a role stated three turns ago still holds, and the router never saw it.
+    3. Nothing, and the persona's default stands.
+
+    Two is not redundant with one. The router is skipped entirely on a
+    single-option turn, on a widget continuation, and whenever no API key is
+    configured -- and on those turns the patterns are all there is.
+    """
+    return routed_role(state) or stated_role(state)
+
+
+def reader_audience(state: AspireState) -> str:
+    """The corpus audience whose questions belong in front of this reader."""
+    role = speaking_as(state)
+    if role:
+        return _ROLE_TO_AUDIENCE.get(role, role)
+    return _AUDIENCE_BY_PERSONA.get(str(state.get("persona") or "guest"), "general")
 
 
 def _asked_questions(state: AspireState) -> list[set[str]]:

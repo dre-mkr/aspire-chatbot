@@ -316,6 +316,55 @@ async def put_embedding(text: str, model: str, vector: list[float]) -> None:
         logger.warning("Embedding-cache write failed.", exc_info=True)
 
 
+# --- Translation cache ---
+#
+# The corpus is English. All 801 rows, no locale column, and the follow-up chips
+# and source labels are lifted from it verbatim -- so a reader who wrote Spanish
+# got a Spanish answer under English chips and an English "Where this came
+# from". The answer is generated and follows the reader; retrieved text cannot.
+#
+# Translating on the way out is cheap ONLY because the same few hundred corpus
+# questions come back over and over. Cached by exact text, so the cost converges
+# to nothing: the second reader to see a chip pays no model call for it.
+
+
+def translation_key(text: str, language: str) -> str:
+    digest = hashlib.sha256(f"{language}\x00{text.strip()}".encode()).hexdigest()[:32]
+    return f"{namespace()}xlate:v1:{digest}"
+
+
+def _translation_cache_on() -> bool:
+    return get_client() is not None
+
+
+async def get_translation(text: str, language: str) -> str | None:
+    """A previously translated string, or None. Never raises."""
+    if not _translation_cache_on():
+        return None
+    try:
+        raw = await get_client().get(translation_key(text, language))
+    except Exception:
+        logger.warning("Translation-cache read failed; treating as a miss.", exc_info=True)
+        return None
+    if not raw:
+        return None
+    return raw.decode() if isinstance(raw, bytes) else str(raw)
+
+
+async def put_translation(text: str, language: str, translated: str) -> None:
+    """Store one translation. Never raises.
+
+    No TTL. A translation of a fixed corpus string does not go stale, and the
+    whole point is that it is paid for once.
+    """
+    if not _translation_cache_on():
+        return
+    try:
+        await get_client().set(translation_key(text, language), translated)
+    except Exception:
+        logger.warning("Translation-cache write failed.", exc_info=True)
+
+
 # --- Semantic response cache, layer 2 ---
 # Layer 1 collapses different spellings; this layer catches paraphrases by embedding distance.
 

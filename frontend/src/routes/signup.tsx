@@ -221,8 +221,7 @@ function SignUp() {
 
 		if (step === "credentials") {
 			if (!email.trim()) next.email = "We need an email to sign in with.";
-			if (password.length < 10)
-				next.password = "Use at least 10 characters.";
+			if (password.length < 10) next.password = "Use at least 10 characters.";
 		}
 
 		setErrors(next);

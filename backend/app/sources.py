@@ -605,3 +605,48 @@ def without_provenance(text: str) -> str:
 # same rule that could disagree, and it would have to throw away three rows'
 # evidence to do it. `canonical` above is what both sides key on; that is the
 # shared part, and it is the only part that needs to be shared.
+
+
+# --- Which strings came out of the corpus ---
+#
+# Follow-up chips and source labels are lifted verbatim from `knowledge_base.csv`,
+# which is English-only: 801 rows, no locale column. Everything else the reader
+# sees in a chip -- story follow-ups, the fallback chip, game labels, story
+# topics -- is authored per locale in the application and is already correct.
+#
+# So the outbound gate needs to translate exactly the retrieved half and leave
+# the authored half alone. Membership of this set is that distinction, stated
+# exactly rather than guessed at from the text.
+
+
+@lru_cache(maxsize=1)
+def corpus_questions() -> frozenset[str]:
+    """Every question string in the knowledge base, for identifying retrieved text.
+
+    Keyed on nothing, and re-read only when the process restarts: the corpus is
+    a file that ships with the build, so it cannot change under a running one.
+    """
+    import csv
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    path = settings.resolved(settings.knowledge_base_csv)
+    try:
+        with path.open(encoding="utf-8") as handle:
+            return frozenset(
+                question
+                for row in csv.DictReader(handle)
+                if (question := (row.get("question") or "").strip())
+            )
+    except Exception:
+        logger.warning(
+            "Could not read the corpus questions; chips will not be translated.",
+            exc_info=True,
+        )
+        return frozenset()
+
+
+def from_the_corpus(text: str) -> bool:
+    """Whether this exact string is a corpus question."""
+    return text.strip() in corpus_questions()

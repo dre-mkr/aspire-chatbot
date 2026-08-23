@@ -11,8 +11,8 @@ import {
 	skipWord,
 	submitAnswer,
 } from "#/lib/aspire/games";
-import { GAME_COPY } from "./game-copy";
 import { GameHead } from "./GameHead";
+import { GAME_COPY } from "./game-copy";
 import { type PiggyMood, PiggyProgress } from "./PiggyProgress";
 
 /** Who Wants to Be a Millionaire, played in the thread. */
@@ -253,9 +253,7 @@ export function Millionaire({
 						</p>
 						<div className="game__meaning">
 							<span className="game__meaning-label">{COPY.meaning}</span>
-							<p className="game__meaning-text">
-								{settled.reveal.explanation}
-							</p>
+							<p className="game__meaning-text">{settled.reveal.explanation}</p>
 						</div>
 						<div className="game__actions">
 							<button
