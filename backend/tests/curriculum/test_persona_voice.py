@@ -103,3 +103,55 @@ class TestTheBudgetingLessonIsAuthoredForAllSix:
         """They share a band. If they share words too, the split bought nothing."""
         said = {p: tuple(lesson.teach_for("adult", p)) for p in ("aurora", "nova", "guest")}
         assert len(set(said.values())) == 3
+
+
+@pytest.mark.asyncio
+class TestTheVoiceActuallyReachesTheReader:
+    """A schema nothing reads is a shelf, not a feature."""
+
+    @staticmethod
+    async def _taught(persona: str, band: str) -> str:
+        from langchain_core.messages import HumanMessage
+
+        from app.agents.learn.graph import build_learn_graph
+
+        graph = build_learn_graph(curriculum=load_all(), store=None)
+        out = await graph.ainvoke(
+            {
+                "messages": [HumanMessage(content="Teach me about making a plan for my money")],
+                "persona": persona, "age_band": band, "locale": "en",
+                "active_agent": "learning_sample", "session_id": "s", "user_id": None,
+                "learning": {"lesson_id": "l05_a_simple_plan", "concept_id": "budget",
+                             "phase": "teaching"},
+                "retrieved": [],
+            }
+        )
+        said = [m for m in out.get("messages", []) if getattr(m, "type", None) == "ai"]
+        return str(said[0].content) if said else ""
+
+    @pytest.mark.parametrize(
+        ("persona", "band", "opens_with"),
+        [
+            ("stella", "5-8", "A plan says where your money goes"),
+            ("kaleb", "9-12", "A plan tells each part of your money"),
+            ("orion", "13-15", "Decide the split on payday"),
+            ("aurora", "adult", "A plan is one decision made in the calm"),
+            ("nova", "adult", "The objective is the split AND the reasoning"),
+            ("guest", "adult", "A plan is what turns an amount into a month"),
+        ],
+    )
+    async def test_each_persona_is_taught_in_its_own_words(self, persona, band, opens_with):
+        assert (await self._taught(persona, band)).startswith(opens_with)
+
+    async def test_the_three_adults_do_not_receive_the_same_lesson(self):
+        """The bug this whole change exists for: all three fell to 13-15."""
+        said = {p: await self._taught(p, "adult") for p in ("aurora", "nova", "guest")}
+        assert len(set(said.values())) == 3
+        for text in said.values():
+            assert "Decide the split on payday" not in text, "still falling to 13-15"
+
+    def test_persona_of_reads_the_key(self):
+        from app.agents.learn.teach import persona_of
+
+        assert persona_of({"persona": "aurora"}) == "aurora"
+        assert persona_of({}) is None
