@@ -1335,6 +1335,8 @@ _SMALL_TALK_REPLIES: Final[dict[str, dict[str, str]]] = {
         "es": "Entendido. ¿Qué más te gustaría saber sobre ASPIRE?",
         "fr": "D'accord. Que veux-tu savoir d'autre sur ASPIRE ?",
     },
+    # The generic form, used only when the reader has no named guide -- see
+    # `_IDENTITY_NAMED` and `_identity_reply` below.
     "identity": {
         "en": "I'm the ASPIRE assistant. I answer questions about the programme — saving, the accounts, and how to join. What would you like to know?",
         "es": "Soy el asistente de ASPIRE. Respondo preguntas sobre el programa: el ahorro, las cuentas y cómo unirte. ¿Qué te gustaría saber?",
@@ -1352,11 +1354,98 @@ _SMALL_TALK_REPLIES: Final[dict[str, dict[str, str]]] = {
     },
 }
 
+#: "Who are you?" answered by the guide who is actually speaking.
+#:
+#: THE LINE ABOVE IS PERSONA-BLIND, and it was the whole answer for every reader.
+#: Measured on production 23 August 2026: all seven persona/band pairs returned
+#: the byte-identical "I'm the ASPIRE assistant" to "Who are you?" -- Skye,
+#: Kaleb, Zion, Imani and Azuri included. Six named guides, commissioned with
+#: their own cards, artwork and voices, and not one of them said its own name.
+#:
+#: They can, and always could: "Are you Kaleb?" returns "Yes. I'm Kaleb" from
+#: the card. Only the OPEN question was hard-coded, so the one phrasing a reader
+#: is most likely to use was the one phrasing that lost the persona.
+#:
+#: `guest` is deliberately absent. It has no character to introduce -- "Guest" is
+#: the absence of a name, not one -- so the generic line is not a fallback for
+#: that reader, it is the correct answer.
+_IDENTITY_NAMED: Final[dict[str, str]] = {
+    "en": "I'm {name}, your ASPIRE guide. I can tell you about the programme — saving, the accounts, and how to join. What would you like to know?",
+    "es": "Soy {name}, tu guía de ASPIRE. Puedo contarte sobre el programa: el ahorro, las cuentas y cómo unirte. ¿Qué te gustaría saber?",
+    "fr": "Je suis {name}, ton guide ASPIRE. Je peux te parler du programme : l'épargne, les comptes et comment s'inscrire. Que veux-tu savoir ?",
+}
+
+
+def _identity_reply(state: AspireState, locale: str) -> str:
+    """The identity line, named where there is a name to give."""
+    from app.prompting.personas.names import display_name
+
+    persona = str(state.get("persona") or "").strip().lower()
+    if persona and persona != "guest":
+        name = display_name(persona, str(state.get("age_band") or ""))
+        if name:
+            template = _IDENTITY_NAMED.get(locale) or _IDENTITY_NAMED["en"]
+            return template.format(name=name)
+    generic = _SMALL_TALK_REPLIES["identity"]
+    return generic.get(locale) or generic["en"]
+
+
 _SMALL_TALK_RE: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
     # Anchored, and the only permitted extras are leading/trailing punctuation and whitespace.
     (kind, re.compile(rf"^[\s\W]*{pattern}[\s\W]*$", re.I))
     for kind, pattern in _SMALL_TALK
 )
+
+
+def small_talk_kind(text: str) -> str | None:
+    """Which closed small-talk class this message is, or None.
+
+    Split out of `_small_talk_reply` so the stream layer can ask the same
+    question WITHOUT building a graph state. See `small_talk_answer`.
+    """
+    raw = (text or "").strip()
+    if not raw or len(raw) > 64:
+        return None
+
+    from app.casual import casual_fold
+
+    folded = casual_fold(raw) or raw
+    for kind, pattern in _SMALL_TALK_RE:
+        if pattern.match(folded):
+            return kind
+    return None
+
+
+def small_talk_answer(
+    text: str, *, locale: str, persona: str | None, age_band: str | None
+) -> str | None:
+    """The conversational reply for a conversational turn, or None.
+
+    ANSWERED BEFORE THE CACHE IS CONSULTED, and that ordering is the whole
+    point. The cache is keyed on the question, so a turn that was once
+    misrouted is served from the shelf for ever after -- and a greeting is the
+    single most likely thing to be asked twice.
+
+    It was not hypothetical. On 23 August 2026 a FRESH session on production
+    answered "hi" with "And how are you related to the child?", and "thanks",
+    "ok" and "bye" with "Pick the closest one -- mother, father, grandmother".
+    All four came back from the cache in under 130ms, so this short-circuit --
+    which exists precisely to answer "hi" -- never ran at all.
+
+    `cacheable` no longer shelves a registration turn, which stops it recurring.
+    This stops the whole class: a greeting, a thank-you or a goodbye is now
+    answered from a closed list before anything is looked up, so no cache entry
+    for one can ever be consulted, whatever put it there.
+    """
+    kind = small_talk_kind(text)
+    if kind is None:
+        return None
+    if kind == "identity":
+        return _identity_reply(
+            {"persona": persona, "age_band": age_band}, locale
+        )
+    replies = _SMALL_TALK_REPLIES[kind]
+    return replies.get(locale) or replies["en"]
 
 
 def _small_talk_reply(state: AspireState) -> Command | None:
@@ -1378,13 +1467,18 @@ def _small_talk_reply(state: AspireState) -> Command | None:
         if pattern.match(text):
             locale = str(state.get("locale") or "en")
             replies = _SMALL_TALK_REPLIES[kind]
+            reply = (
+                _identity_reply(state, locale)
+                if kind == "identity"
+                else (replies.get(locale) or replies["en"])
+            )
             logger.info(
                 "Answering a %s turn conversationally rather than opening a ticket.",
                 kind,
             )
             return Command(
                 update={
-                    "messages": [AIMessage(content=replies.get(locale) or replies["en"])],
+                    "messages": [AIMessage(content=reply)],
                     "groundedness": 1.0,
                     "citations": [],
                 }

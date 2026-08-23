@@ -119,7 +119,12 @@ def start_game(
 
     If it DECLINES there is no card, so tell the user plainly why:
       not_available_for_persona - the games are for ASPIRE account holders
-      no_set_for_language       - that language has no set authored yet
+      no_set_for_language       - the games are not in that language YET. The
+                                  `message` is already written for the reader and
+                                  already in their language: pass it on as it is,
+                                  do not translate it, do not soften it, and do
+                                  not turn it into an apology. It tells them the
+                                  games are coming and that English works now.
       already_running           - a game is already in progress here
     """
     try:
