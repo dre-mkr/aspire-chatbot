@@ -172,3 +172,55 @@ class TestTheReprompt:
 
     def test_no_violations_means_no_instruction(self):
         assert vocab.explain([], "9-12") == ""
+
+
+class TestAClaimIsNotATopic:
+    """Two different kinds of thing used to live in one list."""
+
+    BANDS = ("5-8", "9-12", "13-15", "16-18", "adult")
+
+    @pytest.mark.parametrize(
+        "word",
+        ["risk-free", "risk free", "guaranteed return", "guaranteed returns",
+         "guaranteed profit", "get rich", "sin riesgo", "rendement garanti",
+         "hacerse rico", "sans risque"],
+    )
+    def test_a_false_claim_is_banned_at_every_band(self, word):
+        """"Risk-free" is no safer to say to a guardian than to a nine-year-old.
+
+        It is worse: an adult can act on it.
+        """
+        for band in self.BANDS:
+            assert vocab.check(word, band), f"{word!r} leaked at {band}"
+
+    @pytest.mark.parametrize("word", ["risk-free", "guaranteed return", "get rich"])
+    def test_and_no_scope_can_lift_one(self, word):
+        assert vocab.check(word, "adult", teaching_scope=True)
+        assert vocab.check(word, "adult", programme_scope=True)
+
+    @pytest.mark.parametrize(
+        "word", ["crypto", "Bitcoin", "cryptocurrency", "day trading", "criptomoneda"]
+    )
+    def test_a_topic_is_barred_below_adult(self, word):
+        for band in ("5-8", "9-12", "13-15", "16-18"):
+            assert vocab.check(word, band), f"{word!r} reached a minor at {band}"
+
+    @pytest.mark.parametrize("word", ["crypto", "Bitcoin", "cryptocurrency", "day trading"])
+    def test_but_an_adult_may_have_it_named(self, word):
+        """Banning the word stopped the assistant naming what it was declining.
+
+        Measured live: a guardian asking about Bitcoin was answered "some kinds
+        of online money can lose or gain value very quickly" -- circumlocution,
+        in a child's register, to an adult. A teacher asking what to tell a
+        pupil got the same evasion, when the word is what she needs in class.
+        """
+        assert not vocab.check(word, "adult")
+
+    def test_a_lesson_to_a_child_still_cannot_say_one(self):
+        """The teaching lift must not reach a topic."""
+        assert vocab.check("crypto", "9-12", teaching_scope=True)
+        assert vocab.check("day trading", "13-15", teaching_scope=True)
+
+    def test_the_union_still_covers_both(self):
+        assert set(vocab._GENERAL_BAN) == set(vocab._NEVER_CLAIM) | set(vocab._NOT_FOR_MINORS)
+        assert not (set(vocab._NEVER_CLAIM) & set(vocab._NOT_FOR_MINORS))

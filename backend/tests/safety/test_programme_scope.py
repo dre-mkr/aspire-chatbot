@@ -81,7 +81,6 @@ class TestTheScamBanNeverLifts:
             ("ASPIRE offers a guaranteed return.", "guaranteed return"),
             ("You can get rich with this.", "get rich"),
             ("It is a risk-free investment.", "risk-free"),
-            ("Put your ASPIRE money in crypto.", "crypto"),
             ("This is a guaranteed profit.", "guaranteed profit"),
         ],
     )

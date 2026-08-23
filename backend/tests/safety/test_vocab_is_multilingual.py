@@ -60,11 +60,20 @@ NEVER_ANYWHERE: list[tuple[str, str, str]] = [
     ("guaranteed return", "fr", "Il n'existe aucun rendement garanti."),
     ("risk-free", "es", "No es una inversión sin riesgo."),
     ("risk-free", "fr", "Ce n'est pas un placement sans risque."),
-    ("crypto", "es", "No hablamos de criptomonedas aquí."),
-    ("crypto", "fr", "On ne parle pas de cryptomonnaie ici."),
     ("get rich", "es", "Esto no es para hacerse rico."),
     ("get rich", "fr", "Ce n'est pas pour devenir riche."),
 ]
+
+#: Topics, which follow a DIFFERENT rule from a claim: barred below `adult`,
+#: nameable at it. A claim is false at any age; a topic is a subject, and
+#: barring the word stopped the assistant naming what it was declining.
+NOT_FOR_MINORS: list[tuple[str, str, str]] = [
+    ("crypto", "en", "We do not talk about crypto here."),
+    ("crypto", "es", "No hablamos de criptomonedas aquí."),
+    ("crypto", "fr", "On ne parle pas de cryptomonnaie ici."),
+    ("day trading", "es", "No hacemos trading intradiario."),
+]
+
 
 #: Band-appropriate sentences that must NOT trip the gate.
 #:
@@ -252,3 +261,19 @@ class TestTheOneWordThatWasLifted:
             f"only `interest` was lifted at 5-8; {word} should still fire"
         )
 
+
+
+class TestATopicIsBarredBelowAdultInEveryLocale:
+    @pytest.mark.parametrize(("term", "locale", "text"), NOT_FOR_MINORS)
+    @pytest.mark.parametrize("band", ["5-8", "9-12", "13-15", "16-18"])
+    def test_a_minor_never_has_it_named(self, band, term, locale, text):
+        assert term in {v.term for v in vocab.check(text, band)}, (
+            f"{locale}: {text!r} reached a reader at {band}"
+        )
+
+    @pytest.mark.parametrize(("term", "locale", "text"), NOT_FOR_MINORS)
+    def test_an_adult_may(self, term, locale, text):
+        assert not vocab.check(text, "adult"), (
+            f"{locale}: {text!r} was still barred at adult, so the assistant "
+            f"cannot name what it declines to advise on"
+        )

@@ -125,22 +125,37 @@ class TestTheAnswerSurvivesTheGate:
     @pytest.mark.parametrize(
         "text",
         [
-            "You could put it in crypto.",
             "This is a guaranteed return.",
             "It is risk-free.",
             "That is how you get rich.",
+            "This is a guaranteed profit.",
         ],
     )
-    def test_the_general_ban_is_never_lifted(self, text: str):
-        """`_GENERAL_BAN` is absolute at every band, in scope or out of it.
+    def test_a_false_claim_is_never_lifted(self, text: str):
+        """`_NEVER_CLAIM` is absolute at every band, in scope or out of it.
 
         This is the floor the lift must never reach. A programme question is a
         reason to name EC$500; it is not a reason to say `risk-free` to anybody.
+        A claim is not age-gated -- it is worse to an adult, who can act on it.
         """
         from app.safety import vocab
 
         assert vocab.check(text, "5-8", programme_scope=True), f"{text!r} got through"
         assert vocab.check(text, "adult", programme_scope=True), f"{text!r} at adult"
+
+    @pytest.mark.parametrize("text", ["You could put it in crypto.", "Try day trading."])
+    def test_a_topic_is_barred_from_a_minor_and_nameable_to_an_adult(self, text: str):
+        """`_NOT_FOR_MINORS` is a different rule from `_NEVER_CLAIM`.
+
+        Barring the WORD stopped the assistant naming what it was declining to
+        advise on: a guardian asking about Bitcoin got "some kinds of online
+        money can lose or gain value very quickly", and a teacher asking what to
+        tell a pupil got the same evasion.
+        """
+        from app.safety import vocab
+
+        assert vocab.check(text, "5-8", programme_scope=True), f"{text!r} reached a child"
+        assert not vocab.check(text, "adult", programme_scope=True), f"{text!r} still barred"
 
 
 class TestTheChildRowsLeadWithTheDefinitiveAnswer:
@@ -362,11 +377,18 @@ class TestTeachingScope:
         assert vocab.PROGRAMME_TERMS < vocab.TEACHING_TERMS
         assert vocab.TEACHING_TERMS - vocab.PROGRAMME_TERMS == {"loan"}
 
-    @pytest.mark.parametrize("text", ["crypto", "risk-free", "guaranteed return"])
-    def test_and_neither_scope_reaches_the_general_ban(self, text: str):
+    @pytest.mark.parametrize("text", ["risk-free", "guaranteed return", "get rich"])
+    def test_and_neither_scope_reaches_a_false_claim(self, text: str):
         from app.safety import vocab
 
         assert vocab.check(text, "adult", teaching_scope=True)
+
+    @pytest.mark.parametrize("text", ["crypto", "day trading"])
+    def test_but_a_topic_is_nameable_to_an_adult_and_not_to_a_child(self, text: str):
+        from app.safety import vocab
+
+        assert not vocab.check(text, "adult", teaching_scope=True)
+        assert vocab.check(text, "9-12", teaching_scope=True), "a lesson to a child must not"
 
     def test_a_teaching_turn_is_recognised_by_its_agent(self):
         from app.graph.nodes.safety_out import is_a_lesson

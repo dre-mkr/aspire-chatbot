@@ -23,9 +23,26 @@ class VocabViolation:
 
 
 # ── the general list ──
-# Applies at every band, adult included.
+#
+# Two different kinds of thing used to live in one list, and merging them cost
+# adults real answers.
+#
+# A CLAIM that would be untrue is not age-gated. "Risk-free" is no safer to say
+# to a guardian than to a nine-year-old -- it is worse, because an adult can act
+# on it. Those stay banned at every band, and no scope lifts them.
+#
+# A TOPIC is different. `crypto` and `day trading` are subjects, not falsehoods,
+# and banning the WORD means the assistant cannot name what it is declining to
+# advise on. Measured on the live site: a guardian asking "should I put my
+# savings in Bitcoin instead?" was answered "some kinds of online money can lose
+# or gain value very quickly" -- circumlocution, in a child's register, to an
+# adult. Worse, a teacher asking what to tell a pupil about cryptocurrency got
+# the same evasion, when the word is exactly what she needs to say in class.
+#
+# So topics are barred below `adult` and nameable at it. Nothing else moves.
 
-_GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
+#: Claims that would be false however old the reader is. Never lifted, any band.
+_NEVER_CLAIM: Final[dict[str, tuple[str, ...]]] = {
     "guaranteed return": (
         "guaranteed return", "guaranteed returns",
         # es
@@ -49,6 +66,20 @@ _GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
         # fr
         "sans risque", "sans aucun risque",
     ),
+    "guaranteed profit": (
+        "guaranteed profit", "guaranteed profits",
+        # es
+        "ganancia garantizada", "ganancias garantizadas",
+        "beneficio garantizado", "beneficios garantizados",
+        # fr
+        "profit garanti", "profits garantis",
+        "bénéfice garanti", "bénéfices garantis",
+    ),
+}
+
+
+#: Topics a minor should not be led into, which an adult may have named plainly.
+_NOT_FOR_MINORS: Final[dict[str, tuple[str, ...]]] = {
     "crypto": (
         "crypto", "cryptocurrency", "cryptocurrencies", "bitcoin",
         # es
@@ -63,16 +94,11 @@ _GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {
         # fr
         "trading intrajournalier", "day-trading",
     ),
-    "guaranteed profit": (
-        "guaranteed profit", "guaranteed profits",
-        # es
-        "ganancia garantizada", "ganancias garantizadas",
-        "beneficio garantizado", "beneficios garantizados",
-        # fr
-        "profit garanti", "profits garantis",
-        "bénéfice garanti", "bénéfices garantis",
-    ),
 }
+
+#: The union, for anything that asks "is this banned outright" without a band.
+#: `check` still consults it to stop a programme or teaching scope lifting either.
+_GENERAL_BAN: Final[dict[str, tuple[str, ...]]] = {**_NEVER_CLAIM, **_NOT_FOR_MINORS}
 
 
 # ── the per-band ladders ──
@@ -270,7 +296,13 @@ def _compile(variants: tuple[str, ...]) -> re.Pattern[str]:
 #: `band -> term -> pattern`, built once at import.
 _PATTERNS: Final[dict[str, dict[str, re.Pattern[str]]]] = {
     band: {
-        **{term: _compile(variants) for term, variants in _GENERAL_BAN.items()},
+        **{term: _compile(variants) for term, variants in _NEVER_CLAIM.items()},
+        # Topics drop out at `adult`, and only there.
+        **(
+            {}
+            if band == "adult"
+            else {term: _compile(variants) for term, variants in _NOT_FOR_MINORS.items()}
+        ),
         **{term: _compile(variants) for term, variants in _BAN[band].items()},
     }
     for band in BANDS
