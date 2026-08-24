@@ -54,6 +54,7 @@ export interface DirectiveContext {
 
 /** Types this build knows how to render. Everything else renders nothing. */
 const KNOWN = new Set([
+	"pledge",
 	"signup",
 	"upload",
 	"review_card",
