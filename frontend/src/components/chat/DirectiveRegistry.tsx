@@ -11,6 +11,7 @@ import type {
 	ProgressDirective,
 	ReviewCardDirective,
 	SignupDirective,
+	TinDirective,
 	UploadDirective,
 	VideoDirective,
 	WidgetDirective,
@@ -20,6 +21,7 @@ import { WidgetRenderer } from "../widgets/WidgetRenderer";
 import { CollectibleCard } from "./CollectibleCard";
 import { PledgeCard } from "./PledgeCard";
 import { ReviewCard } from "./ReviewCard";
+import { TinDrop } from "./TinDrop";
 import { UploadCard } from "./UploadCard";
 import { VideoCard } from "./VideoPanel";
 
@@ -56,6 +58,7 @@ export interface DirectiveContext {
 
 /** Types this build knows how to render. Everything else renders nothing. */
 const KNOWN = new Set([
+	"tin",
 	"collectible",
 	"pledge",
 	"signup",
@@ -98,6 +101,9 @@ export function DirectiveView({
 					onSkip={() => undefined}
 				/>
 			);
+
+		case "tin":
+			return <TinDrop directive={directive as TinDirective} />;
 
 		case "collectible":
 			return <CollectibleCard directive={directive as CollectibleDirective} />;

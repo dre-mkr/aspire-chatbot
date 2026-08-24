@@ -189,6 +189,9 @@ class AspireState(TypedDict, total=False):
     #: A preference, not identity: it rides the request body like simple_mode.
     overlay: str
 
+    #: The Tin: {"coins": int}. Only ever fills. See `app/graph/tin.py`.
+    tin: dict | None
+
     #: Story artifacts earned by finishing played stories: [{"name","emoji","topic"}].
     collectibles: list
 
@@ -351,6 +354,7 @@ def initial_state(
         story_topic=None,
         overlay="",
         collectibles=[],
+        tin=None,
         pledge=None,
         awaiting_learner_purpose=False,
         learner_purpose="",

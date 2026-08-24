@@ -10130,3 +10130,26 @@ a.source__site--link:hover .source__out {
 }
 .shelf__emoji { font-size: 1.8rem; }
 .shelf__name { font-size: 0.78rem; font-weight: 600; }
+
+/* ── The Tin ────────────────────────────────────────────────────────────── */
+.tin-drop {
+	display: inline-flex; align-items: center; gap: 8px;
+	margin: 2px 0 16px; padding: 8px 14px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, #fdf3e3, #ffe9c2);
+	border: 1px solid #e0a558; color: #6b4a12;
+	font-size: 0.9rem;
+	animation: collectible-drop 400ms var(--ease) both;
+}
+.tin-drop[data-milestone] {
+	background: linear-gradient(135deg, #ffe9c2, #ffd58a);
+	box-shadow: 0 6px 18px rgb(224 165 88 / 0.4);
+}
+.tin-drop__coin { font-size: 1.15rem; }
+.tin-drop__total {
+	padding: 2px 8px; border-radius: 999px;
+	background: #6b4a12; color: #ffe9c2; font-weight: 700; font-size: 0.8rem;
+}
+.tin-total { display: flex; align-items: baseline; gap: 12px; margin: 10px 0 0; }
+.tin-total strong { font-family: var(--font-display, Georgia, serif); font-size: 2rem; }
+.tin-total__next { color: var(--muted, #6b6377); font-size: 0.85rem; }

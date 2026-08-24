@@ -14,6 +14,9 @@ export interface ViewsCopy {
 		stages: string[];
 		shelfTitle: string;
 		shelfLede: string;
+		tinTitle: string;
+		tinLede: string;
+		tinNext: string;
 	};
 	parents: {
 		title: string;
@@ -55,6 +58,10 @@ const EN: ViewsCopy = {
 		stages: ["Basics", "Saving", "Budgeting", "Investing", "Business"],
 		shelfTitle: "Your story artifacts",
 		shelfLede: "Earned by playing a story all the way to its ending.",
+		tinTitle: "The Tin",
+		tinLede:
+			"Coins land here when you finish stories, complete games and sign pledges. It only ever fills.",
+		tinNext: "{n} to the next milestone",
 	},
 	parents: {
 		title: "For parents & guardians",
@@ -115,6 +122,10 @@ const ES: ViewsCopy = {
 		stages: ["Fundamentos", "Ahorro", "Presupuesto", "Inversión", "Negocios"],
 		shelfTitle: "Tus artefactos de cuentos",
 		shelfLede: "Se ganan jugando un cuento hasta su final.",
+		tinTitle: "La Alcancía",
+		tinLede:
+			"Aquí caen monedas cuando terminas cuentos, completas juegos y firmas compromisos. Solo se llena.",
+		tinNext: "{n} para el siguiente hito",
 	},
 	parents: {
 		title: "Para madres, padres y tutores",
@@ -175,6 +186,10 @@ const FR: ViewsCopy = {
 		stages: ["Bases", "Épargne", "Budget", "Investissement", "Entreprise"],
 		shelfTitle: "Tes artefacts d'histoires",
 		shelfLede: "Gagnés en jouant une histoire jusqu'à sa fin.",
+		tinTitle: "La Tirelire",
+		tinLede:
+			"Les pièces tombent ici quand tu finis des histoires, termines des jeux et signes des engagements. Elle ne fait que se remplir.",
+		tinNext: "{n} avant le prochain palier",
 	},
 	parents: {
 		title: "Pour les parents et tuteurs",

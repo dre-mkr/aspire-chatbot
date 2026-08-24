@@ -1,5 +1,6 @@
 import { collection } from "#/lib/aspire/collectibles";
 import { currentLocale } from "#/lib/aspire/i18n";
+import { tinTotal } from "#/lib/aspire/tin";
 import { viewsCopy } from "#/lib/aspire/views-copy";
 import { ViewHeader } from "./ViewHeader";
 
@@ -62,6 +63,25 @@ export function JourneyView({
 						</button>
 					) : null}
 				</section>
+
+				{tinTotal() > 0 ? (
+					<section className="panel">
+						<h2 className="panel__title">🪙 {copy.tinTitle}</h2>
+						<p>{copy.tinLede}</p>
+						<p className="tin-total">
+							<strong>{tinTotal()}</strong>
+							<span className="tin-total__next">
+								{(() => {
+									const milestones = [10, 25, 50, 100];
+									const next = milestones.find((m) => m > tinTotal());
+									return next
+										? copy.tinNext.replace("{n}", String(next - tinTotal()))
+										: "";
+								})()}
+							</span>
+						</p>
+					</section>
+				) : null}
 
 				{collection().length > 0 ? (
 					<section className="panel">

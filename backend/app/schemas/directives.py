@@ -244,6 +244,20 @@ class VideoDirective(_Directive):
 # ── widget ───────────────────────────────────────────────────────────────────
 
 
+class TinDirective(_Directive):
+    """Coins dropping into the Tin. See `app/graph/tin.py`."""
+
+    t: Literal["tin"] = "tin"
+    #: The new running total for this conversation.
+    coins: int
+    #: What this event added.
+    delta: int
+    #: True when a milestone was crossed -- the client celebrates bigger.
+    milestone: bool = False
+    #: Already in the reader's language.
+    caption: str
+
+
 class CollectibleDirective(_Directive):
     """A story artifact, granted when a played story reaches its ending.
 
@@ -301,6 +315,7 @@ UIDirective = Annotated[
         ReviewCardDirective,
         PledgeDirective,
         CollectibleDirective,
+        TinDirective,
         ChartDirective,
         ProgressDirective,
         CitationsDirective,

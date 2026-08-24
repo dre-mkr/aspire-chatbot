@@ -287,6 +287,26 @@ def make_game_result_node(store: MasteryStore | None = None):
                     ],
                 }
 
+        from app.graph.tin import (
+            COINS_GAME_COMPLETED,
+            COINS_GAME_PERFECT,
+            tin_award,
+        )
+
+        if result.completed:
+            perfect = result.max_score > 0 and result.score == result.max_score
+            delta = COINS_GAME_PERFECT if perfect else COINS_GAME_COMPLETED
+            coins = tin_award(state, delta, str(state.get("locale") or "en"))
+            if coins:
+                award = {
+                    **coins,
+                    **award,
+                    "ui_directives": [
+                        *award.get("ui_directives", []),
+                        *coins.get("ui_directives", []),
+                    ],
+                }
+
         return {
             **award,
             "messages": [AIMessage(content=reaction_for(result, band, str(state.get("locale") or "en")))],

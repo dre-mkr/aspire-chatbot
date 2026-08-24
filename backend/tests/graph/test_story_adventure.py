@@ -161,14 +161,17 @@ class TestTheGameCrowns:
 
         node = make_game_result_node()
         out = await node(self._result_state("millionaire", 9, 10))
-        assert "ui_directives" not in out
+        # Coins for completing, but no crown.
+        kinds = [d.t for d in out.get("ui_directives", [])]
+        assert "collectible" not in kinds and "tin" in kinds
 
     async def test_scramble_never_crowns(self):
         from app.agents.learn.tools.games import make_game_result_node
 
         node = make_game_result_node()
         out = await node(self._result_state("scramble", 10, 10))
-        assert "ui_directives" not in out
+        kinds = [d.t for d in out.get("ui_directives", [])]
+        assert "collectible" not in kinds
 
     async def test_the_crown_is_granted_once(self):
         from app.agents.learn.tools.games import make_game_result_node
@@ -178,4 +181,5 @@ class TestTheGameCrowns:
             "millionaire", 10, 10,
             collectibles=[{"name": "The Crown of Questions", "emoji": "👑", "topic": "millionaire"}],
         ))
-        assert "ui_directives" not in out
+        kinds = [d.t for d in out.get("ui_directives", [])]
+        assert "collectible" not in kinds

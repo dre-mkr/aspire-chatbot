@@ -506,21 +506,46 @@ export function useVoice({
 	const play = useCallback(
 		async (id: number, text: string) => {
 			if (playingId === id) {
-				audio.current?.pause();
+				// Two engines. The ASPIRE voice is an <audio> element; the
+				// browser fallback is speechSynthesis, which has no element at
+				// all -- pausing only `audio.current` left the device voice
+				// talking straight through the button. This was the report
+				// "when you play it and try to stop it it does not stop".
+				if (audio.current) {
+					audio.current.pause();
+				} else if (
+					typeof window !== "undefined" &&
+					"speechSynthesis" in window
+				) {
+					window.speechSynthesis.pause();
+				}
 				setPlayingId(null);
 				setPausedId(id);
 				return;
 			}
 
-			if (pausedId === id && audio.current) {
-				setPausedId(null);
-				setPlayingId(id);
-				try {
-					await audio.current.play();
-				} catch {
-					stopPlayback();
+			if (pausedId === id) {
+				if (audio.current) {
+					setPausedId(null);
+					setPlayingId(id);
+					try {
+						await audio.current.play();
+					} catch {
+						stopPlayback();
+					}
+					return;
 				}
-				return;
+				if (
+					typeof window !== "undefined" &&
+					"speechSynthesis" in window &&
+					window.speechSynthesis.paused
+				) {
+					setPausedId(null);
+					setPlayingId(id);
+					window.speechSynthesis.resume();
+					return;
+				}
+				// Nothing left to resume: fall through and start this answer fresh.
 			}
 
 			stopPlayback();

@@ -398,7 +398,11 @@ def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 break
         pledge = {"amount_line": amount_line.strip(), "goal": goal.strip()}
         salute = copy["salute_young"] if young else copy["salute"]
+        from app.graph.tin import COINS_PLEDGE_SIGNED, tin_award
+
+        coins = tin_award(state, COINS_PLEDGE_SIGNED, locale)
         return {
+            **{k: v for k, v in coins.items() if k != "ui_directives"},
             "pledge": pledge,
             "messages": [AIMessage(content=salute)],
             "ui_directives": [
@@ -408,7 +412,8 @@ def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                     button_label=copy["sealed"],
                     button_value="",
                     pledged=True,
-                )
+                ),
+                *coins.get("ui_directives", []),
             ],
             "active_agent": _holding_agent(state),
             "safety_flags": {"card": "pledge_signed"},
@@ -807,7 +812,11 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 topic_now = str(arc.get("topic") or "")
                 name, emoji = _artifact_for(topic_now, locale)
                 caption = _ARTIFACT_CAPTION.get(locale, _ARTIFACT_CAPTION["en"])
+                from app.graph.tin import COINS_STORY_FINISHED, tin_award
+
+                coins = tin_award(state, COINS_STORY_FINISHED, locale)
                 award = {
+                    **{k: v for k, v in coins.items() if k != "ui_directives"},
                     "collectibles": [
                         *list(state.get("collectibles") or []),
                         {"name": name, "emoji": emoji, "topic": topic_now},
@@ -815,7 +824,8 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                     "ui_directives": [
                         CollectibleDirective(
                             name=name, emoji=emoji, caption=caption, topic=topic_now
-                        )
+                        ),
+                        *coins.get("ui_directives", []),
                     ],
                 }
 

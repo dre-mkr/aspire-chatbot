@@ -92,6 +92,14 @@ export interface ReviewCardDirective {
 	sections: Array<ReviewSection>;
 }
 
+export interface TinDirective {
+	t: "tin";
+	coins: number;
+	delta: number;
+	milestone: boolean;
+	caption: string;
+}
+
 export interface CollectibleDirective {
 	t: "collectible";
 	name: string;
@@ -199,7 +207,8 @@ export type Directive =
 	| VideoDirective
 	| UnknownDirective
 	| PledgeDirective
-	| CollectibleDirective;
+	| CollectibleDirective
+	| TinDirective;
 
 /* ── concept widgets ────────────────────────────────────────────────────── */
 
