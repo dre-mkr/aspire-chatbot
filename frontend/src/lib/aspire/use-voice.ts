@@ -225,6 +225,8 @@ export function useVoice({
 
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
+	/** `persona -> speed`, from `/api/voice/config`. Empty until it answers. */
+	const personaSpeeds = useRef<Map<string, number>>(new Map());
 	const [prefsLoaded, setPrefsLoaded] = useState(false);
 	const [playingId, setPlayingId] = useState<number | null>(null);
 	const [pausedId, setPausedId] = useState<number | null>(null);
@@ -270,6 +272,10 @@ export function useVoice({
 		fetchVoiceConfig().then((config) => {
 			if (!live) return;
 			setAvailable(Boolean(config) && typeof MediaRecorder !== "undefined");
+			// The per-persona pace the server has always sent. Kept, not discarded.
+			personaSpeeds.current = new Map(
+				(config?.personas ?? []).map((entry) => [entry.persona, entry.speed]),
+			);
 		});
 		return () => {
 			live = false;
@@ -485,7 +491,8 @@ export function useVoice({
 						const spoke = speakInBrowser(
 							text,
 							language,
-							Number(speed) || 1,
+							(personaSpeeds.current.get(persona ?? "") ?? 1) *
+								(Number(speed) || 1),
 							() => setPlayingId(null),
 						);
 						// The play button must reflect what is happening, and if
@@ -516,7 +523,12 @@ export function useVoice({
 
 			objectUrl.current = url;
 			const element = new Audio(url);
-			element.playbackRate = Number(speed) || 1;
+			// The persona's own pace, then the reader's preference on top of it.
+			// Two different things: 0.88 is how Skye reads to a five-year-old,
+			// and the preference is a reader saying "faster than that, please".
+			// Using only the preference delivered every persona identically.
+			element.playbackRate =
+				(personaSpeeds.current.get(persona ?? "") ?? 1) * (Number(speed) || 1);
 			element.onended = () => stopPlayback();
 			audio.current = element;
 			setPausedId(null);

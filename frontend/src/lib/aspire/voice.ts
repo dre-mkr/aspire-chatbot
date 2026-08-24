@@ -34,10 +34,27 @@ export interface VoiceLimits {
 	allowed_mime_types: Array<string>;
 }
 
+export interface PersonaVoice {
+	persona: string;
+	languages: Array<VoiceLanguage>;
+	/** How fast this persona reads, before the reader's own preference. */
+	speed: number;
+	stability: number;
+}
+
 export interface VoiceConfig {
 	enabled: boolean;
 	languages: Array<VoiceLanguage>;
 	limits: VoiceLimits;
+	/**
+	 * Per-persona delivery, which the server has always sent and nothing read.
+	 *
+	 * Skye is tuned to 0.88 and Azuri to 0.96 -- a five-year-old is read to more
+	 * slowly than a teacher is. The client used only the reader's own speed
+	 * preference, so every persona was delivered at exactly the same pace and
+	 * the tuning did nothing.
+	 */
+	personas: Array<PersonaVoice>;
 }
 
 export interface Transcription {
