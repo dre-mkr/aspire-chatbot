@@ -352,6 +352,21 @@ export function useConversation({
 		]);
 	}, [clearTimers]);
 
+	/**
+	 * Lets go of a reveal whose turn has been superseded.
+	 *
+	 * Only ever its own: `cursor.current` may already belong to a newer turn,
+	 * and there is a single `streamTimer` behind all of them, so settling the
+	 * wrong one stops the reveal that is legitimately running.
+	 */
+	const releaseAbandoned = useCallback(
+		(streamingId: number) => {
+			const live = cursor.current;
+			if (live && live.id === streamingId) settleRevealed();
+		},
+		[settleRevealed],
+	);
+
 	const tick = useCallback(() => {
 		const state = cursor.current;
 		if (!state) return;
@@ -616,11 +631,32 @@ export function useConversation({
 					autoLanguage: getAutoLanguageRef.current(),
 				});
 
+				if (turnToken.current !== token) {
+					// Abandoned while it was still being revealed. `settleTurn` latches
+					// before it checks the token, so `ended` was never set on this
+					// cursor and `tick` will spin at `pending === 0` forever. Nothing
+					// else will clear it either: `sendUploadResult` and
+					// `sendGameResult` bump the token WITHOUT the `cursor.current`
+					// guard the other turn-starters have. The reader is then locked
+					// out for good -- the composer stays on Stop generating and `send`
+					// is refused by that same guard, which is what a registration that
+					// paused on a document upload actually did.
+					//
+					// `id === streamingId` keeps this to OUR cursor: if a newer turn
+					// has already begun revealing, it owns both the cursor and the
+					// single `streamTimer`, and clearing those here would freeze it.
+					releaseAbandoned(streamingId);
+					return;
+				}
+
 				// Usually a no-op: `onTurn` already settled this when the turn was announced.
 				settleTurn(result);
 				applyFollowUps(result.followUps);
 			} catch (error) {
-				if (turnToken.current !== token) return;
+				if (turnToken.current !== token) {
+					releaseAbandoned(streamingId);
+					return;
+				}
 
 				// A reveal may still be running against a stream that has died.
 				if (cursor.current) settleRevealed();
@@ -645,6 +681,7 @@ export function useConversation({
 			persona,
 			band,
 			nameConversation,
+			releaseAbandoned,
 			settleRevealed,
 			hasTitled,
 			markTitled,
