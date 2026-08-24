@@ -121,7 +121,7 @@ export async function streamAspire(
 					body: {
 						message,
 						...(simpleMode ? { simple_mode: true } : {}),
-						...(autoLanguage ? {} : { auto_language: false }),
+						...(autoLanguage ? {} : { auto_language: false, language }),
 						__upload_result: uploadResult as unknown as Record<string, unknown>,
 					},
 				}
@@ -138,6 +138,15 @@ export async function streamAspire(
 		// shapes the ANSWER. It is sent only when the reader has pinned a
 		// language, because absent means Automatic on the server, and the two
 		// typed endpoints above must not gain a key their schemas do not declare.
+		//
+		// AND `language` WITH IT. Sending the flag alone is worse than sending
+		// neither: `auto_language: false` switches the server's detector off,
+		// and without the value there is nothing to switch it TO -- so pinning
+		// French stopped the conversation following the reader and did not make
+		// it French. "Bonjour" came back "Hello! I can tell you about ASPIRE".
+		//
+		// The server has consumed `language` since the pin landed; this was the
+		// half that never shipped.
 		...((simpleMode || !autoLanguage) &&
 		!interaction &&
 		!gameResult &&
@@ -146,7 +155,7 @@ export async function streamAspire(
 					body: {
 						message,
 						...(simpleMode ? { simple_mode: true } : {}),
-						...(autoLanguage ? {} : { auto_language: false }),
+						...(autoLanguage ? {} : { auto_language: false, language }),
 					},
 				}
 			: {}),
