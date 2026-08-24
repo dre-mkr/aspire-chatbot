@@ -93,6 +93,8 @@ class SessionContext(BaseModel):
     age_band: str
     locale: str
     account_status: str
+    #: The reader's chosen personality overlay, or "". See prompting/overlays.
+    overlay: str = ""
     #: `users.display_name`, or None for an anonymous visitor.
     display_name: str | None = None
 

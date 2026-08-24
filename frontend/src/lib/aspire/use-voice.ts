@@ -125,6 +125,8 @@ interface VoicePrefs {
 	 * the room a child is in is not always a room that wants noise.
 	 */
 	gameSound: boolean;
+	/** Chosen personality overlay key, or "". */
+	overlay: string;
 }
 
 const DEFAULT_PREFS: VoicePrefs = {
@@ -133,6 +135,7 @@ const DEFAULT_PREFS: VoicePrefs = {
 	language: "en",
 	autoLanguage: true,
 	gameSound: true,
+	overlay: "",
 };
 
 function readPrefs(): VoicePrefs {
@@ -154,6 +157,7 @@ function readPrefs(): VoicePrefs {
 				typeof parsed.autoLanguage === "boolean" ? parsed.autoLanguage : true,
 			gameSound:
 				typeof parsed.gameSound === "boolean" ? parsed.gameSound : true,
+			overlay: typeof parsed.overlay === "string" ? parsed.overlay : "",
 		};
 	} catch {
 		return DEFAULT_PREFS;
@@ -222,6 +226,7 @@ export function useVoice({
 	const enableAutoLanguage = useCallback(() => setAutoLanguage(true), []);
 
 	const [gameSound, setGameSound] = useState(DEFAULT_PREFS.gameSound);
+	const [overlay, setOverlay] = useState(DEFAULT_PREFS.overlay);
 
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
@@ -250,6 +255,7 @@ export function useVoice({
 		setSpeed(prefs.speed);
 		setAutoLanguage(prefs.autoLanguage);
 		setGameSound(prefs.gameSound);
+		setOverlay(prefs.overlay);
 		setPrefsLoaded(true);
 	}, []);
 
@@ -259,12 +265,27 @@ export function useVoice({
 		try {
 			window.localStorage.setItem(
 				PREFS_KEY,
-				JSON.stringify({ autoSpeak, speed, language, autoLanguage, gameSound }),
+				JSON.stringify({
+					autoSpeak,
+					speed,
+					language,
+					autoLanguage,
+					gameSound,
+					overlay,
+				}),
 			);
 		} catch {
 			// Private browsing throws. Preferences are a convenience, not a feature.
 		}
-	}, [autoSpeak, autoLanguage, gameSound, language, prefsLoaded, speed]);
+	}, [
+		autoSpeak,
+		autoLanguage,
+		gameSound,
+		language,
+		overlay,
+		prefsLoaded,
+		speed,
+	]);
 
 	// A 404 or a disabled module both mean "no voice": unavailable, not an error.
 	useEffect(() => {
@@ -615,6 +636,8 @@ export function useVoice({
 		runNoteAction,
 		setLanguage,
 		autoLanguage,
+		overlay,
+		setOverlay,
 		enableAutoLanguage,
 		gameSound,
 		toggleGameSound: () => setGameSound((on) => !on),

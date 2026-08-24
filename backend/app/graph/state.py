@@ -185,6 +185,10 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: The reader's chosen personality overlay ("coach", "limer", ...), or "".
+    #: A preference, not identity: it rides the request body like simple_mode.
+    overlay: str
+
     #: A standing savings pledge: {"amount_line": str, "goal": str}.
     #:
     #: Written when the reader signs the pledge card, read by the QA shaping
@@ -342,6 +346,7 @@ def initial_state(
         auto_language=True,
         awaiting_story_topic=False,
         story_topic=None,
+        overlay="",
         pledge=None,
         awaiting_learner_purpose=False,
         learner_purpose="",

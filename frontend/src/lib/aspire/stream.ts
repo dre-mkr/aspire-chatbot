@@ -22,6 +22,19 @@ import {
 } from "./api";
 import { displayNameFor, promptKindFor } from "./game-kinds";
 
+/** The reader's chosen personality overlay, from the shared prefs. */
+function currentOverlay(): string {
+	try {
+		const raw = localStorage.getItem("aspire.voice.prefs.v1");
+		const parsed = raw ? JSON.parse(raw) : null;
+		const value =
+			parsed && typeof parsed.overlay === "string" ? parsed.overlay : "";
+		return value;
+	} catch {
+		return "";
+	}
+}
+
 /** Directive types the transcript renders through its own card row, not inline. */
 const CARD_TYPES = new Set(["game", "eligibility"]);
 
@@ -122,6 +135,7 @@ export async function streamAspire(
 						message,
 						...(simpleMode ? { simple_mode: true } : {}),
 						...(autoLanguage ? {} : { auto_language: false, language }),
+						...(currentOverlay() ? { overlay: currentOverlay() } : {}),
 						__upload_result: uploadResult as unknown as Record<string, unknown>,
 					},
 				}
@@ -147,7 +161,7 @@ export async function streamAspire(
 		//
 		// The server has consumed `language` since the pin landed; this was the
 		// half that never shipped.
-		...((simpleMode || !autoLanguage) &&
+		...((simpleMode || !autoLanguage || currentOverlay()) &&
 		!interaction &&
 		!gameResult &&
 		!uploadResult
@@ -156,6 +170,7 @@ export async function streamAspire(
 						message,
 						...(simpleMode ? { simple_mode: true } : {}),
 						...(autoLanguage ? {} : { auto_language: false, language }),
+						...(currentOverlay() ? { overlay: currentOverlay() } : {}),
 					},
 				}
 			: {}),

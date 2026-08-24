@@ -10087,3 +10087,6 @@ a.source__site--link:hover .source__out {
 	font-weight: 700;
 	color: var(--plum, #4a2977);
 }
+
+/* Personality chips wrap to two rows inside the voice menu. */
+.voice-menu__choices--wrap { flex-wrap: wrap; }
