@@ -197,11 +197,14 @@ app.include_router(accounts_router)
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Liveness, plus whether the data layer actually connected."""
+    from app.learning.concepts import get_store
+
     return HealthResponse(
         status="ok",
         database=database_enabled(),
         cache=response_cache.cache_enabled(),
         cache_stats=await response_cache.stats(),
+        concepts=len(get_store()),
     )
 
 

@@ -185,6 +185,13 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: The band a PREVIEW should be written at, when it is not the reader's own.
+    #:
+    #: A parent asking to see her nine-year-old's lesson. Read only by
+    #: `learning_preview` and `learning_sample`; `learn_agent` ignores it, which
+    #: is what stops it being a way for a reader to move their own band.
+    preview_band: str | None
+
     #: A story still being told, across turns: {"topic": str, "beat": int}.
     #:
     #: `story_topic` is cleared by `hydrate` on every turn, deliberately -- left
@@ -310,6 +317,7 @@ def initial_state(
         auto_language=True,
         awaiting_story_topic=False,
         story_topic=None,
+        preview_band=None,
         story_arc=None,
         offered_video=None,
         suggested_step=None,

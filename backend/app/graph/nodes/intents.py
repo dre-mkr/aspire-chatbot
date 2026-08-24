@@ -521,6 +521,57 @@ def _fuzzy_game(folded: str) -> str | None:
     return None
 
 
+#: An age or a school stage a reader names for SOMEBODY ELSE.
+#:
+#: "Can I see the lesson my nine-year-old would get." Before this there was no
+#: way to say which band you wanted to look at, so `band_of` read the reader
+#: every time and a parent asking for a nine-year-old's lesson was shown a
+#: fourteen-year-old's -- adult falls back through 16-18 to 13-15.
+#:
+#: The school stages are the St Kitts and Nevis ones, because that is what a
+#: teacher says. A Form 2 teacher does not say "the 13-15 band".
+_AGE_SAID = re.compile(
+    r"\b(?:aged?\s+)?(\d{1,2})\s*(?:-|\s)?\s*year[- ]?old\b"
+    r"|\bis\s+(\d{1,2})\b"
+    r"|\baged\s+(\d{1,2})\b",
+    re.IGNORECASE,
+)
+
+_STAGE_SAID: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\binfant\b|\bkindergarten\b|\bgrade\s*[12]\b", re.I), "5-8"),
+    (re.compile(r"\bgrade\s*[3-6]\b|\b(?:lower|upper)\s+primary\b|\bprimary\b", re.I), "9-12"),
+    (re.compile(r"\bform\s*[123]\b|\blower\s+secondary\b", re.I), "13-15"),
+    (re.compile(r"\bform\s*[45]\b|\bupper\s+secondary\b|\bsixth\s+form\b", re.I), "16-18"),
+)
+
+#: Age to band. The same ladder `AGE_BANDS` uses, stated once.
+_BAND_FOR_AGE: tuple[tuple[int, int, str], ...] = (
+    (5, 8, "5-8"), (9, 12, "9-12"), (13, 15, "13-15"), (16, 18, "16-18"),
+)
+
+
+def band_requested(message: str) -> str | None:
+    """The band this message asks to SEE, or None.
+
+    A band named for somebody else -- a child, a class -- not a claim about the
+    reader. Only `learning_preview` and `learning_sample` act on it, so it can
+    never move the reader's own gates.
+    """
+    text = message or ""
+    for pattern, band in _STAGE_SAID:
+        if pattern.search(text):
+            return band
+    found = _AGE_SAID.search(text)
+    if found:
+        digits = next((g for g in found.groups() if g), None)
+        if digits:
+            age = int(digits)
+            for low, high, band in _BAND_FOR_AGE:
+                if low <= age <= high:
+                    return band
+    return None
+
+
 def named_game(message: str) -> str | None:
     """Which game they named, or None if they just said "a game"."""
     folded = fold(message)

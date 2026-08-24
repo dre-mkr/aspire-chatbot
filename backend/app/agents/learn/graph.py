@@ -13,6 +13,7 @@ from app.agents.learn.nodes.explain_back import make_explain_back
 from app.agents.learn.nodes.hint_ladder import make_hint_ladder
 from app.agents.learn.state import (
     band_of,
+    NON_SCORING_AGENTS as _NON_SCORING_AGENTS,
     MAX_ATTEMPTS,
     MAX_DIGRESSIONS,
     merge,
@@ -107,8 +108,8 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
     return resume_or_place
 
 
-#: Learning agents whose turns are watched rather than taken, and therefore score nobody.
-NON_SCORING_AGENTS: frozenset[str] = frozenset({"learning_preview", "learning_sample"})
+#: Re-exported from `state`, which needs it for `band_of`. One definition.
+NON_SCORING_AGENTS = _NON_SCORING_AGENTS
 
 
 def _learner(state: AspireState) -> str | None:

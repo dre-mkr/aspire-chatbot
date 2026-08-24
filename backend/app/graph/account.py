@@ -166,12 +166,23 @@ _ANONYMOUS_BANDS: dict[str, str] = {
     "orion": "13-15",
     "aurora": "adult",
     "nova": "adult",
-    # `guest` is the mixed-audience voice, so the reader behind it may be a
-    # child. `13-15` is the balance the picker promises: real words and ordinary
-    # sentences rather than a five-year-old's register, but still inside the
-    # caps, the vocabulary ladder and the link strip that a minor band carries.
-    # `adult` here would hand an unknown reader the ungated row.
-    "guest": "13-15",
+    # `guest` is the general-public voice and its reader is an adult by default.
+    # They can pick a child persona from the menu, and picking one is how a
+    # child gets a child's band -- but the default is the person the guide is
+    # described for.
+    #
+    # This was `13-15`, on the reasoning that `adult` "would hand an unknown
+    # reader the ungated row". Measured against the tables, it does not:
+    #
+    #   vocabulary   identical at 13-15 and adult -- ZERO words differ
+    #   links        already un-stripped for `guest` at 13-15
+    #   Q&A cap      280 -> uncapped
+    #   lesson cap   180 -> 220
+    #
+    # So the only gate that actually moves is length, and the six words banned
+    # at `adult` are the `_NEVER_CLAIM` list, which holds at every band anyway.
+    # The ungated row was not what `13-15` was buying.
+    "guest": "adult",
 }
 
 #: What an anonymous visitor gets with no persona picked.

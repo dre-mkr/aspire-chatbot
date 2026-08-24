@@ -388,7 +388,87 @@ lessons:
     concept_id: budget
     order: 5
     objective: The learner can split an amount of money into keeping, spending and sharing, and explain their split.
+    # ── the six voices ───────────────────────────────────────────────────
+    # Persona KEYS, never labels. Consulted BEFORE `teach_points`, which stays
+    # as the band fallback for any persona with no voice authored here.
+    #
+    # Imani, Azuri and Guest are all `adult`. They differ by VOICE, not by
+    # reading level -- which is what the band map could not express, and why
+    # every adult fell through to the 13-15 words.
+    persona_voice:
+      stella:
+        band: "5-8"
+        role: learner
+        tone: "warm, simple, praise"
+        teach_points:
+          - "A plan says where your money goes before you get it."
+          - "Keep some. Spend some. Share some."
+          - "Money can run out, so the things you really need come first."
+        examples:
+          - "Three tins on the table: one to keep, one to spend, one to share."
+        joke: "My plan has three tins. The keeping tin is the quiet one."
+      kaleb:
+        band: "9-12"
+        role: learner
+        tone: "friendly, a bit of swagger"
+        teach_points:
+          - "A plan tells each part of your money where to go before it arrives."
+          - "An easy split: keep some, spend some, share some."
+          - "There is no single right split, but deciding early beats deciding at the shop."
+        examples:
+          - "EC$10 pocket money: EC$4 kept, EC$4 spent, EC$2 shared. Decide it on Monday."
+        joke: "Deciding at the shop is deciding on hard mode."
+      orion:
+        band: "13-15"
+        role: learner
+        tone: "dry, plain"
+        teach_points:
+          - "Decide the split on payday, not at the till. The order is what makes it hold."
+          - "Keep first: move the saving out before the spending money is in front of you."
+          - "Review it when your money changes, not every week."
+        examples:
+          - "EC$200 from a Saturday job: EC$50 out first, and the rest is genuinely spendable."
+        joke: "A plan you rewrite every week is a diary, not a plan."
+      aurora:
+        band: "adult"
+        role: parent
+        tone: "warm, practical, proverb"
+        teach_points:
+          - "A plan is one decision made in the calm, instead of many made at the till."
+          - "Keep first. What is left after keeping is the part that is genuinely free."
+          - "Let them do the splitting themselves: the deciding is the lesson, not the amount."
+        examples:
+          - "Three tins at home, and your child divides the pocket money between them."
+          - "At the shop: one treat chosen, one coin kept, and they choose which."
+        joke: "Little by little, the bird builds its nest."
+      nova:
+        band: "adult"
+        role: educator
+        tone: "colleague to colleague, practical"
+        teach_points:
+          - "The objective is the split AND the reasoning, not arriving at one correct answer."
+          - "Deciding in advance is the transferable habit; the proportions are secondary."
+          - "Mark the explanation rather than the arithmetic. A defended split is the evidence."
+        examples:
+          - "Three labelled tins and play EC$: pairs divide, then defend the split to the class."
+          - "Lower Secondary: divide a Saturday-job wage, compare splits, argue for one."
+        joke: "State the split, then defend it. The defending is where the marks live."
+      guest:
+        band: "adult"
+        role: learner
+        tone: "friendly, local"
+        teach_points:
+          - "A plan is what turns an amount into a month. Without one, the money decides."
+          - "Keep first, then what you owe, and what is left is genuinely yours."
+          - "Money here is seasonal. Plan the thin months during the good ones."
+        examples:
+          - "Set the keeping aside in Carnival season, so the September light bill is no shock."
+        joke: "We all become accountants when the light bill comes."
     teach_points:
+      "adult":
+        - "A plan is what turns an amount into a month. Without one, the money decides."
+        - "Keep first, then what you owe, and what is left is genuinely yours."
+        - "Money here is seasonal. Plan the thin months during the good ones."
       "5-8":
         - "A plan says where your money goes before you get it."
         - "Keep some. Spend some. Share some."

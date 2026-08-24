@@ -161,6 +161,39 @@ class Guide(_Node):
     guardian: dict[str, GuardianGuide] = Field(default_factory=dict)
 
 
+#: The six persona keys a lesson may carry a voice for.
+#:
+#: Duplicated from `app.graph.access.PERSONAS` rather than imported, because the
+#: curriculum must load without pulling the graph in behind it. A test asserts
+#: the two stay equal, so the duplication cannot drift silently.
+#:
+#: KEYS, never labels. "Stella" was renamed to "Skye" in the UI while the key
+#: stayed `stella`; a lesson keyed on a display name would have been orphaned by
+#: that rename with nothing to say so.
+PERSONA_KEYS: tuple[str, ...] = ("stella", "kaleb", "orion", "aurora", "nova", "guest")
+
+
+class PersonaVoice(_Node):
+    """How one persona says a lesson, over and above what its band requires.
+
+    A band is a reading level. A persona is a voice. Skye and Kaleb differ by
+    band AND voice; Imani, Azuri and Guest are all `adult` and differ only by
+    voice, which is exactly why the band map could not express them and every
+    adult fell through to the 13-15 content.
+
+    `band` is declared so the authored words can be checked against the
+    vocabulary ladder at load time. It does NOT set the reader's band -- the
+    session does that, and the caps and gates read it from there.
+    """
+
+    band: Band | None = None
+    role: str | None = Field(default=None, max_length=32)
+    teach_points: list[str] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+    joke: str | None = Field(default=None, max_length=200)
+    tone: str | None = Field(default=None, max_length=80)
+
+
 class Lesson(_Node):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
     module_id: str
@@ -175,6 +208,19 @@ class Lesson(_Node):
     suggested_widget_kind: str | None = None
     #: Band-keyed by the CHILD's band. See `Guide`.
     guide: Guide = Field(default_factory=Guide)
+    #: Persona-keyed, and consulted BEFORE the band map. See `PersonaVoice`.
+    persona_voice: dict[str, PersonaVoice] = Field(default_factory=dict)
+
+    @field_validator("persona_voice")
+    @classmethod
+    def _persona_keys_are_real(cls, value: dict[str, PersonaVoice]) -> dict[str, PersonaVoice]:
+        unknown = set(value) - set(PERSONA_KEYS)
+        if unknown:
+            raise ValueError(
+                f"persona_voice: unknown persona key(s) {sorted(unknown)}. "
+                f"Use a key, not a label: {list(PERSONA_KEYS)}"
+            )
+        return value
 
     @field_validator("guide")
     @classmethod
@@ -204,11 +250,27 @@ class Lesson(_Node):
             raise ValueError(f"unknown age band(s): {sorted(unknown)}")
         return value
 
-    def teach_for(self, band: str) -> list[str]:
+    def teach_for(self, band: str, persona: str | None = None) -> list[str]:
+        """This persona's words if it has any, else the band's.
+
+        One shape either way -- a list of strings. The persona layer must not
+        make callers handle two return types.
+        """
+        voice = self.persona_voice.get(persona or "")
+        if voice is not None and voice.teach_points:
+            return list(voice.teach_points)
         return list(for_band(self.teach_points, band) or [])
 
-    def examples_for(self, band: str) -> list[str]:
+    def examples_for(self, band: str, persona: str | None = None) -> list[str]:
+        voice = self.persona_voice.get(persona or "")
+        if voice is not None and voice.examples:
+            return list(voice.examples)
         return list(for_band(self.examples, band) or [])
+
+    def joke_for(self, persona: str | None) -> str | None:
+        """The aside this persona would make, or None. Never falls back."""
+        voice = self.persona_voice.get(persona or "")
+        return voice.joke if voice is not None else None
 
 
 class Module(_Node):

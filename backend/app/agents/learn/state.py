@@ -216,8 +216,34 @@ def seen_check(state: LearningState, check_id: str | None, *, keep: int = 40) ->
 FALLBACK_BAND = "9-12"
 
 
+#: Learning agents whose turns are watched rather than taken, and score nobody.
+#:
+#: Defined here rather than in `graph`, because `band_of` below has to consult it
+#: and `graph` already imports this module -- the other direction would be a
+#: cycle. `graph` re-exports it under the same name.
+NON_SCORING_AGENTS: frozenset[str] = frozenset({"learning_preview", "learning_sample"})
+
+
 def band_of(state: Any) -> str:
-    """This learner's age band: the resolved context first, then turn state."""
+    """The band this turn should be WRITTEN at.
+
+    Usually the reader's own. Not always: a parent asking to see the lesson her
+    nine-year-old would get is asking for a band that is not hers, and before
+    `preview_band` existed there was no way to say so. `_band` read the reader
+    every time, so she asked for a nine-year-old's lesson and got a
+    fourteen-year-old's question -- adult falls back through 16-18 to 13-15, and
+    that is the content she was shown.
+
+    Honoured ONLY for a non-scoring agent. That is the safety property, and it
+    is structural rather than a rule written beside the code: `learn_agent`
+    never consults it, so nothing a real learner can type moves their own band,
+    their own caps or their own vocabulary ladder. A preview is a window; it is
+    not a way in.
+    """
+    preview = state.get("preview_band")
+    if preview and str(state.get("active_agent") or "") in NON_SCORING_AGENTS:
+        return str(preview)
+
     context = state.get("context")
     band = getattr(context, "age_band", None) if context is not None else None
     return str(band or state.get("age_band") or FALLBACK_BAND)

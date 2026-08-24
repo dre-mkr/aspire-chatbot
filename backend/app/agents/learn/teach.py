@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.agents.learn.state import (
     FALLBACK_BAND,
+    NON_SCORING_AGENTS,
     band_of,
     merge,
     remember_opening,
@@ -85,14 +86,38 @@ HOW TO SAY IT
 Write only what the child reads."""
 
 
-def _spine(lesson: Lesson, band: str) -> str:
+def persona_of(state: AspireState) -> str | None:
+    """Whose voice this turn should be written in, or None for the band's own.
+
+    A KEY, so it indexes `persona_voice` directly. `normalise_persona_band` has
+    already run at the claims seam, so what sits in state is a real key.
+
+    A PREVIEW of another band is the exception, and it is the whole point of a
+    preview. A parent looking at her nine-year-old's lesson wants to see what he
+    sees -- Kaleb's words, at Kaleb's reading level -- not her own lesson
+    re-pitched. So the voice follows the band being previewed, not the reader.
+
+    Reader's own band, or no preview at all: the reader's persona, as before.
+    """
+    preview = state.get("preview_band")
+    if preview and str(state.get("active_agent") or "") in NON_SCORING_AGENTS:
+        if str(preview) != str(state.get("age_band") or ""):
+            from app.graph.account import DEFAULT_PERSONA
+
+            return DEFAULT_PERSONA.get(str(preview))
+
+    persona = state.get("persona")
+    return str(persona) if persona else None
+
+
+def _spine(lesson: Lesson, band: str, persona: str | None = None) -> str:
     """The teach points, as a list the model must cover rather than recite."""
-    points = lesson.teach_for(band) or [lesson.objective]
+    points = lesson.teach_for(band, persona) or [lesson.objective]
     return "\n".join(f"- {point}" for point in points)
 
 
-def _example(lesson: Lesson, band: str) -> str:
-    examples = lesson.examples_for(band)
+def _example(lesson: Lesson, band: str, persona: str | None = None) -> str:
+    examples = lesson.examples_for(band, persona)
     return examples[0] if examples else "(none written -- invent one, and keep it local)"
 
 
@@ -147,11 +172,16 @@ def _avoid(learning: dict) -> str:
     return ""
 
 
-def authored_body(lesson: Lesson, band: str) -> str:
-    """The lesson as the curriculum wrote it."""
-    points = lesson.teach_for(band)
+def authored_body(lesson: Lesson, band: str, persona: str | None = None) -> str:
+    """The lesson as the curriculum wrote it, in this persona's words if it has any.
+
+    The fallback path, reached when the model is unavailable or declined -- so
+    it is the one that MUST carry the voice. A reader who falls back should get
+    Azuri's words rather than a thirteen-year-old's.
+    """
+    points = lesson.teach_for(band, persona)
     body = " ".join(points[:2])
-    examples = lesson.examples_for(band)
+    examples = lesson.examples_for(band, persona)
     if examples:
         body = f"{body} {examples[0]}"
     return body.strip()
@@ -174,14 +204,18 @@ async def _compose(
     invoke,
     user: str,
     context=None,
+    persona: str | None = None,
 ) -> str | None:
     """One model call, or None if it could not be made."""
     if invoke is None:
         return None
 
     role = system.format(
-        spine=_spine(lesson, band),
-        example=_example(lesson, band),
+        # This persona's words if the lesson has any, else the band's. The model
+        # is told to COVER these rather than recite them, so a voice steers the
+        # register without the reply becoming a reading of the YAML.
+        spine=_spine(lesson, band, persona),
+        example=_example(lesson, band, persona),
         grounding=_grounding(chunks),
         cap=_cap(band),
         ladder=", ".join(sorted(vocab.concepts_for(band))) or "plain language only",
@@ -310,6 +344,7 @@ def make_teach(curriculum=None, *, invoke=None):
             return {}
 
         band = band_of(state)
+        persona = persona_of(state)
         chunks = list(state.get("retrieved") or [])
         widget_prompt, kind = _widget_prompt(
             _Planned(learning.get("pending_widget")),
@@ -328,9 +363,10 @@ def make_teach(curriculum=None, *, invoke=None):
             invoke=invoke,
             user=f"Teach them: {lesson.objective}",
             context=state.get("context"),
+            persona=persona,
         )
         if body is None:
-            body = authored_body(lesson, band)
+            body = authored_body(lesson, band, persona)
 
         # Remembered only if a widget was actually WRITTEN.
         if kind and sentinel.count(body) == 0:
@@ -395,9 +431,10 @@ def make_reteach(curriculum=None, *, retrieve=None, invoke=None):
             invoke=invoke,
             user=f"Explain why: {lesson.objective}",
             context=state.get("context"),
+            persona=persona_of(state),
         )
         if body is None:
-            points = lesson.teach_for(band)
+            points = lesson.teach_for(band, persona_of(state))
             body = points[-1] if points else lesson.objective
 
         return {
