@@ -74,6 +74,9 @@ const MAX_RATE_ENDED = 8;
 function blockWords(block: AnswerBlock): number {
 	if (block.kind === "paragraph")
 		return block.text ? block.text.split(" ").length : 0;
+	// A table reveals whole -- a half-drawn grid is unreadable -- so it counts
+	// as one word to the pacer and is never sliced.
+	if (block.kind === "table") return 1;
 	return block.items.reduce(
 		(total, item) => total + (item ? item.split(" ").length : 0),
 		0,
@@ -82,6 +85,8 @@ function blockWords(block: AnswerBlock): number {
 
 /** A block cut to its first `words` words. */
 function sliceBlock(block: AnswerBlock, words: number): AnswerBlock {
+	// Atomic: it has no words to slice, and appears whole once revealed at all.
+	if (block.kind === "table") return block;
 	if (block.kind === "paragraph") {
 		return {
 			kind: "paragraph",

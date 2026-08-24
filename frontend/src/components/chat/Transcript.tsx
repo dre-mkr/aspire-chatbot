@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
 	lazy,
+	type ReactNode,
 	type RefObject,
 	Suspense,
 	useCallback,
@@ -157,6 +158,15 @@ export function Transcript({
 				},
 			]
 		: messages;
+
+	// A table needs more room than the 660px reading column. Any thread that
+	// holds one widens its column for every persona -- prose stays capped at the
+	// reading measure (see styles), so only the table takes the extra width.
+	const hasTable = turns.some(
+		(message) =>
+			message.role === "assistant" &&
+			message.blocks?.some((block) => block.kind === "table"),
+	);
 
 	// There is only ever one live session, so only the NEWEST game turn can show it.
 	const liveGameIndex = turns.reduce(
@@ -338,7 +348,11 @@ export function Transcript({
 	};
 
 	return (
-		<div className="transcript" ref={listRef}>
+		<div
+			className="transcript"
+			data-has-table={hasTable || undefined}
+			ref={listRef}
+		>
 			{windowed ? (
 				<div
 					className="transcript__window"
@@ -476,6 +490,16 @@ function Block({
 		);
 	}
 
+	if (block.kind === "table") {
+		return (
+			<ResponseTable
+				header={block.header}
+				rows={block.rows}
+				revealing={revealing}
+			/>
+		);
+	}
+
 	// `<ol>` when the model numbered it.
 	const List = block.ordered ? "ol" : "ul";
 	return (
@@ -487,6 +511,133 @@ function Block({
 				</li>
 			))}
 		</List>
+	);
+}
+
+/**
+ * A teaching-activity list, one card per activity.
+ *
+ * The educator answers are sequences -- an activity with a setup, a first step,
+ * an outcome, a teaching point -- and a wide table is the wrong shape. The
+ * first cell names the activity and becomes the card title; each other cell is
+ * a labelled row, so "New base: EC$1,050" reads as a fact about that activity
+ * rather than a column a reader tracks across a grid.
+ */
+function ActivityCards({
+	header,
+	rows,
+	revealing,
+}: {
+	header: Array<string>;
+	rows: Array<Array<string>>;
+	revealing: boolean;
+}) {
+	return (
+		<div className="activity-cards">
+			{rows.map((row, rowIndex) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+				<article className="activity-card" key={rowIndex}>
+					<h4 className="activity-card__title">
+						<Rich text={row[0] ?? ""} revealing={revealing} />
+					</h4>
+					<dl className="activity-card__fields">
+						{row.slice(1).map((cell, colIndex) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+							<div className="activity-card__field" key={colIndex}>
+								<dt>
+									<Rich
+										text={header[colIndex + 1] ?? ""}
+										revealing={revealing}
+									/>
+								</dt>
+								<dd>
+									<Rich text={cell} revealing={revealing} />
+								</dd>
+							</div>
+						))}
+					</dl>
+				</article>
+			))}
+		</div>
+	);
+}
+
+/**
+ * A table that stays readable at any width.
+ *
+ * THREE BEHAVIOURS, one component. A narrow table (<= 3 columns) is a normal
+ * table. A wide one scrolls horizontally inside its own wrap rather than
+ * crushing every column -- `.response-table` is `width: max-content`, so the
+ * columns take the room they need and the WRAP scrolls. And on a phone or a
+ * tablet, the CSS restacks each row into a labelled card, which is why every
+ * `<td>` carries its column heading in `data-label`: the heading has to travel
+ * with the value once the header row is gone.
+ *
+ * Cells render through `Rich`, so a currency value inside a cell gets the same
+ * `.nowrap` protection it gets in prose, and a link in a cell still links.
+ */
+function ResponseTable({
+	header,
+	rows,
+	revealing,
+}: {
+	header: Array<string>;
+	rows: Array<Array<string>>;
+	revealing: boolean;
+}) {
+	const columns = Math.max(header.length, ...rows.map((r) => r.length));
+
+	// A complex table -- 4+ columns -- is almost always a teaching activity
+	// list, not a data grid: an Azuri "Activity | Setup | Interest | New base |
+	// Next step" reads far better as one card per activity than a wide grid
+	// squeezed into the chat. Simple 2-3 column data tables stay tables.
+	if (columns >= 4 && rows.length > 0) {
+		return <ActivityCards header={header} rows={rows} revealing={revealing} />;
+	}
+
+	return (
+		// A section with a label is an implicit region.
+		<section
+			className="response-table-wrap"
+			aria-label="Table, scroll sideways to see more"
+			// Deliberate: a scrollable area must be focusable, or a keyboard user
+			// cannot scroll a table wider than the column.
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region must take focus
+			tabIndex={0}
+			data-cols={columns}
+		>
+			<table className="response-table">
+				{header.some((cell) => cell) && (
+					<thead>
+						<tr>
+							{header.map((cell, index) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+								<th key={index} scope="col">
+									<Rich text={cell} revealing={revealing} />
+								</th>
+							))}
+						</tr>
+					</thead>
+				)}
+				<tbody>
+					{rows.map((row, rowIndex) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+						<tr key={rowIndex}>
+							{row.map((cell, colIndex) => (
+								<td
+									// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+									key={colIndex}
+									// Carries the heading into the stacked-card layout on narrow widths.
+									data-label={header[colIndex] ?? ""}
+								>
+									<Rich text={cell} revealing={revealing} />
+								</td>
+							))}
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
 	);
 }
 
@@ -527,10 +678,40 @@ function Inline({ nodes }: { nodes: Array<InlineNode> }) {
 				}
 
 				// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
-				return <span key={index}>{node.text}</span>;
+				return <span key={index}>{protectTokens(node.text)}</span>;
 			})}
 		</>
 	);
+}
+
+/**
+ * Currency, numbers, percentages and dates, kept on one line.
+ *
+ * "EC$1,050" is one token with no spaces, so normal wrapping never splits it --
+ * but a tight table cell with an aggressive break would, turning it into
+ * "EC$1,05 / 0". Wrapping each such token in `.nowrap` is the belt to the
+ * cell CSS's braces: the value is atomic wherever it lands.
+ */
+const PROTECTED_TOKEN =
+	/(EC\$\s?[\d,]+(?:\.\d+)?|\$\s?[\d,]+(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?\s?%|\d+\s?percent\b|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/gi;
+
+function protectTokens(text: string): Array<ReactNode> {
+	const out: Array<ReactNode> = [];
+	let last = 0;
+	let key = 0;
+	for (const match of text.matchAll(PROTECTED_TOKEN)) {
+		const start = match.index ?? 0;
+		if (start > last) out.push(text.slice(last, start));
+		out.push(
+			<span key={`n${key}`} className="nowrap">
+				{match[0]}
+			</span>,
+		);
+		key += 1;
+		last = start + match[0].length;
+	}
+	if (last < text.length) out.push(text.slice(last));
+	return out;
 }
 
 /**

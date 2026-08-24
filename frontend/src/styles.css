@@ -1659,6 +1659,30 @@ body {
 	padding: 24px 0 44px;
 }
 
+/* A thread that contains a table widens its column -- for every persona, not
+ * just Azuri -- so the table has room instead of scrolling in a 660px slot.
+ * `calc(100vw - 380px)` leaves the rail its space, and the existing
+ * `calc(100% - 48px)` cap above still stops any overflow. Prose does NOT get
+ * the extra width: `.answer > p/ul/ol` are capped at the reading measure just
+ * below, so only the table spreads. */
+.transcript[data-has-table] {
+	/* Only raise the ceiling. The base `.transcript` rule is
+	   `min(--reading-width, calc(100% - 48px))`, and its `100%` is already the
+	   thread width (rail excluded), so a narrow screen still lands on the
+	   `100% - 48px` branch and nothing overflows. An earlier `calc(100vw -
+	   380px)` here went NEGATIVE at 375px and won the min(), crushing the
+	   answer into a sliver -- removed. */
+	--reading-width: 920px;
+}
+
+/* Prose keeps its 65-75 character measure even when a table has widened the
+ * column around it. The table wrap is exempt, so it alone takes the room. */
+.transcript[data-has-table] .answer > p,
+.transcript[data-has-table] .answer > ul,
+.transcript[data-has-table] .answer > ol {
+	max-width: 42rem;
+}
+
 /* Only present past 60 turns, where the transcript switches to windowing. */
 .transcript__window {
 	position: relative;
@@ -1731,10 +1755,192 @@ body {
 	padding-top: 1px;
 }
 
-/* Same reason as .bubble, and more urgent here: the assistant is the side that emits URLs. */
+/* The assistant emits URLs, so a genuinely unbreakable string must still wrap
+   rather than push the column wider. `break-word`, NOT `anywhere`: `anywhere`
+   breaks a word mid-character even when the next line has room, which is what
+   turned "EC$1,050" into "EC$1,05 / 0". `break-word` breaks only a word that
+   cannot fit a line by itself -- a long portal URL still wraps; a price does
+   not. Numbers and currency get `.nowrap` on top, as a second guarantee. */
 .answer p,
-.answer li {
-	overflow-wrap: anywhere;
+.answer li,
+.answer td,
+.answer th {
+	overflow-wrap: break-word;
+	word-break: normal;
+}
+
+/* A token that must never break: currency, a number, a percentage, a date, a
+   short heading. Applied in the renderer (`protectTokens`) and available to
+   any cell that needs it. */
+.answer .nowrap {
+	white-space: nowrap;
+	word-break: keep-all;
+}
+
+/* ── Tables in an answer ─────────────────────────────────────────────────────
+ *
+ * The reading column is 660px (wider for Azuri). A table with more than a
+ * couple of columns cannot fit that and must not be squeezed into it, so the
+ * WRAP scrolls sideways and the table takes the width its content needs.
+ * Nothing here sets `table-layout: fixed` or `word-break: break-all`, on
+ * purpose: those are exactly what crush a column to one character wide. */
+.response-table-wrap {
+	width: 100%;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	margin: 4px 0 19px;
+	border-radius: 12px;
+}
+.response-table-wrap:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 2px;
+}
+
+.response-table {
+	width: max-content;
+	min-width: 100%;
+	border-collapse: collapse;
+	table-layout: auto;
+	font-size: 0.96875rem;
+	line-height: 1.5;
+}
+
+.response-table th,
+.response-table td {
+	padding: 10px 14px;
+	vertical-align: top;
+	text-align: left;
+	white-space: normal;
+	word-break: normal;
+	overflow-wrap: break-word;
+	/* Readable floor and a sane ceiling: a label column does not need to be
+	   wide, a description column does not run forever. */
+	min-width: 128px;
+	max-width: 340px;
+	border-bottom: 1px solid var(--wash-18, rgb(72 41 119 / 0.14));
+}
+
+.response-table th {
+	font-weight: 700;
+	color: var(--plum, #4a2977);
+	border-bottom-width: 2px;
+	white-space: nowrap;
+}
+
+.response-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+/* Narrow widths: no table survives 4-7 columns on a phone, so each row becomes
+ * a labelled card. The header row is dropped and every cell carries its heading
+ * in `data-label`, printed before the value. This is why the WRAP stops
+ * scrolling here -- the cards are full width. */
+@media (max-width: 860px) {
+	.response-table-wrap {
+		overflow-x: visible;
+	}
+	.response-table {
+		width: 100%;
+		min-width: 0;
+	}
+	.response-table thead {
+		/* Off-screen, not `display: none`: the headings still reach a screen
+		   reader through each cell's `data-label`. */
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+	}
+	.response-table tr {
+		display: block;
+		margin: 0 0 12px;
+		padding: 4px 2px;
+		border: 1px solid var(--wash-18, rgb(72 41 119 / 0.14));
+		border-radius: 12px;
+	}
+	.response-table td {
+		display: flex;
+		gap: 10px;
+		max-width: none;
+		min-width: 0;
+		border-bottom: 1px solid var(--wash-18, rgb(72 41 119 / 0.1));
+	}
+	.response-table tr td:last-child {
+		border-bottom: none;
+	}
+	.response-table td[data-label]:not([data-label=""])::before {
+		content: attr(data-label);
+		flex: 0 0 40%;
+		font-weight: 700;
+		color: var(--plum, #4a2977);
+	}
+}
+
+/* ── Activity cards ──────────────────────────────────────────────────────────
+ *
+ * A complex table (4+ columns) is rendered as one card per row instead of a
+ * grid: educator output is a sequence of activities, and a card reads as one
+ * where a wide table reads as homework. The first column is the title; the
+ * rest are labelled facts. */
+.activity-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 4px 0 19px;
+}
+
+.activity-card {
+	border: 1px solid var(--wash-18, rgb(72 41 119 / 0.14));
+	border-radius: 14px;
+	padding: 14px 16px;
+	background: rgb(255 255 255 / 0.55);
+}
+
+.activity-card__title {
+	margin: 0 0 10px;
+	font-family: var(--font-display, Georgia, serif);
+	font-size: 1.1875rem;
+	font-weight: 400;
+	line-height: 1.2;
+	color: var(--plum, #4a2977);
+}
+
+.activity-card__fields {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	margin: 0;
+}
+
+.activity-card__field {
+	display: grid;
+	grid-template-columns: minmax(96px, 26%) 1fr;
+	gap: 4px 14px;
+	align-items: baseline;
+}
+
+.activity-card__field dt {
+	margin: 0;
+	font-size: 0.8125rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: var(--plum, #4a2977);
+}
+
+.activity-card__field dd {
+	margin: 0;
+	line-height: 1.55;
+	overflow-wrap: break-word;
+	word-break: normal;
+}
+
+/* On a narrow screen the label sits above its value rather than beside it. */
+@media (max-width: 560px) {
+	.activity-card__field {
+		grid-template-columns: 1fr;
+		gap: 2px;
+	}
 }
 
 /* The child combinator is load-bearing, not tidiness. */
