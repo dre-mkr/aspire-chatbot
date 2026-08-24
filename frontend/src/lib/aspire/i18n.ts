@@ -39,6 +39,24 @@ const COPY = {
 	pledgeMine: { en: "My pledge", es: "Mi compromiso", fr: "Mon engagement" },
 	pledgeSealed: { en: "Pledged", es: "Comprometido", fr: "Engagé" },
 	towards: { en: "towards", es: "para", fr: "pour" },
+	landExplore: { en: "Explore", es: "Explorar", fr: "Explorer" },
+	landJourney: { en: "Journey", es: "Camino", fr: "Parcours" },
+	landGallery: { en: "Gallery", es: "Galería", fr: "Galerie" },
+	landParents: {
+		en: "For Parents",
+		es: "Para familias",
+		fr: "Pour les parents",
+	},
+	landEducators: {
+		en: "For Educators",
+		es: "Para docentes",
+		fr: "Enseignants",
+	},
+	landAbout: {
+		en: "About ASPIRE",
+		es: "Sobre ASPIRE",
+		fr: "À propos d'ASPIRE",
+	},
 	navBackToChat: {
 		en: "Back to chat",
 		es: "Volver al chat",

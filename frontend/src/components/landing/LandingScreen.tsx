@@ -7,7 +7,7 @@ import {
 	stageFirstTurn,
 	stageVoiceStart,
 } from "#/lib/aspire/handoff";
-import { currentLocale } from "#/lib/aspire/i18n";
+import { currentLocale, say } from "#/lib/aspire/i18n";
 import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
 import { useSession } from "#/lib/aspire/use-session";
 import {
@@ -18,6 +18,7 @@ import {
 import { AboutView } from "./AboutView";
 import { Brandmark } from "./Brandmark";
 import { EducatorsView } from "./EducatorsView";
+import { GalleryView } from "./GalleryView";
 import { GuideSelector } from "./GuideSelector";
 import { HistoryView } from "./HistoryView";
 import { JourneyView } from "./JourneyView";
@@ -48,6 +49,7 @@ type ViewState =
 	| "stories"
 	| "parents"
 	| "educators"
+	| "gallery"
 	| "about";
 /**
  * The names on the guide picker, which are LABELS and not persona keys.
@@ -149,12 +151,16 @@ const WAYS_IN: ReadonlyArray<WayIn> = [
 ];
 
 /** The header nav, in the order the sections are meant to be met. */
-const NAV: ReadonlyArray<{ view: ViewState; label: string }> = [
-	{ view: "stories", label: "Explore" },
-	{ view: "journey", label: "Journey" },
-	{ view: "parents", label: "For Parents" },
-	{ view: "educators", label: "For Educators" },
-	{ view: "about", label: "About ASPIRE" },
+const NAV: ReadonlyArray<{
+	view: ViewState;
+	labelKey: Parameters<typeof say>[0];
+}> = [
+	{ view: "stories", labelKey: "landExplore" },
+	{ view: "journey", labelKey: "landJourney" },
+	{ view: "gallery", labelKey: "landGallery" },
+	{ view: "parents", labelKey: "landParents" },
+	{ view: "educators", labelKey: "landEducators" },
+	{ view: "about", labelKey: "landAbout" },
 ];
 
 /** The three shortest ways to a first answer. */
@@ -379,6 +385,8 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 		return <ParentsView onBack={() => setActiveView("landing")} />;
 	if (activeView === "educators")
 		return <EducatorsView onBack={() => setActiveView("landing")} />;
+	if (activeView === "gallery")
+		return <GalleryView onBack={() => setActiveView("landing")} />;
 	if (activeView === "about")
 		return <AboutView onBack={() => setActiveView("landing")} />;
 
@@ -456,7 +464,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								onClick={() => setActiveView(item.view)}
 								className="text-ink/70 hover:text-magenta transition-colors cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-magenta"
 							>
-								{item.label}
+								{say(item.labelKey)}
 							</button>
 						))}
 					</nav>
@@ -567,7 +575,7 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 								}}
 								className="min-h-11 px-4 rounded-xl text-left text-base font-semibold text-ink hover:bg-plum/5 transition-colors cursor-pointer"
 							>
-								{item.label}
+								{say(item.labelKey)}
 							</button>
 						))}
 						<span className="h-px bg-plum/10 my-2 mx-4" aria-hidden="true" />

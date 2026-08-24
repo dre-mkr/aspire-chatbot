@@ -2,6 +2,16 @@
 
 import type { Locale } from "./i18n";
 
+export interface GalleryCopy {
+	title: string;
+	lede: string;
+	comingSoon: string;
+	photosTitle: string;
+	photosBody: string;
+	videosTitle: string;
+	videosBody: string;
+}
+
 export interface ViewsCopy {
 	backToChat: string;
 	journey: {
@@ -33,6 +43,7 @@ export interface ViewsCopy {
 		ctaBody: string;
 		ctaButton: string;
 	};
+	gallery: GalleryCopy;
 	educators: {
 		title: string;
 		lede: string;
@@ -86,6 +97,16 @@ const EN: ViewsCopy = {
 		ctaTitle: "Ready to register your child?",
 		ctaBody: "Help them build wealth and learn financial literacy early.",
 		ctaButton: "Register your child",
+	},
+	gallery: {
+		title: "Gallery",
+		lede: "Moments from the ASPIRE Programme, across St. Kitts and Nevis.",
+		comingSoon: "Coming soon",
+		photosTitle: "Pictures",
+		photosBody:
+			"Photographs from ASPIRE Days, school visits and registration drives across the Federation.",
+		videosTitle: "Video",
+		videosBody: "Highlights, stories and moments from the programme, on film.",
 	},
 	educators: {
 		title: "For educators",
@@ -152,6 +173,16 @@ const ES: ViewsCopy = {
 			"Ayúdales a construir patrimonio y aprender finanzas desde temprano.",
 		ctaButton: "Registrar a tu hijo o hija",
 	},
+	gallery: {
+		title: "Galería",
+		lede: "Momentos del Programa ASPIRE, por todo San Cristóbal y Nieves.",
+		comingSoon: "Próximamente",
+		photosTitle: "Fotos",
+		photosBody:
+			"Fotografías de los Días ASPIRE, visitas escolares y jornadas de registro por toda la Federación.",
+		videosTitle: "Vídeo",
+		videosBody: "Momentos destacados e historias del programa, en vídeo.",
+	},
 	educators: {
 		title: "Para docentes",
 		lede: "Fortalece a la próxima generación con educación financiera esencial.",
@@ -214,6 +245,16 @@ const FR: ViewsCopy = {
 		ctaTitle: "Prêt à inscrire votre enfant ?",
 		ctaBody: "Aidez-le à bâtir un patrimoine et à apprendre les finances tôt.",
 		ctaButton: "Inscrire votre enfant",
+	},
+	gallery: {
+		title: "Galerie",
+		lede: "Des moments du Programme ASPIRE, à travers Saint-Christophe-et-Niévès.",
+		comingSoon: "Bientôt disponible",
+		photosTitle: "Photos",
+		photosBody:
+			"Des photos des Journées ASPIRE, des visites d'écoles et des campagnes d'inscription dans toute la Fédération.",
+		videosTitle: "Vidéo",
+		videosBody: "Les temps forts et les histoires du programme, en vidéo.",
 	},
 	educators: {
 		title: "Pour les enseignants",
