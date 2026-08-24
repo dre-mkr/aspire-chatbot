@@ -77,7 +77,82 @@ lessons:
     concept_id: save
     order: 1
     objective: The learner can say, in their own words, that saving is keeping money instead of using it now.
+    # ── the six voices ───────────────────────────────────────────────────
+    # Persona KEYS, never labels. Consulted BEFORE `teach_points`, which stays
+    # as the band fallback for any persona with no voice authored here. Imani,
+    # Azuri and Guest are all `adult`; they differ by VOICE, not reading level.
+    persona_voice:
+      stella:
+        band: "5-8"
+        role: learner
+        tone: "warm, simple, praise"
+        teach_points:
+          - "Saving means you keep your money instead of using it today."
+          - "The money does not go away. It waits for you in your tin."
+          - "Every coin you keep makes your pile bigger."
+        examples:
+          - "Grandma gives you two dollars. One snow cone now, one dollar kept in the tin."
+        joke: "My tin never spends a cent. Best saver I know."
+      kaleb:
+        band: "9-12"
+        role: learner
+        tone: "friendly, a bit of swagger"
+        teach_points:
+          - "Saving is keeping money now so you have more later -- nothing is lost, it is just not spent yet."
+          - "Small amounts kept often beat big amounts kept never."
+          - "The money is still yours. Saving is a when, not a goodbye."
+        examples:
+          - "EC$5 for helping at the shop: EC$2 on patties, EC$3 into the account. You still ate."
+        joke: "Money in the tin cannot buy patties. That is the whole point."
+      orion:
+        band: "13-15"
+        role: learner
+        tone: "dry, plain"
+        teach_points:
+          - "Saving is deferring a purchase, not cancelling one."
+          - "What you keep stays yours and stays reachable -- saving is not locking it away."
+          - "Regular small amounts win, because those are the ones you actually keep doing."
+        examples:
+          - "EC$80 from a Saturday job: keep EC$30, and EC$50 is still yours to enjoy."
+        joke: "Saving once is an event. Saving weekly is a habit. Only one of them works."
+      aurora:
+        band: "adult"
+        role: parent
+        tone: "warm, practical, proverb"
+        teach_points:
+          - "Saving is a habit you show more than one you explain -- let them see you keep some first."
+          - "The tin they can see beats the account they cannot. Start with what is visible."
+          - "Name what they already do right and build onto it. Most children already hoard something."
+        examples:
+          - "Three coins from Granny, and your child keeps one before the shop is even mentioned."
+        joke: "The tin on the shelf teaches more than any lecture from the sofa."
+      nova:
+        band: "adult"
+        role: educator
+        tone: "colleague to colleague, practical"
+        teach_points:
+          - "The objective is that a learner can SAY saving is keeping money instead of using it now -- in their own words, not yours."
+          - "Make the habit concrete: a set-aside they perform, not a definition they recite."
+          - "Mark the reasoning, not the wording. 'It is still mine, just later' is mastery."
+        examples:
+          - "Play EC$ and a tin: each learner keeps some before the class shop opens, then says why."
+        joke: "Ask them to define saving and you get the textbook. Ask what they kept and you get the lesson."
+      guest:
+        band: "adult"
+        role: learner
+        tone: "friendly, local"
+        teach_points:
+          - "You already know you should save -- the gap is the habit, not the idea."
+          - "Beat willpower with a system: move the keeping out on payday, before it is in your hand to spend."
+          - "Small and automatic beats large and hoped-for. A standing transfer never forgets."
+        examples:
+          - "On payday, EC$100 moves to savings before the week starts spending it for you."
+        joke: "The money you never see is the money you never miss."
     teach_points:
+      "adult":
+        - "Saving is moving money from now to later -- it stays yours and stays reachable."
+        - "The adult gap is behaviour, not knowledge: build the habit, do not relearn the fact."
+        - "Keep first, on payday, by standing order -- a system beats willpower every month."
       "5-8":
         - "Saving means you keep your money instead of using it today."
         - "The money does not go away. It waits for you."
@@ -114,6 +189,7 @@ lessons:
           "5-8": "You keep a coin in your tin instead of buying sweets. What is that called?"
           "9-12": "You put EC$3 away instead of spending it. What is that called?"
           "13-15": "You move EC$25 into your account instead of spending it this week. What is that?"
+          "16-18": "On payday you move EC$150 to savings before you spend anything. What is that?"
         options: [Saving, Spending]
         answer: 0
         hints:
@@ -129,12 +205,17 @@ lessons:
             - "Close. Ask yourself whether the money left your account or moved within it."
             - "It is one of these two. Which one still has the money in your name?"
             - "It is saving -- the money moved from now to later, and it is still yours."
+          "16-18":
+            - "Did the money leave you, or just move within what is yours?"
+            - "One of these two. Which one still has the money in your name?"
+            - "Saving -- moved from now to later, still yours, and done on payday so willpower never enters into it."
 
       - id: q2_explain_back
         prompt:
           "5-8": "Can you tell Skye what saving means, in your own words?"
           "9-12": "In your own words -- what does saving mean?"
           "13-15": "Say it back to me in your own words: what is saving?"
+          "16-18": "In your own words -- what is saving, and what makes the habit actually stick?"
         graded: false
         accept: [keep, keeping, later, save, not spend, put away, tin, account, wait]
 
@@ -144,7 +225,79 @@ lessons:
     concept_id: spend
     order: 2
     objective: The learner understands that spending is normal and that saving is a choice about timing, not a rule about never buying.
+    # ── the six voices ───────────────────────────────────────────────────
+    persona_voice:
+      stella:
+        band: "5-8"
+        role: learner
+        tone: "warm, simple, praise"
+        teach_points:
+          - "Spending is using your money to get something."
+          - "Spending is not naughty. Everybody spends."
+          - "Keep some too, so you can get bigger things later."
+        examples:
+          - "You buy a snow cone with one dollar. That is spending, and it is fine!"
+        joke: "I spent a whole dollar on joy. Worth it."
+      kaleb:
+        band: "9-12"
+        role: learner
+        tone: "friendly, a bit of swagger"
+        teach_points:
+          - "Spending is what money is for -- it turns money into things you need and enjoy."
+          - "Saving everything and enjoying nothing is not a plan anybody keeps."
+          - "The question is not whether to spend, but how much to keep first."
+        examples:
+          - "EC$5 on patties at break is spending. EC$5 into the account Friday is saving. Most weeks you do both."
+        joke: "A tin with no snacks nearby is just a sad tin."
+      orion:
+        band: "13-15"
+        role: learner
+        tone: "dry, plain"
+        teach_points:
+          - "Money has one job: to be exchanged for something you want or need."
+          - "A plan you resent is a plan you abandon by March -- build the enjoyable spending in."
+          - "Keep first, spend the rest. The order does the work, not the amount."
+        examples:
+          - "EC$200 in December: EC$120 saved, EC$80 for gifts, is a plan you will actually keep."
+        joke: "Nobody ever kept a rule that banned snow cones until 2028."
+      aurora:
+        band: "adult"
+        role: parent
+        tone: "warm, practical, proverb"
+        teach_points:
+          - "Let them spend some of their own money and feel it -- the felt trade-off teaches faster than the ban."
+          - "Do not label a child's want as bad; label the timing. 'Not this week' beats 'no'."
+          - "The habit to model is keep-first, then spend freely -- guilt-free is the goal."
+        examples:
+          - "Your child spends part of their pocket money and keeps part, and you praise the keeping."
+        joke: "Ban the treat and you teach sneaking. Time the treat and you teach planning."
+      nova:
+        band: "adult"
+        role: educator
+        tone: "colleague to colleague, practical"
+        teach_points:
+          - "The misconception to correct is that saving means never spending -- it is timing, not abstinence."
+          - "Have them defend a spend, not just a save. A justified purchase is evidence of the concept."
+          - "Watch for the learner who calls all spending failure; that is the error, not the spending."
+        examples:
+          - "Pairs get a play wage, must both save AND spend, then defend one spend to the class."
+        joke: "The learner who saves everything has missed the point as surely as the one who saves nothing."
+      guest:
+        band: "adult"
+        role: learner
+        tone: "friendly, local"
+        teach_points:
+          - "Spending is not the enemy -- unplanned spending is. Decide first, do not deprive yourself."
+          - "A budget with no room for enjoyment is one you will break; build the treat in on purpose."
+          - "Keep first on payday, then spend the rest without guilt -- the order is the whole trick."
+        examples:
+          - "Set the keeping aside on payday, and spend the rest of the month without doing sums in the shop."
+        joke: "A budget with no fun in it lasts about as long as a New Year gym plan."
     teach_points:
+      "adult":
+        - "Spending is normal; unplanned spending is the problem. Decide the split first, then spend the rest freely."
+        - "A plan with no enjoyment built in is one you abandon -- guilt-free spending is part of the method."
+        - "Keep-first on payday makes the rest genuinely spendable. The order does the work."
       "5-8":
         - "Spending is using your money to get something."
         - "Spending is not naughty. Everybody spends."
@@ -157,6 +310,10 @@ lessons:
         - "Money has one job: to be exchanged for something you want or need."
         - "A plan you resent is a plan you abandon by March, so build the enjoyable spending in."
         - "Keep first, spend the rest. The order is what makes it work, not the amount."
+      "16-18":
+        - "Money's job is to be exchanged -- for now or for later. Saving is a choice about when, not whether."
+        - "Build the enjoyable spending into the plan on purpose; a plan you resent is one you drop."
+        - "Keep first, then spend the rest without second-guessing every purchase."
     examples:
       "5-8":
         - "You buy a snow cone with one dollar. That is spending, and it is fine!"
@@ -167,6 +324,9 @@ lessons:
       "13-15":
         - "You earn EC$200 in December helping at a shop. EC$120 saved, EC$80 for Christmas gifts is a plan you will actually keep."
         - "Nobody sticks to a rule that says no snow cones until 2028."
+      "16-18":
+        - "First pay packet: move the keeping on payday, and the rest is yours to spend without sums at the till."
+        - "December pays more than February -- keep the same share, and enjoy the rest guilt-free."
     suggested_widget_kind: allocator
     check_questions:
       - id: q1_spending_ok
@@ -174,6 +334,7 @@ lessons:
           "5-8": "Is it bad to spend some of your money?"
           "9-12": "Is spending some of your money a problem?"
           "13-15": "Does spending part of your money break a savings plan?"
+          "16-18": "You keep part of your pay first, then spend the rest. Does spending the rest break your savings?"
         options: ["No -- it is fine", "Yes -- always"]
         answer: 0
         hints:
@@ -189,6 +350,10 @@ lessons:
             - "Think about which plan survives contact with December."
             - "One of these two. Which describes a plan you would still be following in March?"
             - "It is fine. A plan with no enjoyment in it is a plan you abandon."
+          "16-18":
+            - "Think about whether the keeping already happened before the spending."
+            - "One of these two. Which plan is one you would still keep in March?"
+            - "It is fine. If you kept first, the rest is yours to spend -- the order is the method."
 
   # ── 3. A goal makes saving easier ───────────────────────────────────────
   - id: l03_a_goal
@@ -196,7 +361,79 @@ lessons:
     concept_id: goal
     order: 3
     objective: The learner can name a saving goal and work out roughly how long it takes to reach it.
+    # ── the six voices ───────────────────────────────────────────────────
+    persona_voice:
+      stella:
+        band: "5-8"
+        role: learner
+        tone: "warm, simple, praise"
+        teach_points:
+          - "A goal is the thing you are saving for."
+          - "When you can picture it, waiting is much easier."
+          - "Every coin gets you closer to it."
+        examples:
+          - "Your goal is a football. It costs ten coins. You have four. Six more to go!"
+        joke: "My goal is a bigger tin. For all the coins."
+      kaleb:
+        band: "9-12"
+        role: learner
+        tone: "friendly, a bit of swagger"
+        teach_points:
+          - "A goal turns saving from a rule into a plan with an ending."
+          - "Write down what it is and what it costs -- a goal you have not priced is a wish."
+          - "Then work out how much to keep each week to get there."
+        examples:
+          - "A bicycle costs EC$300. EC$10 a week is 30 weeks -- about seven months."
+        joke: "A wish is a goal that never got a price tag."
+      orion:
+        band: "13-15"
+        role: learner
+        tone: "dry, plain"
+        teach_points:
+          - "A goal gives your saving a deadline, and the deadline makes the weekly amount obvious."
+          - "Price it, date it, divide it. That is the whole method."
+          - "A goal you cannot reach in the time discourages -- adjust the goal or the time."
+        examples:
+          - "A Carnival costume is EC$450 and Carnival is 26 weeks away. About EC$18 a week."
+        joke: "Price it, date it, divide it. Three steps, no magic."
+      aurora:
+        band: "adult"
+        role: parent
+        tone: "warm, practical, proverb"
+        teach_points:
+          - "Let the goal be theirs, not yours -- a child saves hardest for the thing they chose."
+          - "Make it visible: a picture on the tin, a bar they colour in. Progress they can see, they keep."
+          - "Help them price and date it once; the arithmetic is the lesson, not the toy."
+        examples:
+          - "Your child names the goal and prices it, and you help only with the sum, not the choosing."
+        joke: "A goal you chose for them is one they save for at your pace, not theirs."
+      nova:
+        band: "adult"
+        role: educator
+        tone: "colleague to colleague, practical"
+        teach_points:
+          - "The objective is name a goal AND estimate the time -- the estimate is where the numeracy lives."
+          - "Have them price, date and divide; mark the method, not whether the toy is sensible."
+          - "A mis-scoped goal is a teaching moment: adjust the amount or the deadline, out loud."
+        examples:
+          - "Each learner prices a real goal, sets a date, works out the weekly keep; compare methods."
+        joke: "Mark the dividing, not the dream. The dream is theirs; the arithmetic is ours."
+      guest:
+        band: "adult"
+        role: learner
+        tone: "friendly, local"
+        teach_points:
+          - "A goal turns 'I should save' into a number and a date -- vague saving rarely sticks."
+          - "Price it, date it, divide it, then automate that amount so the goal saves itself."
+          - "One named goal beats a general intention. The brain keeps a promise it can picture."
+        examples:
+          - "A EC$2400 course, twelve months out: EC$200 a month, set to move on payday."
+        joke: "Saving 'in general' is how you reach December with only good intentions."
     teach_points:
+      "adult":
+        - "A goal turns 'I should save' into a number and a date -- price it, date it, divide it."
+        - "Automate the weekly or monthly amount so the goal saves itself, rather than relying on memory."
+        - "One named, pictured goal keeps better than a general intention to save."
       "5-8":
         - "A goal is the thing you are saving for."
         - "When you can picture it, waiting is much easier."
@@ -209,6 +446,10 @@ lessons:
         - "A goal gives your saving a deadline, and a deadline is what makes the weekly amount obvious."
         - "Price it, date it, divide it. That is the whole method."
         - "A goal you cannot reach in the time you have is not motivating -- it is discouraging. Adjust one or the other."
+      "16-18":
+        - "A goal gives saving a deadline, and the deadline makes the amount per pay obvious."
+        - "Price it, date it, divide it -- then move that amount automatically so it does not depend on willpower."
+        - "If the goal will not fit the time, change the goal or the date; do not just hope."
     examples:
       "5-8":
         - "Your goal is a football. It costs ten coins. You have four. Six more to go!"
@@ -219,6 +460,9 @@ lessons:
       "13-15":
         - "A Carnival costume is EC$450 and Carnival is 26 weeks away. That is about EC$18 a week."
         - "A phone costs EC$600. Twelve months of EC$50 gets there; six months of EC$50 does not."
+      "16-18":
+        - "A phone costs EC$900 and you want it in 6 months: EC$150 a month, moved on payday."
+        - "CFBC fees land in September; counted back from now, that is a fixed amount each pay."
     suggested_widget_kind: timeline
     check_questions:
       - id: q1_weeks_to_goal
@@ -232,6 +476,7 @@ lessons:
           # Joseph Lin checks arithmetic; so does a judge with a rubric.
           # EC$250 at EC$25 is exactly ten, which is what the options already say.
           "13-15": "A goal costs EC$250 and you keep EC$25 a week. How many weeks?"
+          "16-18": "A goal costs EC$2500 and you keep EC$250 each month. How many months?"
         options: ["Ten", "Two", "One hundred"]
         answer: 0
         hints:
@@ -250,12 +495,17 @@ lessons:
             # different two.
             - "It is one of these two: ten, or two?"
             - "It is ten. EC$250 divided by EC$25 a week is ten weeks exactly."
+          "16-18":
+            - "Divide the goal by what you keep each period."
+            - "It is one of these two: ten, or two?"
+            - "Ten. EC$2500 divided by EC$250 a month is ten months exactly."
 
       - id: q2_name_a_goal
         prompt:
           "5-8": "What would YOU save for? Tell Skye."
           "9-12": "What is one thing you would save for?"
           "13-15": "Name a goal of your own, and roughly what it costs."
+          "16-18": "Name a goal of your own, roughly what it costs, and when you want it by."
         graded: false
         accept: [bike, bicycle, phone, shoes, boots, gift, costume, game, ball, book, school]
 
@@ -265,7 +515,79 @@ lessons:
     concept_id: need
     order: 4
     objective: The learner can sort ordinary purchases into needs and wants, and sees that the line is a judgement rather than a rule.
+    # ── the six voices ───────────────────────────────────────────────────
+    persona_voice:
+      stella:
+        band: "5-8"
+        role: learner
+        tone: "warm, simple, praise"
+        teach_points:
+          - "A need is something you must have to live. A want is something you would like."
+          - "Wanting things is fine. But needs come first."
+          - "Food and water are needs. Toys are wants."
+        examples:
+          - "Water is a need. A snow cone is a want."
+        joke: "My biggest need is snacks. ...Okay, that one is a want."
+      kaleb:
+        band: "9-12"
+        role: learner
+        tone: "friendly, a bit of swagger"
+        teach_points:
+          - "A need is something you have to have; a want is something you would like."
+          - "Needs come first when money is short -- that is the only rule."
+          - "Lots of things sit in between, and reasonable people disagree about them."
+        examples:
+          - "School shoes are a need. A third pair in your favourite colour is a want."
+        joke: "Patties every single day: technically a want. Emotionally, a need."
+      orion:
+        band: "13-15"
+        role: learner
+        tone: "dry, plain"
+        teach_points:
+          - "Needs are non-negotiable: food, fees, transport to get there."
+          - "Wants are everything else, and wanting things is not a character flaw."
+          - "The line moves with circumstances -- shoes are a need, a brand of shoes is a want."
+        examples:
+          - "Data for schoolwork is a need. Data for six hours of video is a want."
+        joke: "The line between need and want moves the moment you are the one paying."
+      aurora:
+        band: "adult"
+        role: parent
+        tone: "warm, practical, proverb"
+        teach_points:
+          - "Sort with them, do not sort for them -- the judging is the skill you are handing over."
+          - "Use real household examples: the light bill, the bus fare, the treat. Abstract lists do not stick."
+          - "Let the in-between cases stay arguable; 'it depends, and here is what moves it' is the right answer."
+        examples:
+          - "At the shop, hold up two things and ask which one you could not go home without."
+        joke: "Ask a child to sort needs and wants and you learn what they think you can afford."
+      nova:
+        band: "adult"
+        role: educator
+        tone: "colleague to colleague, practical"
+        teach_points:
+          - "The objective is that the line is a JUDGEMENT, not a fixed rule -- the in-between cases are the lesson."
+          - "Mark the reasoning: 'a need for us, a want for them' shows they understand context."
+          - "Watch for sorting turning moral; wanting is not a fault, and that correction is part of the teaching."
+        examples:
+          - "Learners sort a week of real spending and count the in-betweens; defend the borderline ones."
+        joke: "The moment the sorting turns into judging, the concept has been missed -- gently reset it."
+      guest:
+        band: "adult"
+        role: learner
+        tone: "friendly, local"
+        teach_points:
+          - "The needs list gets longer and quieter with age -- transport, phone-for-work, your share at home."
+          - "An unplanned need breaks a month; a planned want does not. Guard against the surprise need."
+          - "Sort your own spending honestly once, on paper. Most people find something on the wrong side."
+        examples:
+          - "Your share of the light bill is a need -- and the one people most often leave out of the plan."
+        joke: "The light bill is a need that waits quietly until the exact worst moment."
     teach_points:
+      "adult":
+        - "The needs list gets longer and quieter with age -- transport, phone-for-work, your share at home."
+        - "An unplanned need is what breaks a month; a planned want is not a failure of discipline."
+        - "Sort your own spending honestly once, on paper -- most people find one thing on the wrong side."
       "5-8":
         - "A need is something you must have to live. Food. Water. Clothes. A home."
         - "A want is something you would like. A toy. A treat."
