@@ -36,6 +36,7 @@ import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
+import { say } from "../../lib/aspire/i18n";
 import type { DirectiveContext } from "./DirectiveRegistry";
 import { DirectiveView } from "./DirectiveRegistry";
 import { PlayingStars } from "./Voice";
@@ -579,7 +580,7 @@ function Sources({ sources }: { sources: Array<Source> }) {
 		>
 			<summary className="sources__toggle">
 				<SourcesIcon />
-				<span className="sources__label">Where this came from</span>
+				<span className="sources__label">{say("sources")}</span>
 				<span className="sources__count">{groups.length}</span>
 				{/* The badge reads as a bare number otherwise, and it counts
 				    sources now rather than rows — worth saying out loud. */}
@@ -719,7 +720,7 @@ function Failure({
 						<button type="button" className="text-btn" onClick={onRetry}>
 							<RetryIcon />
 							{/* Nothing went wrong, so not "Try again" — the question is still there to ask. */}
-							{stopped ? "Ask again" : "Try again"}
+							{stopped ? say("askAgain") : say("tryAgain")}
 						</button>
 					</div>
 				) : null}
@@ -794,7 +795,7 @@ function AnswerActions({
 						onClick={() => playback.play(messageId, text)}
 					>
 						{playing ? <PauseIcon /> : <SpeakerIcon />}
-						{playing ? "Playing" : paused ? "Paused" : "Play"}
+						{playing ? say("playing") : paused ? say("paused") : say("play")}
 					</button>
 					{playing ? <PlayingStars /> : null}
 				</>
@@ -803,7 +804,7 @@ function AnswerActions({
 			{/* Labelled like its neighbours: a lone bare icon is the one a reader must guess at. */}
 			<button type="button" className="text-btn" onClick={copy}>
 				{copied ? <CheckIcon /> : <CopyIcon />}
-				{copied ? "Copied" : "Copy"}
+				{copied ? say("copied") : say("copy")}
 			</button>
 
 			{/* The per-answer half of "Explain it simply".
@@ -822,7 +823,7 @@ function AnswerActions({
 				<SparkIcon />
 				{confirming === "simpler"
 					? `Simplify and drop the ${discards} ${discards === 1 ? "message" : "messages"} after it?`
-					: "Simpler"}
+					: say("simpler")}
 			</button>
 
 			{/* "Ask again", not "Try again": under a good answer the latter reads as "you got it wrong". */}
@@ -835,7 +836,7 @@ function AnswerActions({
 				<RetryIcon />
 				{confirming === "again"
 					? `Ask again and drop the ${discards} ${discards === 1 ? "message" : "messages"} after it?`
-					: "Ask again"}
+					: say("askAgain")}
 			</button>
 		</div>
 	);
