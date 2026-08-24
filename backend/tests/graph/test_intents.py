@@ -145,3 +145,35 @@ class TestWatchingAStoryIsAskingForOne:
     def test_and_an_ordinary_question_is_neither(self, message):
         assert not intents.wants_story(message)
         assert not intents.asks_for_a_video(message)
+
+
+class TestHowAFiveYearOldActuallyAsks:
+    """Children rarely form a full request, and never demand one."""
+
+    @pytest.mark.parametrize(
+        "message",
+        ["game", "games", "play", "play?", "a game please", "maybe a game",
+         "i wanna play", "lets play", "can we play a game",
+         "Maybe i want to play a game"],
+    )
+    def test_a_game(self, message):
+        assert intents.wants_game(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        ["story", "story?", "a story please", "maybe a story",
+         "i wanna hear a story", "can we have a story", "Can I watch a story?"],
+    )
+    def test_a_story(self, message):
+        assert intents.wants_story(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        ["what is the story of ASPIRE", "the history of ASPIRE",
+         "my balance please", "what is compound interest", "is the programme free",
+         "a million dollars in savings"],
+    )
+    def test_and_a_bare_word_inside_a_sentence_is_still_a_word(self, message):
+        """"story" in a sentence is a noun. Matching it answers a question with a tale."""
+        assert not intents.wants_story(message)
+        assert not intents.wants_game(message)

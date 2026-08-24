@@ -419,6 +419,28 @@ def wants_lesson(message: str) -> bool:
     return any(pattern.search(folded) for pattern in _LESSON)
 
 
+#: The whole message is the word, and nothing else.
+#:
+#: How a five-year-old asks. "game", "story", "story?", "a game please". Only
+#: as the ENTIRE message: "story" inside a sentence is usually a noun, as in
+#: "what is the story of ASPIRE", and matching that would answer a question
+#: with a fairy tale.
+_JUST_A_GAME = re.compile(r"^\W*(?:a\s+)?(?:game|games|play)\W*(?:please)?\W*$", re.I)
+_JUST_A_STORY = re.compile(r"^\W*(?:a\s+)?(?:story|storie?s|tale)\W*(?:please)?\W*$", re.I)
+
+#: Hedged, and still a request. Children rarely demand.
+_MAYBE_A_GAME = re.compile(
+    r"\b(?:maybe|perhaps|could\s+we|can\s+we)\b[^.?!]{0,12}?\b(?:game|play)\b"
+    r"|\bi\s+wanna\s+play\b|\bwanna\s+play\b",
+    re.IGNORECASE,
+)
+_MAYBE_A_STORY = re.compile(
+    r"\b(?:maybe|perhaps|could\s+we|can\s+we)\b[^.?!]{0,12}?\b(?:story|tale)\b"
+    r"|\bwanna\s+(?:hear|read|see|watch)\b[^.?!]{0,12}?\b(?:story|tale)\b",
+    re.IGNORECASE,
+)
+
+
 def wants_game(message: str) -> bool:
     """Whether this message is asking to play, rather than asking about playing.
 
@@ -437,6 +459,8 @@ def wants_game(message: str) -> bool:
         return False
     if any(pattern.search(folded) for pattern in _PLAY):
         return True
+    if _JUST_A_GAME.match(folded) or _MAYBE_A_GAME.search(folded):
+        return True
     return named_game(message) is not None
 
 
@@ -445,7 +469,9 @@ def wants_story(message: str) -> bool:
     folded = fold(message)
     if not _is_a_command(folded):
         return False
-    return any(pattern.search(folded) for pattern in _STORY)
+    if any(pattern.search(folded) for pattern in _STORY):
+        return True
+    return bool(_JUST_A_STORY.match(folded) or _MAYBE_A_STORY.search(folded))
 
 
 def wants_video(message: str) -> bool:
