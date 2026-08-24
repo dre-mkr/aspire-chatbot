@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.escalation.contract import EscalationReason
 from app.graph.nodes.intents import (
@@ -17,6 +17,7 @@ from app.graph.nodes.intents import (
     wants_eligibility,
     wants_game,
     wants_human,
+    wants_lesson,
     wants_registration,
     wants_story,
     wants_video,
@@ -288,6 +289,14 @@ def make_intent_gate(
         if card is not None:
             return card
 
+        # The learn-vs-teach clarifier, both halves. An educator or a parent
+        # asking to be taught is ambiguous where a child is not: learning for
+        # themselves, or preparing to teach it on. Like the story flow, the
+        # second half returns a resumed request rather than a card.
+        card = _learner_purpose_turn(state, message)
+        if card is not None:
+            return card
+
         # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
@@ -305,6 +314,155 @@ def make_intent_gate(
         return {}
 
     return intent_gate
+
+
+#: Which personas meet the learn-vs-teach clarifier, and how it is worded.
+#:
+#: `nova` is Azuri, the educator: for yourself, or to teach your students.
+#: `aurora` is Imani, the parent: for yourself, or to help your child. Guest
+#: is deliberately absent -- a signed-out adult has no third party to teach, so
+#: their learning intent is taken at its word and answered as a learner.
+#:
+#: `second` is the ROLE the non-self answer resolves to: an educator teaching
+#: is a `teacher`, a parent helping their child is a `parent`. `self` is always
+#: `learner`. Those are the registers in `_ROLE_INSTRUCTION`.
+_PURPOSE_PERSONAS: dict[str, dict[str, str]] = {
+    "nova": {"second": "students", "role": "teacher"},
+    "aurora": {"second": "child", "role": "parent"},
+}
+
+_PURPOSE_ASK: dict[str, dict[str, str]] = {
+    "nova": {
+        "en": "Quick check -- are you learning this for yourself, or planning to teach it to your students?",
+        "es": "Una pregunta rapida: aprendes esto para ti, o quieres ensenarselo a tus estudiantes?",
+        "fr": "Petite question : apprenez-vous ceci pour vous, ou pour l'enseigner a vos eleves ?",
+    },
+    "aurora": {
+        "en": "Quick check -- are you learning this for yourself, or to help your child with it?",
+        "es": "Una pregunta rapida: aprendes esto para ti, o para ayudar a tu hijo o hija?",
+        "fr": "Petite question : apprenez-vous ceci pour vous, ou pour aider votre enfant ?",
+    },
+}
+
+_PURPOSE_CHIPS: dict[str, dict[str, list[str]]] = {
+    "nova": {
+        "en": ["For myself", "To teach my students"],
+        "es": ["Para mi", "Para ensenar a mis estudiantes"],
+        "fr": ["Pour moi", "Pour enseigner a mes eleves"],
+    },
+    "aurora": {
+        "en": ["For myself", "To help my child"],
+        "es": ["Para mi", "Para ayudar a mi hijo o hija"],
+        "fr": ["Pour moi", "Pour aider mon enfant"],
+    },
+}
+
+#: What a "for myself" answer looks like, in the three languages.
+_SELF_ANSWER = re.compile(
+    r"\b(?:myself|for me|my own|just me|i want to learn|para m[ií]|pour moi|moi-?m[eê]me)\b",
+    re.IGNORECASE,
+)
+
+
+def _purpose_from_answer(message: str, persona: str) -> str:
+    """Read a clarifier answer into "self" or the persona's teaching role.
+
+    A tap gives the chip text; a typed reply gives whatever they wrote. Default
+    to `self` on anything unclear -- the learner register offers rather than
+    gates, so it is the safe wrong guess. Only an explicit teaching answer wins.
+    """
+    second = _PURPOSE_PERSONAS[persona]["second"]
+    folded = message.lower()
+    teaching = {
+        "students": ("student", "class", "pupil", "my form", "estudiante", "clase", "alumno", "eleve", "élève"),
+        "child": ("my child", "my kid", "my son", "my daughter", "help my child", "mi hijo", "mi hija", "mon enfant"),
+    }[second]
+    if _SELF_ANSWER.search(message):
+        return "self"
+    if any(word in folded for word in teaching):
+        return second
+    return "self"
+
+
+def _looks_like_a_purpose_answer(message: str, persona: str) -> bool:
+    """Whether this reply is an answer to the clarifier, not a fresh question.
+
+    A chip, a "for myself", a "for my students" -- or a short tap-length reply,
+    which a hurried reader gives instead of the chip. A longer message with no
+    purpose signal is treated as a change of subject.
+    """
+    second = _PURPOSE_PERSONAS[persona]["second"]
+    folded = message.lower()
+    teaching = {
+        "students": ("student", "class", "pupil", "my form", "estudiante", "clase", "alumno", "eleve", "élève"),
+        "child": ("my child", "my kid", "my son", "my daughter", "help my child", "mi hijo", "mi hija", "mon enfant"),
+    }[second]
+    if _SELF_ANSWER.search(message) or any(word in folded for word in teaching):
+        return True
+    return len(message.split()) <= 4
+
+
+def _learner_purpose_turn(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Ask an educator or parent whether a lesson is for them or to teach on.
+
+    Two halves, like the story flow. First half: an ambiguous lesson request
+    from `nova` or `aurora`, with nothing remembered yet -- ask, and hold the
+    request. Second half: the answer arrives, so record the purpose for the
+    session and resume the held request as though they had just sent it.
+    """
+    persona = str(state.get("persona") or "")
+    locale = str(state.get("locale") or "en")
+    if locale not in _CARD_LOCALES:
+        locale = "en"
+
+    # ── second half: the answer to a question we asked last turn ──
+    if state.get("awaiting_learner_purpose"):
+        pending = state.get("pending_learning") or message
+        # A persona we no longer recognise cannot resolve an answer; let go.
+        if persona not in _PURPOSE_PERSONAS:
+            return {"awaiting_learner_purpose": False, "pending_learning": None}
+        # They may have ignored the question and asked something else. A real
+        # answer looks like an answer -- a chip, a "for myself", "my students" --
+        # or is a short tap-length reply. Anything longer and unrecognised is a
+        # new intent, so drop the latch and let THIS message flow to the router
+        # rather than resuming a lesson they have moved on from.
+        if not _looks_like_a_purpose_answer(message, persona):
+            return {"awaiting_learner_purpose": False, "pending_learning": None}
+        purpose = _purpose_from_answer(message, persona)
+        # Resume the original request as the effective message, so the router
+        # and the tutor see "teach me about budgeting", not "for myself".
+        return {
+            "awaiting_learner_purpose": False,
+            "learner_purpose": purpose,
+            "pending_learning": None,
+            "messages": [HumanMessage(content=pending)],
+        }
+
+    # ── first half: an ambiguous lesson request worth clarifying ──
+    if persona not in _PURPOSE_PERSONAS:
+        return None
+    # Ask ONCE. Once the session has an answer, never interrupt again.
+    if state.get("learner_purpose"):
+        return None
+    if not wants_lesson(message):
+        return None
+    # If the message already says which, there is nothing to ask.
+    if _purpose_is_explicit(message, persona):
+        return None
+
+    return {
+        "awaiting_learner_purpose": True,
+        "pending_learning": message,
+        "active_agent": _holding_agent(state),
+        "messages": [AIMessage(content=_PURPOSE_ASK[persona].get(locale) or _PURPOSE_ASK[persona]["en"])],
+        "quick_replies": _PURPOSE_CHIPS[persona].get(locale) or _PURPOSE_CHIPS[persona]["en"],
+        "safety_flags": {"card": "learner_purpose"},
+    }
+
+
+def _purpose_is_explicit(message: str, persona: str) -> bool:
+    """Whether the request already says who the learning is for."""
+    return _purpose_from_answer(message, persona) != "self" or bool(_SELF_ANSWER.search(message))
 
 
 #: Suggested subjects, offered as chips when a reader asks for a story.

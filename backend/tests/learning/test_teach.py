@@ -98,7 +98,7 @@ class TestTheModelWritesTheLesson:
         model = Recorder()
         await run_teach(invoke=model, curriculum=curriculum)
 
-        for point in lesson.teach_for("9-12"):
+        for point in lesson.teach_for("9-12", "stella"):
             assert point in model.system
 
     async def test_the_prompt_states_the_bands_own_word_cap(self, curriculum):
@@ -412,7 +412,7 @@ class TestWithoutAModel:
     ):
         """The floor."""
         update = await run_teach(invoke=None, curriculum=curriculum)
-        assert said(update) == teaching.authored_body(lesson, "9-12")
+        assert said(update) == teaching.authored_body(lesson, "9-12", "stella")
 
     async def test_a_model_failure_falls_back_rather_than_failing_the_turn(
         self, curriculum, lesson
@@ -421,12 +421,12 @@ class TestWithoutAModel:
         model.raises = RuntimeError("429")
         update = await run_teach(invoke=model, curriculum=curriculum)
 
-        assert said(update) == teaching.authored_body(lesson, "9-12")
+        assert said(update) == teaching.authored_body(lesson, "9-12", "stella")
 
     async def test_an_empty_reply_falls_back_too(self, curriculum, lesson):
         """A model that returns "" has not written a lesson."""
         update = await run_teach(invoke=Recorder("   "), curriculum=curriculum)
-        assert said(update) == teaching.authored_body(lesson, "9-12")
+        assert said(update) == teaching.authored_body(lesson, "9-12", "stella")
 
     async def test_the_turn_still_advances_and_still_offers_chips(self, curriculum):
         update = await run_teach(invoke=None, curriculum=curriculum)
@@ -462,7 +462,7 @@ class TestReteach:
     async def test_it_falls_back_to_the_authored_last_point(self, curriculum, lesson):
         node = teaching.make_reteach(curriculum, invoke=None)
         update = await node(state_for())
-        assert said(update) == lesson.teach_for("9-12")[-1]
+        assert said(update) == lesson.teach_for("9-12", "stella")[-1]
 
     async def test_it_still_records_the_wrong_outcome(self, curriculum):
         """The reveal path must reach `mastery_update` with a wrong answer, model or not."""

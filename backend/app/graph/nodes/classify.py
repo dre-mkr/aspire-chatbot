@@ -131,11 +131,17 @@ _SYSTEM = (
     "is accountable, data, consent, safeguarding\n"
     "  parent   - speaking about their own child: \"my daughter\", \"I have two "
     "children\", \"as a parent\"\n"
-    "  learner  - speaking about their own money and learning\n"
+    "  learner  - an ADULT working on their OWN money: \"I want to get "
+    "better with money\", \"how do I stop living paycheck to paycheck\", "
+    "\"I never learned to budget\", \"help me get my spending under "
+    "control\", \"what should I do with my savings\". First person, their "
+    "own situation, a real ask for help -- not a child answering a lesson.\n"
     '  ""       - nothing in this message says which. Common, and the right '
-    "answer whenever the reader has only named a TOPIC: asking about lessons "
-    "does not make someone a teacher, and asking about saving does not make "
-    "them a learner.\n"
+    "answer whenever the reader has only named a TOPIC with no first-person "
+    "stake: \"what is compound interest\", \"tell me about saving\". Asking "
+    "about lessons does not make someone a teacher. But \"I\" plus their own "
+    "money -- a problem they have, a habit they want -- is a learner, and the "
+    "commonest adult on this service.\n"
     "Saying what they HAVE is stating a role, even without the words "
     '"as a": "I have two children" and "J\'ai deux enfants" are parent; '
     '"my Form 2s" is teacher. Saying what they WANT is not.\n'

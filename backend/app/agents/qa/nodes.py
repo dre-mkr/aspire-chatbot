@@ -666,6 +666,41 @@ _ROLE_INSTRUCTION: dict[str, str] = {
         "Answer for THEIR child, not for children in general, and say what "
         "they can do next. Never guess at their account."
     ),
+    # The Adult Learner spine. NOT the educator: a teacher asks what to do with
+    # a class, an adult learner asks what to do with their own money. The
+    # register is andragogy, not pedagogy -- an adult who missed this the first
+    # time is not a child, and being quizzed like one is why they leave.
+    #
+    # Four moves, and they are the difference between teaching a grown reader
+    # and talking down to one:
+    #  - START FROM THE PROBLEM they brought, not from a definition. An adult
+    #    learns what they have a use for now, this month, this pay.
+    #  - CREDIT WHAT THEY ALREADY DO. They have run a household, a hustle, a
+    #    light bill. Name the thing they already do right and build the idea
+    #    onto it, rather than starting them at zero.
+    #  - ONE STEP THEY CAN TAKE, concrete and this-week, in EC dollars and the
+    #    Federation's own seasons -- Sugar Mas, the September bills, the good
+    #    month and the thin one.
+    #  - OFFER, NEVER GATE. You may offer a check or a worked example; you must
+    #    never make them pass a quiz to be answered, and never grade a plain
+    #    question as a wrong answer. A defended choice is worth more than a
+    #    right one.
+    "learner": (
+        "The reader is an adult learning this for themselves -- not a teacher, "
+        "not asking about a child. Answer as one adult to another. Start from "
+        "the money problem they actually have, not from a definition. Credit "
+        "what they already do well and build onto it rather than starting them "
+        "at zero. Give ONE concrete step they could take this week, in EC "
+        "dollars and set in the Federation. Offer a check or an example if it "
+        "helps -- never require them to pass a quiz, and never grade an "
+        "ordinary question as if it were a wrong answer.\n"
+        "For an adult the gap is usually BEHAVIOUR, not knowledge -- they "
+        "already know they should save. Speak to the habit and the pattern: "
+        "what triggers the spend, the automatic move that beats willpower "
+        "(keep-first on payday, a standing transfer), the small routine repeated "
+        "over the grand plan attempted once. Name the habit to build, not just "
+        "the fact to know."
+    ),
 }
 
 
@@ -1661,7 +1696,22 @@ def speaking_as(state: AspireState) -> str | None:
     single-option turn, on a widget continuation, and whenever no API key is
     configured -- and on those turns the patterns are all there is.
     """
-    return routed_role(state) or stated_role(state)
+    return routed_role(state) or stated_role(state) or _purpose_role(state)
+
+
+#: The learn-vs-teach clarifier's remembered answer, as a role.
+#:
+#: Ranks BELOW what this turn's message says -- an Azuri who answered "for
+#: myself" last week and asks "how do I teach compound interest to my Form 2s"
+#: today is a teacher today. It ranks ABOVE the persona default, which is the
+#: whole point: the persona could not tell learning from teaching, and now the
+#: reader has said which.
+_PURPOSE_ROLE: dict[str, str] = {"self": "learner", "students": "teacher", "child": "parent"}
+
+
+def _purpose_role(state: AspireState) -> str:
+    """The role implied by a remembered clarifier answer, or empty."""
+    return _PURPOSE_ROLE.get(str(state.get("learner_purpose") or ""), "")
 
 
 def reader_audience(state: AspireState) -> str:
