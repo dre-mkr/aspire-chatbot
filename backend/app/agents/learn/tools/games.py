@@ -216,6 +216,40 @@ async def record_result(
     )
 
 
+#: Perfect-run artifacts, for the two games where perfection is earned:
+#: Millionaire is the hardest question set, Hangman punishes every wrong
+#: letter. Scramble and true/false stay score-only -- perfect runs there are
+#: common enough that a crown would cheapen the others.
+_GAME_ARTIFACTS: dict[str, dict[str, Any]] = {
+    "millionaire": {
+        "emoji": "👑",
+        "name": {
+            "en": "The Crown of Questions",
+            "es": "La Corona de las Preguntas",
+            "fr": "La Couronne des Questions",
+        },
+        "caption": {
+            "en": "A perfect run — every question, first try!",
+            "es": "¡Una partida perfecta — cada pregunta, al primer intento!",
+            "fr": "Une partie parfaite — chaque question, du premier coup !",
+        },
+    },
+    "hangman": {
+        "emoji": "🪶",
+        "name": {
+            "en": "The Quill of Letters",
+            "es": "La Pluma de las Letras",
+            "fr": "La Plume des Lettres",
+        },
+        "caption": {
+            "en": "Not one letter wasted — a perfect word!",
+            "es": "¡Ni una letra perdida — una palabra perfecta!",
+            "fr": "Pas une lettre perdue — un mot parfait !",
+        },
+    },
+}
+
+
 def make_game_result_node(store: MasteryStore | None = None):
     """The node that runs when a game finishes."""
 
@@ -232,7 +266,42 @@ def make_game_result_node(store: MasteryStore | None = None):
         learner = state.get("user_id") or None
         await record_result(result, learner_id=learner, store=store, age_band=band)
 
+        # A PERFECT run of the two hardest games earns an artifact, the same
+        # collectible a finished story grants. Perfect only -- an artifact for
+        # any score is a participation sticker, and children can tell.
+        award: dict[str, Any] = {}
+        crown = _GAME_ARTIFACTS.get(result.game)
+        if (
+            crown is not None
+            and result.completed
+            and result.max_score > 0
+            and result.score == result.max_score
+        ):
+            from app.schemas.directives import CollectibleDirective
+
+            locale = str(state.get("locale") or "en")
+            name = crown["name"].get(locale, crown["name"]["en"])
+            caption = crown["caption"].get(locale, crown["caption"]["en"])
+            item = {"name": name, "emoji": crown["emoji"], "topic": result.game}
+            already = any(
+                c.get("topic") == result.game
+                for c in (state.get("collectibles") or [])
+            )
+            if not already:
+                award = {
+                    "collectibles": [*list(state.get("collectibles") or []), item],
+                    "ui_directives": [
+                        CollectibleDirective(
+                            name=name,
+                            emoji=crown["emoji"],
+                            caption=caption,
+                            topic=result.game,
+                        )
+                    ],
+                }
+
         return {
+            **award,
             "messages": [AIMessage(content=reaction_for(result, band))],
             "quick_replies": _chips(band),
             # Keep the learning agent the router picked; hardcoding `learn_agent` broke stickiness.

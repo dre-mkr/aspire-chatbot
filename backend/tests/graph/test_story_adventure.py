@@ -128,3 +128,54 @@ class TestTheGoldenGoose:
     async def test_a_near_miss_is_not_a_story(self):
         out = await gate(_state("the golden goose story please", None))
         assert "story_arc" not in out or out.get("story_arc") is None
+
+
+class TestTheGameCrowns:
+    def _result_state(self, game, score, max_score, completed=True, **over):
+        from langchain_core.messages import HumanMessage
+
+        from app.graph.state import initial_state
+
+        s = initial_state(
+            session_id="s", user_id="u", device_id="d",
+            persona="kaleb", age_band="9-12", account_status="active", locale="en",
+        )
+        s["messages"] = [HumanMessage(content="")]
+        s["safety_flags"] = {"game_result": {
+            "game": game, "concept_id": "save", "score": score,
+            "max_score": max_score, "duration_s": 60, "completed": completed,
+        }}
+        s.update(over)
+        return s
+
+    async def test_a_perfect_millionaire_earns_the_crown(self):
+        from app.agents.learn.tools.games import make_game_result_node
+
+        node = make_game_result_node()
+        out = await node(self._result_state("millionaire", 10, 10))
+        assert out["ui_directives"][0].name == "The Crown of Questions"
+        assert out["collectibles"][0]["emoji"] == "👑"
+
+    async def test_an_imperfect_run_earns_nothing(self):
+        from app.agents.learn.tools.games import make_game_result_node
+
+        node = make_game_result_node()
+        out = await node(self._result_state("millionaire", 9, 10))
+        assert "ui_directives" not in out
+
+    async def test_scramble_never_crowns(self):
+        from app.agents.learn.tools.games import make_game_result_node
+
+        node = make_game_result_node()
+        out = await node(self._result_state("scramble", 10, 10))
+        assert "ui_directives" not in out
+
+    async def test_the_crown_is_granted_once(self):
+        from app.agents.learn.tools.games import make_game_result_node
+
+        node = make_game_result_node()
+        out = await node(self._result_state(
+            "millionaire", 10, 10,
+            collectibles=[{"name": "The Crown of Questions", "emoji": "👑", "topic": "millionaire"}],
+        ))
+        assert "ui_directives" not in out
