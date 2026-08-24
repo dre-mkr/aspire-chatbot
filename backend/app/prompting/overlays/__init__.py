@@ -22,7 +22,7 @@ OVERLAY_BANDS: Final[dict[str, frozenset[str]]] = {
     "limer": frozenset(['13-15', '16-18', '9-12', 'adult']),
     "professor": frozenset(['13-15', '16-18', 'adult']),
     "storyteller": frozenset(['13-15', '5-8', '9-12']),
-    "hype": frozenset(['13-15', '5-8', '9-12']),
+    "hype": frozenset({"5-8", "9-12", "13-15", "16-18", "adult"}),
     "quiet": frozenset(['13-15', '16-18', '5-8', '9-12', 'adult']),
     "unbothered": frozenset({"16-18"}),
     "hustler": frozenset(['13-15', '16-18', '9-12', 'adult']),

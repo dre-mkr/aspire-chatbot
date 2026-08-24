@@ -556,6 +556,18 @@ def _purpose_is_explicit(message: str, persona: str) -> bool:
     return _purpose_from_answer(message, persona) != "self" or bool(_SELF_ANSWER.search(message))
 
 
+#: A priced story choice: "Buy the rope (EC$30)" or "Walk on (free)".
+_STORY_CHOICE = re.compile(r"^(.*?)\s*\((?:EC\$\s?(\d+)|free)\)\s*$", re.IGNORECASE)
+
+
+def _story_choice(message: str) -> tuple[str, int] | None:
+    """The (item, cost) a chip-shaped reply carries, or None."""
+    m = _STORY_CHOICE.match(message.strip())
+    if m is None:
+        return None
+    return (m.group(1).strip() or "that", int(m.group(2) or 0))
+
+
 #: Suggested subjects, offered as chips when a reader asks for a story.
 #:
 #: Every one is something the corpus can actually ground a story in, so the
@@ -670,13 +682,34 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 "quick_replies": _STORY_TOPICS[locale],
                 "safety_flags": {"card": "story_closed"},
             }
-        if story_continues(message):
+        choice = _story_choice(message)
+        if choice is not None or story_continues(message):
             beat = int(arc.get("beat") or 1) + 1
+            wallet = int(arc.get("wallet") or 0)
+            inventory = list(arc.get("inventory") or [])
+            last_choice, afforded = "", True
+            if choice is not None:
+                item, cost = choice
+                last_choice = item
+                # The wallet is the lesson: an unaffordable pick is not an
+                # error, it is the consequence the next beat is built on.
+                afforded = cost <= wallet
+                if afforded:
+                    wallet -= cost
+                    if cost > 0:
+                        inventory.append(item)
             # Not a card: the router runs and an agent writes the next beat,
             # with the story instruction and the story word cap applied.
             return {
                 "story_topic": str(arc.get("topic") or ""),
-                "story_arc": {"topic": arc.get("topic"), "beat": beat},
+                "story_arc": {
+                    "topic": arc.get("topic"),
+                    "beat": beat,
+                    "wallet": wallet,
+                    "inventory": inventory,
+                    "last_choice": last_choice,
+                    "afforded": afforded,
+                },
                 "awaiting_story_topic": False,
             }
         # Thinking about the story is not leaving it. Empty update, so the
@@ -717,7 +750,15 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
         return {
             "awaiting_story_topic": False,
             "story_topic": topic[:120],
-            "story_arc": {"topic": topic[:120], "beat": 1},
+            # The adventure state: an in-story wallet and inventory, so the
+            # reader PLAYS the money idea instead of only hearing it. EC$100
+            # of story-money, spent by picking choices priced "(EC$N)".
+            "story_arc": {
+                "topic": topic[:120],
+                "beat": 1,
+                "wallet": 100,
+                "inventory": [],
+            },
         }
 
     if not wants_story(message):

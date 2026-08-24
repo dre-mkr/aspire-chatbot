@@ -60,6 +60,29 @@ const NOTES: Record<NoteKind, Omit<VoiceNote, "kind">> = {
 	},
 };
 
+/** Per-personality flavour for the notes, where the register truly differs. */
+const OVERLAY_NOTES: Record<string, Partial<Record<NoteKind, string>>> = {
+	quiet: {
+		denied: "Mic blocked. Go fix it or just type.",
+		"no-speech": "Heard nothing. Try again or type, you good.",
+		offline: "Voice down. Typing works same way.",
+	},
+	unbothered: {
+		denied: "Mic not working. Up to you.",
+		"no-speech": "Didn't catch that. Or don't repeat it. Your call.",
+		offline: "Voice is down. It is what it is -- typing works.",
+	},
+	limer: {
+		denied: "De mic block up. Allow it in the browser or just type, y'know.",
+		"no-speech": "Didn' hear nothing -- come closer and talk again.",
+		offline: "Voice gone for now. Type it out, same answers.",
+	},
+	hype: {
+		"no-speech": "MIC MISSED IT! Run it back one more time! 🎉",
+		offline: "Voice taking a break -- typing still gets the party! 🎉",
+	},
+};
+
 /**
  * Read text aloud with the device's own speech engine.
  *
@@ -319,9 +342,21 @@ export function useVoice({
 		stream.current = null;
 	}, []);
 
-	const showNote = useCallback((kind: NoteKind) => {
-		setNote({ kind, ...NOTES[kind] });
-	}, []);
+	const showNote = useCallback(
+		(kind: NoteKind) => {
+			// The chosen personality colours even the bad news. "Mic not working.
+			// Up to you." is The Unbothered being itself where a default note
+			// would break character -- overrides exist only where the register
+			// genuinely differs, and every other overlay keeps the plain text.
+			const flavoured = OVERLAY_NOTES[overlay]?.[kind];
+			setNote({
+				kind,
+				...NOTES[kind],
+				...(flavoured ? { text: flavoured } : {}),
+			});
+		},
+		[overlay],
+	);
 
 	const finish = useCallback(
 		async (blob: Blob, seconds: number) => {

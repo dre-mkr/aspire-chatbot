@@ -625,9 +625,41 @@ def _story_instruction(state: AspireState) -> str | None:
             "before it.\n"
         )
 
+    # The adventure block: the deterministic state the model must honour.
+    adventure = ""
+    if "wallet" in arc:
+        wallet = int(arc.get("wallet") or 0)
+        inventory = ", ".join(arc.get("inventory") or []) or "nothing yet"
+        picked = str(arc.get("last_choice") or "")
+        outcome = ""
+        if picked:
+            outcome = (
+                f"Last beat the reader chose: {picked} -- and "
+                + ("they could afford it. Weave the purchase in.\n"
+                   if arc.get("afforded", True)
+                   else "they could NOT afford it. The story shows that "
+                        "consequence now, kindly and without a lecture.\n")
+            )
+        choices = (
+            ""
+            if beat >= STORY_BEATS
+            else "End the beat with 2 or 3 choices for the reader, each on its "
+                 "own line, each formatted exactly like \"Buy the rope (EC$30)\" "
+                 "or \"Walk on (free)\" -- at least one free, every price within "
+                 "or near the wallet, and the trade-off real: what they buy or "
+                 "skip must matter in the next beat.\n"
+        )
+        adventure = (
+            f"THIS IS A PLAYABLE STORY. The reader's story-wallet holds EC${wallet} "
+            f"and their inventory is: {inventory}. These numbers are the game "
+            "state -- never change them yourself, never contradict them.\n"
+            f"{outcome}{choices}"
+        )
+
     return (
         f"The reader has asked for a story about: {topic}\n"
         f"{page}"
+        f"{adventure}"
         f"{shape}\n"
         "Set it in Saint Kitts and Nevis and use EC dollars. Invent the "
         "characters freely; do NOT invent anything about the ASPIRE programme "
@@ -1307,7 +1339,7 @@ def make_ground_check(threshold: float | None = None):
                 "citations": citations,
                 "groundedness": groundedness,
                 "active_agent": state.get("active_agent"),
-                "quick_replies": follow_up_chips(state, chunks, grounded_citations),
+                "quick_replies": follow_up_chips(state, chunks, grounded_citations, answer),
                 # A resolved turn ends any run of unresolved ones.
                 "decline_streak": {},
             }
@@ -1467,7 +1499,7 @@ _STORY_ENDED: dict[str, list[str]] = {
 
 
 def follow_up_chips(
-    state: AspireState, chunks: list[KBChunk], cited: set[str]
+    state: AspireState, chunks: list[KBChunk], cited: set[str], answer: str = ""
 ) -> list[str]:
     """More questions the corpus can answer, drawn from the reranked chunks then `qa_related`."""
     # A story earns its own, because corpus questions do not follow from one.
@@ -1477,7 +1509,19 @@ def follow_up_chips(
         from app.graph.nodes.cards import STORY_BEATS
 
         locale = str(state.get("locale") or "en")
-        beat = int((state.get("story_arc") or {}).get("beat") or 1)
+        arc = state.get("story_arc") or {}
+        beat = int(arc.get("beat") or 1)
+        # A playable story's chips ARE its choices, read off the beat the
+        # model just wrote, so the tap sends exactly the priced line the
+        # cards node knows how to score.
+        if "wallet" in arc and beat < STORY_BEATS and answer:
+            choices = [
+                line.strip("-* \t")
+                for line in answer.splitlines()
+                if re.search(r"\((?:EC\$\s?\d+|free)\)\s*$", line.strip(), re.IGNORECASE)
+            ]
+            if choices:
+                return choices[:3]
         table = _STORY_ENDED if beat >= STORY_BEATS else _STORY_FOLLOW_UPS
         return list(table.get(locale, table["en"]))
 

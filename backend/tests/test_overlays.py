@@ -48,10 +48,13 @@ class TestTheGates:
         assert overlay_block("unbothered", "16-18") != ""
         assert overlay_block("unbothered", "adult") == ""
 
-    def test_storyteller_and_hype_stop_before_adult(self):
-        for key in ("storyteller", "hype"):
-            assert overlay_block(key, "adult") == "", key
-            assert overlay_block(key, "5-8") != "", key
+    def test_storyteller_stops_before_adult(self):
+        assert overlay_block("storyteller", "adult") == ""
+        assert overlay_block("storyteller", "5-8") != ""
+
+    def test_the_party_animal_serves_every_band(self):
+        for band in ("5-8", "9-12", "13-15", "16-18", "adult"):
+            assert overlay_block("hype", band) != "", band
 
     def test_unknown_and_empty_are_silent(self):
         assert overlay_block("", "adult") == ""

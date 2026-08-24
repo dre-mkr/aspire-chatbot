@@ -22,7 +22,14 @@ class TestTheArcOpensAndAdvances:
     def test_a_told_story_opens_the_arc_at_beat_one(self):
         state = _state(awaiting_story_topic=True)
         update = cards._story_turn(state, "saving for a bike")
-        assert update["story_arc"] == {"topic": "saving for a bike", "beat": 1}
+        assert update["story_arc"] == {
+            "topic": "saving for a bike",
+            "beat": 1,
+            # The adventure state, seeded at the door: the reader plays the
+            # story with EC$100 of story-money and an empty satchel.
+            "wallet": 100,
+            "inventory": [],
+        }
         assert update["story_topic"] == "saving for a bike"
 
     def test_what_happens_next_advances_the_beat(self):
