@@ -5969,6 +5969,19 @@ body {
 /* The sidebar block. */
 .account--rail {
 	width: 100%;
+	/* The sign-out menu is `position: absolute`. Without an anchor here it
+	   resolved against `.rail` -- which is `position: relative` -- so
+	   `bottom: calc(100% + 8px)` put the menu 8px above the TOP of the whole
+	   sidebar, where `.rail`'s `overflow: hidden` clipped it away. The menu
+	   opened on every click; nobody could see it, so signing out looked
+	   impossible. Anchored to the account block, it opens just above the name. */
+	position: relative;
+}
+
+/* Same fix for the floating variant, so its menu anchors to the avatar button
+   rather than to whatever ancestor happens to be positioned. */
+.account--corner {
+	position: relative;
 }
 
 .account__block {
