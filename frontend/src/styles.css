@@ -1456,12 +1456,6 @@ body {
 	--orb-mid: #4fbda7;
 	--orb-low: #1f7f70;
 	--orb-deep: #0e4139;
-	/* Educator outputs are structured -- activity tables, key-value sequences --
-	   and 660px crushes them. A wider reading surface for Azuri only, clamped so
-	   it never crowds the rail: `calc(100vw - 420px)` leaves the sidebar its
-	   room. Prose is a touch wider than the 65-75ch ideal here, an accepted
-	   trade for content that is scanned as much as read. */
-	--reading-width: min(920px, calc(100vw - 420px));
 }
 
 /* Each guide's own face and ring, keyed off the one attribute at the root.
@@ -1663,6 +1657,25 @@ body {
 	/* The tail clears the bottom fade, so the last line of an answer is never
 	   the line the mask is eating. */
 	padding: 24px 0 44px;
+}
+
+/* A thread that contains a table widens its column -- for every persona, not
+ * just Azuri -- so the table has room instead of scrolling in a 660px slot.
+ * `calc(100vw - 380px)` leaves the rail its space, and the existing
+ * `calc(100% - 48px)` cap above still stops any overflow. Prose does NOT get
+ * the extra width: `.answer > p/ul/ol` are capped at the reading measure just
+ * below, so only the table spreads. */
+.transcript[data-has-table] {
+	--reading-width: 920px;
+	width: min(var(--reading-width), calc(100vw - 380px), calc(100% - 48px));
+}
+
+/* Prose keeps its 65-75 character measure even when a table has widened the
+ * column around it. The table wrap is exempt, so it alone takes the room. */
+.transcript[data-has-table] .answer > p,
+.transcript[data-has-table] .answer > ul,
+.transcript[data-has-table] .answer > ol {
+	max-width: 42rem;
 }
 
 /* Only present past 60 turns, where the transcript switches to windowing. */

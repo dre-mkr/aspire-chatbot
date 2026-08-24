@@ -158,6 +158,15 @@ export function Transcript({
 			]
 		: messages;
 
+	// A table needs more room than the 660px reading column. Any thread that
+	// holds one widens its column for every persona -- prose stays capped at the
+	// reading measure (see styles), so only the table takes the extra width.
+	const hasTable = turns.some(
+		(message) =>
+			message.role === "assistant" &&
+			message.blocks?.some((block) => block.kind === "table"),
+	);
+
 	// There is only ever one live session, so only the NEWEST game turn can show it.
 	const liveGameIndex = turns.reduce(
 		(latest, message, index) => (message.role === "game" ? index : latest),
@@ -338,7 +347,11 @@ export function Transcript({
 	};
 
 	return (
-		<div className="transcript" ref={listRef}>
+		<div
+			className="transcript"
+			data-has-table={hasTable || undefined}
+			ref={listRef}
+		>
 			{windowed ? (
 				<div
 					className="transcript__window"
