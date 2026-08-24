@@ -45,6 +45,7 @@ const OVERLAYS: ReadonlyArray<{ key: string; label: string }> = [
 	{ key: "hype", label: "🎉 The Party Animal" },
 	{ key: "quiet", label: "🌙 The Lowkey" },
 	{ key: "hustler", label: "💼 The Hustler" },
+	{ key: "unbothered", label: "🧊 The Unbothered" },
 ];
 
 export function VoiceSettings({ voice }: VoiceSettingsProps) {

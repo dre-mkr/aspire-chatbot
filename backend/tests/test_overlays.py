@@ -21,8 +21,8 @@ _FORBIDDEN = re.compile(
 
 
 class TestTheFiles:
-    def test_seven_overlays_exist(self):
-        assert len(KNOWN_OVERLAYS) == 7
+    def test_eight_overlays_exist(self):
+        assert len(KNOWN_OVERLAYS) == 8
         for key in KNOWN_OVERLAYS:
             assert (_DIR / f"{key}.md").is_file(), key
 
@@ -42,6 +42,11 @@ class TestTheGates:
         assert overlay_block("professor", "5-8") == ""
         assert overlay_block("professor", "9-12") == ""
         assert overlay_block("professor", "16-18") != ""
+
+    def test_unbothered_is_the_oldest_teens_only(self):
+        assert overlay_block("unbothered", "13-15") == ""
+        assert overlay_block("unbothered", "16-18") != ""
+        assert overlay_block("unbothered", "adult") == ""
 
     def test_storyteller_and_hype_stop_before_adult(self):
         for key in ("storyteller", "hype"):
