@@ -49,6 +49,19 @@ class TestThePledgeLoop:
         )
         assert "EC$200 a month" in line and "bicycle" in line
 
+    async def test_french_offers_signs_and_stores(self):
+        """The accent matters: 'économiser' with its é must trigger the card."""
+        state = _state("Je veux économiser EC$40 par semaine pour un vélo")
+        state["locale"] = "fr"
+        offer = await gate(state)
+        d = offer["ui_directives"][0]
+        assert d.button_label == "Signer mon engagement"
+        signed_state = _state(d.button_value)
+        signed_state["locale"] = "fr"
+        out = await gate(signed_state)
+        assert out["pledge"] == {"amount_line": "EC$40 par semaine", "goal": "un vélo"}
+        assert out["ui_directives"][0].button_label == "Engagé"
+
     async def test_the_youngest_get_a_promise_not_a_pledge(self):
         out = await gate(
             _state("I want to save EC$5 a week for a football", band="5-8")

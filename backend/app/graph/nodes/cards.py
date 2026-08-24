@@ -326,7 +326,7 @@ def make_intent_gate(
 #: maybe a named goal. The trigger for the pledge card.
 _PLEDGE_INTENT = re.compile(
     r"\b(?:i (?:want|plan|am going|'m going|would like) to save|i will save|"
-    r"quiero ahorrar|je veux (?:economiser|épargner))\b.{0,40}?"
+    r"quiero ahorrar|je veux (?:[eé]conomiser|[eé]pargner))\b.{0,40}?"
     r"(?:ec\$?\s?|\$)(\d[\d,]*)"
     r"(?:.{0,30}?\b(a week|per week|each week|a month|per month|each month|al mes|a la semana|par mois|par semaine|"
     r"every (?:week|month|payday)|this (?:week|month|year)|a year)\b)?",
