@@ -82,6 +82,11 @@ class Video:
     #: The subject, per locale, for the chip. English falls back to `topic`.
     topics: tuple[tuple[Language, str], ...] = ()
 
+    #: Curriculum concept ids this video teaches ("save", "need", ...).
+    #: THE FUTURE-PROOFING: the teach flow recommends by concept, so a video
+    #: added later with the right tag is offered with no other change anywhere.
+    concepts: tuple[str, ...] = ()
+
     #: The offer line per locale. English falls back to `offer`.
     #:
     #: Translating the offer is not optional decoration: the offer IS the chip
@@ -153,6 +158,7 @@ _VIDEOS: Final[tuple[Video, ...]] = (
             (Language.FR, "Veux-tu regarder une courte vidéo ASPIRE sur la rareté ?"),
         ),
         topics=((Language.ES, "la escasez"), (Language.FR, "la rareté")),
+        concepts=("need", "spend"),
     ),
     Video(
         id="monique-saving-adventure",
@@ -205,6 +211,7 @@ _VIDEOS: Final[tuple[Video, ...]] = (
              "Veux-tu regarder une histoire ASPIRE sur l'épargne pour un objectif ?"),
         ),
         topics=((Language.ES, "el ahorro"), (Language.FR, "l'épargne")),
+        concepts=("save", "goal", "habit"),
     ),
 )
 
@@ -464,3 +471,16 @@ def requested(
     # Everything at the top score. One winner plays; a tie is offered as a
     # choice, which is a better answer than the silence a tie produces above.
     return tuple(video for video in playable if hits.get(video.id, 0) == best)
+
+
+def for_concept(concept: str, persona: str) -> Video | None:
+    """The first video that teaches this concept and admits this persona.
+
+    Concept-keyed on purpose: a lesson never names a video id, so a video
+    added to this catalog tomorrow with the right `concepts` tag starts being
+    recommended everywhere that concept is taught, with no other change.
+    """
+    for video in all_videos():
+        if concept in video.concepts and persona in {p.value for p in video.personas}:
+            return video
+    return None

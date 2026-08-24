@@ -377,9 +377,25 @@ def make_teach(curriculum=None, *, invoke=None):
             )
             kind = None
 
+        # A video that teaches this concept, offered as one extra chip. Matched
+        # by CONCEPT, so a video added to the catalog later with the right tag
+        # is recommended here with no change to any lesson. The chip rides the
+        # existing offered_video state, so a tap or a "yes" opens the card.
+        from app.videos.catalog import for_concept
+
+        video = for_concept(lesson.concept_id, str(state.get("persona") or ""))
+        offer = {}
+        video_chip = []
+        if video is not None:
+            offer = {"offered_video": video.id}
+            # Four words at most -- the lesson chip gate counts words, and a
+            # full title blows it. The tap routes through `wants_video`.
+            video_chip = ["🎬 Watch the video"]
+
         return {
+            **offer,
             "messages": [AIMessage(content=body)],
-            "quick_replies": _chips(band, ["Got it", "Say that again"]),
+            "quick_replies": _chips(band, ["Got it", "Say that again"]) + video_chip,
             "learning": merge(
                 learning,
                 phase="checking",

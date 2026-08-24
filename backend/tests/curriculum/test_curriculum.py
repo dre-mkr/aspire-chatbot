@@ -39,7 +39,8 @@ class TestModuleOneLoads:
 
     def test_it_loads(self, curriculum):
         assert "module_01_saving" in curriculum.by_id
-        assert len(curriculum.by_id["module_01_saving"].lessons) == 5
+        # Six now: the habits lesson joined the module, the behaviour thread's home.
+        assert len(curriculum.by_id["module_01_saving"].lessons) == 6
 
     def test_every_lesson_has_a_check_question(self, curriculum):
         for lesson in curriculum.lessons.values():
