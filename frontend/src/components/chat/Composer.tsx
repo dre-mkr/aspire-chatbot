@@ -8,6 +8,7 @@ import {
 	useState,
 } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
+import { say } from "#/lib/aspire/i18n";
 import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
@@ -188,14 +189,14 @@ export function Composer({
 
 	// The Space hint is the only sign hold-to-talk exists, so it is keyboard-only.
 	const placeholder = listening
-		? "Speak now — your words appear here"
+		? say("speakNow")
 		: transcribing
-			? "Transcribing…"
+			? say("transcribing")
 			: !holdToTalk
-				? "Ask me anything..."
+				? say("askPlain")
 				: touch
-					? "Ask me anything, or tap the mic to talk"
-					: "Ask me anything, or hold Space to talk";
+					? say("askPlaceholderTap")
+					: say("askPlaceholder");
 
 	return (
 		<div className="composer-slot">
@@ -274,12 +275,14 @@ export function Composer({
 							aria-pressed={simpleMode}
 							onClick={onToggleSimpleMode}
 							title={
-								simpleMode ? "Explain it simply: on" : "Explain it simply: off"
+								simpleMode
+									? `${say("explainSimply")}: on`
+									: `${say("explainSimply")}: off`
 							}
 						>
 							<SparkIcon />
 							{/* Clipped, not removed, under 620px: it still names the button at every width. */}
-							<span className="tool-btn__label">Explain it simply</span>
+							<span className="tool-btn__label">{say("explainSimply")}</span>
 						</button>
 
 						<div className="composer__end">

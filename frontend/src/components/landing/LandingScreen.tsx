@@ -7,6 +7,7 @@ import {
 	stageFirstTurn,
 	stageVoiceStart,
 } from "#/lib/aspire/handoff";
+import { currentLocale } from "#/lib/aspire/i18n";
 import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
 import { useSession } from "#/lib/aspire/use-session";
 import {
@@ -285,7 +286,11 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 					threadId,
 					question: message,
 					simple: false,
-					language: "en",
+					// The reader's stored choice, not a hardcoded "en". The landing
+					// has no selector of its own, so somebody who picked French in
+					// the chat and came back here had their first turn staged as
+					// English -- they typed "Bonjour" and were answered "Hello!".
+					language: currentLocale(),
 				});
 			}
 			// The guide rides the address, which is where the chat reads it from

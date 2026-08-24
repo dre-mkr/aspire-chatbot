@@ -39,6 +39,74 @@ const COPY = {
 	simpler: { en: "Simpler", es: "Más simple", fr: "Plus simple" },
 	askAgain: { en: "Ask again", es: "Preguntar otra vez", fr: "Redemander" },
 	tryAgain: { en: "Try again", es: "Intentar de nuevo", fr: "Réessayer" },
+
+	// The composer.
+	askPlaceholder: {
+		en: "Ask me anything, or hold Space to talk",
+		es: "Pregúntame lo que quieras, o mantén Espacio para hablar",
+		fr: "Demande-moi ce que tu veux, ou maintiens Espace pour parler",
+	},
+	askPlaceholderTap: {
+		en: "Ask me anything, or tap the mic to talk",
+		es: "Pregúntame lo que quieras, o toca el micrófono para hablar",
+		fr: "Demande-moi ce que tu veux, ou touche le micro pour parler",
+	},
+	askPlain: {
+		en: "Ask me anything...",
+		es: "Pregúntame lo que quieras...",
+		fr: "Demande-moi ce que tu veux...",
+	},
+	speakNow: {
+		en: "Speak now — your words appear here",
+		es: "Habla ahora — tus palabras aparecen aquí",
+		fr: "Parle maintenant — tes mots apparaissent ici",
+	},
+	transcribing: {
+		en: "Transcribing…",
+		es: "Transcribiendo…",
+		fr: "Transcription…",
+	},
+	explainSimply: {
+		en: "Explain it simply",
+		es: "Explícalo de forma sencilla",
+		fr: "Explique-le simplement",
+	},
+
+	// The chat shell.
+	newChat: { en: "New chat", es: "Nuevo chat", fr: "Nouvelle discussion" },
+	history: { en: "History", es: "Historial", fr: "Historique" },
+	today: { en: "Today", es: "Hoy", fr: "Aujourd'hui" },
+	videos: { en: "Videos", es: "Videos", fr: "Vidéos" },
+	stories: { en: "Stories", es: "Cuentos", fr: "Histoires" },
+	learn: { en: "Learn", es: "Aprender", fr: "Apprendre" },
+	games: { en: "Games", es: "Juegos", fr: "Jeux" },
+	myJourney: { en: "My Journey", es: "Mi camino", fr: "Mon parcours" },
+	forParents: {
+		en: "For Parents & Guardians",
+		es: "Para madres, padres y tutores",
+		fr: "Pour les parents et tuteurs",
+	},
+	forEducators: {
+		en: "For Educators",
+		es: "Para docentes",
+		fr: "Pour les enseignants",
+	},
+	howToUse: { en: "How to use", es: "Cómo usarlo", fr: "Comment l'utiliser" },
+	notSignedIn: {
+		en: "Not signed in",
+		es: "Sin sesión iniciada",
+		fr: "Non connecté",
+	},
+	signInToKeep: {
+		en: "Sign in to keep your chats",
+		es: "Inicia sesión para guardar tus chats",
+		fr: "Connecte-toi pour garder tes discussions",
+	},
+	canMakeMistakes: {
+		en: "ASPIRE AI can make mistakes.",
+		es: "ASPIRE AI puede cometer errores.",
+		fr: "ASPIRE AI peut se tromper.",
+	},
 } as const;
 
 export type Phrase = keyof typeof COPY;
