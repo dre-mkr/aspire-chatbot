@@ -551,3 +551,31 @@ class TestTheBudgetBucketIsNeverChosenByTheCaller:
         with pytest.raises(HTTPException) as raised:
             await require_voice_caller(authorization=None, principal=None)
         assert raised.value.status_code == 401
+
+
+class TestEveryVoiceTheCodeReadsIsDocumented:
+    """`VOICE_KALEB` went uncast because nothing told an operator to set it."""
+
+    def test_no_persona_voice_is_undocumented(self):
+        import re
+        from pathlib import Path
+
+        from app.voice.config import VoiceSettings
+
+        example = (Path(__file__).parents[2] / ".env.example").read_text(encoding="utf-8")
+        documented = set(re.findall(r"^(VOICE_[A-Z]+)=", example, re.M)) - {"VOICE_ENABLED"}
+        # `VOICE_EVERYONE` is the accepted alias for `VOICE_GUEST`.
+        if "VOICE_EVERYONE" in documented:
+            documented.add("VOICE_GUEST")
+
+        read = {
+            name.upper()
+            for name in VoiceSettings.model_fields
+            if name.startswith("voice_") and name.count("_") == 1 and "enabled" not in name
+        }
+        missing = read - documented
+        assert not missing, (
+            f"{sorted(missing)} are read by the code and named nowhere in "
+            f".env.example, so nobody will set them. That is how Kaleb ended up "
+            f"with no voice at all."
+        )
