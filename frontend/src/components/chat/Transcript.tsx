@@ -514,6 +514,54 @@ function Block({
 }
 
 /**
+ * A teaching-activity list, one card per activity.
+ *
+ * The educator answers are sequences -- an activity with a setup, a first step,
+ * an outcome, a teaching point -- and a wide table is the wrong shape. The
+ * first cell names the activity and becomes the card title; each other cell is
+ * a labelled row, so "New base: EC$1,050" reads as a fact about that activity
+ * rather than a column a reader tracks across a grid.
+ */
+function ActivityCards({
+	header,
+	rows,
+	revealing,
+}: {
+	header: Array<string>;
+	rows: Array<Array<string>>;
+	revealing: boolean;
+}) {
+	return (
+		<div className="activity-cards">
+			{rows.map((row, rowIndex) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+				<article className="activity-card" key={rowIndex}>
+					<h4 className="activity-card__title">
+						<Rich text={row[0] ?? ""} revealing={revealing} />
+					</h4>
+					<dl className="activity-card__fields">
+						{row.slice(1).map((cell, colIndex) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+							<div className="activity-card__field" key={colIndex}>
+								<dt>
+									<Rich
+										text={header[colIndex + 1] ?? ""}
+										revealing={revealing}
+									/>
+								</dt>
+								<dd>
+									<Rich text={cell} revealing={revealing} />
+								</dd>
+							</div>
+						))}
+					</dl>
+				</article>
+			))}
+		</div>
+	);
+}
+
+/**
  * A table that stays readable at any width.
  *
  * THREE BEHAVIOURS, one component. A narrow table (<= 3 columns) is a normal
@@ -537,6 +585,15 @@ function ResponseTable({
 	revealing: boolean;
 }) {
 	const columns = Math.max(header.length, ...rows.map((r) => r.length));
+
+	// A complex table -- 4+ columns -- is almost always a teaching activity
+	// list, not a data grid: an Azuri "Activity | Setup | Interest | New base |
+	// Next step" reads far better as one card per activity than a wide grid
+	// squeezed into the chat. Simple 2-3 column data tables stay tables.
+	if (columns >= 4 && rows.length > 0) {
+		return <ActivityCards header={header} rows={rows} revealing={revealing} />;
+	}
+
 	return (
 		// A section with a label is an implicit region.
 		<section

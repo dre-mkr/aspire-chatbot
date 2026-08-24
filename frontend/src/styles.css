@@ -1666,8 +1666,13 @@ body {
  * the extra width: `.answer > p/ul/ol` are capped at the reading measure just
  * below, so only the table spreads. */
 .transcript[data-has-table] {
+	/* Only raise the ceiling. The base `.transcript` rule is
+	   `min(--reading-width, calc(100% - 48px))`, and its `100%` is already the
+	   thread width (rail excluded), so a narrow screen still lands on the
+	   `100% - 48px` branch and nothing overflows. An earlier `calc(100vw -
+	   380px)` here went NEGATIVE at 375px and won the min(), crushing the
+	   answer into a sliver -- removed. */
 	--reading-width: 920px;
-	width: min(var(--reading-width), calc(100vw - 380px), calc(100% - 48px));
 }
 
 /* Prose keeps its 65-75 character measure even when a table has widened the
@@ -1869,6 +1874,72 @@ body {
 		flex: 0 0 40%;
 		font-weight: 700;
 		color: var(--plum, #4a2977);
+	}
+}
+
+/* ── Activity cards ──────────────────────────────────────────────────────────
+ *
+ * A complex table (4+ columns) is rendered as one card per row instead of a
+ * grid: educator output is a sequence of activities, and a card reads as one
+ * where a wide table reads as homework. The first column is the title; the
+ * rest are labelled facts. */
+.activity-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 4px 0 19px;
+}
+
+.activity-card {
+	border: 1px solid var(--wash-18, rgb(72 41 119 / 0.14));
+	border-radius: 14px;
+	padding: 14px 16px;
+	background: rgb(255 255 255 / 0.55);
+}
+
+.activity-card__title {
+	margin: 0 0 10px;
+	font-family: var(--font-display, Georgia, serif);
+	font-size: 1.1875rem;
+	font-weight: 400;
+	line-height: 1.2;
+	color: var(--plum, #4a2977);
+}
+
+.activity-card__fields {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	margin: 0;
+}
+
+.activity-card__field {
+	display: grid;
+	grid-template-columns: minmax(96px, 26%) 1fr;
+	gap: 4px 14px;
+	align-items: baseline;
+}
+
+.activity-card__field dt {
+	margin: 0;
+	font-size: 0.8125rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: var(--plum, #4a2977);
+}
+
+.activity-card__field dd {
+	margin: 0;
+	line-height: 1.55;
+	overflow-wrap: break-word;
+	word-break: normal;
+}
+
+/* On a narrow screen the label sits above its value rather than beside it. */
+@media (max-width: 560px) {
+	.activity-card__field {
+		grid-template-columns: 1fr;
+		gap: 2px;
 	}
 }
 
