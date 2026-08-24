@@ -4,7 +4,8 @@ import type { Directive } from "../stream/types";
 
 export type AnswerBlock =
 	| { kind: "paragraph"; text: string }
-	| { kind: "list"; items: Array<string>; ordered: boolean };
+	| { kind: "list"; items: Array<string>; ordered: boolean }
+	| { kind: "table"; header: Array<string>; rows: Array<Array<string>> };
 
 export interface Answer {
 	blocks: Array<AnswerBlock>;
@@ -19,6 +20,26 @@ const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+/;
 const ORDERED_BULLET = /^\s*\d+[.)]\s+/;
 /** Leading `#`s and trailing `#`s from a markdown heading. */
 const HEADING = /^\s*#{1,6}\s+|\s+#+\s*$/g;
+
+/** A markdown table row: `| a | b |`, with at least one interior pipe. */
+function isTableRow(line: string): boolean {
+	return line.includes("|") && line.replace(/^\||\|$/g, "").includes("|");
+}
+
+/** The `| --- | --- |` line under a header. Dashes, pipes, colons, spaces only. */
+function isTableSeparator(line: string): boolean {
+	return line.includes("|") && line.includes("-") && /^[\s|:-]+$/.test(line);
+}
+
+/** Split one row into trimmed cells, dropping the outer pipes. */
+function tableCells(line: string): Array<string> {
+	return line
+		.trim()
+		.replace(/^\|/, "")
+		.replace(/\|$/, "")
+		.split("|")
+		.map((cell) => cell.trim());
+}
 
 /** Parses the service's markdown into transcript blocks. */
 export function parseAnswer(markdown: string): Array<AnswerBlock> {
@@ -41,13 +62,35 @@ export function parseAnswer(markdown: string): Array<AnswerBlock> {
 		ordered = false;
 	};
 
-	for (const rawLine of markdown.replace(/\r\n/g, "\n").split("\n")) {
-		const line = rawLine.trim();
+	const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+	for (let i = 0; i < lines.length; i += 1) {
+		const line = lines[i].trim();
 
 		if (!line) {
 			// A blank line closes whatever was open.
 			flushParagraph();
 			flushList();
+			continue;
+		}
+
+		// A table is a header row followed by a `| --- |` separator. Detected
+		// with one line of lookahead so a lone pipe in prose is never a table.
+		if (
+			isTableRow(line) &&
+			i + 1 < lines.length &&
+			isTableSeparator(lines[i + 1].trim())
+		) {
+			flushParagraph();
+			flushList();
+			const header = tableCells(line);
+			const rows: Array<Array<string>> = [];
+			let j = i + 2;
+			while (j < lines.length && isTableRow(lines[j].trim())) {
+				rows.push(tableCells(lines[j].trim()));
+				j += 1;
+			}
+			blocks.push({ kind: "table", header, rows });
+			i = j - 1;
 			continue;
 		}
 
@@ -94,16 +137,30 @@ function plain(text: string) {
 /** Flattens an answer to text — used for the clipboard and for announcements. */
 export function answerToText(blocks: Array<AnswerBlock>) {
 	return blocks
-		.map((block) =>
-			block.kind === "paragraph"
-				? plain(block.text)
-				: block.items
-						.map(
-							(item, index) =>
-								`${block.ordered ? `${index + 1}.` : "•"} ${plain(item)}`,
-						)
-						.join("\n"),
-		)
+		.map((block) => {
+			if (block.kind === "paragraph") return plain(block.text);
+			if (block.kind === "table") {
+				// A table read aloud is its rows, each cell announced as
+				// "header: value", so a column heading is never lost from the value.
+				return block.rows
+					.map((row) =>
+						row
+							.map((cell, col) => {
+								const head = plain(block.header[col] ?? "");
+								const value = plain(cell);
+								return head ? `${head}: ${value}` : value;
+							})
+							.join(". "),
+					)
+					.join("\n");
+			}
+			return block.items
+				.map(
+					(item, index) =>
+						`${block.ordered ? `${index + 1}.` : "•"} ${plain(item)}`,
+				)
+				.join("\n");
+		})
 		.join("\n\n");
 }
 

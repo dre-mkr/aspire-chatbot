@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
 	lazy,
+	type ReactNode,
 	type RefObject,
 	Suspense,
 	useCallback,
@@ -475,6 +476,16 @@ function Block({
 		);
 	}
 
+	if (block.kind === "table") {
+		return (
+			<ResponseTable
+				header={block.header}
+				rows={block.rows}
+				revealing={revealing}
+			/>
+		);
+	}
+
 	// `<ol>` when the model numbered it.
 	const List = block.ordered ? "ol" : "ul";
 	return (
@@ -486,6 +497,76 @@ function Block({
 				</li>
 			))}
 		</List>
+	);
+}
+
+/**
+ * A table that stays readable at any width.
+ *
+ * THREE BEHAVIOURS, one component. A narrow table (<= 3 columns) is a normal
+ * table. A wide one scrolls horizontally inside its own wrap rather than
+ * crushing every column -- `.response-table` is `width: max-content`, so the
+ * columns take the room they need and the WRAP scrolls. And on a phone or a
+ * tablet, the CSS restacks each row into a labelled card, which is why every
+ * `<td>` carries its column heading in `data-label`: the heading has to travel
+ * with the value once the header row is gone.
+ *
+ * Cells render through `Rich`, so a currency value inside a cell gets the same
+ * `.nowrap` protection it gets in prose, and a link in a cell still links.
+ */
+function ResponseTable({
+	header,
+	rows,
+	revealing,
+}: {
+	header: Array<string>;
+	rows: Array<Array<string>>;
+	revealing: boolean;
+}) {
+	const columns = Math.max(header.length, ...rows.map((r) => r.length));
+	return (
+		// A section with a label is an implicit region.
+		<section
+			className="response-table-wrap"
+			aria-label="Table, scroll sideways to see more"
+			// Deliberate: a scrollable area must be focusable, or a keyboard user
+			// cannot scroll a table wider than the column.
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region must take focus
+			tabIndex={0}
+			data-cols={columns}
+		>
+			<table className="response-table">
+				{header.some((cell) => cell) && (
+					<thead>
+						<tr>
+							{header.map((cell, index) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+								<th key={index} scope="col">
+									<Rich text={cell} revealing={revealing} />
+								</th>
+							))}
+						</tr>
+					</thead>
+				)}
+				<tbody>
+					{rows.map((row, rowIndex) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+						<tr key={rowIndex}>
+							{row.map((cell, colIndex) => (
+								<td
+									// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
+									key={colIndex}
+									// Carries the heading into the stacked-card layout on narrow widths.
+									data-label={header[colIndex] ?? ""}
+								>
+									<Rich text={cell} revealing={revealing} />
+								</td>
+							))}
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</section>
 	);
 }
 
@@ -526,10 +607,40 @@ function Inline({ nodes }: { nodes: Array<InlineNode> }) {
 				}
 
 				// biome-ignore lint/suspicious/noArrayIndexKey: positional by design
-				return <span key={index}>{node.text}</span>;
+				return <span key={index}>{protectTokens(node.text)}</span>;
 			})}
 		</>
 	);
+}
+
+/**
+ * Currency, numbers, percentages and dates, kept on one line.
+ *
+ * "EC$1,050" is one token with no spaces, so normal wrapping never splits it --
+ * but a tight table cell with an aggressive break would, turning it into
+ * "EC$1,05 / 0". Wrapping each such token in `.nowrap` is the belt to the
+ * cell CSS's braces: the value is atomic wherever it lands.
+ */
+const PROTECTED_TOKEN =
+	/(EC\$\s?[\d,]+(?:\.\d+)?|\$\s?[\d,]+(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?\s?%|\d+\s?percent\b|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/gi;
+
+function protectTokens(text: string): Array<ReactNode> {
+	const out: Array<ReactNode> = [];
+	let last = 0;
+	let key = 0;
+	for (const match of text.matchAll(PROTECTED_TOKEN)) {
+		const start = match.index ?? 0;
+		if (start > last) out.push(text.slice(last, start));
+		out.push(
+			<span key={`n${key}`} className="nowrap">
+				{match[0]}
+			</span>,
+		);
+		key += 1;
+		last = start + match[0].length;
+	}
+	if (last < text.length) out.push(text.slice(last));
+	return out;
 }
 
 /**

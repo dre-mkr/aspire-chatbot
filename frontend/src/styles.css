@@ -1456,6 +1456,12 @@ body {
 	--orb-mid: #4fbda7;
 	--orb-low: #1f7f70;
 	--orb-deep: #0e4139;
+	/* Educator outputs are structured -- activity tables, key-value sequences --
+	   and 660px crushes them. A wider reading surface for Azuri only, clamped so
+	   it never crowds the rail: `calc(100vw - 420px)` leaves the sidebar its
+	   room. Prose is a touch wider than the 65-75ch ideal here, an accepted
+	   trade for content that is scanned as much as read. */
+	--reading-width: min(920px, calc(100vw - 420px));
 }
 
 /* Each guide's own face and ring, keyed off the one attribute at the root.
@@ -1731,10 +1737,126 @@ body {
 	padding-top: 1px;
 }
 
-/* Same reason as .bubble, and more urgent here: the assistant is the side that emits URLs. */
+/* The assistant emits URLs, so a genuinely unbreakable string must still wrap
+   rather than push the column wider. `break-word`, NOT `anywhere`: `anywhere`
+   breaks a word mid-character even when the next line has room, which is what
+   turned "EC$1,050" into "EC$1,05 / 0". `break-word` breaks only a word that
+   cannot fit a line by itself -- a long portal URL still wraps; a price does
+   not. Numbers and currency get `.nowrap` on top, as a second guarantee. */
 .answer p,
-.answer li {
-	overflow-wrap: anywhere;
+.answer li,
+.answer td,
+.answer th {
+	overflow-wrap: break-word;
+	word-break: normal;
+}
+
+/* A token that must never break: currency, a number, a percentage, a date, a
+   short heading. Applied in the renderer (`protectTokens`) and available to
+   any cell that needs it. */
+.answer .nowrap {
+	white-space: nowrap;
+	word-break: keep-all;
+}
+
+/* ── Tables in an answer ─────────────────────────────────────────────────────
+ *
+ * The reading column is 660px (wider for Azuri). A table with more than a
+ * couple of columns cannot fit that and must not be squeezed into it, so the
+ * WRAP scrolls sideways and the table takes the width its content needs.
+ * Nothing here sets `table-layout: fixed` or `word-break: break-all`, on
+ * purpose: those are exactly what crush a column to one character wide. */
+.response-table-wrap {
+	width: 100%;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	margin: 4px 0 19px;
+	border-radius: 12px;
+}
+.response-table-wrap:focus-visible {
+	outline: 2px solid var(--plum);
+	outline-offset: 2px;
+}
+
+.response-table {
+	width: max-content;
+	min-width: 100%;
+	border-collapse: collapse;
+	table-layout: auto;
+	font-size: 0.96875rem;
+	line-height: 1.5;
+}
+
+.response-table th,
+.response-table td {
+	padding: 10px 14px;
+	vertical-align: top;
+	text-align: left;
+	white-space: normal;
+	word-break: normal;
+	overflow-wrap: break-word;
+	/* Readable floor and a sane ceiling: a label column does not need to be
+	   wide, a description column does not run forever. */
+	min-width: 128px;
+	max-width: 340px;
+	border-bottom: 1px solid var(--wash-18, rgb(72 41 119 / 0.14));
+}
+
+.response-table th {
+	font-weight: 700;
+	color: var(--plum, #4a2977);
+	border-bottom-width: 2px;
+	white-space: nowrap;
+}
+
+.response-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+/* Narrow widths: no table survives 4-7 columns on a phone, so each row becomes
+ * a labelled card. The header row is dropped and every cell carries its heading
+ * in `data-label`, printed before the value. This is why the WRAP stops
+ * scrolling here -- the cards are full width. */
+@media (max-width: 860px) {
+	.response-table-wrap {
+		overflow-x: visible;
+	}
+	.response-table {
+		width: 100%;
+		min-width: 0;
+	}
+	.response-table thead {
+		/* Off-screen, not `display: none`: the headings still reach a screen
+		   reader through each cell's `data-label`. */
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+	}
+	.response-table tr {
+		display: block;
+		margin: 0 0 12px;
+		padding: 4px 2px;
+		border: 1px solid var(--wash-18, rgb(72 41 119 / 0.14));
+		border-radius: 12px;
+	}
+	.response-table td {
+		display: flex;
+		gap: 10px;
+		max-width: none;
+		min-width: 0;
+		border-bottom: 1px solid var(--wash-18, rgb(72 41 119 / 0.1));
+	}
+	.response-table tr td:last-child {
+		border-bottom: none;
+	}
+	.response-table td[data-label]:not([data-label=""])::before {
+		content: attr(data-label);
+		flex: 0 0 40%;
+		font-weight: 700;
+		color: var(--plum, #4a2977);
+	}
 }
 
 /* The child combinator is load-bearing, not tidiness. */
