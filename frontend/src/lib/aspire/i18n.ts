@@ -39,6 +39,11 @@ const COPY = {
 	pledgeMine: { en: "My pledge", es: "Mi compromiso", fr: "Mon engagement" },
 	pledgeSealed: { en: "Pledged", es: "Comprometido", fr: "Engagé" },
 	towards: { en: "towards", es: "para", fr: "pour" },
+	navBackToChat: {
+		en: "Back to chat",
+		es: "Volver al chat",
+		fr: "Retour au chat",
+	},
 	navStories: { en: "Stories", es: "Cuentos", fr: "Histoires" },
 	navLearn: { en: "Learn", es: "Aprender", fr: "Apprendre" },
 	navGames: { en: "Games", es: "Juegos", fr: "Jeux" },

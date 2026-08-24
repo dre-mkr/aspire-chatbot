@@ -92,6 +92,14 @@ export interface ReviewCardDirective {
 	sections: Array<ReviewSection>;
 }
 
+export interface CollectibleDirective {
+	t: "collectible";
+	name: string;
+	emoji: string;
+	caption: string;
+	topic: string;
+}
+
 export interface PledgeDirective {
 	t: "pledge";
 	/** "EC$200 a month" -- already formatted. */
@@ -190,7 +198,8 @@ export type Directive =
 	| WidgetDirective
 	| VideoDirective
 	| UnknownDirective
-	| PledgeDirective;
+	| PledgeDirective
+	| CollectibleDirective;
 
 /* ── concept widgets ────────────────────────────────────────────────────── */
 

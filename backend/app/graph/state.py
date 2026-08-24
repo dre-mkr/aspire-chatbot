@@ -189,6 +189,9 @@ class AspireState(TypedDict, total=False):
     #: A preference, not identity: it rides the request body like simple_mode.
     overlay: str
 
+    #: Story artifacts earned by finishing played stories: [{"name","emoji","topic"}].
+    collectibles: list
+
     #: A standing savings pledge: {"amount_line": str, "goal": str}.
     #:
     #: Written when the reader signs the pledge card, read by the QA shaping
@@ -347,6 +350,7 @@ def initial_state(
         awaiting_story_topic=False,
         story_topic=None,
         overlay="",
+        collectibles=[],
         pledge=None,
         awaiting_learner_purpose=False,
         learner_purpose="",

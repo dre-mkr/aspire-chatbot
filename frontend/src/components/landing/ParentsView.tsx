@@ -1,3 +1,5 @@
+import { currentLocale } from "#/lib/aspire/i18n";
+import { viewsCopy } from "#/lib/aspire/views-copy";
 import { ViewHeader } from "./ViewHeader";
 
 interface ParentsViewProps {
@@ -7,17 +9,15 @@ interface ParentsViewProps {
 }
 
 export function ParentsView({ onBack, backLabel }: ParentsViewProps) {
+	const copy = viewsCopy(currentLocale()).parents;
 	return (
 		<div className="view">
 			<ViewHeader onBack={onBack} backLabel={backLabel} />
 
 			<main className="view__main">
 				<div className="view__head">
-					<h1 className="view__title">For parents &amp; guardians</h1>
-					<p className="view__lede">
-						Secure your child&rsquo;s financial future with the ASPIRE
-						Programme.
-					</p>
+					<h1 className="view__title">{copy.title}</h1>
+					<p className="view__lede">{copy.lede}</p>
 				</div>
 
 				<div className="panel-row">
@@ -25,23 +25,16 @@ export function ParentsView({ onBack, backLabel }: ParentsViewProps) {
 						<span className="panel__icon" aria-hidden="true">
 							<i className="ph-duotone ph-piggy-bank" />
 						</span>
-						<h2 className="panel__title">The EC$1,000 grant</h2>
-						<p>
-							Every eligible child (ages 5–18) receives an EC$1,000 contribution
-							from the Government of St. Kitts and Nevis:
-						</p>
+						<h2 className="panel__title">{copy.grantTitle}</h2>
+						<p>{copy.grantBody}</p>
 						{/* This list used filled green tick circles at 2.54:1 against the
 						 * card, in a green the palette does not contain; the list in the
 						 * card beside it used typed "•" characters. One bullet now, from
 						 * `.panel__list`, in the brand accent. */}
 						<ul className="panel__list">
-							<li>
-								EC$500 in a savings account at the St. Kitts-Nevis-Anguilla
-								National Bank
-							</li>
-							<li>
-								EC$500 invested in shares of local government-owned entities
-							</li>
+							{copy.grantItems.map((item) => (
+								<li key={item.slice(0, 20)}>{item}</li>
+							))}
 						</ul>
 					</section>
 
@@ -49,13 +42,13 @@ export function ParentsView({ onBack, backLabel }: ParentsViewProps) {
 						<span className="panel__icon" aria-hidden="true">
 							<i className="ph-duotone ph-file-text" />
 						</span>
-						<h2 className="panel__title">How to register</h2>
+						<h2 className="panel__title">{copy.regTitle}</h2>
 						{/* Street and opening hours restored from the corpus. ASP-299 names
 						 * Cayon Street; ASP-300 gives the hours. Naming a building without
 						 * either sends a parent across Basseterre to a locked door, which is
 						 * a worse outcome than not mentioning the walk-in centre at all. */}
 						<p>
-							Register online at{" "}
+							{copy.regBody1}{" "}
 							{/* This was inert bold text while the same address on About was
 							 * a working link. */}
 							<a
@@ -66,14 +59,13 @@ export function ParentsView({ onBack, backLabel }: ParentsViewProps) {
 							>
 								aspire.gov.kn
 							</a>
-							, or in person at The Cable Office on Cayon Street in Basseterre —
-							walk-in support is available Monday to Friday, 9:00 AM to 3:00 PM.
+							{copy.regBody2}
 						</p>
-						<p className="panel__label">What you&rsquo;ll need</p>
+						<p className="panel__label">{copy.needLabel}</p>
 						<ul className="panel__list">
-							<li>Parent or guardian valid ID</li>
-							<li>Child&rsquo;s SKN birth certificate or passport</li>
-							<li>Recent proof of address (within 3 months)</li>
+							{copy.needItems.map((item) => (
+								<li key={item.slice(0, 20)}>{item}</li>
+							))}
 						</ul>
 					</section>
 				</div>
@@ -83,15 +75,15 @@ export function ParentsView({ onBack, backLabel }: ParentsViewProps) {
 				 * Case where every other control on the site is sentence case. */}
 				<div className="view__cta">
 					<div>
-						<h2>Ready to register your child?</h2>
-						<p>Help them build wealth and learn financial literacy early.</p>
+						<h2>{copy.ctaTitle}</h2>
+						<p>{copy.ctaBody}</p>
 					</div>
 					<a
 						href="https://aspire.gov.kn/"
 						target="_blank"
 						rel="noopener noreferrer"
 					>
-						Register your child
+						{copy.ctaButton}
 						<i className="ph-bold ph-arrow-up-right" aria-hidden="true" />
 					</a>
 				</div>

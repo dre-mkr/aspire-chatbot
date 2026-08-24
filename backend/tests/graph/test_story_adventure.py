@@ -26,7 +26,8 @@ def _state(message, arc, band="9-12"):
         persona="kaleb", age_band=band, account_status="active", locale="en",
     )
     s["messages"] = [HumanMessage(content=message)]
-    s["story_arc"] = arc
+    if arc is not None:
+        s["story_arc"] = arc
     return s
 
 
@@ -86,3 +87,44 @@ class TestTheChips:
         s = _state("x", dict(ARC))
         s["story_topic"] = "the island"
         assert follow_up_chips(s, [], set(), "The tide rises.") != []
+
+
+class TestTheArtifact:
+    async def test_reaching_the_last_beat_grants_it(self):
+        arc = {"topic": "the island", "beat": 5, "wallet": 40, "inventory": []}
+        out = await gate(_state("Walk on (free)", arc))
+        assert out["story_arc"]["beat"] == 6
+        assert out["collectibles"][0]["name"]
+        d = out["ui_directives"][0]
+        assert d.t == "collectible" and d.emoji
+
+    async def test_a_middle_beat_grants_nothing(self):
+        out = await gate(_state("Walk on (free)", dict(ARC)))
+        assert "collectibles" not in out
+
+    async def test_the_same_topic_always_grants_the_same_artifact(self):
+        from app.graph.nodes.cards import _artifact_for
+
+        assert _artifact_for("the island") == _artifact_for("the island")
+        # Same artifact in every language, under its translated name.
+        en = _artifact_for("the island")
+        es = _artifact_for("the island", "es")
+        assert en[1] == es[1] and en[0] != es[0]
+
+
+class TestTheGoldenGoose:
+    async def test_the_whisper_starts_the_secret_story(self):
+        out = await gate(_state("golden goose", None))
+        arc = out["story_arc"]
+        assert arc["topic"] == "The Golden Goose" and arc["wallet"] == 500
+
+    async def test_it_ends_in_the_golden_egg(self):
+        from app.graph.nodes.cards import _artifact_for
+
+        assert _artifact_for("The Golden Goose") == ("The Golden Egg", "🥚")
+        assert _artifact_for("The Golden Goose", "es") == ("El Huevo de Oro", "🥚")
+        assert _artifact_for("The Golden Goose", "fr") == ("L'Œuf d'Or", "🥚")
+
+    async def test_a_near_miss_is_not_a_story(self):
+        out = await gate(_state("the golden goose story please", None))
+        assert "story_arc" not in out or out.get("story_arc") is None

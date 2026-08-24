@@ -594,6 +594,59 @@ def _purpose_is_explicit(message: str, persona: str) -> bool:
     return _purpose_from_answer(message, persona) != "self" or bool(_SELF_ANSWER.search(message))
 
 
+#: The artifacts a finished story can grant, named in the reader's language.
+#: Picked by crc32 of the topic, so one story always grants one artifact.
+_ARTIFACTS: dict[str, tuple[tuple[str, str], ...]] = {
+    "en": (
+        ("The Shield of Savings", "🛡️"), ("The Golden Tin", "🏺"),
+        ("The Compass of Coins", "🧭"), ("The Lantern of Patience", "🏮"),
+        ("The Key of Choices", "🗝️"), ("The Anchor of Plans", "⚓"),
+    ),
+    "es": (
+        ("El Escudo del Ahorro", "🛡️"), ("La Alcancía Dorada", "🏺"),
+        ("La Brújula de las Monedas", "🧭"), ("El Farol de la Paciencia", "🏮"),
+        ("La Llave de las Decisiones", "🗝️"), ("El Ancla de los Planes", "⚓"),
+    ),
+    "fr": (
+        ("Le Bouclier de l'Épargne", "🛡️"), ("La Tirelire Dorée", "🏺"),
+        ("La Boussole des Pièces", "🧭"), ("La Lanterne de la Patience", "🏮"),
+        ("La Clé des Choix", "🗝️"), ("L'Ancre des Plans", "⚓"),
+    ),
+}
+
+#: What the earned line says, per locale.
+_ARTIFACT_CAPTION = {
+    "en": "Artifact unlocked — you finished the story!",
+    "es": "¡Artefacto desbloqueado — terminaste el cuento!",
+    "fr": "Artefact débloqué — tu as fini l'histoire !",
+}
+
+#: Easter eggs: whisper one of these, exactly, and a secret story begins with
+#: a fuller wallet and its own artifact at the end. Harmless by construction --
+#: it opens a STORY, so CARE, the gates and every register cap still apply.
+_SECRET_STORIES: dict[str, tuple[str, int]] = {
+    "golden goose": ("The Golden Goose", 500),
+    "la gansa dorada": ("La Gansa Dorada", 500),
+    "l'oie dorée": ("L'Oie Dorée", 500),
+}
+_SECRET_ARTIFACT = {
+    "en": ("The Golden Egg", "🥚"),
+    "es": ("El Huevo de Oro", "🥚"),
+    "fr": ("L'Œuf d'Or", "🥚"),
+}
+
+
+def _artifact_for(topic: str, locale: str = "en") -> tuple[str, str]:
+    import zlib
+
+    if topic.lower().startswith(("the golden goose", "la gansa", "l'oie")):
+        return _SECRET_ARTIFACT.get(locale, _SECRET_ARTIFACT["en"])
+    table = _ARTIFACTS.get(locale, _ARTIFACTS["en"])
+    # crc32 of the TOPIC only, so the same story grants the same artifact in
+    # every language -- just under its translated name.
+    return table[zlib.crc32(topic.encode()) % len(table)]
+
+
 #: A priced story choice: "Buy the rope (EC$30)" or "Walk on (free)".
 _STORY_CHOICE = re.compile(
     r"^(.*?)\s*\((?:EC\$\s?(\d+)|free|gratis|gratuit)\)\s*$", re.IGNORECASE
@@ -738,9 +791,32 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                     wallet -= cost
                     if cost > 0:
                         inventory.append(item)
+            # Reaching the final beat earns the artifact: the card rides the
+            # same update, so it drops in beside the story's ending. Awarded on
+            # ARRIVAL at the last beat, not after -- there is no turn after.
+            award: dict[str, Any] = {}
+            if beat >= STORY_BEATS:
+                from app.schemas.directives import CollectibleDirective
+
+                topic_now = str(arc.get("topic") or "")
+                name, emoji = _artifact_for(topic_now, locale)
+                caption = _ARTIFACT_CAPTION.get(locale, _ARTIFACT_CAPTION["en"])
+                award = {
+                    "collectibles": [
+                        *list(state.get("collectibles") or []),
+                        {"name": name, "emoji": emoji, "topic": topic_now},
+                    ],
+                    "ui_directives": [
+                        CollectibleDirective(
+                            name=name, emoji=emoji, caption=caption, topic=topic_now
+                        )
+                    ],
+                }
+
             # Not a card: the router runs and an agent writes the next beat,
             # with the story instruction and the story word cap applied.
             return {
+                **award,
                 "story_topic": str(arc.get("topic") or ""),
                 "story_arc": {
                     "topic": arc.get("topic"),
@@ -799,6 +875,16 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 "wallet": 100,
                 "inventory": [],
             },
+        }
+
+    # The easter egg: an exact whisper starts a secret story, no topic asked.
+    secret = _SECRET_STORIES.get(message.strip().lower().rstrip(".!?"))
+    if secret is not None:
+        topic, purse = secret
+        return {
+            "awaiting_story_topic": False,
+            "story_topic": topic,
+            "story_arc": {"topic": topic, "beat": 1, "wallet": purse, "inventory": []},
         }
 
     if not wants_story(message):

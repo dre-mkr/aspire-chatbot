@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { type AspireVideo, fetchVideos } from "#/lib/aspire/videos";
 import type {
 	ChartDirective,
+	CollectibleDirective,
 	Directive,
 	EscalatedDirective,
 	PledgeDirective,
@@ -16,6 +17,7 @@ import type {
 	WidgetInteraction,
 } from "../../lib/stream/types";
 import { WidgetRenderer } from "../widgets/WidgetRenderer";
+import { CollectibleCard } from "./CollectibleCard";
 import { PledgeCard } from "./PledgeCard";
 import { ReviewCard } from "./ReviewCard";
 import { UploadCard } from "./UploadCard";
@@ -54,6 +56,7 @@ export interface DirectiveContext {
 
 /** Types this build knows how to render. Everything else renders nothing. */
 const KNOWN = new Set([
+	"collectible",
 	"pledge",
 	"signup",
 	"upload",
@@ -95,6 +98,9 @@ export function DirectiveView({
 					onSkip={() => undefined}
 				/>
 			);
+
+		case "collectible":
+			return <CollectibleCard directive={directive as CollectibleDirective} />;
 
 		case "pledge":
 			return (

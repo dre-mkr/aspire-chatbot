@@ -378,7 +378,7 @@ export function Rail({
 							triggerClassName="btn-journey"
 						>
 							{(close) => (
-								<JourneyView onBack={close} backLabel="Back to chat" />
+								<JourneyView onBack={close} backLabel={say("navBackToChat")} />
 							)}
 						</ViewLauncher>
 						<ViewLauncher
@@ -389,7 +389,7 @@ export function Rail({
 							triggerClassName="btn-parents"
 						>
 							{(close) => (
-								<ParentsView onBack={close} backLabel="Back to chat" />
+								<ParentsView onBack={close} backLabel={say("navBackToChat")} />
 							)}
 						</ViewLauncher>
 						<ViewLauncher
@@ -399,7 +399,10 @@ export function Rail({
 							triggerClassName="btn-educators"
 						>
 							{(close) => (
-								<EducatorsView onBack={close} backLabel="Back to chat" />
+								<EducatorsView
+									onBack={close}
+									backLabel={say("navBackToChat")}
+								/>
 							)}
 						</ViewLauncher>
 					</>

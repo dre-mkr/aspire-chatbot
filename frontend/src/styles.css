@@ -10090,3 +10090,43 @@ a.source__site--link:hover .source__out {
 
 /* Personality chips wrap to two rows inside the voice menu. */
 .voice-menu__choices--wrap { flex-wrap: wrap; }
+
+/* ── The collectible drop, and the Journey shelf ────────────────────────── */
+.collectible {
+	max-width: 300px;
+	margin: 4px 0 19px;
+	padding: 22px 24px;
+	border-radius: 18px;
+	text-align: center;
+	color: #fff;
+	background: linear-gradient(150deg, #6435b6, #b03d8f 55%, #e0a558);
+	box-shadow: 0 10px 30px rgb(90 40 140 / 0.35);
+	animation: collectible-drop 500ms var(--ease) both;
+}
+@keyframes collectible-drop {
+	from { opacity: 0; transform: translateY(-14px) scale(0.94); }
+	to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.collectible { animation: none; }
+}
+.collectible__emoji { font-size: 2.6rem; line-height: 1; display: block; }
+.collectible__name {
+	margin: 10px 0 2px;
+	font-family: var(--font-display, Georgia, serif);
+	font-size: 1.35rem;
+}
+.collectible__caption { margin: 0; font-size: 0.85rem; opacity: 0.9; }
+
+.shelf {
+	display: flex; flex-wrap: wrap; gap: 12px;
+	list-style: none; margin: 12px 0 0; padding: 0;
+}
+.shelf__item {
+	display: flex; flex-direction: column; align-items: center; gap: 4px;
+	width: 108px; padding: 12px 8px;
+	border: 1px solid var(--hairline, #e5dfd4); border-radius: 14px;
+	text-align: center;
+}
+.shelf__emoji { font-size: 1.8rem; }
+.shelf__name { font-size: 0.78rem; font-weight: 600; }

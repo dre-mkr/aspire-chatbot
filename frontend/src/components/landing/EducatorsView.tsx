@@ -1,3 +1,5 @@
+import { currentLocale } from "#/lib/aspire/i18n";
+import { viewsCopy } from "#/lib/aspire/views-copy";
 import { ViewHeader } from "./ViewHeader";
 
 interface EducatorsViewProps {
@@ -6,25 +8,16 @@ interface EducatorsViewProps {
 	backLabel?: string;
 }
 
-const TOPICS = [
-	"Budgeting",
-	"Saving",
-	"Investing",
-	"Debt management",
-	"Entrepreneurship",
-];
-
 export function EducatorsView({ onBack, backLabel }: EducatorsViewProps) {
+	const copy = viewsCopy(currentLocale()).educators;
 	return (
 		<div className="view">
 			<ViewHeader onBack={onBack} backLabel={backLabel} />
 
 			<main className="view__main">
 				<div className="view__head">
-					<h1 className="view__title">For educators</h1>
-					<p className="view__lede">
-						Empower the next generation with essential financial literacy.
-					</p>
+					<h1 className="view__title">{copy.title}</h1>
+					<p className="view__lede">{copy.lede}</p>
 				</div>
 
 				{/* This card was wrapped in a `flex md:flex-row items-center` container
@@ -34,16 +27,10 @@ export function EducatorsView({ onBack, backLabel }: EducatorsViewProps) {
 					<span className="panel__icon" aria-hidden="true">
 						<i className="ph-duotone ph-books" />
 					</span>
-					<h2 className="panel__title">The ASPIRE AI financial curriculum</h2>
-					<p>
-						Educators are at the heart of ASPIRE&rsquo;s financial literacy
-						programme. Developed by the ASPIRE AI team in collaboration with the
-						Eastern Caribbean Central Bank, the curriculum introduces students
-						to the ideas that will shape their financial futures &mdash; and
-						gives every learner a guide who meets them at their own age.
-					</p>
+					<h2 className="panel__title">{copy.currTitle}</h2>
+					<p>{copy.currBody}</p>
 					<div className="view__tags">
-						{TOPICS.map((topic) => (
+						{copy.topics.map((topic) => (
 							<span key={topic}>{topic}</span>
 						))}
 					</div>
@@ -51,24 +38,13 @@ export function EducatorsView({ onBack, backLabel }: EducatorsViewProps) {
 
 				<div className="panel-row">
 					<section className="panel">
-						<h2 className="panel__title">Educator training</h2>
-						<p>
-							{/* "specialized" here and "programme" two lines up: one page,
-							 * two spelling conventions, on a Government of St Kitts and
-							 * Nevis service. */}
-							The ASPIRE Programme hosts specialised educator training sessions
-							to equip teachers with the knowledge and tools to teach financial
-							literacy confidently in the classroom.
-						</p>
+						<h2 className="panel__title">{copy.trainTitle}</h2>
+						<p>{copy.trainBody}</p>
 					</section>
 
 					<section className="panel">
-						<h2 className="panel__title">Interactive learning</h2>
-						<p>
-							Our AI assistant and gamified learning paths reinforce classroom
-							lessons, letting students play, explore and earn rewards while
-							mastering the EC dollar.
-						</p>
+						<h2 className="panel__title">{copy.interTitle}</h2>
+						<p>{copy.interBody}</p>
 					</section>
 				</div>
 			</main>

@@ -244,6 +244,25 @@ class VideoDirective(_Directive):
 # ── widget ───────────────────────────────────────────────────────────────────
 
 
+class CollectibleDirective(_Directive):
+    """A story artifact, granted when a played story reaches its ending.
+
+    The reward for finishing: a shiny card drops into the chat, and the client
+    keeps the collection so My Journey can shelve it. Cosmetic by design -- it
+    unlocks nothing and costs nothing, so there is nothing to gate or refund.
+    """
+
+    t: Literal["collectible"] = "collectible"
+    #: "The Shield of Savings"
+    name: str
+    #: One emoji, the artifact's face.
+    emoji: str
+    #: Why it was earned, in the reader's language.
+    caption: str
+    #: The story topic it came from.
+    topic: str = ""
+
+
 class PledgeDirective(_Directive):
     """A savings pledge card: the reader's own goal, made signable.
 
@@ -281,6 +300,7 @@ UIDirective = Annotated[
         UploadDirective,
         ReviewCardDirective,
         PledgeDirective,
+        CollectibleDirective,
         ChartDirective,
         ProgressDirective,
         CitationsDirective,
