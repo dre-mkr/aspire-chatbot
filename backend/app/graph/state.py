@@ -185,6 +185,25 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: The latch for the Azuri/Imani learn-vs-teach clarifier.
+    #:
+    #: An educator or a parent who asks to be TAUGHT is ambiguous in a way a
+    #: child never is: they may be learning for themselves, or preparing to
+    #: teach it to their students or their own child. Set when we have asked
+    #: which; read on the next turn to interpret the answer. Like
+    #: `awaiting_story_topic`, this is the only thing that starts the exchange.
+    awaiting_learner_purpose: bool
+
+    #: The answer, remembered for the rest of the session: "self", "students"
+    #: or "child". Empty until asked and answered. This is the "ask ONCE" half:
+    #: once it is set, the clarifier never fires again this session.
+    learner_purpose: str
+
+    #: The lesson request that triggered the clarifier, held so the turn that
+    #: answers "for myself" can resume "teach me about budgeting" rather than
+    #: teaching a lesson called "for myself".
+    pending_learning: str | None
+
     #: The band a PREVIEW should be written at, when it is not the reader's own.
     #:
     #: A parent asking to see her nine-year-old's lesson. Read only by
@@ -317,6 +336,9 @@ def initial_state(
         auto_language=True,
         awaiting_story_topic=False,
         story_topic=None,
+        awaiting_learner_purpose=False,
+        learner_purpose="",
+        pending_learning=None,
         preview_band=None,
         story_arc=None,
         offered_video=None,

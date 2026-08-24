@@ -1696,7 +1696,22 @@ def speaking_as(state: AspireState) -> str | None:
     single-option turn, on a widget continuation, and whenever no API key is
     configured -- and on those turns the patterns are all there is.
     """
-    return routed_role(state) or stated_role(state)
+    return routed_role(state) or stated_role(state) or _purpose_role(state)
+
+
+#: The learn-vs-teach clarifier's remembered answer, as a role.
+#:
+#: Ranks BELOW what this turn's message says -- an Azuri who answered "for
+#: myself" last week and asks "how do I teach compound interest to my Form 2s"
+#: today is a teacher today. It ranks ABOVE the persona default, which is the
+#: whole point: the persona could not tell learning from teaching, and now the
+#: reader has said which.
+_PURPOSE_ROLE: dict[str, str] = {"self": "learner", "students": "teacher", "child": "parent"}
+
+
+def _purpose_role(state: AspireState) -> str:
+    """The role implied by a remembered clarifier answer, or empty."""
+    return _PURPOSE_ROLE.get(str(state.get("learner_purpose") or ""), "")
 
 
 def reader_audience(state: AspireState) -> str:
