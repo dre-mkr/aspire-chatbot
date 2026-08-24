@@ -28,6 +28,10 @@ export function PersonaPicker({
 
 	const selected = guideFor(persona, band);
 	const current = selected;
+	// A reader who has chosen no guide IS the guest -- name the row and tick it.
+	// `current` stays null on purpose, so the trigger keeps the glyph rather
+	// than a face: this is the voice that has not been told who is reading.
+	const activeGuideId = selected?.guideId ?? "guest";
 
 	/** Fixed positioning, anchored to the trigger. */
 	const measure = (estimatedHeight: number) => {
@@ -155,7 +159,7 @@ export function PersonaPicker({
 					<PersonIcon />
 				)}
 				<span className="persona__name">
-					{current ? current.name : "General"}
+					{current ? current.name : "Guest"}
 				</span>
 				<ChevronDownIcon size={14} />
 				<span className="sr-only">
@@ -185,14 +189,12 @@ export function PersonaPicker({
 									key={option.guideId}
 									type="button"
 									role="menuitemradio"
-									aria-checked={selected?.guideId === option.guideId}
+									aria-checked={activeGuideId === option.guideId}
 									className="persona__option"
 									onClick={() => choose(option.persona, option.band)}
 								>
 									<span className="persona__tick" aria-hidden="true">
-										{selected?.guideId === option.guideId ? (
-											<CheckIcon />
-										) : null}
+										{activeGuideId === option.guideId ? <CheckIcon /> : null}
 									</span>
 									<span className="persona__text">
 										<span className="persona__label">
