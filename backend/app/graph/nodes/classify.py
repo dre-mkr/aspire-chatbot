@@ -334,6 +334,41 @@ def _is_about_the_reader(state: AspireState) -> bool:
     return bool(text) and bool(_ABOUT_THE_READER.search(text))
 
 
+#: The agents that walk a guardian through an application.
+#:
+#: Kept here rather than imported from `cards`, which imports this module.
+REGISTRATION_AGENTS: tuple[str, ...] = (
+    "register_agent",
+    "register_agent_step1",
+)
+
+
+#: An outright question, for a reader who is part-way through an application.
+#:
+#: Deliberately NARROWER than `_ASKS_SOMETHING`, which also opens on `can`,
+#: `do`, `is`, `are`, `will`, `have`. Those are safe to treat as questions
+#: inside a lesson, where the alternative is a quiz answer. They are not safe
+#: here, because the alternative is a slot answer -- and "Will" is a child's
+#: name, which `\bwill\b` would read as a question and route away from the
+#: very form that asked for it.
+#:
+#: A question mark, or a wh-word. Nothing else.
+_ASKS_OUTRIGHT = re.compile(
+    r"\?\s*$"
+    r"|^\s*(what|who|whose|when|where|why|how|which|tell me|explain)\b"
+    # Spanish and French, which the form is also asked in.
+    r"|^\s*(qu[eé]|qui[eé]n(?:es)?|cu[aá]ndo|d[oó]nde|por\s+qu[eé]|c[oó]mo|cu[aá]l(?:es)?)\b"
+    r"|^\s*(que|qui|quand|o[uù]|pourquoi|comment|quel(?:le)?s?)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_an_outright_question(state: AspireState) -> bool:
+    """Whether this turn asks something, judged strictly. See `_ASKS_OUTRIGHT`."""
+    text = (_latest_user_text(state) or "").strip()
+    return bool(text) and bool(_ASKS_OUTRIGHT.search(text))
+
+
 def _is_a_question_not_an_answer(state: AspireState) -> bool:
     """Whether this turn asks something rather than answering the last thing."""
     text = (_latest_user_text(state) or "").strip()
@@ -342,8 +377,93 @@ def _is_a_question_not_an_answer(state: AspireState) -> bool:
     return bool(_ASKS_SOMETHING.search(text))
 
 
+#: Where a guardian is parked after her question is answered.
+#:
+#: Only these. A reader who left the form for a LESSON must not be yanked back
+#: out of it by `_resume_registration` -- a quiz answer ("Saving", "true") is
+#: not a question either, and would match every one of its conditions.
+_QA_AGENTS: tuple[str, ...] = ("qa_agent", "qa_agent_limited", "qa_agent_public")
+
+
+def _awaiting_slot(state: AspireState) -> str | None:
+    """The registration slot this session is part-way through, if any."""
+    raw = state.get("registration")
+    if not isinstance(raw, dict):
+        return None
+    awaiting = raw.get("awaiting")
+    return str(awaiting) if awaiting else None
+
+
+def _resume_registration(
+    decision: Classification, state: AspireState
+) -> Classification | None:
+    """An application left waiting mid-slot takes its own answer back.
+
+    The escape in `apply_stickiness` lets a guardian ask a question without it
+    being graded as a slot answer. That leaves her parked in QA with the form
+    still open -- and measured against the real classifier, 23 August 2026, the
+    one-word reply the interface itself offers as a chip does not get her back:
+
+        "Grandmother"           -> qa_agent_public  0.40   (stranded)
+        "I am her grandmother"  -> register_agent   0.90
+
+    So the form reclaims a weak turn. Weak only: a confident proposal is a real
+    change of subject -- "play a game" is not an answer to anything -- and it
+    wins, exactly as it does everywhere else here.
+    """
+    if _awaiting_slot(state) is None:
+        return None
+    if state.get("active_agent") not in _QA_AGENTS:
+        return None
+    # She is asking again, not answering. The escape owns this turn.
+    if _is_an_outright_question(state):
+        return None
+
+    allowed = state.get("allowed_agents") or []
+    # The classifier PROPOSING the form is the strongest signal there is, and it
+    # was the thing being thrown away: measured 23 August 2026, "Grandmother"
+    # came back as `register_agent@0.40 'ambiguous single word'` -- right agent,
+    # honest confidence -- and stickiness then replaced it with the QA agent she
+    # was parked in, because 0.40 is under the threshold. Below the threshold is
+    # exactly where a one-word answer lives.
+    proposed_the_form = decision.agent in REGISTRATION_AGENTS
+    target = (
+        decision.agent
+        if proposed_the_form and decision.agent in allowed
+        else next((name for name in REGISTRATION_AGENTS if name in allowed), None)
+    )
+    if target is None:
+        return None
+    # A confident move somewhere else entirely is a real change of subject.
+    if (
+        not proposed_the_form
+        and decision.confidence > get_settings().classifier_stickiness_threshold
+    ):
+        return None
+
+    logger.info(
+        "Returning session %s to %s: an application is waiting on %r and %s was "
+        "only proposed at %.2f.",
+        state.get("session_id"),
+        target,
+        _awaiting_slot(state),
+        decision.agent,
+        decision.confidence,
+    )
+    return Classification(
+        agent=target,
+        confidence=decision.confidence,
+        reason="an application is waiting on a slot",
+        sticky=True,
+    )
+
+
 def apply_stickiness(decision: Classification, state: AspireState) -> Classification:
     """Keep an ongoing flow unless the proposal clears the threshold."""
+    resumed = _resume_registration(decision, state)
+    if resumed is not None:
+        return resumed
+
     active = state.get("active_agent")
     if not active or active not in (state.get("allowed_agents") or []):
         return decision
@@ -433,6 +553,71 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
             decision.confidence,
         )
         return decision
+
+    # The same one-way door, on the registration side.
+    #
+    # The escape above is gated on `active in TEACHING_AGENTS`, and an
+    # application is not a lesson, so a guardian part-way through one had no
+    # exit at all. Measured on aspire.eccugenai.app, 23 August 2026, signed out:
+    #
+    #   "I want to sign up"
+    #       -> "And how are you related to the child?"
+    #   "Are there tutorials to help me sign up my child?"
+    #       -> "Pick the closest one -- mother, father, grandmother, ..."
+    #   "Grandmother"
+    #       -> the tutorials answer, a turn late, and the relationship dropped
+    #
+    # Her question was read as a bad answer to the relationship slot. The slot
+    # was re-asked, and because nothing had answered the question it was still
+    # the salient one in the history -- so the NEXT turn answered it and threw
+    # away the relationship. The application could not move either way.
+    #
+    # `_is_an_outright_question`, not `_is_a_question_not_an_answer`, and
+    # `_is_about_the_reader` deliberately not consulted at all: "I am her
+    # grandmother", "My child is seven", "I have two children" are what this
+    # form is FOR. Reading those as a bid to leave would break the flow the
+    # escape exists to protect.
+    # Not `decision.agent not in REGISTRATION_AGENTS`, which is what this first
+    # said and what let the reported turn through unchanged. The classifier
+    # proposed the FORM for her question, while its own reason said otherwise:
+    #
+    #   "Are there tutorials to help me sign up my child?"
+    #       -> register_agent@0.40 'asking for tutorials, not applying'
+    #
+    # It had understood her exactly and routed her to the thing that could not
+    # answer. So the question decides this, not the proposal -- as long as the
+    # proposal is weak enough to be worth overruling.
+    if (
+        active in REGISTRATION_AGENTS
+        and _is_an_outright_question(state)
+        and decision.confidence <= get_settings().classifier_stickiness_threshold
+    ):
+        answering = (
+            decision.agent
+            if decision.agent in _QA_AGENTS
+            else next(
+                (
+                    name
+                    for name in _QA_AGENTS
+                    if name in (state.get("allowed_agents") or [])
+                ),
+                None,
+            )
+        )
+        if answering is not None:
+            logger.info(
+                "Letting %s take session %s from %s at %.2f: the guardian asked "
+                "a question rather than answering the slot.",
+                answering,
+                state.get("session_id"),
+                active,
+                decision.confidence,
+            )
+            return Classification(
+                agent=answering,
+                confidence=decision.confidence,
+                reason="a question, not a slot answer",
+            )
 
     threshold = get_settings().classifier_stickiness_threshold
     if decision.confidence > threshold:
