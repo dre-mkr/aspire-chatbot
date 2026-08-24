@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.agents.learn.state import (
     FALLBACK_BAND,
+    NON_SCORING_AGENTS,
     band_of,
     merge,
     remember_opening,
@@ -86,11 +87,25 @@ Write only what the child reads."""
 
 
 def persona_of(state: AspireState) -> str | None:
-    """The persona key this turn speaks as, or None.
+    """Whose voice this turn should be written in, or None for the band's own.
 
     A KEY, so it indexes `persona_voice` directly. `normalise_persona_band` has
     already run at the claims seam, so what sits in state is a real key.
+
+    A PREVIEW of another band is the exception, and it is the whole point of a
+    preview. A parent looking at her nine-year-old's lesson wants to see what he
+    sees -- Kaleb's words, at Kaleb's reading level -- not her own lesson
+    re-pitched. So the voice follows the band being previewed, not the reader.
+
+    Reader's own band, or no preview at all: the reader's persona, as before.
     """
+    preview = state.get("preview_band")
+    if preview and str(state.get("active_agent") or "") in NON_SCORING_AGENTS:
+        if str(preview) != str(state.get("age_band") or ""):
+            from app.graph.account import DEFAULT_PERSONA
+
+            return DEFAULT_PERSONA.get(str(preview))
+
     persona = state.get("persona")
     return str(persona) if persona else None
 

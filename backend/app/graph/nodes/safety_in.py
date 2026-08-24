@@ -305,4 +305,24 @@ def safety_in(state: AspireState) -> dict[str, Any]:
     if state.get("active_agent") == "learn_agent" and is_off_topic(text):
         flags["off_topic"] = True
 
-    return {"safety_flags": flags}
+    update: dict[str, Any] = {"safety_flags": flags}
+
+    # A band named for somebody ELSE -- "the lesson my nine-year-old would get",
+    # "something for my Form 2 class". Carried so a preview can be written at
+    # it. `band_of` honours it only for a non-scoring agent, so `learn_agent`
+    # ignores it entirely and no reader can move their own gates by typing an
+    # age. Cleared when they stop naming one, or the first preview would pin
+    # every later turn.
+    from app.graph.nodes.intents import band_requested
+
+    asked_for = band_requested(text)
+    if asked_for != state.get("preview_band"):
+        update["preview_band"] = asked_for
+        if asked_for:
+            logger.info(
+                "Session %s asked to see the %s band; previews will render at it.",
+                state.get("session_id"),
+                asked_for,
+            )
+
+    return update
