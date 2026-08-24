@@ -10043,3 +10043,47 @@ a.source__site--link:hover .source__out {
 		font-size: 10px;
 	}
 }
+
+/* ── The pledge card ─────────────────────────────────────────────────────── */
+.pledge {
+	max-width: 340px;
+	margin: 4px 0 19px;
+	padding: 18px 22px;
+	border: 1.5px solid var(--plum, #4a2977);
+	border-radius: 16px;
+	background: rgb(255 255 255 / 0.7);
+	text-align: center;
+}
+.pledge__eyebrow {
+	margin: 0 0 6px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--plum, #4a2977);
+}
+.pledge__amount {
+	margin: 0;
+	font-family: var(--font-display, Georgia, serif);
+	font-size: 1.75rem;
+	color: var(--ink, #241234);
+}
+.pledge__goal {
+	margin: 2px 0 0;
+	color: var(--ink, #241234);
+}
+.pledge__sign {
+	margin-top: 14px;
+	padding: 10px 22px;
+	border: none;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--plum, #4a2977), var(--plum-light, #7a4fd0));
+	color: #fff;
+	font-weight: 700;
+	cursor: pointer;
+}
+.pledge__sealed {
+	margin: 10px 0 0;
+	font-weight: 700;
+	color: var(--plum, #4a2977);
+}

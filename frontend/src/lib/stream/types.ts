@@ -92,6 +92,17 @@ export interface ReviewCardDirective {
 	sections: Array<ReviewSection>;
 }
 
+export interface PledgeDirective {
+	t: "pledge";
+	/** "EC$200 a month" -- already formatted. */
+	amount_line: string;
+	goal: string;
+	button_label: string;
+	/** What tapping the button sends as a plain user message. */
+	button_value: string;
+	pledged: boolean;
+}
+
 export interface ChartDirective {
 	t: "chart";
 	kind: "line" | "bar" | "stacked_bar";
@@ -178,7 +189,8 @@ export type Directive =
 	| EscalatedDirective
 	| WidgetDirective
 	| VideoDirective
-	| UnknownDirective;
+	| UnknownDirective
+	| PledgeDirective;
 
 /* ── concept widgets ────────────────────────────────────────────────────── */
 

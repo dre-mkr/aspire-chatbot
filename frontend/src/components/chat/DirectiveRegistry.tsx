@@ -6,6 +6,7 @@ import type {
 	ChartDirective,
 	Directive,
 	EscalatedDirective,
+	PledgeDirective,
 	ProgressDirective,
 	ReviewCardDirective,
 	SignupDirective,
@@ -15,6 +16,7 @@ import type {
 	WidgetInteraction,
 } from "../../lib/stream/types";
 import { WidgetRenderer } from "../widgets/WidgetRenderer";
+import { PledgeCard } from "./PledgeCard";
 import { ReviewCard } from "./ReviewCard";
 import { UploadCard } from "./UploadCard";
 import { VideoCard } from "./VideoPanel";
@@ -90,6 +92,14 @@ export function DirectiveView({
 					onInteraction={context.onWidgetInteraction}
 					// Skipping is silent by design: the agent continues without comment.
 					onSkip={() => undefined}
+				/>
+			);
+
+		case "pledge":
+			return (
+				<PledgeCard
+					directive={directive as PledgeDirective}
+					send={context.send}
 				/>
 			);
 

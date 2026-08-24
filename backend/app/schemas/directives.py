@@ -244,6 +244,26 @@ class VideoDirective(_Directive):
 # ── widget ───────────────────────────────────────────────────────────────────
 
 
+class PledgeDirective(_Directive):
+    """A savings pledge card: the reader's own goal, made signable.
+
+    A goal said out loud in chat evaporates; a card with a button makes it a
+    small ceremony. "Pledge", never "contract" -- most readers are minors.
+    """
+
+    t: Literal["pledge"] = "pledge"
+    #: "EC$200 each month" -- already formatted, band-appropriate.
+    amount_line: str
+    #: What it is for, in the reader's own words. May be empty.
+    goal: str = ""
+    #: The button. "Sign my pledge", or "I promise" for the youngest.
+    button_label: str
+    #: What tapping the button SENDS, as a plain message the cards node reads.
+    button_value: str
+    #: True on the confirmation re-render, after the pledge is stored.
+    pledged: bool = False
+
+
 class WidgetDirective(_Directive):
     """A concept widget, already validated through every gate."""
 
@@ -260,6 +280,7 @@ UIDirective = Annotated[
         SignupDirective,
         UploadDirective,
         ReviewCardDirective,
+        PledgeDirective,
         ChartDirective,
         ProgressDirective,
         CitationsDirective,

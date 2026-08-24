@@ -297,6 +297,12 @@ def make_intent_gate(
         if card is not None:
             return card
 
+        # A savings goal said out loud becomes a signable pledge card, and the
+        # signed pledge becomes a standing goal every later turn keeps in view.
+        card = _pledge_turn(state, message)
+        if card is not None:
+            return card
+
         # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
@@ -314,6 +320,91 @@ def make_intent_gate(
         return {}
 
     return intent_gate
+
+
+#: "I want to save EC$200 a month for a bike" -- an amount, a period, and
+#: maybe a named goal. The trigger for the pledge card.
+_PLEDGE_INTENT = re.compile(
+    r"\b(?:i (?:want|plan|am going|'m going|would like) to save|i will save|"
+    r"quiero ahorrar|je veux (?:economiser|épargner))\b.{0,40}?"
+    r"(?:ec\$?\s?|\$)(\d[\d,]*)"
+    r"(?:.{0,30}?\b(a week|per week|each week|a month|per month|each month|"
+    r"every (?:week|month|payday)|this (?:week|month|year)|a year)\b)?",
+    re.IGNORECASE,
+)
+
+#: What the goal is for, trailing the amount: "for a bike", "towards CFBC".
+_PLEDGE_GOAL = re.compile(
+    r"\b(?:for|towards?|para|pour)\s+((?:my |a |an |the |mi |mon |ma )?[^.,!?]{2,40})",
+    re.IGNORECASE,
+)
+
+#: What the sign button sends. Read back by `_pledge_confirm`.
+_PLEDGE_PREFIX = "I pledge: "
+
+
+def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Offer a pledge card for a stated savings goal; store it when signed."""
+    from app.schemas.directives import PledgeDirective
+
+    band = str(state.get("age_band") or "adult")
+    young = band == "5-8"
+
+    # ── the signed pledge coming back ──
+    if message.startswith(_PLEDGE_PREFIX):
+        body = message[len(_PLEDGE_PREFIX):].strip()
+        amount_line, _, goal = body.partition(" towards ")
+        pledge = {"amount_line": amount_line.strip(), "goal": goal.strip()}
+        salute = {
+            True: "You made a promise to your tin! I will remember it.",
+            False: "Signed. That pledge is yours now -- I will keep it in view.",
+        }[young]
+        return {
+            "pledge": pledge,
+            "messages": [AIMessage(content=salute)],
+            "ui_directives": [
+                PledgeDirective(
+                    amount_line=pledge["amount_line"],
+                    goal=pledge["goal"],
+                    button_label="Pledged",
+                    button_value="",
+                    pledged=True,
+                )
+            ],
+            "active_agent": _holding_agent(state),
+            "safety_flags": {"card": "pledge_signed"},
+        }
+
+    # ── a fresh goal worth offering a card for ──
+    if state.get("pledge"):
+        return None
+    match = _PLEDGE_INTENT.search(message)
+    if match is None:
+        return None
+    amount = match.group(1)
+    period = (match.group(2) or "").strip()
+    goal_match = _PLEDGE_GOAL.search(message[match.end():])
+    goal = (goal_match.group(1).strip() if goal_match else "")
+
+    amount_line = f"EC${amount}" + (f" {period}" if period else "")
+    value = _PLEDGE_PREFIX + amount_line + (f" towards {goal}" if goal else "")
+    ask = {
+        True: "That is a real plan. Want to make it a promise?",
+        False: "That is a real goal. Want to make it a pledge? Signing it means I keep it in view and ask how it is going.",
+    }[young]
+    return {
+        "messages": [AIMessage(content=ask)],
+        "ui_directives": [
+            PledgeDirective(
+                amount_line=amount_line,
+                goal=goal,
+                button_label="I promise" if young else "Sign my pledge",
+                button_value=value,
+            )
+        ],
+        "active_agent": _holding_agent(state),
+        "safety_flags": {"card": "pledge_offer"},
+    }
 
 
 #: Which personas meet the learn-vs-teach clarifier, and how it is worded.

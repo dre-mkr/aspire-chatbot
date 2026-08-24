@@ -745,6 +745,19 @@ _STAGE_INSTRUCTION: dict[str, str] = {
 }
 
 
+def _pledge_instruction(state: AspireState) -> str | None:
+    """The standing pledge, kept in view. The journey rung's memory."""
+    pledge = state.get("pledge")
+    if not isinstance(pledge, dict) or not pledge.get("amount_line"):
+        return None
+    goal = f" towards {pledge['goal']}" if pledge.get("goal") else ""
+    return (
+        f"The reader has PLEDGED to save {pledge['amount_line']}{goal}. Keep it "
+        "in view: where it is natural, connect the answer to their pledge or ask "
+        "how it is going. Never scold about it, and never bring it up twice in a row."
+    )
+
+
 def _stage_instruction(state: AspireState) -> str | None:
     """Where in the journey this reader is standing, or None."""
     return _STAGE_INSTRUCTION.get(str(state.get("account_status") or ""))
@@ -757,6 +770,7 @@ def _shaping_instructions(state: AspireState) -> str | None:
         for line in (
             _simple_mode_instruction(state),
             _role_instruction(state),
+            _pledge_instruction(state),
             _stage_instruction(state),
             _story_instruction(state),
         )
