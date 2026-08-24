@@ -43,6 +43,11 @@ const NOTES: Record<NoteKind, Omit<VoiceNote, "kind">> = {
 		action: "Try voice again",
 		tone: "quiet",
 	},
+	"use-browser": {
+		text: "Reading this in your device's voice — the ASPIRE voice is not available right now.",
+		action: "Got it",
+		tone: "quiet",
+	},
 	dropped: {
 		text: "The connection dropped, so nothing was sent and nothing was kept. Speak again when you are back online.",
 		action: "Speak again",
@@ -54,6 +59,37 @@ const NOTES: Record<NoteKind, Omit<VoiceNote, "kind">> = {
 		tone: "warn",
 	},
 };
+
+/**
+ * Read text aloud with the device's own speech engine.
+ *
+ * The fallback the server has always offered in `fallback: "browser"` and which
+ * nothing took. It is deliberately plain: it must not sound like a persona,
+ * because the reason we are here is usually that a persona's own voice is not
+ * cast, and borrowing another one is the bug this avoids.
+ */
+function speakInBrowser(
+	text: string,
+	language: string,
+	rate: number,
+	onDone: () => void,
+): boolean {
+	if (typeof window === "undefined" || !("speechSynthesis" in window))
+		return false;
+	try {
+		window.speechSynthesis.cancel();
+		const utterance = new SpeechSynthesisUtterance(text);
+		utterance.lang =
+			{ en: "en-GB", es: "es-ES", fr: "fr-FR" }[language] ?? "en-GB";
+		utterance.rate = rate;
+		utterance.onend = onDone;
+		utterance.onerror = onDone;
+		window.speechSynthesis.speak(utterance);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /** Hard stop, matching the server's own 60-second cap. */
 const MAX_SECONDS = 60;
@@ -387,6 +423,10 @@ export function useVoice({
 		// Abort the synthesis too, not just the playback.
 		synthesis.current?.abort();
 		synthesis.current = null;
+		// And the browser's own voice, which is a separate engine entirely.
+		if (typeof window !== "undefined" && "speechSynthesis" in window) {
+			window.speechSynthesis.cancel();
+		}
 		audio.current?.pause();
 		audio.current = null;
 		if (objectUrl.current) {
@@ -437,6 +477,29 @@ export function useVoice({
 			} catch (error) {
 				// An abort is always this component's own doing, so it earns no note.
 				if (error instanceof VoiceError) {
+					if (error.failure === "use-browser") {
+						// The server has no voice it will use and said to try the
+						// browser. Reading in a plain device voice is worse than
+						// Kaleb's own and far better than "voice is offline" over a
+						// working speech engine.
+						const spoke = speakInBrowser(
+							text,
+							language,
+							Number(speed) || 1,
+							() => setPlayingId(null),
+						);
+						// The play button must reflect what is happening, and if
+						// the device has no speech engine at all then "offline"
+						// is finally the true thing to say.
+						if (spoke) {
+							setPausedId(null);
+							setPlayingId(id);
+							showNote("use-browser");
+						} else {
+							showNote("offline");
+						}
+						return;
+					}
 					if (error.failure !== "aborted") showNote(error.failure);
 				} else {
 					showNote("offline");
