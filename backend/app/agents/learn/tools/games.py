@@ -156,35 +156,22 @@ def launch_game(
 # ── reacting to the result ───────────────────────────────────────────────────
 
 
-def reaction_for(result: GameResult, band: str) -> str:
-    """What the agent says, containing the child's actual score."""
+def reaction_for(result: GameResult, band: str, locale: str = "en") -> str:
+    """What the agent says, containing the child's actual score, in their language."""
+    from app.prompting.ui_lines import reaction
+
     score, total = result.score, result.max_score
+    young = band == "5-8"
 
     if not result.completed:
-        return (
-            f"You got {score} before we stopped. Want to pick it up again, or "
-            "carry on with the lesson?"
-        )
-
-    if result.fraction >= 0.8:
-        if band == "5-8":
-            return f"{score} out of {total}! You knew those."
-        return f"{score} out of {total}. You have that one."
-
-    if result.fraction >= 0.5:
-        if band == "5-8":
-            return f"{score} out of {total}. Good going -- let us look at the tricky ones."
-        return (
-            f"{score} out of {total}. Solid. The ones you missed are the ones "
-            "worth going over."
-        )
-
-    if band == "5-8":
-        return f"You got {score}. That one was tricky! Let us do it together."
-    return (
-        f"{score} out of {total} -- that set was a hard one. Let us go back over "
-        "it and try again after."
-    )
+        key = "stopped"
+    elif result.fraction >= 0.8:
+        key = "high_young" if young else "high"
+    elif result.fraction >= 0.5:
+        key = "mid_young" if young else "mid"
+    else:
+        key = "low_young" if young else "low"
+    return reaction(key, locale, score=score, total=total)
 
 
 async def record_result(
@@ -302,8 +289,8 @@ def make_game_result_node(store: MasteryStore | None = None):
 
         return {
             **award,
-            "messages": [AIMessage(content=reaction_for(result, band))],
-            "quick_replies": _chips(band),
+            "messages": [AIMessage(content=reaction_for(result, band, str(state.get("locale") or "en")))],
+            "quick_replies": _chips(band, str(state.get("locale") or "en")),
             # Keep the learning agent the router picked; hardcoding `learn_agent` broke stickiness.
             "active_agent": state.get("active_agent") or "learn_agent",
             "learning": _learning_after(state, result),
@@ -351,7 +338,9 @@ def _learning_after(state: Any, result: GameResult) -> dict[str, Any]:
     )
 
 
-def _chips(band: str) -> list[str]:
+def _chips(band: str, locale: str = "en") -> list[str]:
+    from app.prompting.ui_lines import chips
+
     if band == "5-8":
-        return ["Again", "Back to lesson"]
-    return ["Play again", "Back to the lesson"]
+        return chips(["again", "back_lesson_short"], locale)
+    return chips(["play_again", "back_to_lesson"], locale)

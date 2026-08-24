@@ -390,12 +390,14 @@ def make_teach(curriculum=None, *, invoke=None):
             offer = {"offered_video": video.id}
             # Four words at most -- the lesson chip gate counts words, and a
             # full title blows it. The tap routes through `wants_video`.
-            video_chip = ["🎬 Watch the video"]
+            from app.prompting.ui_lines import line
+
+            video_chip = [line("watch_video", str(state.get("locale") or "en"))]
 
         return {
             **offer,
             "messages": [AIMessage(content=body)],
-            "quick_replies": _chips(band, ["Got it", "Say that again"]) + video_chip,
+            "quick_replies": _chips_i18n(state, ["got_it", "say_again"]) + video_chip,
             "learning": merge(
                 learning,
                 phase="checking",
@@ -455,7 +457,7 @@ def make_reteach(curriculum=None, *, retrieve=None, invoke=None):
 
         return {
             "messages": [AIMessage(content=body)],
-            "quick_replies": _chips(band, ["Got it", "Next"]),
+            "quick_replies": _chips_i18n(state, ["got_it", "next"]),
             "learning": merge(
                 learning,
                 phase="updating_mastery",
@@ -465,6 +467,13 @@ def make_reteach(curriculum=None, *, retrieve=None, invoke=None):
         }
 
     return reteach
+
+
+def _chips_i18n(state, keys: list[str]) -> list[str]:
+    """Authored chips, in the reader's language."""
+    from app.prompting.ui_lines import chips
+
+    return chips(keys, str(state.get("locale") or "en"))
 
 
 def _chips(band: str, options: list[str]) -> list[str]:

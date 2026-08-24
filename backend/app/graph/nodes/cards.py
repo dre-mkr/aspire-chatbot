@@ -597,20 +597,26 @@ def _purpose_is_explicit(message: str, persona: str) -> bool:
 #: The artifacts a finished story can grant, named in the reader's language.
 #: Picked by crc32 of the topic, so one story always grants one artifact.
 _ARTIFACTS: dict[str, tuple[tuple[str, str], ...]] = {
+    # Named from home: Brimstone Hill guards, the sugar mill turns steady work,
+    # the Narrows is the crossing between the two islands, the pelican is the
+    # national bird, Liamuiga is the mountain, and the vervet is the clever one.
     "en": (
-        ("The Shield of Savings", "🛡️"), ("The Golden Tin", "🏺"),
-        ("The Compass of Coins", "🧭"), ("The Lantern of Patience", "🏮"),
-        ("The Key of Choices", "🗝️"), ("The Anchor of Plans", "⚓"),
+        ("The Brimstone Shield", "🛡️"), ("The Sugar Mill Wheel", "⚙️"),
+        ("The Compass of the Narrows", "🧭"), ("The Lantern of Liamuiga", "🏮"),
+        ("The Vervet's Key", "🗝️"), ("The Pelican's Anchor", "⚓"),
+        ("The Railway Star", "🚂"), ("The Sugar Mas Ribbon", "🎀"),
     ),
     "es": (
-        ("El Escudo del Ahorro", "🛡️"), ("La Alcancía Dorada", "🏺"),
-        ("La Brújula de las Monedas", "🧭"), ("El Farol de la Paciencia", "🏮"),
-        ("La Llave de las Decisiones", "🗝️"), ("El Ancla de los Planes", "⚓"),
+        ("El Escudo de Brimstone", "🛡️"), ("La Rueda del Ingenio", "⚙️"),
+        ("La Brújula de los Estrechos", "🧭"), ("El Farol de Liamuiga", "🏮"),
+        ("La Llave del Vervet", "🗝️"), ("El Ancla del Pelícano", "⚓"),
+        ("La Estrella del Tren", "🚂"), ("La Cinta de Sugar Mas", "🎀"),
     ),
     "fr": (
-        ("Le Bouclier de l'Épargne", "🛡️"), ("La Tirelire Dorée", "🏺"),
-        ("La Boussole des Pièces", "🧭"), ("La Lanterne de la Patience", "🏮"),
-        ("La Clé des Choix", "🗝️"), ("L'Ancre des Plans", "⚓"),
+        ("Le Bouclier de Brimstone", "🛡️"), ("La Roue du Moulin à Sucre", "⚙️"),
+        ("La Boussole des Narrows", "🧭"), ("La Lanterne de Liamuiga", "🏮"),
+        ("La Clé du Vervet", "🗝️"), ("L'Ancre du Pélican", "⚓"),
+        ("L'Étoile du Petit Train", "🚂"), ("Le Ruban de Sugar Mas", "🎀"),
     ),
 }
 
