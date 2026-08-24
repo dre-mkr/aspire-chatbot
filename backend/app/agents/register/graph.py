@@ -330,6 +330,12 @@ def _options_for(slot: Slot, locale: str) -> list[str]:
     """Tap targets when the answer is one of a closed set."""
     if not slot.options:
         return _skip_chip(slot, locale)
+    # `locale` was taken and ignored here, which is how a Spanish question ended
+    # up over Mother / Father / Grandmother / Grandfather.
+    if slot.path == "guardian.relationship":
+        from app.agents.register.schema import relationship_label
+
+        return [relationship_label(o, locale) for o in slot.options[:4]]
     return [option.title() for option in slot.options[:4]]
 
 

@@ -38,6 +38,52 @@ RELATIONSHIPS: tuple[str, ...] = (
     "other",
 )
 
+#: The same relationships in the two other languages ASPIRE ships.
+#:
+#: Two jobs. The chips are labelled from here, because a Spanish question over
+#: English buttons -- "¿Y cuál es tu relación con el niño o la niña?" above
+#: Mother / Father / Grandmother / Grandfather -- is what a guardian actually
+#: met. And `_one_of` reads it too, so a parent who TYPES "madre" is understood
+#: whether or not she tapped anything.
+#:
+#: The stored value stays the English key. What a guardian was asked is a
+#: presentation question; what ASPIRE holds about their family is not, and it
+#: should not depend on which language they happened to be reading in.
+RELATIONSHIP_WORDS: dict[str, dict[str, str]] = {
+    "es": {
+        "mother": "Madre", "father": "Padre",
+        "grandmother": "Abuela", "grandfather": "Abuelo",
+        "aunt": "Tía", "uncle": "Tío",
+        "legal guardian": "Tutor legal", "other": "Otra",
+    },
+    "fr": {
+        "mother": "Mère", "father": "Père",
+        "grandmother": "Grand-mère", "grandfather": "Grand-père",
+        "aunt": "Tante", "uncle": "Oncle",
+        "legal guardian": "Tuteur légal", "other": "Autre",
+    },
+}
+
+
+def relationship_label(option: str, locale: str) -> str:
+    """How to SHOW one relationship. Falls back to English rather than to a key."""
+    return RELATIONSHIP_WORDS.get(locale, {}).get(option) or option.title()
+
+
+def relationship_from(text: str) -> str | None:
+    """The canonical English key for a word in any shipped language, or None."""
+    wanted = _fold(text)
+    if not wanted:
+        return None
+    for option in RELATIONSHIPS:
+        if _fold(option) == wanted:
+            return option
+    for words in RELATIONSHIP_WORDS.values():
+        for option, word in words.items():
+            if _fold(word) == wanted:
+                return option
+    return None
+
 
 class DocumentRef(BaseModel):
     """A document that lives in object storage."""
@@ -245,6 +291,14 @@ def _tokens_fit(answer: str, option: str) -> bool:
     )
 
 
+def _relationship(raw: str) -> tuple[Any, str | None]:
+    """Accept the relationship in any shipped language; store the English key."""
+    found = relationship_from(raw)
+    if found is not None:
+        return found, None
+    return _one_of(RELATIONSHIPS)(raw)
+
+
 def _one_of(options: tuple[str, ...]):
     def parse(raw: str) -> tuple[Any, str | None]:
         text = raw.strip().lower()
@@ -356,7 +410,7 @@ GUARDIAN_SLOTS: tuple[Slot, ...] = (
             "es": "Elige la más cercana — madre, padre, abuela, abuelo, tía, tío, tutor legal u otra.",
             "fr": "Choisis la plus proche — mère, père, grand-mère, grand-père, tante, oncle, tuteur légal ou autre.",
         },
-        parse=_one_of(RELATIONSHIPS),
+        parse=_relationship,
         options=RELATIONSHIPS,
     ),
     Slot(
