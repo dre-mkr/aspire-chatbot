@@ -34,10 +34,27 @@ export interface VoiceLimits {
 	allowed_mime_types: Array<string>;
 }
 
+export interface PersonaVoice {
+	persona: string;
+	languages: Array<VoiceLanguage>;
+	/** How fast this persona reads, before the reader's own preference. */
+	speed: number;
+	stability: number;
+}
+
 export interface VoiceConfig {
 	enabled: boolean;
 	languages: Array<VoiceLanguage>;
 	limits: VoiceLimits;
+	/**
+	 * Per-persona delivery, which the server has always sent and nothing read.
+	 *
+	 * Skye is tuned to 0.88 and Azuri to 0.96 -- a five-year-old is read to more
+	 * slowly than a teacher is. The client used only the reader's own speed
+	 * preference, so every persona was delivered at exactly the same pace and
+	 * the tuning did nothing.
+	 */
+	personas: Array<PersonaVoice>;
 }
 
 export interface Transcription {
@@ -54,6 +71,17 @@ export type VoiceFailure =
 	| "offline"
 	| "dropped"
 	| "limited"
+	/**
+	 * The server has no voice it is willing to use, and said to try the browser.
+	 *
+	 * Two causes, one answer. `voice_uncast` is a persona whose voice id is not
+	 * set -- Kaleb, who deliberately does NOT borrow Skye's, so without his own
+	 * he has none. `voice_unavailable` is the vendor being unreachable or the
+	 * key being absent. Both arrive as 503 carrying `fallback: "browser"`, and
+	 * nothing was reading it: the reply was "Voice is offline", which was untrue
+	 * and left a working browser voice unused.
+	 */
+	| "use-browser"
 	/** The caller cancelled it. */
 	| "aborted";
 
@@ -188,6 +216,8 @@ export async function speakStream(
 	clearTimeout(timer);
 
 	if (response.status === 429) throw new VoiceError("limited");
+	// The server offers the browser when it cannot speak itself. Take it.
+	if (response.status === 503) throw new VoiceError("use-browser");
 	if (!response.ok) throw new VoiceError("offline");
 
 	const body = response.body;
