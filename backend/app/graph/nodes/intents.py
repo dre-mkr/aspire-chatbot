@@ -134,7 +134,17 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
 _STORY: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (
-        r"\b(?:tell|read|say|give)(?: me| us)?(?: a| another| one)? (?:short )?(?:story|tale)\b",
+        # `watch` and `see` are here because a child asked "Can I watch a
+        # story?" and got a hint from a saving lesson. Only the TELL verbs were
+        # listed, so watching or seeing one was not a story request at all, in
+        # any of the three languages -- it fell through to mastery placement and
+        # was answered as a wrong quiz answer. `asks_for_a_video` already yields
+        # to a story match, so "watch a story" lands here and "watch a video"
+        # still does not.
+        r"\b(?:tell|read|say|give|watch|see|show)(?: me| us)?"
+        r"(?: a| another| one| the)? (?:short )?(?:story|tale)\b",
+        r"\b(?:can|could|may)\s+(?:i|we)\s+(?:watch|see|hear|have)"
+        r"(?: a| another| the)?\s+(?:short\s+)?(?:story|tale)\b",
         r"\bi want (?:a|another) story\b",
         r"\b(?:can|could) (?:you|we) (?:tell|hear|have)(?: me| us)?(?: a)? story\b",
         r"\bstory time\b",
@@ -145,11 +155,18 @@ _STORY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:cuenta|cuentame|dime|narra|nos cuentas)\b[^.?!]{0,12}?"
         r"\b(?:cuento|historia)\b",
         r"\b(?:otro cuento|otra historia)\b",
+        r"\b(?:ver|mirar|escuchar)\s+(?:un|una|otro|otra|el|la)?\s*"
+        r"(?:cuento|historia)\b",
+        r"\bpuedo\s+(?:ver|mirar|escuchar|o[ií]r)\b[^.?!]{0,12}?"
+        r"\b(?:cuento|historia)\b",
         r"\bquiero (?:un cuento|una historia)\b",
         # Same for French: "raconte" was required, and "une autre histoire" --
         # what the follow-up chip says -- matched nothing.
         r"\b(?:raconte|racontez|dis)\b[^.?!]{0,14}?\bhistoire\b",
         r"\b(?:une autre histoire|encore une histoire)\b",
+        r"\b(?:regarder|voir|[eé]couter)\s+(?:une|l\'|la|encore une)?\s*"
+        r"histoire\b",
+        r"\b(?:puis-je|je peux|je veux|on peut)\b[^.?!]{0,16}?\bhistoire\b",
     )
 )
 
@@ -402,6 +419,28 @@ def wants_lesson(message: str) -> bool:
     return any(pattern.search(folded) for pattern in _LESSON)
 
 
+#: The whole message is the word, and nothing else.
+#:
+#: How a five-year-old asks. "game", "story", "story?", "a game please". Only
+#: as the ENTIRE message: "story" inside a sentence is usually a noun, as in
+#: "what is the story of ASPIRE", and matching that would answer a question
+#: with a fairy tale.
+_JUST_A_GAME = re.compile(r"^\W*(?:a\s+)?(?:game|games|play)\W*(?:please)?\W*$", re.I)
+_JUST_A_STORY = re.compile(r"^\W*(?:a\s+)?(?:story|storie?s|tale)\W*(?:please)?\W*$", re.I)
+
+#: Hedged, and still a request. Children rarely demand.
+_MAYBE_A_GAME = re.compile(
+    r"\b(?:maybe|perhaps|could\s+we|can\s+we)\b[^.?!]{0,12}?\b(?:game|play)\b"
+    r"|\bi\s+wanna\s+play\b|\bwanna\s+play\b",
+    re.IGNORECASE,
+)
+_MAYBE_A_STORY = re.compile(
+    r"\b(?:maybe|perhaps|could\s+we|can\s+we)\b[^.?!]{0,12}?\b(?:story|tale)\b"
+    r"|\bwanna\s+(?:hear|read|see|watch)\b[^.?!]{0,12}?\b(?:story|tale)\b",
+    re.IGNORECASE,
+)
+
+
 def wants_game(message: str) -> bool:
     """Whether this message is asking to play, rather than asking about playing.
 
@@ -420,6 +459,8 @@ def wants_game(message: str) -> bool:
         return False
     if any(pattern.search(folded) for pattern in _PLAY):
         return True
+    if _JUST_A_GAME.match(folded) or _MAYBE_A_GAME.search(folded):
+        return True
     return named_game(message) is not None
 
 
@@ -428,7 +469,9 @@ def wants_story(message: str) -> bool:
     folded = fold(message)
     if not _is_a_command(folded):
         return False
-    return any(pattern.search(folded) for pattern in _STORY)
+    if any(pattern.search(folded) for pattern in _STORY):
+        return True
+    return bool(_JUST_A_STORY.match(folded) or _MAYBE_A_STORY.search(folded))
 
 
 def wants_video(message: str) -> bool:

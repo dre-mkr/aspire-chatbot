@@ -354,3 +354,47 @@ class TestThePersonaSaysItsName:
         assert "Skye" in qa.small_talk_answer(
             "what is your name?", locale="en", persona="stella", age_band="5-8"
         )
+
+
+class TestTheRegistrationChipsSpeakTheReadersLanguage:
+    """A Spanish question over English buttons is what a guardian actually met."""
+
+    @pytest.mark.parametrize(
+        ("locale", "expected"),
+        [
+            ("en", ["Mother", "Father", "Grandmother", "Grandfather"]),
+            ("es", ["Madre", "Padre", "Abuela", "Abuelo"]),
+            ("fr", ["Mère", "Père", "Grand-mère", "Grand-père"]),
+        ],
+    )
+    def test_the_chips_are_labelled_in_the_readers_language(self, locale, expected):
+        from app.agents.register.graph import _options_for
+        from app.agents.register.schema import SLOTS
+
+        slot = next(s for s in SLOTS if s.path == "guardian.relationship")
+        assert _options_for(slot, locale) == expected
+
+    @pytest.mark.parametrize(
+        ("typed", "stored"),
+        [("Madre", "mother"), ("madre", "mother"), ("Mère", "mother"),
+         ("Abuelo", "grandfather"), ("Grand-mère", "grandmother"),
+         ("Tutor legal", "legal guardian"), ("mother", "mother")],
+    )
+    def test_a_typed_answer_in_any_language_is_understood(self, typed, stored):
+        """She may type it rather than tap, and in her own language."""
+        from app.agents.register.schema import relationship_from
+
+        assert relationship_from(typed) == stored
+
+    def test_what_is_stored_is_the_english_key_whatever_she_read(self):
+        """What ASPIRE holds about a family must not depend on the UI language."""
+        from app.agents.register.schema import RELATIONSHIPS, relationship_from
+
+        for word in ("Madre", "Mère", "Abuela", "Grand-père", "Tío"):
+            assert relationship_from(word) in RELATIONSHIPS
+
+    def test_nonsense_is_still_refused(self):
+        from app.agents.register.schema import relationship_from
+
+        assert relationship_from("wizard") is None
+        assert relationship_from("") is None

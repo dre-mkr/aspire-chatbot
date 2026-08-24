@@ -155,3 +155,41 @@ class TestTheVoiceActuallyReachesTheReader:
 
         assert persona_of({"persona": "aurora"}) == "aurora"
         assert persona_of({}) is None
+
+
+class TestEveryPersonaCanTellAStory:
+    """Storytelling has to work for all six, in all three languages."""
+
+    def test_every_persona_has_a_story_shape(self):
+        from app.agents.qa.nodes import _STORY_BY_PERSONA
+        from app.graph.access import PERSONAS
+
+        missing = set(PERSONAS) - set(_STORY_BY_PERSONA)
+        assert not missing, f"{sorted(missing)} would fall back to the guest shape"
+
+    @pytest.mark.parametrize("persona", ["stella", "kaleb", "orion", "aurora", "nova", "guest"])
+    def test_each_one_gets_its_own_instruction(self, persona):
+        from app.agents.qa.nodes import _story_instruction
+
+        text = _story_instruction(
+            {"story_topic": "saving", "persona": persona, "story_arc": {"beat": 1}}
+        )
+        assert text and "saving" in text
+
+    def test_the_six_shapes_are_actually_different(self):
+        from app.agents.qa.nodes import _STORY_BY_PERSONA
+
+        shapes = {p: _STORY_BY_PERSONA[p] for p in
+                  ("stella", "kaleb", "orion", "aurora", "nova", "guest")}
+        assert len(set(shapes.values())) == 6
+
+    @pytest.mark.parametrize("locale", ["en", "es", "fr"])
+    def test_every_piece_of_story_copy_is_translated(self, locale):
+        """The ask, the topics, the closing line, and both sets of chips."""
+        from app.agents.qa.nodes import _STORY_ENDED, _STORY_FOLLOW_UPS
+        from app.graph.nodes.cards import _STORY_ASK, _STORY_CLOSED, _STORY_TOPICS
+
+        for table in (_STORY_ASK, _STORY_CLOSED, _STORY_TOPICS,
+                      _STORY_FOLLOW_UPS, _STORY_ENDED):
+            assert locale in table, f"{locale} missing from a story copy table"
+            assert table[locale]

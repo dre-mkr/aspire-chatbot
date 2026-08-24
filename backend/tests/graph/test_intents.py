@@ -101,3 +101,79 @@ class TestTheGateReachesTheMatcher:
         from app.graph.nodes.intents import wants_game
 
         assert not wants_game(message)
+
+
+class TestWatchingAStoryIsAskingForOne:
+    """A child asked "Can I watch a story?" and got a saving hint."""
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            # English
+            "Can I watch a story?", "watch a story", "see a story",
+            "show me a story", "tell me a story", "Can we hear a story?",
+            # French
+            "Puis-je regarder une histoire ?", "Je veux voir une histoire",
+            "Raconte-moi une histoire", "je peux écouter une histoire",
+            # Spanish
+            "¿Puedo ver un cuento?", "Quiero ver una historia",
+            "Cuéntame un cuento", "cuentame una historia",
+        ],
+    )
+    def test_every_way_a_child_asks(self, message):
+        """Only the TELL verbs were listed, so watching one was not a request.
+
+        It fell through to mastery placement and came back as a hint from a
+        lesson the reader never started -- in French, which is how it was found.
+        """
+        assert intents.wants_story(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        ["Can I watch a video?", "I want to watch a video", "show me a video"],
+    )
+    def test_a_video_is_still_a_video(self, message):
+        """`asks_for_a_video` yields to a story match, so this had to be checked."""
+        assert not intents.wants_story(message)
+        assert intents.asks_for_a_video(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        ["what is saving", "my balance please", "the history of ASPIRE",
+         "tell me about saving", "how do I open an account"],
+    )
+    def test_and_an_ordinary_question_is_neither(self, message):
+        assert not intents.wants_story(message)
+        assert not intents.asks_for_a_video(message)
+
+
+class TestHowAFiveYearOldActuallyAsks:
+    """Children rarely form a full request, and never demand one."""
+
+    @pytest.mark.parametrize(
+        "message",
+        ["game", "games", "play", "play?", "a game please", "maybe a game",
+         "i wanna play", "lets play", "can we play a game",
+         "Maybe i want to play a game"],
+    )
+    def test_a_game(self, message):
+        assert intents.wants_game(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        ["story", "story?", "a story please", "maybe a story",
+         "i wanna hear a story", "can we have a story", "Can I watch a story?"],
+    )
+    def test_a_story(self, message):
+        assert intents.wants_story(message)
+
+    @pytest.mark.parametrize(
+        "message",
+        ["what is the story of ASPIRE", "the history of ASPIRE",
+         "my balance please", "what is compound interest", "is the programme free",
+         "a million dollars in savings"],
+    )
+    def test_and_a_bare_word_inside_a_sentence_is_still_a_word(self, message):
+        """"story" in a sentence is a noun. Matching it answers a question with a tale."""
+        assert not intents.wants_story(message)
+        assert not intents.wants_game(message)
