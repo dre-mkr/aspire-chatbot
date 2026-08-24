@@ -69,7 +69,7 @@ const EN: HelpCopy = {
 			paras: [
 				'Ask *"can we play a game"* and a card opens in the chat. There are four: **Word scramble**, where you unscramble a money word; **True or false**, which explains the answer after each round; **Millionaire**, four choices a question; and **Hangman**, one letter at a time. You can ask for a clue, skip a question, or leave at any point — your score is kept either way.',
 			],
-			note: "Questions are matched to who you are using ASPIRE AI as, so a younger reader and a teenager get different sets. The games are a learning activity for children and teenagers, so the Imani and Azuri personas are not offered them.",
+			note: "Questions are matched to who you are using ASPIRE AI as, so a younger reader and a teenager get different sets. The games are a learning activity for children and teenagers, so the Imani and Azuri personas are not offered them. And a rumor for the explorers: they say whispering *golden goose* to your guide starts something special…",
 		},
 		{
 			title: "Checking if you can join",
@@ -196,7 +196,7 @@ const ES: HelpCopy = {
 			paras: [
 				"Pide *«¿jugamos a algo?»* y se abre una tarjeta en el chat. Hay cuatro: **Palabras revueltas**, donde ordenas una palabra de dinero; **Verdadero o falso**, que explica la respuesta en cada ronda; **Millonario**, cuatro opciones por pregunta; y **Ahorcado**, letra a letra. Puedes pedir una pista, saltar una pregunta o salir cuando quieras: tu puntuación se guarda igual.",
 			],
-			note: "Las preguntas se ajustan a quién eres al usar ASPIRE AI: un lector joven y un adolescente reciben series distintas. Los juegos son una actividad para niños y adolescentes, así que Imani y Azuri no los reciben.",
+			note: "Las preguntas se ajustan a quién eres al usar ASPIRE AI: un lector joven y un adolescente reciben series distintas. Los juegos son una actividad para niños y adolescentes, así que Imani y Azuri no los reciben. Y un rumor para quienes exploran: dicen que susurrar *la gansa dorada* a tu guía hace que empiece algo especial…",
 		},
 		{
 			title: "Comprobar si puedes entrar",
@@ -323,7 +323,7 @@ const FR: HelpCopy = {
 			paras: [
 				"Demande *« on joue à un jeu ? »* et une carte s'ouvre dans la discussion. Il y en a quatre : **Mots mélangés**, où tu remets une mot d'argent en ordre ; **Vrai ou faux**, qui explique la réponse à chaque tour ; **Millionnaire**, quatre choix par question ; et **Le pendu**, lettre par lettre. Tu peux demander un indice, passer une question ou partir quand tu veux — ton score est gardé quand même.",
 			],
-			note: "Les questions s'adaptent à qui tu es dans ASPIRE AI : un jeune lecteur et un adolescent reçoivent des séries différentes. Les jeux sont une activité pour les enfants et les adolescents, donc Imani et Azuri ne les reçoivent pas.",
+			note: "Les questions s'adaptent à qui tu es dans ASPIRE AI : un jeune lecteur et un adolescent reçoivent des séries différentes. Les jeux sont une activité pour les enfants et les adolescents, donc Imani et Azuri ne les reçoivent pas. Et une rumeur pour les curieux : on dit que chuchoter *l'oie dorée* à ton guide déclenche quelque chose de spécial…",
 		},
 		{
 			title: "Vérifier si tu peux entrer",

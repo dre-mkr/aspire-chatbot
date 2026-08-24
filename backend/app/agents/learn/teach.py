@@ -394,8 +394,26 @@ def make_teach(curriculum=None, *, invoke=None):
 
             video_chip = [line("watch_video", str(state.get("locale") or "en"))]
 
+        # Two coins the FIRST time this thread is taught this lesson. The
+        # farm-proofing is the list: `coined_lessons` remembers which lessons
+        # already paid, so "say that again" and a re-teach of the same lesson
+        # drop nothing. A different lesson is new learning, and pays.
+        from app.graph.tin import COINS_LESSON_TAUGHT, tin_award
+
+        coined = list(learning.get("coined_lessons") or [])
+        coins: dict[str, Any] = {}
+        if lesson.id not in coined:
+            coins = tin_award(
+                state, COINS_LESSON_TAUGHT, str(state.get("locale") or "en")
+            )
+            coined = [*coined, lesson.id]
+
         return {
+            **{k: v for k, v in coins.items() if k != "ui_directives"},
             **offer,
+            "ui_directives": [
+                *coins.get("ui_directives", []),
+            ],
             "messages": [AIMessage(content=body)],
             "quick_replies": _chips_i18n(state, ["got_it", "say_again"]) + video_chip,
             "learning": merge(
@@ -406,6 +424,7 @@ def make_teach(curriculum=None, *, invoke=None):
                 last_widget_kinds=remember_widget(learning, kind),
                 recent_openings=remember_opening(learning, body),
                 teach_count=taught_again(learning, lesson.id),
+                coined_lessons=coined,
                 # Consumed.
                 pending_widget=None,
             ),

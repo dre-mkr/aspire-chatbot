@@ -28,3 +28,42 @@ class TestTheTin:
 
     def test_milestones_are_ordered(self):
         assert list(MILESTONES) == sorted(MILESTONES)
+
+
+class TestLessonCoins:
+    async def _teach(self, learning_over=None):
+        import sys
+
+        sys.path.insert(0, "tests")
+        from learning.test_teach import run_teach
+
+        from app.curriculum.schema import load_all
+
+        cur = load_all(refresh=False)
+        return await run_teach(
+            invoke=None, curriculum=cur,
+            **({"learning": learning_over} if learning_over else {}),
+        )
+
+    async def test_the_first_teach_pays_two(self, anyio_backend):
+        out = await self._teach()
+        tins = [d for d in out.get("ui_directives", []) if d.t == "tin"]
+        assert tins and tins[0].delta == 2
+        assert out["learning"]["coined_lessons"]
+
+    async def test_the_same_lesson_never_pays_twice(self, anyio_backend):
+        first = await self._teach()
+        coined = first["learning"]["coined_lessons"]
+        again = await self._teach({**first["learning"], "coined_lessons": coined})
+        assert not [d for d in again.get("ui_directives", []) if d.t == "tin"]
+
+
+import pytest
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+pytestmark = pytest.mark.anyio
