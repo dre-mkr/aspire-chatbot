@@ -134,7 +134,17 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
 _STORY: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (
-        r"\b(?:tell|read|say|give)(?: me| us)?(?: a| another| one)? (?:short )?(?:story|tale)\b",
+        # `watch` and `see` are here because a child asked "Can I watch a
+        # story?" and got a hint from a saving lesson. Only the TELL verbs were
+        # listed, so watching or seeing one was not a story request at all, in
+        # any of the three languages -- it fell through to mastery placement and
+        # was answered as a wrong quiz answer. `asks_for_a_video` already yields
+        # to a story match, so "watch a story" lands here and "watch a video"
+        # still does not.
+        r"\b(?:tell|read|say|give|watch|see|show)(?: me| us)?"
+        r"(?: a| another| one| the)? (?:short )?(?:story|tale)\b",
+        r"\b(?:can|could|may)\s+(?:i|we)\s+(?:watch|see|hear|have)"
+        r"(?: a| another| the)?\s+(?:short\s+)?(?:story|tale)\b",
         r"\bi want (?:a|another) story\b",
         r"\b(?:can|could) (?:you|we) (?:tell|hear|have)(?: me| us)?(?: a)? story\b",
         r"\bstory time\b",
@@ -145,11 +155,18 @@ _STORY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:cuenta|cuentame|dime|narra|nos cuentas)\b[^.?!]{0,12}?"
         r"\b(?:cuento|historia)\b",
         r"\b(?:otro cuento|otra historia)\b",
+        r"\b(?:ver|mirar|escuchar)\s+(?:un|una|otro|otra|el|la)?\s*"
+        r"(?:cuento|historia)\b",
+        r"\bpuedo\s+(?:ver|mirar|escuchar|o[ií]r)\b[^.?!]{0,12}?"
+        r"\b(?:cuento|historia)\b",
         r"\bquiero (?:un cuento|una historia)\b",
         # Same for French: "raconte" was required, and "une autre histoire" --
         # what the follow-up chip says -- matched nothing.
         r"\b(?:raconte|racontez|dis)\b[^.?!]{0,14}?\bhistoire\b",
         r"\b(?:une autre histoire|encore une histoire)\b",
+        r"\b(?:regarder|voir|[eé]couter)\s+(?:une|l\'|la|encore une)?\s*"
+        r"histoire\b",
+        r"\b(?:puis-je|je peux|je veux|on peut)\b[^.?!]{0,16}?\bhistoire\b",
     )
 )
 
