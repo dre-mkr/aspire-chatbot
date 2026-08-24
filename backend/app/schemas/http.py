@@ -69,4 +69,15 @@ class HealthResponse(BaseModel):
     cache: bool = False
     # Hits, misses and the rate, counted in Valkey so the numbers survive a restart.
     cache_stats: dict = Field(default_factory=dict)
+    # How many teaching concepts the tutor can actually resolve.
+    #
+    # Zero is a broken deployment that looks exactly like a working one from
+    # every other signal. With an empty store the tutor cannot claim a turn, so
+    # "explain budgeting to me" stops being a topic to teach and becomes
+    # whatever mastery-based placement picks -- the reader gets a check question
+    # about a concept they did not ask about, identically, every time.
+    #
+    # `seed_curriculum` runs at startup and `ConceptStore.reload` swallows its
+    # own failure, so nothing said. Now something does, from outside, over curl.
+    concepts: int = 0
 

@@ -174,29 +174,97 @@ def test_a_visitor_who_picks_nothing_gets_the_mixed_audience_voice():
     assert claims.account_status == "prospect"
 
 
-def test_the_mixed_audience_default_is_still_gated_as_a_minor():
-    """The change of voice must not become a change of permissions.
+def test_the_mixed_audience_default_is_an_adult():
+    """`guest` is the general-public voice, and its reader is an adult.
 
-    This is the assertion that makes the previous test safe. `everyone` reads as
-    ordinary prose rather than as a five-year-old, but the reader behind it may
-    still be a child, so the band it resolves to has to be one that keeps the
-    caps, the ladder, the link strip and the minor game set.
+    This used to resolve to `13-15` on the reasoning that `adult` "would hand an
+    unknown reader the ungated row". Measured against the tables, it does not --
+    and the next test is that measurement, kept as an assertion so the claim
+    cannot rot.
+
+    A child gets a child's band by PICKING a child persona, which is what the
+    menu is for. The default is the person the guide is written for.
     """
     claims = account.anonymous_claims()
 
-    assert claims.age_band in MINOR_BANDS, (
-        "the signed-out default has been given an adult band. A visitor whose "
-        "age is unknown must never get the ungated row."
-    )
+    assert claims.persona == "guest"
+    assert claims.age_band == "adult"
     assert claims.age_band == account._ANONYMOUS_BANDS["guest"]
 
 
+def test_and_the_only_gate_that_moved_was_length():
+    """What `13-15` was actually buying `guest`, gate by gate.
+
+    Four of the five are identical at both bands, so moving the default changed
+    one thing: the word cap. The `_NEVER_CLAIM` list holds at every band anyway,
+    including `adult`, so nothing a reader must never be told became sayable.
+    """
+    from app.agents.learn.tools.games import available_for
+    from app.graph.access import allowed_agents
+    from app.graph.nodes.classify import routable
+    from app.graph.nodes.safety_out import cap_for, strips_links
+    from app.safety import vocab
+
+    # 1. the vocabulary LADDER -- not one word differs between the two bands
+    probe = ["loan", "credit", "interest", "invest", "mortgage", "dividend",
+             "risk-free", "guaranteed return"]
+    assert [w for w in probe if vocab.check(w, "13-15")] == [
+        w for w in probe if vocab.check(w, "adult")
+    ], "the ladder is not identical at the two bands after all"
+
+    # 2. links -- already un-stripped for `guest` at 13-15
+    assert strips_links("guest", "13-15") == strips_links("guest", "adult") is False
+
+    # 3. games -- the same set
+    assert available_for("13-15", "guest") == available_for("adult", "guest")
+
+    # 4. agents -- the same row
+    assert routable(allowed_agents("guest", "13-15", "prospect", user_id=None)) == routable(
+        allowed_agents("guest", "adult", "prospect", user_id=None)
+    )
+
+    # 5. length -- the one that did move, and deliberately
+    assert cap_for("13-15", "qa_agent_public") == 280
+    assert cap_for("adult", "qa_agent_public") is None
+
+
+def test_the_default_reader_may_now_have_a_topic_named_to_them():
+    """A second consequence, from combining two changes in one release.
+
+    `_NOT_FOR_MINORS` bars `crypto` and `day trading` below `adult`, and the
+    signed-out default is now `adult` -- so a visitor whose age is unknown can
+    have those topics NAMED. Asserted rather than left to be discovered.
+
+    It is a smaller thing than it reads as. Naming is not advising: the reply
+    still declines to recommend, and the alternative was the circumlocution the
+    topic ban produced -- "some kinds of online money can lose or gain value
+    very quickly" -- which was neither clearer nor safer, just vaguer. A reader
+    who wants a child's gating picks a child persona.
+    """
+    from app.safety import vocab
+
+    claims = account.anonymous_claims()
+    assert claims.age_band == "adult"
+    for topic in ("crypto", "Bitcoin", "day trading"):
+        assert not vocab.check(topic, claims.age_band)
+        assert vocab.check(topic, "13-15"), "still barred to anyone on a minor band"
+
+
+def test_a_false_claim_is_still_unsayable_to_the_default_reader():
+    """The gate that actually protects an unknown reader, at their new band."""
+    from app.safety import vocab
+
+    claims = account.anonymous_claims()
+    for text in ("risk-free", "guaranteed return", "guaranteed profit", "get rich"):
+        assert vocab.check(text, claims.age_band), f"{text!r} became sayable"
+
+
 def test_an_unknown_persona_falls_back_to_the_default_too():
-    """A junk `?persona=` must not be a way to widen the band."""
+    """A junk `?persona=` must resolve to the default, not to something else."""
     for junk in ("", "   ", "wizard", "ADULT", None):
         claims = account.anonymous_claims(junk)
         assert claims.persona == "guest", junk
-        assert claims.age_band in MINOR_BANDS, junk
+        assert claims.age_band == "adult", junk
 
 
 @pytest.mark.parametrize(
