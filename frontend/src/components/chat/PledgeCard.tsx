@@ -1,3 +1,4 @@
+import { say } from "#/lib/aspire/i18n";
 import type { PledgeDirective } from "#/lib/stream/types";
 
 /**
@@ -18,12 +19,16 @@ export function PledgeCard({
 	return (
 		<div className="pledge" data-pledged={pledged || undefined}>
 			<p className="pledge__eyebrow">
-				{pledged ? "My pledge" : "A pledge, if you want it"}
+				{pledged ? say("pledgeMine") : say("pledgeOffer")}
 			</p>
 			<p className="pledge__amount">{amount_line}</p>
-			{goal ? <p className="pledge__goal">towards {goal}</p> : null}
+			{goal ? (
+				<p className="pledge__goal">
+					{say("towards")} {goal}
+				</p>
+			) : null}
 			{pledged ? (
-				<p className="pledge__sealed">Pledged ✓</p>
+				<p className="pledge__sealed">{say("pledgeSealed")} ✓</p>
 			) : (
 				<button
 					type="button"

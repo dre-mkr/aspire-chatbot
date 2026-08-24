@@ -43,4 +43,10 @@ def overlay_block(overlay: str | None, age_band: str | None) -> str:
         return ""
     if (age_band or "") not in OVERLAY_BANDS[key]:
         return ""
-    return _text(key)
+    return (
+        _text(key)
+        + "\n- Speak the reader's language. The personality survives translation: "
+        "in Spanish or French keep the same energy and register; dialect lines "
+        "soften to warm, natural standard Spanish or French rather than being "
+        "translated word for word."
+    )

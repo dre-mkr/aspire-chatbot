@@ -328,7 +328,7 @@ _PLEDGE_INTENT = re.compile(
     r"\b(?:i (?:want|plan|am going|'m going|would like) to save|i will save|"
     r"quiero ahorrar|je veux (?:economiser|épargner))\b.{0,40}?"
     r"(?:ec\$?\s?|\$)(\d[\d,]*)"
-    r"(?:.{0,30}?\b(a week|per week|each week|a month|per month|each month|"
+    r"(?:.{0,30}?\b(a week|per week|each week|a month|per month|each month|al mes|a la semana|par mois|par semaine|"
     r"every (?:week|month|payday)|this (?:week|month|year)|a year)\b)?",
     re.IGNORECASE,
 )
@@ -339,8 +339,40 @@ _PLEDGE_GOAL = re.compile(
     re.IGNORECASE,
 )
 
-#: What the sign button sends. Read back by `_pledge_confirm`.
-_PLEDGE_PREFIX = "I pledge: "
+#: What the sign button sends, per locale. Read back by `_pledge_turn`, which
+#: accepts ANY of them -- a reader who switched language mid-conversation must
+#: not have their earlier button refused.
+_PLEDGE_PREFIXES = {"en": "I pledge: ", "es": "Me comprometo: ", "fr": "Je m'engage : "}
+_PLEDGE_SEPARATORS = {"en": " towards ", "es": " para ", "fr": " pour "}
+_PLEDGE_COPY = {
+    "en": {
+        "ask_young": "That is a real plan. Want to make it a promise?",
+        "ask": "That is a real goal. Want to make it a pledge? Signing it means I keep it in view and ask how it is going.",
+        "salute_young": "You made a promise to your tin! I will remember it.",
+        "salute": "Signed. That pledge is yours now -- I will keep it in view.",
+        "button_young": "I promise",
+        "button": "Sign my pledge",
+        "sealed": "Pledged",
+    },
+    "es": {
+        "ask_young": "Ese es un buen plan. ¿Quieres convertirlo en una promesa?",
+        "ask": "Esa es una meta de verdad. ¿Quieres convertirla en un compromiso? Si lo firmas, lo tendré presente y te preguntaré cómo va.",
+        "salute_young": "¡Hiciste una promesa a tu alcancía! La recordaré.",
+        "salute": "Firmado. Ese compromiso ya es tuyo -- lo tendré presente.",
+        "button_young": "Lo prometo",
+        "button": "Firmar mi compromiso",
+        "sealed": "Comprometido",
+    },
+    "fr": {
+        "ask_young": "C'est un vrai plan. Tu veux en faire une promesse ?",
+        "ask": "C'est un vrai objectif. Tu veux en faire un engagement ? Si tu le signes, je le garde en vue et je te demanderai où tu en es.",
+        "salute_young": "Tu as fait une promesse à ta tirelire ! Je m'en souviendrai.",
+        "salute": "Signé. Cet engagement est à toi -- je le garde en vue.",
+        "button_young": "Je promets",
+        "button": "Signer mon engagement",
+        "sealed": "Engagé",
+    },
+}
 
 
 def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
@@ -350,15 +382,22 @@ def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     band = str(state.get("age_band") or "adult")
     young = band == "5-8"
 
-    # ── the signed pledge coming back ──
-    if message.startswith(_PLEDGE_PREFIX):
-        body = message[len(_PLEDGE_PREFIX):].strip()
-        amount_line, _, goal = body.partition(" towards ")
+    locale = str(state.get("locale") or "en")
+    copy = _PLEDGE_COPY.get(locale, _PLEDGE_COPY["en"])
+
+    # ── the signed pledge coming back, in whichever language it was offered ──
+    matched = next(
+        (p for p in _PLEDGE_PREFIXES.values() if message.startswith(p)), None
+    )
+    if matched is not None:
+        body = message[len(matched):].strip()
+        amount_line, goal = body, ""
+        for sep in _PLEDGE_SEPARATORS.values():
+            if sep in body:
+                amount_line, _, goal = body.partition(sep)
+                break
         pledge = {"amount_line": amount_line.strip(), "goal": goal.strip()}
-        salute = {
-            True: "You made a promise to your tin! I will remember it.",
-            False: "Signed. That pledge is yours now -- I will keep it in view.",
-        }[young]
+        salute = copy["salute_young"] if young else copy["salute"]
         return {
             "pledge": pledge,
             "messages": [AIMessage(content=salute)],
@@ -366,7 +405,7 @@ def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 PledgeDirective(
                     amount_line=pledge["amount_line"],
                     goal=pledge["goal"],
-                    button_label="Pledged",
+                    button_label=copy["sealed"],
                     button_value="",
                     pledged=True,
                 )
@@ -387,18 +426,17 @@ def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     goal = (goal_match.group(1).strip() if goal_match else "")
 
     amount_line = f"EC${amount}" + (f" {period}" if period else "")
-    value = _PLEDGE_PREFIX + amount_line + (f" towards {goal}" if goal else "")
-    ask = {
-        True: "That is a real plan. Want to make it a promise?",
-        False: "That is a real goal. Want to make it a pledge? Signing it means I keep it in view and ask how it is going.",
-    }[young]
+    prefix = _PLEDGE_PREFIXES.get(locale, _PLEDGE_PREFIXES["en"])
+    sep = _PLEDGE_SEPARATORS.get(locale, _PLEDGE_SEPARATORS["en"])
+    value = prefix + amount_line + (f"{sep}{goal}" if goal else "")
+    ask = copy["ask_young"] if young else copy["ask"]
     return {
         "messages": [AIMessage(content=ask)],
         "ui_directives": [
             PledgeDirective(
                 amount_line=amount_line,
                 goal=goal,
-                button_label="I promise" if young else "Sign my pledge",
+                button_label=copy["button_young"] if young else copy["button"],
                 button_value=value,
             )
         ],
@@ -557,7 +595,9 @@ def _purpose_is_explicit(message: str, persona: str) -> bool:
 
 
 #: A priced story choice: "Buy the rope (EC$30)" or "Walk on (free)".
-_STORY_CHOICE = re.compile(r"^(.*?)\s*\((?:EC\$\s?(\d+)|free)\)\s*$", re.IGNORECASE)
+_STORY_CHOICE = re.compile(
+    r"^(.*?)\s*\((?:EC\$\s?(\d+)|free|gratis|gratuit)\)\s*$", re.IGNORECASE
+)
 
 
 def _story_choice(message: str) -> tuple[str, int] | None:

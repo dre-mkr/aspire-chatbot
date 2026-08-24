@@ -645,7 +645,7 @@ def _story_instruction(state: AspireState) -> str | None:
             if beat >= STORY_BEATS
             else "End the beat with 2 or 3 choices for the reader, each on its "
                  "own line, each formatted exactly like \"Buy the rope (EC$30)\" "
-                 "or \"Walk on (free)\" -- at least one free, every price within "
+                 "or \"Walk on (free)\" -- written in the story's own language, with the free option marked (free), (gratis) or (gratuit) to match -- at least one free, every price within "
                  "or near the wallet, and the trade-off real: what they buy or "
                  "skip must matter in the next beat.\n"
         )
@@ -1518,7 +1518,7 @@ def follow_up_chips(
             choices = [
                 line.strip("-* \t")
                 for line in answer.splitlines()
-                if re.search(r"\((?:EC\$\s?\d+|free)\)\s*$", line.strip(), re.IGNORECASE)
+                if re.search(r"\((?:EC\$\s?\d+|free|gratis|gratuit)\)\s*$", line.strip(), re.IGNORECASE)
             ]
             if choices:
                 return choices[:3]
