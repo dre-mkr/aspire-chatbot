@@ -56,6 +56,39 @@ class TestTheArcOpensAndAdvances:
         assert "messages" not in update
 
 
+class TestTheWordsOfThreeLanguages:
+    """The regexes carry three languages, and two words were traps.
+
+    Spanish `para` is the everyday preposition "for"; French `pas encore` is
+    "not yet". Both used to match as commands -- one ended the story a child
+    was in the middle of playing, the other turned the page they had just
+    said they were not ready for.
+    """
+
+    def test_the_spanish_preposition_para_does_not_end_a_story(self):
+        assert not story_ends("quiero ahorrar para la bici")
+        assert not story_ends("es para mi hermana")
+
+    @pytest.mark.parametrize("phrase", ["para ya", "ya basta", "basta", "detente", "no más"])
+    def test_spanish_stopping_phrases_still_stop(self, phrase):
+        assert story_ends(phrase)
+
+    def test_pas_encore_is_not_a_request_for_more(self):
+        assert not story_continues("pas encore")
+        assert not story_continues("non, pas encore fini")
+
+    def test_encore_alone_still_turns_the_page(self):
+        assert story_continues("encore !")
+        assert story_continues("la suite")
+
+    def test_a_spanish_preference_with_mas_is_not_a_page_turn(self):
+        assert not story_continues("me gusta más la bicicleta roja")
+
+    @pytest.mark.parametrize("phrase", ["más", "más!", "cuéntame más", "quiero más", "qué pasa después"])
+    def test_asking_for_more_in_spanish_still_works(self, phrase):
+        assert story_continues(phrase)
+
+
 class TestTheReaderEndsIt:
     @pytest.mark.parametrize("locale", LOCALES)
     def test_enough_closes_the_arc(self, locale):

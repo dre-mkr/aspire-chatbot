@@ -706,19 +706,29 @@ _STORY_ASK: dict[str, str] = {
 STORY_BEATS = 6
 
 #: Carrying on, in the reader's own words. The chip sends the first of these.
+#: Spanish and French had two words too common to be commands. `más` is in
+#: half of Spanish sentences ("me gusta más la bici" is a preference, not a
+#: request for the next page), so it only counts standalone or in an asking
+#: phrase. And French `encore` means its opposite after `pas` -- "pas encore"
+#: is "not yet", which must not turn the page.
 _STORY_MORE = re.compile(
     r"\bwhat happens next\b|\bwhat next\b|\bkeep going\b|\bgo on\b|\bcontinue\b"
     r"|\bmore\b|\bthen what\b"
-    r"|\bqu[eé] pasa despu[eé]s\b|\bsigue\b|\bcontin[uú]a\b|\bm[aá]s\b"
-    r"|\bet apr[eè]s\b|\bla suite\b|\bcontinue[rz]?\b|\bencore\b",
+    r"|\bqu[eé] pasa despu[eé]s\b|\bsigue\b|\bcontin[uú]a\b"
+    r"|^\s*m[aá]s\s*[!.]*\s*$|\bcu[eé]ntame m[aá]s\b|\bquiero m[aá]s\b|\bdime m[aá]s\b"
+    r"|\bet apr[eè]s\b|\bla suite\b|\bcontinue[rz]?\b|(?<!pas )\bencore\b",
     re.IGNORECASE,
 )
 
 #: Stopping, in the reader's own words. Checked BEFORE `_STORY_MORE`, because
 #: "no more" contains "more" and means its opposite.
+#: `para` alone was here, and it is Spanish's everyday "for": a child mid-story
+#: writing "quiero ahorrar para la bici" was ending their own story with the
+#: fourth word. Stopping now takes the phrase, not the preposition.
 _STORY_ENOUGH = re.compile(
     r"\bthat\'?s enough\b|\benough\b|\bno more\b|\bstop\b|\bi\'?m done\b|\bdone\b"
-    r"|\bya basta\b|\bbasta\b|\bsuficiente\b|\bno m[aá]s\b|\bpara\b"
+    r"|\bya basta\b|\bbasta\b|\bsuficiente\b|\bno m[aá]s\b"
+    r"|\bpara ya\b|\bp[aá]rale\b|\bdetente\b|\bya no quiero\b"
     r"|\b[cç]a suffit\b|\bassez\b|\bstop\b|\bplus rien\b",
     re.IGNORECASE,
 )
