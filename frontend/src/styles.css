@@ -9004,13 +9004,17 @@ a.source__site--link:hover .source__out {
  * sets. Without the guard the trim made the type on a phone BIGGER than the
  * design, which is the opposite of what a trim is for. */
 @media (min-width: 768px) and (max-height: 860px) {
+	/* The mark keeps its air. Squeezing the top padding to nothing put the
+	   lockup 8px off the edge of the window, which reads as a page that has
+	   been cropped rather than one that was laid out. The 8px it costs comes
+	   back off the card row below, which has it to give. */
 	.landing-head {
-		padding-top: 0.5rem;
+		padding-top: 1rem;
 		padding-bottom: 0.375rem;
 	}
 	/* Two lines at 4.75rem is 160px of an 780px window. */
 	.landing-hero h1 {
-		font-size: 3.25rem;
+		font-size: 3rem;
 		margin-bottom: 0.25rem;
 	}
 	.landing-hero > p {
@@ -9020,7 +9024,10 @@ a.source__site--link:hover .source__out {
 	.landing-cards {
 		margin-bottom: 0.5rem;
 	}
-	/* `h-32` is a fixed 8rem, so it does not give any of it back on its own. */
+	/* `h-32` is a fixed 8rem, so it does not give any of it back on its own --
+	   but it cannot go below 6.75rem either: at 6.25 the third line of each
+	   card's copy was cut off mid-sentence. The 8px the header takes comes off
+	   the display type instead, where two lines give it up unnoticed. */
 	.landing-cards > button {
 		height: 6.75rem;
 	}
@@ -9038,8 +9045,13 @@ a.source__site--link:hover .source__out {
  * a hero, a composer, four cards, five faces and a ministry footer at a size
  * anyone would want to look at. */
 @media (min-width: 768px) and (max-height: 760px) {
+	/* Still more than the 8px it started at: the top edge is the one place
+	   this page should not look trimmed. */
+	.landing-head {
+		padding-top: 0.75rem;
+	}
 	.landing-hero h1 {
-		font-size: 2.75rem;
+		font-size: 2.625rem;
 	}
 	.landing-hero > p {
 		margin-bottom: 0.5rem;
