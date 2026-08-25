@@ -227,6 +227,44 @@ class TestGroundCheck:
         assert update.get("decline_streak") == {}
 
     @pytest.mark.asyncio
+    async def test_a_story_is_written_even_when_nothing_was_retrieved(self):
+        """The Zion failure of 25 Aug.
+
+        "Saving up for something" retrieved nothing, `generate` returned
+        without calling the model at all, and the child asking for a story was
+        given ASPIRE's email address and two phone numbers. A story has no
+        extracts because fiction does not live in a knowledge base.
+        """
+        state = state_for("Saving up for something", persona="orion", age_band="16-18")
+        state["story_topic"] = "Saving up for something"
+        state["retrieved"] = []
+        generate = nodes.make_generate(generating("Malik counted his coins on the ferry..."))
+        update = await generate(state)
+        assert update.get("messages"), "the model was never asked to write the story"
+        assert "Malik" in str(update["messages"][0].content)
+
+    @pytest.mark.asyncio
+    async def test_a_non_story_turn_with_nothing_retrieved_still_declines(self):
+        """The exception is fiction, not an opening for ungrounded answers."""
+        state = state_for("What is the minimum deposit?")
+        state["retrieved"] = []
+        generate = nodes.make_generate(generating("EC$25."))
+        update = await generate(state)
+        assert not update.get("messages")
+        assert update.get("groundedness") == 0.0
+
+    def test_the_story_instruction_forbids_the_refusal_it_kept_producing(self):
+        state = state_for("a story", persona="stella", age_band="5-8")
+        state["story_topic"] = "Saving up for something"
+        instruction = nodes._story_instruction(state)
+        assert instruction is not None
+        lowered = instruction.lower()
+        assert "write the story" in lowered
+        assert "do not offer contact details" in lowered
+        # And the rule it must not loosen is still there.
+        assert "do not invent anything about the aspire programme" in lowered.replace("  ", " ")
+
+    @pytest.mark.asyncio
     async def test_a_story_turn_with_no_text_still_declines(self):
         """An empty story is not a story; the model failed and a person hears."""
         state = state_for("Earning your own money", persona="stella", age_band="5-8")

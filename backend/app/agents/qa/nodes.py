@@ -526,8 +526,14 @@ def make_generate(invoke=None):
         if _small_talk_reply(state) is not None:
             return {"groundedness": 1.0}
 
-        if not chunks:
+        if not chunks and not (state.get("story_topic") or "").strip():
             # No context means nothing to ground on, so never generate here.
+            #
+            # A STORY IS THE EXCEPTION. Fiction has no extracts, and refusing
+            # here meant the model was never asked to write it: `generate`
+            # returned no message, so `ground_check` found none and declined.
+            # Observed on production, 25 Aug -- Zion, asked for a story about
+            # "Saving up for something", answered with contact details.
             logger.info("Nothing retrieved; escalating rather than answering.")
             return {"groundedness": 0.0}
 
@@ -665,7 +671,18 @@ def _story_instruction(state: AspireState) -> str | None:
         "characters freely; do NOT invent anything about the ASPIRE programme "
         "itself -- no amounts, ages, dates or rules that are not in the "
         "material you were given. Do not add a quiz, a game or a question at "
-        "the end unless the shape above asks for one."
+        "the end unless the shape above asks for one.\n"
+        # The rule this has to beat is the right rule everywhere else. NEVER
+        # INVENT tells the model to refuse a premise it has no record of, and a
+        # story about saving up is exactly that -- so the model applied it and
+        # answered a child's request for a story with ASPIRE's phone number.
+        # Fiction is not a premise to check; it is the thing that was asked for.
+        "THIS TURN IS A STORY, not a knowledge answer. Any knowledge-base "
+        "extracts are background, not the subject, and having none is normal: "
+        "a story about a girl and a bicycle is not in the knowledge base and "
+        "was never going to be. Do NOT say you have no record, no information "
+        "or nothing in the supplied material, do not offer contact details, "
+        "and do not ask what they meant. Write the story."
     )
 
 
