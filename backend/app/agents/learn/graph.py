@@ -81,7 +81,7 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
         if placement.lesson is None:
             return {
                 "messages": [AIMessage(content=_all_done(_band(state)))],
-                "quick_replies": _chips(_band(state), ["Play a game", "Ask a question"]),
+                "quick_replies": _chips_i18n(state, ["play_a_game", "ask_a_question"]),
                 "learning": merge(learning, phase="done"),
             }
 
@@ -154,7 +154,7 @@ def make_check(curriculum=None):
         return {
             "messages": [AIMessage(content=prompt)],
             # The options ARE the interaction.
-            "quick_replies": list(question.options) or _chips(band, ["Tell me"]),
+            "quick_replies": list(question.options) or _chips_i18n(state, ["tell_me"]),
             "learning": merge(learning, question_id=question.id, phase="checking"),
         }
 
@@ -392,7 +392,7 @@ def _digress(state: AspireState, learning: dict, lesson: Lesson) -> dict[str, An
 
     return {
         "messages": [AIMessage(content=text)],
-        "quick_replies": _chips(band, ["Okay", "Ask again later"]),
+        "quick_replies": _chips_i18n(state, ["okay", "ask_later"]),
         "learning": merge(
             learning,
             digression_count=count,
@@ -473,6 +473,27 @@ def make_wrap_session(store: MasteryStore | None = None):
         touched_ids = list(learning.get("concepts_touched") or [])
 
         moved = sum(1 for row in rows if row.concept_id in touched_ids and row.score > 0)
+
+        # A SESSION WITH NOTHING IN IT DOES NOT GET A CEREMONY.
+        #
+        # "Nice work. You covered 0 concepts today." was observed mid
+        # conversation, after a question that was never a lesson: an ending
+        # nobody asked for, congratulating work nobody did, with a progress
+        # card behind it showing a zero.
+        #
+        # A wrap-up now requires something to wrap: a concept actually touched.
+        # Without one the graph simply does not end the session here -- no
+        # message, no progress directive, no chips -- and the turn goes on to
+        # whichever agent the reader was talking to. Conservative on purpose:
+        # the cost of a missed wrap-up is nothing, and the cost of a false one
+        # is a reader being told their session is over while they are using it.
+        if not touched_ids:
+            logger.info(
+                "Not wrapping session %s: no concept was touched, so there is "
+                "nothing to wrap.",
+                state.get("session_id"),
+            )
+            return {"learning": merge(learning, phase="idle", wrapped=False)}
         streak = scheduler.streak_after(
             int(state.get("streak") or 0),
             max((row.last_seen for row in rows if row.last_seen), default=None),
@@ -488,8 +509,8 @@ def make_wrap_session(store: MasteryStore | None = None):
         )
 
         return {
-            "messages": [AIMessage(content=_wrap_text(band, moved))],
-            "quick_replies": _chips(band, ["Play a game", "See you tomorrow"]),
+            "messages": [AIMessage(content=_wrap_text(band, moved, state))],
+            "quick_replies": _chips_i18n(state, ["play_a_game", "see_tomorrow"]),
             "ui_directives": [directive],
             "learning": merge(learning, phase="done", wrapped=True),
         }
@@ -497,7 +518,21 @@ def make_wrap_session(store: MasteryStore | None = None):
     return wrap_session
 
 
-def _wrap_text(band: str, moved: int) -> str:
+def _wrap_text(band: str, moved: int, state: AspireState | None = None) -> str:
+    """The end of a session, said only if there was one.
+
+    NOTHING COVERED IS NOT AN ACHIEVEMENT. "Nice work. You covered 0 concepts
+    today" was observed on the live site mid-conversation, after a question
+    that was never a lesson -- praise for work nobody did, ending a session the
+    reader had not ended. When the count is zero the line says so plainly and
+    offers the lesson instead.
+    """
+    if moved == 0 and state is not None:
+        from app.prompting.ui_lines import line
+
+        locale = str(state.get("locale") or "en")
+        key = "wrap_nothing_young" if band in ("5-8", "9-12") else "wrap_nothing"
+        return line(key, locale)
     if band == "5-8":
         return "That was great work today. Come back tomorrow and we will do more!"
     if band == "9-12":
@@ -514,6 +549,18 @@ def _all_done(band: str) -> str:
 def _chips(band: str, options: list[str]) -> list[str]:
     """Chips, capped at four and at four words each."""
     return [" ".join(option.split()[:4]) for option in options[:4]]
+
+
+def _chips_i18n(state: AspireState, keys: list[str]) -> list[str]:
+    """The lesson's own chips, in the reader's language.
+
+    These were English literals passed through `_chips`, which caps length and
+    does not translate -- so a Spanish reader finishing a lesson was offered
+    "Play a game" and "See you tomorrow" under Spanish prose.
+    """
+    from app.prompting.ui_lines import chips
+
+    return chips(keys, str(state.get("locale") or "en"))
 
 
 # ── routing ──────────────────────────────────────────────────────────────────

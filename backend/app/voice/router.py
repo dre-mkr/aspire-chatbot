@@ -165,6 +165,10 @@ def voice_config() -> VoiceConfigResponse:
             rate_window_seconds=settings.rate_window_seconds,
         ),
         realtime_enabled=settings.voice_realtime_enabled,
+        # The one thing the config never said out loud. `VoiceClient` refuses
+        # to construct without this key, so with it unset every persona listed
+        # above is a voice that cannot speak.
+        native_voice=bool(settings.elevenlabs_api_key),
     )
 
 

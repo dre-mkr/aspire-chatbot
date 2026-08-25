@@ -120,6 +120,17 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:un|el) juego\b",
         r"\bjouer\b",
         r"\b(?:un|le) jeu\b",
+        # "a different game" matched nothing while "another game" matched, so a
+        # reader who had just finished one and asked for the next was routed to
+        # the tutor and quizzed. Observed on the live site, 25 Aug, Zion.
+        r"\b(?:a |some )?(?:different|other|new) (?:game|quiz|puzzle)\b",
+        r"\banother one\b",
+        # The first-person plural imperative is how you say "let's play" in both
+        # languages, and neither was here: `jugar`/`jouer` are the infinitives.
+        r"\bjuguemos\b",
+        r"\bjouons\b",
+        r"\b(?:otro|otra) (?:juego|partida)\b",
+        r"\bun autre jeu\b",
     )
 )
 
@@ -167,6 +178,22 @@ _STORY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:regarder|voir|[eé]couter)\s+(?:une|l\'|la|encore une)?\s*"
         r"histoire\b",
         r"\b(?:puis-je|je peux|je veux|on peut)\b[^.?!]{0,16}?\bhistoire\b",
+        # THE POLITE FORMS, which is how most people actually ask.
+        #
+        # Spanish and French put the request as a question about the listener
+        # -- "me cuentas un cuento?", "peux-tu me raconter une histoire?" --
+        # and every pattern above wanted an imperative. Measured against the
+        # matcher: the imperative `cuentame un cuento` passed and the polite
+        # `me cuentas un cuento` did not, so the courteous reader was the one
+        # who got a classroom activity instead of a story.
+        r"\bme (?:cuentas|puedes contar|podr[ií]as contar|lees|puedes leer)\b"
+        r"[^.?!]{0,14}?\b(?:cuento|historia)\b",
+        r"\b(?:leeme|leame|cuentanos)\b[^.?!]{0,12}?\b(?:cuento|historia)\b",
+        r"\b(?:cuento|historia)\s+(?:por favor|porfa)\b",
+        r"\b(?:peux-tu|pouvez-vous|tu peux|vous pouvez)\b[^.?!]{0,18}?"
+        r"\b(?:raconter|lire)\b[^.?!]{0,12}?\bhistoire\b",
+        r"\bhistoire\s+s\W?il (?:te|vous) pla[iî]t\b",
+        r"\b(?:lis|lisez)-?(?:moi|nous)\b[^.?!]{0,12}?\bhistoire\b",
     )
 )
 
@@ -291,6 +318,25 @@ _REGISTER = (
     re.compile(r"\b(?:start|begin|open)\s+(?:an?\s+)?(?:application|account)\b"),
     re.compile(r"\b(?:quiero|queremos)\s+(?:registrar|inscribir)\b"),
     re.compile(r"\b(?:je\s+veux|nous\s+voulons)\s+(?:inscrire|enregistrer)\b"),
+    # THE REFLEXIVE FORMS, which is how both languages actually say it.
+    #
+    # Spanish and French put the reader inside the verb -- "registrarme",
+    # "inscribirme", "m'inscrire" -- and the patterns above wanted the bare
+    # infinitive, so "quiero registrarme" and "je veux m'inscrire" were not
+    # registration requests at all. `fold` strips the accents before these run.
+    re.compile(r"\b(?:quiero|queremos|puedo|podemos|deseo)\s+"
+               r"(?:registrar|inscribir|apuntar|anotar)(?:me|nos)?\b"),
+    re.compile(r"\bcomo\s+(?:me|nos)\s+(?:registro|inscribo|apunto|"
+               r"registramos|inscribimos)\b"),
+    re.compile(r"\bcomo\s+(?:puedo|podemos)\s+"
+               r"(?:registrar|inscribir|apuntar)(?:me|nos)?\b"),
+    re.compile(r"\b(?:je\s+veux|je\s+peux|puis-je|on\s+peut|comment\s+(?:je|on))\s+"
+               r"(?:m'?|s'?|nous\s+)?(?:inscri|enregistr)\w*"),
+    re.compile(r"\bcomment\s+(?:s'?|m'?)?(?:inscrire|enregistrer)\b"),
+    # And the English one that was missing: joining is what a teenager calls it.
+    re.compile(r"\bhow\s+do\s+(?:i|we)\s+(?:join|get\s+(?:in|on)|get\s+started)\b"),
+    re.compile(r"\bhow\s+(?:can|could)\s+(?:i|we)\s+"
+               r"(?:register|sign\s+up|enroll?|apply|join)\b"),
 )
 
 
@@ -472,6 +518,36 @@ def wants_story(message: str) -> bool:
     if any(pattern.search(folded) for pattern in _STORY):
         return True
     return bool(_JUST_A_STORY.match(folded) or _MAYBE_A_STORY.search(folded))
+
+
+#: "Say that simpler." The button already exists; the words did not.
+#:
+#: `simple_mode` arrived only as a flag on the body, set by the "Explain it
+#: simply" chip. A reader who TYPED the same request had nothing reading it --
+#: so on the live site, 25 Aug, "make it simpler" landed in the tutor and came
+#: back as a quiz question about payday. The chip and the sentence should do
+#: the same thing.
+_SIMPLER = re.compile(
+    r"\b(?:make|say|explain|put|word)\s+(?:it|that|this)\s+(?:more\s+)?"
+    r"(?:simpl(?:er|y)|easier|plainer|clearer)\b"
+    r"|\b(?:simpl(?:er|y)|easier)\s+(?:please|version)\b"
+    r"|^\s*(?:simpler|simply|easier)\s*[.!?]*\s*$"
+    r"|\bin\s+(?:simpler|plainer|easier)\s+(?:words|terms|english)\b"
+    r"|\bi\s+(?:don'?t|do not|can'?t)\s+understand\b"
+    # Spanish and French, where the same request is one everyday verb.
+    r"|\b(?:mas|m[aá]s)\s+(?:simple|f[aá]cil|sencillo)\b"
+    r"|\bexpl[ií]ca(?:melo|lo)?\s+(?:mas|m[aá]s)\s+(?:simple|f[aá]cil|sencillo)\b"
+    r"|\bno\s+entiendo\b"
+    r"|\bplus\s+(?:simple|facile)\b"
+    r"|\bexplique[sz]?[- ]?(?:le|moi)?\s+plus\s+simplement\b"
+    r"|\bje\s+ne\s+comprends\s+pas\b",
+    re.IGNORECASE,
+)
+
+
+def wants_it_simpler(message: str) -> bool:
+    """Whether this asks for the LAST answer again, in plainer words."""
+    return bool(_SIMPLER.search(fold(message)))
 
 
 def wants_video(message: str) -> bool:

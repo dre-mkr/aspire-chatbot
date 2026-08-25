@@ -209,6 +209,13 @@ export function useVoice({
 	onLanguageChange,
 }: UseVoiceOptions) {
 	const [available, setAvailable] = useState(false);
+	/**
+	 * Whether the server can synthesise the GUIDE voices, as opposed to whether
+	 * the voice module is on. False means the reader hears their device.
+	 */
+	const nativeVoice = useRef(true);
+	/** Whether to offer the player at all -- true even when only the device can speak. */
+	const [canPlay, setCanPlay] = useState(false);
 	const [phase, setPhase] = useState<VoicePhase>("rest");
 	const [consented, setConsented] = useState(false);
 	const [elapsed, setElapsed] = useState(0);
@@ -315,7 +322,17 @@ export function useVoice({
 		let live = true;
 		fetchVoiceConfig().then((config) => {
 			if (!live) return;
-			setAvailable(Boolean(config) && typeof MediaRecorder !== "undefined");
+			// `native_voice === false` means the server has no ElevenLabs key, so
+			// speech AND transcription are both dead upstream. The mic goes --
+			// it could only ever fail -- while playback stays, because the
+			// device can still read the answer aloud.
+			nativeVoice.current = config?.native_voice !== false;
+			setAvailable(
+				Boolean(config) &&
+					typeof MediaRecorder !== "undefined" &&
+					nativeVoice.current,
+			);
+			setCanPlay(Boolean(config));
 			// The per-persona pace the server has always sent. Kept, not discarded.
 			personaSpeeds.current = new Map(
 				(config?.personas ?? []).map((entry) => [entry.persona, entry.speed]),
@@ -549,6 +566,31 @@ export function useVoice({
 			}
 
 			stopPlayback();
+
+			// STRAIGHT TO THE DEVICE when there is no guide voice to fetch.
+			//
+			// Without this the client asks the server on every single press,
+			// waits out the round trip, is told 503, and only then speaks --
+			// so a misconfigured server costs the reader a pause before every
+			// answer, on top of losing Skye's voice.
+			if (!nativeVoice.current) {
+				const spoke = speakInBrowser(
+					text,
+					language,
+					(personaSpeeds.current.get(persona ?? "") ?? 1) *
+						(Number(speed) || 1),
+					() => setPlayingId(null),
+				);
+				if (spoke) {
+					setPausedId(null);
+					setPlayingId(id);
+					showNote("use-browser");
+				} else {
+					showNote("offline");
+				}
+				return;
+			}
+
 			const controller = new AbortController();
 			synthesis.current = controller;
 			let url: string;
@@ -674,6 +716,8 @@ export function useVoice({
 
 	return {
 		available,
+		/** The player is offered whenever anything can speak -- guide or device. */
+		canPlay,
 		phase,
 		micState,
 		elapsed,

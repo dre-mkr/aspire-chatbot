@@ -53,7 +53,20 @@ _FOR_ANOTHER = re.compile(
     r"\b(?:my|our|the|she|he)\s+"
     r"(?:son|daughter|child|children|kid|kids|boy|girl|grandson|granddaughter|"
     r"grandchild|grandchildren|niece|nephew|godson|goddaughter|godchild)\b"
-    r"|\bfor (?:him|her|them|the child|the children)\b",
+    r"|\bfor (?:him|her|them|the child|the children)\b"
+    # SPANISH AND FRENCH, which this pattern never had -- and it decides which
+    # of two people the assistant thinks it is talking to. "quiero registrar a
+    # mi hijo" read as a teenager registering herself, so a Spanish-speaking
+    # parent was answered as the child. The English half has been right since a
+    # teenager applying for her daughter was told to go and ask her own parent.
+    r"|\b(?:mi|mis|su|sus|nuestro|nuestra|nuestros|nuestras|el|la|los|las)\s+"
+    r"(?:hijo|hija|hijos|hijas|nino|nina|ninos|ninas|nieto|nieta|nietos|nietas|"
+    r"sobrino|sobrina|ahijado|ahijada)\b"
+    r"|\bpara\s+(?:mi|su|el|ella|ellos|el nino|la nina)\b"
+    r"|\b(?:mon|ma|mes|son|sa|ses|notre|nos|le|la|les)\s+"
+    r"(?:fils|fille|filles|enfant|enfants|petit-fils|petite-fille|petits-enfants|"
+    r"neveu|niece|filleul|filleule)\b"
+    r"|\bpour\s+(?:lui|elle|eux|mon enfant|son enfant|l'enfant)\b",
     re.IGNORECASE,
 )
 
@@ -312,6 +325,13 @@ def make_intent_gate(
         card = _open_signup(state, message)
         if card is not None:
             return card
+
+        # The teen policy runs FIRST: it is the narrower rule, and the generic
+        # help would otherwise answer a seventeen-year-old as "somebody who
+        # cannot register" without ever telling them what they can do.
+        reply = _teen_registration(state, message)
+        if reply is not None:
+            return reply
 
         reply = _registration_help(state, message)
         if reply is not None:
@@ -1130,6 +1150,202 @@ _SIGNUP_INTRO: dict[str, str] = {
     "es": "Vamos a crearla: el formulario está en pantalla.",
     "fr": "Créons-le : le formulaire est à l'écran.",
 }
+
+
+# ── the teen registration policy ─────────────────────────────────────────────
+#
+# RESOLVED, and written here rather than left to the model: 16-17 may prepare
+# and understand the whole process; the enrolment itself is completed with a
+# parent or legal guardian; and the adult is handed to Imani. None of that
+# blocks the teenager from any information.
+#
+# The probe is deliberately the lightest one that answers the question. An age
+# routes the guidance; a date of birth is personal data this conversation has no
+# reason to hold, and a national ID, an address or an account number are never
+# asked for here at all.
+
+#: "How old are you now?" -- the only thing that separates the two routes.
+_TEEN_AGE_ASK: dict[str, str] = {
+    "en": "Before I point you the right way -- how old are you now?",
+    "es": "Antes de orientarte bien, ¿cuántos años tienes ahora?",
+    "fr": "Avant de bien t'orienter -- quel âge as-tu maintenant ?",
+}
+
+_TEEN_AGE_CHIPS: dict[str, list[str]] = {
+    "en": ["I am 16", "I am 17", "I am 18", "Older than 18"],
+    "es": ["Tengo 16", "Tengo 17", "Tengo 18", "Más de 18"],
+    "fr": ["J'ai 16 ans", "J'ai 17 ans", "J'ai 18 ans", "Plus de 18"],
+}
+
+#: Under eighteen: prepare everything, and the adult completes it.
+_TEEN_UNDER_18: dict[str, str] = {
+    "en": (
+        "You can get fully prepared now, but while you are under 18 a parent or "
+        "legal guardian completes the enrolment with you. I can show you the "
+        "whole process, what to prepare, and what they will be asked to do. "
+        "When they are ready, they can switch to Imani -- the Parents & "
+        "Guardians guide -- for step-by-step help."
+    ),
+    "es": (
+        "Puedes prepararlo todo ahora, pero mientras seas menor de 18 un padre, "
+        "madre o tutor legal completa la inscripción contigo. Puedo enseñarte "
+        "todo el proceso, qué preparar y qué le pedirán a esa persona. Cuando "
+        "esté lista, puede cambiar a Imani -- la guía para padres y tutores -- "
+        "y recibir ayuda paso a paso."
+    ),
+    "fr": (
+        "Tu peux tout préparer dès maintenant, mais tant que tu as moins de 18 "
+        "ans, un parent ou tuteur légal termine l'inscription avec toi. Je peux "
+        "te montrer tout le processus, ce qu'il faut préparer et ce qu'on lui "
+        "demandera. Quand cette personne est prête, elle peut passer à Imani -- "
+        "le guide pour les parents et tuteurs -- pour un accompagnement pas à pas."
+    ),
+}
+
+#: Eighteen or older: the programme's own adult route, not this assistant's form.
+_TEEN_ADULT: dict[str, str] = {
+    "en": (
+        "At 18 you are past the point where a guardian has to do it for you. "
+        "Register your own ASPIRE account at aspire.gov.kn or at any branch, and "
+        "I can tell you what to prepare and what happens at each step."
+    ),
+    "es": (
+        "A los 18 ya no necesitas que un tutor lo haga por ti. Registra tu propia "
+        "cuenta de ASPIRE en aspire.gov.kn o en cualquier sucursal, y puedo "
+        "decirte qué preparar y qué pasa en cada paso."
+    ),
+    "fr": (
+        "À 18 ans, tu n'as plus besoin qu'un tuteur le fasse pour toi. Crée ton "
+        "propre compte ASPIRE sur aspire.gov.kn ou dans une agence, et je peux "
+        "te dire quoi préparer et ce qui se passe à chaque étape."
+    ),
+}
+
+#: What to offer next, whichever route they are on. Every one of these is a
+#: question the corpus can answer, so the chip leads to a grounded, cited reply
+#: rather than to anything invented here.
+_TEEN_NEXT: dict[str, list[str]] = {
+    "en": [
+        "What documents are needed?",
+        "What happens after applying?",
+        "Who can join ASPIRE?",
+    ],
+    "es": [
+        "¿Qué documentos hacen falta?",
+        "¿Qué pasa después de solicitar?",
+        "¿Quién puede unirse a ASPIRE?",
+    ],
+    "fr": [
+        "Quels documents faut-il ?",
+        "Que se passe-t-il après ?",
+        "Qui peut rejoindre ASPIRE ?",
+    ],
+}
+
+#: An age, said any of the ways a teenager says it.
+_AGE_SAID = re.compile(
+    r"\b(1\d|2\d)\b"
+    r"|\b(?:i am|i'?m|im|tengo|j'?ai)\s+(1\d|2\d)\b",
+    re.IGNORECASE,
+)
+
+#: "Older than 18", without a number in it.
+_OLDER_THAN = re.compile(
+    r"\b(?:older|over|above|m[aá]s de|plus de)\b", re.IGNORECASE
+)
+
+
+def _age_said(message: str) -> int | None:
+    """The age this message states, or None. Never a date of birth."""
+    match = _AGE_SAID.search(message or "")
+    if match:
+        value = next((g for g in match.groups() if g), None)
+        if value is not None:
+            age = int(value)
+            # 13 to 25 is the range this question can sensibly be answered in.
+            # Outside it the number is something else -- a year, an amount, a
+            # bus route -- and guessing from it would route real guidance.
+            if 13 <= age <= 25:
+                return age
+    if _OLDER_THAN.search(message or ""):
+        return 19
+    return None
+
+
+def _teen_registration(state: AspireState, message: str) -> dict[str, Any] | None:
+    """A teenager asking how to sign up, answered by policy rather than a form.
+
+    Two turns at most. The first establishes the age, because 16-18 is three
+    ages and two different answers. The second gives the route -- and either
+    way the reader is offered the whole process, the documents and what the
+    adult will be asked to do, so nothing about ASPIRE is withheld from them.
+    """
+    band = str(state.get("age_band") or "")
+    if band not in _SELF_REGISTERING_BANDS:
+        return None
+
+    # APPLYING FOR SOMEBODY ELSE IS A GUARDIAN'S QUESTION, whatever the reader's
+    # own age. A sixteen-year-old can be a parent, and `_audience` has said so
+    # since the day a teenager asking to register their daughter was told to go
+    # and ask their own. This policy is about a teen registering THEMSELVES;
+    # `_registration_help` below still owns the other case.
+    if _FOR_ANOTHER.search(message or ""):
+        return None
+
+    # DELIBERATELY NOT GATED ON `allowed_agents`, which `_registration_help`
+    # below is. A signed-out reader is handed the anonymous row whatever band
+    # they are on -- unconditionally, and that invariant is load-bearing:
+    # nothing may widen its own access by claiming to be someone. So a
+    # seventeen-year-old, signed out, carried `register_agent_step1` and the
+    # guardian intake asked him how he was related to the child.
+    #
+    # The answer is not to narrow the row on an unproven claim. It is to answer
+    # the question here, before the router ever sees it. A card that fires on
+    # the band NARROWS what happens; it grants nothing.
+
+    locale = str(state.get("locale") or "en")
+    if locale not in _TEEN_AGE_ASK:
+        locale = "en"
+
+    # ── the answer to "how old are you now?" ──
+    if state.get("awaiting_teen_age"):
+        age = _age_said(message)
+        if age is None:
+            # Not an age. Drop the question rather than asking it twice: the
+            # reader has moved on, and a form that will not let go is the fault
+            # this whole flow exists to undo.
+            return None
+        under_18 = age < 18
+        return {
+            "awaiting_teen_age": False,
+            "teen_age": age,
+            "active_agent": _holding_agent(state),
+            "messages": [
+                AIMessage(content=(_TEEN_UNDER_18 if under_18 else _TEEN_ADULT)[locale])
+            ],
+            "quick_replies": list(_TEEN_NEXT[locale]),
+            "safety_flags": {"card": "teen_registration"},
+        }
+
+    if not wants_registration(message):
+        return None
+
+    # 13-15 needs no probe: every age in that band is under eighteen.
+    if band == "13-15":
+        return {
+            "active_agent": _holding_agent(state),
+            "messages": [AIMessage(content=_TEEN_UNDER_18[locale])],
+            "quick_replies": list(_TEEN_NEXT[locale]),
+            "safety_flags": {"card": "teen_registration"},
+        }
+
+    return {
+        "awaiting_teen_age": True,
+        "active_agent": _holding_agent(state),
+        "messages": [AIMessage(content=_TEEN_AGE_ASK[locale])],
+        "quick_replies": list(_TEEN_AGE_CHIPS[locale]),
+        "safety_flags": {"card": "teen_age"},
+    }
 
 
 def _registration_help(state: AspireState, message: str) -> dict[str, Any] | None:

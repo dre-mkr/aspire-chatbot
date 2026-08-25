@@ -149,8 +149,22 @@ _CONFUSED = re.compile(
 
 
 def sounds_confused(text: str) -> bool:
-    """Whether this message says, in any words, that the explanation did not land."""
-    return bool(_CONFUSED.search(text or ""))
+    """Whether this message says, in any words, that the explanation did not land.
+
+    "Make it simpler" belongs here rather than in the grader. It is the same
+    message as "I don't understand" said politely, and the tutor already knows
+    what to do with that -- re-teach, do not score. `_CONFUSED` knew the
+    English confessions of confusion and none of the requests to simplify, so
+    on the live site, 25 Aug, "make it simpler" was graded as an attempt at the
+    last check question and answered with a new one about payday.
+
+    `wants_it_simpler` also carries Spanish and French, which `_CONFUSED` never
+    did: "no entiendo" and "je ne comprends pas" were as unheard as the
+    English request.
+    """
+    from app.graph.nodes.intents import wants_it_simpler
+
+    return bool(_CONFUSED.search(text or "")) or wants_it_simpler(text or "")
 
 
 # ── the node ─────────────────────────────────────────────────────────────────

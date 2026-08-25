@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 from app.graph.state import AspireState, KBChunk
@@ -132,11 +134,54 @@ def _writes_as_child(state: AspireState) -> bool:
     return bool(state.get("identity_proven"))
 
 
-def nearest_topic(chunks: list[KBChunk]) -> str | None:
-    """A topic the corpus can actually answer, from the best chunk's own title."""
+#: Words too common to tell two questions apart.
+_STOPWORDS: frozenset[str] = frozenset(
+    "a an the of to for do does did i my me you your is are was what which how "
+    "que el la los las un una de del para por mi yo tu es son como cual cuales "
+    "le les des du un une pour par mon ton est sont comme quel quelle".split()
+)
+
+
+def _shape(text: str) -> frozenset[str]:
+    """The content words of a question, for comparing two of them."""
+    words = re.findall(r"[^\W\d_]+", (text or "").casefold(), re.UNICODE)
+    return frozenset(w for w in words if w not in _STOPWORDS and len(w) > 2)
+
+
+def _too_alike(topic: str, asked: str) -> bool:
+    """Whether the offer is the question that was just declined.
+
+    Observed on production, 25 Aug: "what documents do i need" was declined
+    with 'You could ask me this one instead: "What documents do I need to
+    register?"'. The offer is the whole value of a decline -- it is the one
+    part that gives the reader somewhere to go -- and handing back their own
+    sentence reads as a fault they caused. Their words are dropped from the
+    comparison, so this catches a rewording as well as a repeat.
+    """
+    a, b = _shape(topic), _shape(asked)
+    if not a or not b:
+        return False
+    return a <= b or b <= a
+
+
+def _asked(state: AspireState) -> str:
+    """The reader's own last message, for keeping the offer off it."""
+    for message in reversed(list(state.get("messages") or [])):
+        if getattr(message, "type", "") == "human":
+            content = getattr(message, "content", "")
+            return content if isinstance(content, str) else ""
+    return ""
+
+
+def nearest_topic(chunks: list[KBChunk], asked: str = "") -> str | None:
+    """A topic the corpus can answer, from the best chunk's own title.
+
+    `asked` is the reader's own question, and a title that merely restates it
+    is skipped in favour of the next chunk's.
+    """
     for chunk in chunks:
         title = (chunk.title or "").strip()
-        if title:
+        if title and not _too_alike(title, asked):
             return title
     return None
 
@@ -157,7 +202,7 @@ def decline_text(state: AspireState, chunks: list[KBChunk]) -> str:
         _WHO_HOLDS_IT[locale][audience].format(**contacts()),
     ]
 
-    topic = nearest_topic(chunks)
+    topic = nearest_topic(chunks, _asked(state))
     if topic:
         parts.append(_OFFER[locale].format(topic=topic))
 
@@ -183,7 +228,7 @@ def decline_chips(state: AspireState, chunks: list[KBChunk]) -> list[str]:
     shortens at a word boundary for display; what it must never be handed is a
     label that has stopped being a question.
     """
-    topic = nearest_topic(chunks)
+    topic = nearest_topic(chunks, _asked(state))
     if not topic:
         return []
     label = topic.strip()

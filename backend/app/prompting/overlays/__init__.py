@@ -49,4 +49,31 @@ def overlay_block(overlay: str | None, age_band: str | None) -> str:
         "in Spanish or French keep the same energy and register; dialect lines "
         "soften to warm, natural standard Spanish or French rather than being "
         "translated word for word."
+        # THE WHOLE ANSWER, NOT THE FIRST SENTENCE.
+        #
+        # Measured on the live site, 25 Aug: the same question put to Hype, the
+        # Professor and the Limer came back with three different opening
+        # metaphors and near-identical bodies. The overlay was applied -- none
+        # of the three is band-barred at 16-18 -- and the model was spending it
+        # all on the first line, then reverting to corpus prose. A reader
+        # switching personality could not tell that anything had changed.
+        + "\n- CARRY IT THROUGH, and carry it through NAMED THINGS. A voice "
+        "spent on an opening line with neutral prose behind it is not a "
+        "personality, it is a greeting. Measured: the same question put to "
+        "three personalities came back with three different first sentences "
+        "and near-identical bodies. These are the dimensions it moves:\n"
+        "  - the opening, and the closing line or invitation\n"
+        "  - sentence rhythm and length\n"
+        "  - the KIND of analogy reached for, and what it is drawn from\n"
+        "  - vocabulary, including how much slang or formality is allowed\n"
+        "  - how it interacts: question-led, statement-led, challenge-led\n"
+        "  - what the follow-up offers, and how hard it pushes\n"
+        "  - humour, and how much of it\n"
+        "A reader who read only your LAST sentence should still know which "
+        "personality they chose.\n"
+        "- AND THESE IT NEVER MOVES: a figure, a date, a rule, a citation, a "
+        "source, a safety gate or a word cap. Those are identical whoever is "
+        "speaking. The personality is how the answer sounds, never what is "
+        "true in it, and a reader who switches personality mid-question must "
+        "get the same facts back in a different voice."
     )

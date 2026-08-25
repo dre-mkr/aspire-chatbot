@@ -44,6 +44,21 @@ class VoiceConfigResponse(BaseModel):
     languages: list[Language]
     limits: VoiceLimits
     realtime_enabled: bool
+    #: Whether the GUIDE voices can actually be synthesised, as distinct from
+    #: whether the voice module is switched on.
+    #:
+    #: `enabled` is a feature flag and nothing more, and on production it was
+    #: true while `ELEVENLABS_API_KEY` was unset -- so the config advertised six
+    #: guides across three languages, the client showed the Play button, and
+    #: every press spent a round trip discovering a 503 before falling back to
+    #: the device's own voice. The reader still heard the answer, which is why
+    #: it went unnoticed: the fallback was covering for a silent misconfiguration.
+    #:
+    #: `enabled` deliberately stays as it was. It gates whether the player is
+    #: offered at all, so reporting it false here would have removed the
+    #: fallback along with the failure -- no Play button, no audio, worse than
+    #: the bug. This field says which VOICE the reader is about to hear.
+    native_voice: bool = True
 
 
 class VoiceErrorResponse(BaseModel):

@@ -36,6 +36,28 @@ _LINES: dict[str, dict[str, str]] = {
         "en": "Show me a number", "es": "Muéstrame un número", "fr": "Montre-moi un nombre",
     },
     "okay": {"en": "Okay", "es": "Vale", "fr": "D'accord"},
+    # The lesson's own way out, which was English in all three languages: a
+    # Spanish reader finishing a lesson was offered "Play a game" and "See you
+    # tomorrow". Observed on the live site, 25 Aug.
+    "play_a_game": {"en": "Play a game", "es": "Jugar un juego", "fr": "Jouer à un jeu"},
+    "ask_a_question": {"en": "Ask a question", "es": "Hacer una pregunta", "fr": "Poser une question"},
+    "ask_later": {"en": "Ask again later", "es": "Pregúntame luego", "fr": "Redemande plus tard"},
+    "see_tomorrow": {"en": "See you tomorrow", "es": "Hasta mañana", "fr": "À demain"},
+    "tell_me": {"en": "Tell me", "es": "Dime", "fr": "Dis-moi"},
+    # The end of a session, which was three English literals -- and one of them
+    # congratulated a reader for nothing. Observed on the live site, 25 Aug:
+    # "Nice work. You covered 0 concepts today." arrived in the middle of a
+    # conversation, after a question that was not a lesson at all.
+    "wrap_nothing_young": {
+        "en": "We did not get to a lesson this time. Want to try one?",
+        "es": "Esta vez no llegamos a una lección. ¿Quieres probar una?",
+        "fr": "On n'a pas fait de leçon cette fois. Tu veux en essayer une ?",
+    },
+    "wrap_nothing": {
+        "en": "We did not cover a lesson this time. Want to start one?",
+        "es": "Esta vez no vimos ninguna lección. ¿Quieres empezar una?",
+        "fr": "Nous n'avons pas fait de leçon cette fois. Tu veux en commencer une ?",
+    },
     "go_back": {
         "en": "Go back to the other one", "es": "Volver a la otra", "fr": "Revenir à l'autre",
     },
