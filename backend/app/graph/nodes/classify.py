@@ -369,10 +369,50 @@ _ASKS_OUTRIGHT = re.compile(
 )
 
 
+#: An auxiliary opening a sentence: "can I", "do I", "puedo", "dois-je".
+_AUX_OPENER = re.compile(
+    r"^\s*(?:can|could|do|does|did|should|shall|is|are|am|will|would|have|has|may"
+    r"|puedo|puedes|debo|deber[ií]a|necesito|tengo\s+que|hay\s+que"
+    r"|puis-je|dois-je|est-ce|faut-il|peux-tu)\b",
+    re.IGNORECASE,
+)
+
+#: The reader talking about themselves, which no slot ever asks for.
+_ABOUT_ME = re.compile(
+    r"\b(?:i|me|my|we|our|us|you|your"
+    r"|yo|mi|mis|me|nosotros|nuestro|tu|te"
+    r"|je|moi|mon|ma|mes|nous|notre|tu|toi|ton)\b",
+    re.IGNORECASE,
+)
+
+
 def _is_an_outright_question(state: AspireState) -> bool:
-    """Whether this turn asks something, judged strictly. See `_ASKS_OUTRIGHT`."""
+    """Whether this turn asks something, judged strictly. See `_ASKS_OUTRIGHT`.
+
+    A QUESTION MARK IS NOT REQUIRED, and requiring one was the whole bug.
+    Observed on the live site, 25 Aug, Zion aged 17: "can i register on my own
+    or do i need my mother to do it" was read as a bad answer to "how are you
+    related to the child?", so the same re-ask came back, and it came back
+    again on the next attempt. A reader who types without punctuation -- which
+    is most teenagers -- had no way out of the form at all.
+
+    `_ASKS_OUTRIGHT` stays as strict as it was, because its exclusions are
+    load-bearing: "Will" is a child's name and must remain an answer. What is
+    added is narrower than a bare auxiliary. All three must hold: the sentence
+    OPENS with an auxiliary, it mentions the reader or the assistant, and it is
+    longer than a name. "Will" fails the first two, "Will Smith" fails all
+    three, and "can i register on my own" passes every one.
+    """
     text = (_latest_user_text(state) or "").strip()
-    return bool(text) and bool(_ASKS_OUTRIGHT.search(text))
+    if not text:
+        return False
+    if _ASKS_OUTRIGHT.search(text):
+        return True
+    return bool(
+        _AUX_OPENER.match(text)
+        and _ABOUT_ME.search(text)
+        and len(text.split()) >= 4
+    )
 
 
 def _is_a_question_not_an_answer(state: AspireState) -> bool:

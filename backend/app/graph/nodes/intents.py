@@ -120,6 +120,17 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:un|el) juego\b",
         r"\bjouer\b",
         r"\b(?:un|le) jeu\b",
+        # "a different game" matched nothing while "another game" matched, so a
+        # reader who had just finished one and asked for the next was routed to
+        # the tutor and quizzed. Observed on the live site, 25 Aug, Zion.
+        r"\b(?:a |some )?(?:different|other|new) (?:game|quiz|puzzle)\b",
+        r"\banother one\b",
+        # The first-person plural imperative is how you say "let's play" in both
+        # languages, and neither was here: `jugar`/`jouer` are the infinitives.
+        r"\bjuguemos\b",
+        r"\bjouons\b",
+        r"\b(?:otro|otra) (?:juego|partida)\b",
+        r"\bun autre jeu\b",
     )
 )
 
@@ -167,6 +178,22 @@ _STORY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:regarder|voir|[eé]couter)\s+(?:une|l\'|la|encore une)?\s*"
         r"histoire\b",
         r"\b(?:puis-je|je peux|je veux|on peut)\b[^.?!]{0,16}?\bhistoire\b",
+        # THE POLITE FORMS, which is how most people actually ask.
+        #
+        # Spanish and French put the request as a question about the listener
+        # -- "me cuentas un cuento?", "peux-tu me raconter une histoire?" --
+        # and every pattern above wanted an imperative. Measured against the
+        # matcher: the imperative `cuentame un cuento` passed and the polite
+        # `me cuentas un cuento` did not, so the courteous reader was the one
+        # who got a classroom activity instead of a story.
+        r"\bme (?:cuentas|puedes contar|podr[ií]as contar|lees|puedes leer)\b"
+        r"[^.?!]{0,14}?\b(?:cuento|historia)\b",
+        r"\b(?:leeme|leame|cuentanos)\b[^.?!]{0,12}?\b(?:cuento|historia)\b",
+        r"\b(?:cuento|historia)\s+(?:por favor|porfa)\b",
+        r"\b(?:peux-tu|pouvez-vous|tu peux|vous pouvez)\b[^.?!]{0,18}?"
+        r"\b(?:raconter|lire)\b[^.?!]{0,12}?\bhistoire\b",
+        r"\bhistoire\s+s\W?il (?:te|vous) pla[iî]t\b",
+        r"\b(?:lis|lisez)-?(?:moi|nous)\b[^.?!]{0,12}?\bhistoire\b",
     )
 )
 
