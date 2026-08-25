@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -108,6 +109,8 @@ _ASKS_FOR_ANSWER = re.compile(
       | (?:i\s+)?give\s+up
       | show\s+me\s+how
       | i\s+want\s+the\s+answer
+      | dime\s+la\s+respuesta | dame\s+la\s+respuesta | me\s+rindo
+      | donne[\s-]moi\s+la\s+r[eé]ponse | dis[\s-]moi\s+la\s+r[eé]ponse | j'?abandonne
     )\b""",
     re.VERBOSE | re.IGNORECASE,
 )
@@ -121,6 +124,8 @@ _DONT_KNOW = re.compile(
         i\s+(?:really\s+)?(?:do\s*n[o']?t|don'?t)\s+know(?:\s+(?:it|that|this))?
       | (?:i\s+have\s+)?(?:no|not\s+(?:a|the)\s+)\s*idea
       | dunno | idk | no\s+clue | not\s+sure | unsure | no\s+idea
+      | no\s+(?:lo\s+)?s[eé] | ni\s+idea | no\s+tengo\s+(?:ni\s+)?idea
+      | je\s+(?:ne\s+)?sais\s+pas | j'?en\s+sais\s+rien | aucune\s+id[eé]e | sais\s+pas
       | \?+
     )\s*[.!?]*\s*$""",
     re.VERBOSE | re.IGNORECASE,
@@ -135,11 +140,22 @@ _FILLER = frozenset(
 _WORD = re.compile(r"[a-z0-9$%.]+")
 
 
+def _fold(text: str) -> str:
+    """Lowercase, accents dropped -- so "educación" and "educacion" compare equal.
+
+    The games module learnt this first (`games.normalise`): a child's keyboard
+    and an author's keyboard disagree about accents constantly, and in two of
+    the three shipped languages almost every content word carries one.
+    """
+    decomposed = unicodedata.normalize("NFKD", (text or "").lower())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
 def _keywords(text: str) -> frozenset[str]:
     """Content words, for comparing an answer against an accept term."""
     return frozenset(
         word.strip(".,;:!?")
-        for word in _WORD.findall((text or "").lower())
+        for word in _WORD.findall(_fold(text))
         if word not in _FILLER and len(word.strip(".,;:!?")) > 1
     )
 
@@ -153,13 +169,13 @@ def match_accept_list(item: CheckItem, answer: str) -> bool | None:
     author wrote no accept terms tells us nothing, and grading it False would
     punish the learner for the author's omission.
     """
-    text = (answer or "").strip().lower()
+    text = _fold(answer).strip()
     if not text:
         return None
 
-    terms = [term.lower().strip() for term in item.accept if term.strip()]
+    terms = [_fold(term).strip() for term in item.accept if term.strip()]
     if item.answer:
-        terms.append(item.answer.lower().strip())
+        terms.append(_fold(item.answer).strip())
     if not terms:
         return None
 
