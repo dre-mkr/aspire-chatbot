@@ -231,3 +231,45 @@ class EligibilityOutcome(Base):
         # The only read shape: counts over a date range, grouped by verdict.
         Index("ix_eligibility_outcomes_created_verdict", "created_at", "verdict"),
     )
+
+
+class SiteSnapshot(Base):
+    """The text the website watcher last saw at one watched URL."""
+
+    __tablename__ = "site_snapshots"
+
+    url: Mapped[str] = mapped_column(Text, primary_key=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PendingKbRow(Base):
+    """A knowledge-base row the watcher drafted, waiting for a human's yes.
+
+    Deliberately NOT the `documents` table: nothing here is embedded, retrieved,
+    or served. Rows leave this queue by `python -m app.watcher export` into a
+    review CSV, and enter the corpus only through the research tool's append
+    gate. `status` is "pending" until exported, then "exported".
+    """
+
+    __tablename__ = "pending_kb_rows"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    # "WEB-20260824-00": the watcher's own prefix, so provenance survives the CSV.
+    kb_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    subcategory: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    keywords: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    audience: Mapped[str] = mapped_column(String(16), nullable=False, default="general")
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    as_of: Mapped[str] = mapped_column(String(10), nullable=False)
+    why: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

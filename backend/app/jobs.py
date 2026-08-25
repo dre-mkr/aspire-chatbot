@@ -11,6 +11,7 @@ from app.cache import valkey_url
 from app.config import get_settings
 
 from app.retention import retention_job
+from app.watcher.job import watcher_job
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,8 @@ class WorkerSettings:
     # Nightly, at 03:15, off the request path.
     cron_jobs = [
         cron(retention_job, hour=3, minute=15, run_at_startup=False),
+        # After retention, before anyone is awake to ask about what changed.
+        cron(watcher_job, hour=4, minute=10, run_at_startup=False),
     ]
     max_tries = 2
     job_timeout = 120

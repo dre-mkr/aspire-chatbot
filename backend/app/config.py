@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # Whether the console provider may write message bodies to the log.
     mail_console_logs_links: bool = False
 
+    # --- Website watcher ---
+    # The public pages the watcher polls for changes. Empty list disables it.
+    watcher_urls: list[str] = ["https://aspire.gov.kn/"]
+
     # --- Chat model ---
     # Passed straight to init_chat_model, so it must be in "provider:model" form.
     chat_model: str = "openai:gpt-5.6-luna"
