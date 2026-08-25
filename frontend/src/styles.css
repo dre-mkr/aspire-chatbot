@@ -8715,6 +8715,52 @@ a.source__site--link:hover .source__out {
 	transform: translateX(-50%) translateY(0);
 }
 
+/* ON THE LANDING THE HINT OPENS UPWARD.
+ *
+ * The compact row is the last thing above the footer on a page that fills the
+ * window exactly, so a hint dropping BELOW the card has only the page edge
+ * under it. Two ancestors clip there -- the `h-dvh` scroller and the wrapper
+ * above it -- and how much of the hint survives depends on the window height:
+ * at 900 it happens to fit, at the height the reader had it lost its last
+ * line mid-word. A tooltip whose legibility depends on the size of the window
+ * is not a tooltip.
+ *
+ * Upward there is the whole page. Nothing is resized to make room -- the guide
+ * faces stay the size they were drawn at -- and the full-page selector, which
+ * has room beneath it, keeps opening downward.
+ */
+.guide-selector--compact .guide-card__hint {
+	top: auto;
+	bottom: calc(100% + 6px);
+	transform: translateX(-50%) translateY(4px);
+}
+
+.guide-selector--compact .guide-card__hint[data-visible="true"] {
+	transform: translateX(-50%) translateY(0);
+}
+
+/* The row's end cards sit against the panel edge, and a 15rem hint centred on
+   an 83px card reaches past it -- Azuri's crossed the window's right edge by
+   3px. The outer two anchor to their own edge instead of their centre. */
+.guide-selector--compact .guide-card:first-child .guide-card__hint {
+	left: 0;
+	transform: translateX(0) translateY(4px);
+}
+
+.guide-selector--compact .guide-card:first-child .guide-card__hint[data-visible="true"] {
+	transform: translateX(0) translateY(0);
+}
+
+.guide-selector--compact .guide-card:last-child .guide-card__hint {
+	left: auto;
+	right: 0;
+	transform: translateX(0) translateY(4px);
+}
+
+.guide-selector--compact .guide-card:last-child .guide-card__hint[data-visible="true"] {
+	transform: translateX(0) translateY(0);
+}
+
 .guide-selector__skip {
 	margin: 28px 0 0;
 	text-align: center;
@@ -8978,6 +9024,99 @@ a.source__site--link:hover .source__out {
 	}
 	.guide-selector--compact .guide-card__name {
 		margin-top: 5px;
+	}
+}
+
+/* ── The landing, in a window shorter than the design was signed off at ────
+ *
+ * The step above recovers 80px and lands the page in a 900px window. A window
+ * SHORTER than that is not an edge case: it is what a screen recording is. A
+ * 1080p capture spends 150-300px on the browser's own chrome and the dock, so
+ * the page a demo video actually shows is nearer 780 tall -- and at 780 the
+ * measurements are header 111, main 685, footer 71: 867 against 780, with the
+ * ministry footer cut off entirely and the guide faces clipped.
+ *
+ * Everything below the fold there is the part a viewer most needs to see: who
+ * the guides are, and whose programme this is.
+ *
+ * The trim is the same shape as the step above -- vertical rhythm first, then
+ * the two things that own real height at this size: the hero's display type,
+ * which is set for a 900px window and is simply too tall for a 780px one, and
+ * the fixed 8rem card row. Nothing reflows and nothing is hidden; the page is
+ * the same page, breathing less.
+ */
+/* `min-width` as well as `max-height`: a phone is short AND narrow, and the
+ * hero there is already `text-5xl` -- 48px, smaller than the 52px this step
+ * sets. Without the guard the trim made the type on a phone BIGGER than the
+ * design, which is the opposite of what a trim is for. */
+@media (min-width: 768px) and (max-height: 860px) {
+	/* The mark keeps its air. Squeezing the top padding to nothing put the
+	   lockup 8px off the edge of the window, which reads as a page that has
+	   been cropped rather than one that was laid out. The 8px it costs comes
+	   back off the card row below, which has it to give. */
+	.landing-head {
+		padding-top: 1rem;
+		padding-bottom: 0.375rem;
+	}
+	/* Two lines at 4.75rem is 160px of an 780px window. */
+	.landing-hero h1 {
+		font-size: 3rem;
+		margin-bottom: 0.25rem;
+	}
+	.landing-hero > p {
+		margin-bottom: 0.75rem;
+	}
+	.landing-hero,
+	.landing-cards {
+		margin-bottom: 0.5rem;
+	}
+	/* `h-32` is a fixed 8rem, so it does not give any of it back on its own --
+	   but it cannot go below 6.75rem either: at 6.25 the third line of each
+	   card's copy was cut off mid-sentence. The 8px the header takes comes off
+	   the display type instead, where two lines give it up unnoticed. */
+	.landing-cards > button {
+		height: 6.75rem;
+	}
+	.landing-lower {
+		padding-bottom: 0;
+	}
+	.guide-selector--compact {
+		padding: 8px 20px 10px;
+	}
+}
+
+/* A 720p capture, and the 1366x768 laptop, land here: 47px still over after
+ * the step above. The same three levers, one notch further. Below this the
+ * page scrolls, which is the honest answer -- a window this short cannot hold
+ * a hero, a composer, four cards, five faces and a ministry footer at a size
+ * anyone would want to look at. */
+@media (min-width: 768px) and (max-height: 760px) {
+	/* Still more than the 8px it started at: the top edge is the one place
+	   this page should not look trimmed. */
+	.landing-head {
+		padding-top: 0.75rem;
+	}
+	.landing-hero h1 {
+		font-size: 2.625rem;
+	}
+	.landing-hero > p {
+		margin-bottom: 0.5rem;
+	}
+	.landing-hero,
+	.landing-cards {
+		margin-bottom: 0.375rem;
+	}
+	.landing-cards > button {
+		height: 5.75rem;
+	}
+	.landing-lower h3 {
+		margin-bottom: 0.5rem;
+	}
+	.guide-selector--compact {
+		padding: 6px 18px 8px;
+	}
+	.guide-selector--compact .guide-selector__heading {
+		margin-bottom: 6px;
 	}
 }
 
@@ -9739,6 +9878,20 @@ a.source__site--link:hover .source__out {
 .view-head__back:focus-visible {
 	outline: 2px solid var(--plum);
 	outline-offset: 2px;
+}
+
+/* The right-hand group: the way out, and the account. */
+.view-head__actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+/* `view-head__back` carries a -12px pull so its WORDS, not its padding, land on
+   the container edge. That is right while the label ends the row and wrong the
+   moment it does not: it would drag the account control back over the text. */
+.view-head__actions > .view-head__back:not(:last-child) {
+	margin-right: 0;
 }
 
 @media (max-width: 640px) {
