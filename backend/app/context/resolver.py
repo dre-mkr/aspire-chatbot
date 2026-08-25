@@ -208,6 +208,7 @@ def make_resolve_context(loader=None):
             age_band=str(state.get("age_band") or ""),
             locale=str(state.get("locale") or "en"),
             account_status=str(state.get("account_status") or ""),
+            overlay=str(state.get("overlay") or ""),
             display_name=payload.get("display_name"),
             recent_turns=_recent_turns(state),
             running_summary=str(state.get("summary") or ""),

@@ -4,18 +4,24 @@ import { type ReactNode, useEffect, useState } from "react";
 import { type AspireVideo, fetchVideos } from "#/lib/aspire/videos";
 import type {
 	ChartDirective,
+	CollectibleDirective,
 	Directive,
 	EscalatedDirective,
+	PledgeDirective,
 	ProgressDirective,
 	ReviewCardDirective,
 	SignupDirective,
+	TinDirective,
 	UploadDirective,
 	VideoDirective,
 	WidgetDirective,
 	WidgetInteraction,
 } from "../../lib/stream/types";
 import { WidgetRenderer } from "../widgets/WidgetRenderer";
+import { CollectibleCard } from "./CollectibleCard";
+import { PledgeCard } from "./PledgeCard";
 import { ReviewCard } from "./ReviewCard";
+import { TinDrop } from "./TinDrop";
 import { UploadCard } from "./UploadCard";
 import { VideoCard } from "./VideoPanel";
 
@@ -52,6 +58,9 @@ export interface DirectiveContext {
 
 /** Types this build knows how to render. Everything else renders nothing. */
 const KNOWN = new Set([
+	"tin",
+	"collectible",
+	"pledge",
 	"signup",
 	"upload",
 	"review_card",
@@ -90,6 +99,20 @@ export function DirectiveView({
 					onInteraction={context.onWidgetInteraction}
 					// Skipping is silent by design: the agent continues without comment.
 					onSkip={() => undefined}
+				/>
+			);
+
+		case "tin":
+			return <TinDrop directive={directive as TinDirective} />;
+
+		case "collectible":
+			return <CollectibleCard directive={directive as CollectibleDirective} />;
+
+		case "pledge":
+			return (
+				<PledgeCard
+					directive={directive as PledgeDirective}
+					send={context.send}
 				/>
 			);
 

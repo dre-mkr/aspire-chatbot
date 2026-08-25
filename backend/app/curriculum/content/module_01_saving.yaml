@@ -69,6 +69,11 @@ concepts:
     band_min: "5-8"
     prerequisites: [need, goal]
     vocabulary: [budget, save, spend, need, want, goal]
+  - id: habit
+    name: Money habits
+    band_min: "5-8"
+    prerequisites: [save]
+    vocabulary: [habit, save, money, keep]
 
 lessons:
   # ── 1. What saving is ────────────────────────────────────────────────────
@@ -219,6 +224,52 @@ lessons:
         graded: false
         accept: [keep, keeping, later, save, not spend, put away, tin, account, wait]
 
+    guide:
+      educator:
+        "5-8":
+          timing_minutes: 30
+          materials: ["A tin or jar", "Play coins"]
+          misconceptions:
+            - wrong: "They think saved money is gone, like spent money."
+              say: "Open the tin. Count it. Still yours, and still here."
+            - wrong: "They think saving means never getting the thing."
+              say: "Saving is HOW you get the thing. The tin is the road to the football."
+          extension: "Each child names one thing they would keep a coin for this week."
+        "9-12":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They treat saving as an event -- one big amount, once."
+              say: "Which wins by Christmas: EC$10 every week, or EC$100 one time in June?"
+            - wrong: "They think small amounts are not worth keeping."
+              say: "Run EC$3 a week to the end of term on the board. Let the total argue."
+          extension: "Track a real week of pocket money: kept, spent, and what the kept part is for."
+        "13-15":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They equate saving with not being allowed to spend."
+              say: "Saving is deferring, not cancelling. The money is still theirs -- ask them when, not whether."
+            - wrong: "They think saving only counts when there is a lot to save."
+              say: "EC$25 a week from a Saturday job is EC$1,300 a year. Do the multiplication together."
+          extension: "Price something real they want, and work backwards to a weekly amount."
+      guardian:
+        "5-8":
+          doing: "Learning that kept money is not lost money -- it waits."
+          do_together: "Keep one coin together at the shop, and count the tin at home."
+          ask_them: "Where is your coin now? Is it still yours?"
+          got_it_sounds_like: "They say the money is waiting, not gone."
+        "9-12":
+          doing: "Learning that small amounts kept often beat big amounts kept never."
+          do_together: "Pick a goal, put the week's kept money somewhere they can see."
+          ask_them: "How many weeks to the goal at this rate?"
+          got_it_sounds_like: "They do the division themselves and tell you the date."
+        "13-15":
+          doing: "Learning that saving is a timing choice, not a punishment."
+          do_together: "Talk through one real purchase they deferred, and what changed."
+          ask_them: "What did waiting cost you? What did it get you?"
+          got_it_sounds_like: "They weigh both sides without being prompted."
+
   # ── 2. Spending is not the enemy ────────────────────────────────────────
   - id: l02_spending_is_fine
     module_id: module_01_saving
@@ -354,6 +405,46 @@ lessons:
             - "Think about whether the keeping already happened before the spending."
             - "One of these two. Which plan is one you would still keep in March?"
             - "It is fine. If you kept first, the rest is yours to spend -- the order is the method."
+
+    guide:
+      educator:
+        "5-8":
+          timing_minutes: 25
+          materials: ["Play coins", "Two picture cards: a treat, a tin"]
+          misconceptions:
+            - wrong: "They hear that spending is bad and hide what they bought."
+              say: "We bought the snow cone and it was fine. What did we also keep?"
+          extension: "Everyone names one good spend from this week, and claps for it."
+        "9-12":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They swing to all-saving and call classmates wasteful."
+              say: "A plan with no patties in it gets abandoned by March. Build the treat in."
+          extension: "Design a week that includes BOTH: something kept, something enjoyed."
+        "13-15":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They frame every purchase as a failure of discipline."
+              say: "Keep first, then spend the rest without guilt. Interrogate the ORDER, not the treat."
+          extension: "Take a real month and mark which spends were planned. Only the unplanned ones get discussed."
+      guardian:
+        "5-8":
+          doing: "Learning that spending is normal and keeping some is the trick."
+          do_together: "Buy the treat AND feed the tin, same day, and name both out loud."
+          ask_them: "What did we enjoy today? What did we keep?"
+          got_it_sounds_like: "They stop hiding what they spent."
+        "9-12":
+          doing: "Learning that the question is how much to keep first, not whether to spend."
+          do_together: "Split the week's money together before any of it is spent."
+          ask_them: "What is the keep-first amount this week?"
+          got_it_sounds_like: "They name the split before you ask."
+        "13-15":
+          doing: "Learning that a plan with enjoyment in it is the one that survives."
+          do_together: "Let them defend one fun purchase inside their plan -- and accept the defence."
+          ask_them: "Was it in the plan? Then it is fine. What is next week's plan?"
+          got_it_sounds_like: "They talk about the order of money, not the guilt of it."
 
   # ── 3. A goal makes saving easier ───────────────────────────────────────
   - id: l03_a_goal
@@ -508,6 +599,46 @@ lessons:
           "16-18": "Name a goal of your own, roughly what it costs, and when you want it by."
         graded: false
         accept: [bike, bicycle, phone, shoes, boots, gift, costume, game, ball, book, school]
+
+    guide:
+      educator:
+        "5-8":
+          timing_minutes: 30
+          materials: ["Picture cards of goals", "A paper thermometer to colour"]
+          misconceptions:
+            - wrong: "They pick a goal so big it cannot be reached this term."
+              say: "Pick something ten coins big. Reaching it is the lesson; the bicycle can be next."
+          extension: "Colour one segment of the goal chart for every coin kept."
+        "9-12":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They name the goal but never price it."
+              say: "A goal without a price is a wish. What does it cost, to the dollar?"
+          extension: "Price it, date it, divide it -- on paper, for a real goal of theirs."
+        "13-15":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They set a weekly amount they cannot actually keep."
+              say: "Adjust the goal or the date. A plan that fails week one teaches the wrong lesson."
+          extension: "Two versions of the same goal: aggressive and comfortable. Argue for one."
+      guardian:
+        "5-8":
+          doing: "Learning that a goal makes waiting easier."
+          do_together: "Draw the goal and stick it on the tin."
+          ask_them: "How many more coins to the football?"
+          got_it_sounds_like: "They count down without being asked."
+        "9-12":
+          doing: "Learning to price a goal and work out the weeks."
+          do_together: "Check the real price together -- in the shop or online."
+          ask_them: "At EC$5 a week, when do you get there?"
+          got_it_sounds_like: "They answer with a date."
+        "13-15":
+          doing: "Learning to fit a goal to the money they actually have."
+          do_together: "Review the weekly amount after two weeks and let them adjust it."
+          ask_them: "Is the amount right, or does the date move?"
+          got_it_sounds_like: "They adjust the plan instead of abandoning it."
 
   # ── 4. Needs and wants ──────────────────────────────────────────────────
   - id: l04_needs_and_wants
@@ -916,3 +1047,189 @@ lessons:
           do_together: "Ask what their split would be on EC$200, then on EC$60, and listen for what moved."
           ask_them: "When your money drops, do you keep the same amount or the same share?"
           got_it_sounds_like: "They say share, and they can explain why the amount is the wrong thing to hold."
+
+  # ── 6. Money habits ─────────────────────────────────────────────────────
+  - id: l06_money_habits
+    module_id: module_01_saving
+    concept_id: habit
+    order: 6
+    objective: The learner can name one money habit of their own and one small change that makes keeping money automatic.
+    # ── the six voices ───────────────────────────────────────────────────
+    persona_voice:
+      stella:
+        band: "5-8"
+        role: learner
+        tone: "warm, simple, praise"
+        teach_points:
+          - "A habit is a thing you do every time, without thinking hard."
+          - "Feeding the tin on the same day makes keeping easy."
+          - "Little and often beats big and once."
+        examples:
+          - "Every Saturday, one coin goes in the tin before anything else."
+        joke: "My tin eats every Saturday. It is never full and never complains."
+      kaleb:
+        band: "9-12"
+        role: learner
+        tone: "friendly, a bit of swagger"
+        teach_points:
+          - "A habit is money on autopilot -- decided once, done every week."
+          - "Same day, same amount, before the spending starts. That is the whole trick."
+          - "The habit is the machine; the amount can be small."
+        examples:
+          - "EC$3 into the account every Friday, before the shop. Sixty-plus dollars by end of term without feeling it."
+        joke: "Willpower takes a day off. A habit clocks in anyway."
+      orion:
+        band: "13-15"
+        role: learner
+        tone: "dry, plain"
+        teach_points:
+          - "Habits beat willpower because they remove the decision."
+          - "Attach the keeping to something that already happens: allowance day, job day."
+          - "Track it somewhere you can see; a visible streak protects itself."
+        examples:
+          - "Saturday job pays, EC$20 moves before you leave the yard. No decision, no leak."
+        joke: "A streak is the only judge you cannot argue with."
+      aurora:
+        band: "adult"
+        role: parent
+        tone: "warm, practical, proverb"
+        teach_points:
+          - "Children copy the habit they can SEE. Feed the tin in front of them."
+          - "Tie their keeping to a fixed day, and let them do the moving themselves."
+          - "Praise the streak, not the sum -- the habit is the inheritance."
+        examples:
+          - "Sunday evening, everyone's tin gets fed, yours included. It becomes what this family does."
+        joke: "What you do on payday teaches louder than what you say on Sunday."
+      nova:
+        band: "adult"
+        role: educator
+        tone: "colleague to colleague, practical"
+        teach_points:
+          - "The objective is behavioural: one named habit and one named change, per learner."
+          - "Anchor new habits to existing routines -- arrival, register, Friday close."
+          - "Mark consistency over amount: a four-week streak of EC$1 outranks one EC$20."
+        examples:
+          - "A class savings chart: each learner logs their keep-day weekly, streaks visible to all."
+        joke: "Grade the streak and watch attendance at the habit improve."
+      guest:
+        band: "adult"
+        role: learner
+        tone: "friendly, local"
+        teach_points:
+          - "You do not need more discipline; you need fewer decisions. Automate the keep."
+          - "Same day as the pay lands, the keeping moves. A standing order never forgets."
+          - "One visible streak -- an app, a book, a calendar -- keeps the habit honest."
+        examples:
+          - "Payday standing order: EC$100 gone to savings before the weekend can find it."
+        joke: "The best saver in the house is the standing order. It has no feelings."
+    teach_points:
+      "adult":
+        - "The gap is rarely knowledge -- it is the habit. Decide once, automate, and stop re-deciding."
+        - "Anchor keeping to payday: what moves first never gets spent."
+        - "Make the streak visible. A run you can see is a run you protect."
+      "5-8":
+        - "A habit is a thing you do every time, without thinking hard."
+        - "Feeding the tin on the same day makes keeping easy."
+        - "Little and often beats big and once."
+      "9-12":
+        - "A habit is a decision made once that then works every week."
+        - "Same day, same amount, before the spending starts."
+        - "Small amounts on a schedule beat big amounts on a promise."
+      "13-15":
+        - "Habits beat willpower because they remove the decision."
+        - "Attach the keeping to something that already happens -- allowance day, job day."
+        - "Track it visibly; a streak you can see is a streak you protect."
+      "16-18":
+        - "Willpower is a budget that runs out; a habit spends none of it."
+        - "Move the keeping the day money arrives -- pay yourself first, literally first."
+        - "Streaks and automation carry you through the thin months willpower would not."
+    examples:
+      "5-8":
+        - "Every Saturday morning, one coin in the tin before play."
+        - "The tin lives where you can see it, so you remember to feed it."
+      "9-12":
+        - "EC$3 every Friday before the shop. By end of term that is real money, and it never hurt."
+        - "A tick on the calendar every week you fed the account. Try to keep the row unbroken."
+      "13-15":
+        - "Saturday job pays EC$80: EC$20 moves the same day, every time, before anything else."
+        - "Six ticks in a row on your phone. Week seven, you keep the run alive."
+      "16-18":
+        - "First job: a standing order moves EC$150 the day pay lands. You never meet that money as spendable."
+        - "December pays double; the HABIT stays the same percentage, so the thin months are already covered."
+    suggested_widget_kind: timeline
+    check_questions:
+      - id: q1_when_does_it_move
+        prompt:
+          "5-8": "When does your keeping coin go in the tin?"
+          "9-12": "When should the keeping money move?"
+          "13-15": "When does the keep-money move, if you want it to actually happen?"
+          "16-18": "Pay lands today. When does the keeping move?"
+        options: ["Same day, first thing", "Whenever I remember", "At the end of the month"]
+        answer: 0
+        hints:
+          "5-8":
+            - "Think about feeding the tin before play, every Saturday."
+            - "It is one of these two: first thing, or when you remember?"
+            - "First thing! Same day, every time -- that is what makes it a habit."
+          "9-12":
+            - "Think about which one still happens on a busy week."
+            - "It is one of these two: first thing, or when you remember?"
+            - "Same day, first thing. Remembering is a plan; a habit does not need one."
+          "13-15":
+            - "Think about which option removes the decision."
+            - "One of these two: first thing, or end of the month?"
+            - "Same day, first thing. What waits until month-end meets an empty pocket."
+          "16-18":
+            - "Which option never meets the money as spendable?"
+            - "One of these two: first thing, or end of the month?"
+            - "Same day, first thing -- pay yourself first. Month-end keeping is whatever is left, which is usually nothing."
+      - id: q2_name_your_habit
+        prompt:
+          "5-8": "Tell Skye your tin day. Which day feeds the tin?"
+          "9-12": "Name your keep-day, and what moves on it."
+          "13-15": "Name one money habit you could start this week, and its trigger."
+          "16-18": "Name the habit, the trigger, and the amount. All three."
+        graded: false
+        accept: [saturday, sunday, monday, friday, payday, allowance, week, every, day, tin, account, move, keep]
+
+    guide:
+      educator:
+        "5-8":
+          timing_minutes: 30
+          materials: ["The class tin", "A wall calendar and stickers"]
+          misconceptions:
+            - wrong: "They think a habit has to be big to count."
+              say: "One coin, every Saturday, beats ten coins once. The every-time is the habit."
+            - wrong: "They wait to feel like doing it."
+              say: "Habits are for the days you do not feel like it. That is their whole job."
+          extension: "A class tin fed every Friday, with a sticker for every unbroken week."
+        "9-12":
+          timing_minutes: 25
+          materials: ["A streak chart per learner"]
+          misconceptions:
+            - wrong: "They restart the whole plan after one missed week."
+              say: "A missed week is a gap, not a failure. The streak starts again the same day."
+          extension: "Four-week streak challenge: consistency scores, amounts do not."
+        "13-15":
+          timing_minutes: 25
+          materials: []
+          misconceptions:
+            - wrong: "They rely on motivation and call the plan broken when it dips."
+              say: "Motivation dips are the design case. Anchor the habit to a day, not a mood."
+          extension: "Each learner names habit + trigger + amount and reports the streak in four weeks."
+      guardian:
+        "5-8":
+          doing: "Learning that keeping money works best as a same-day-every-time habit."
+          do_together: "Pick the tin day together and feed it at the same moment each week."
+          ask_them: "What day does the tin eat?"
+          got_it_sounds_like: "They remind YOU it is tin day."
+        "9-12":
+          doing: "Learning to put keeping on a schedule instead of a promise."
+          do_together: "Set the keep-day and mark every kept week on the calendar."
+          ask_them: "How long is the streak now?"
+          got_it_sounds_like: "They protect the streak without being reminded."
+        "13-15":
+          doing: "Learning to anchor keeping to a trigger -- job day, allowance day."
+          do_together: "Let them choose the trigger and the amount; you only ask about the streak."
+          ask_them: "What is the trigger, and did it fire this week?"
+          got_it_sounds_like: "They describe the habit as a system, not an intention."

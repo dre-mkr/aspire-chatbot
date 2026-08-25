@@ -9,6 +9,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from app.context.session_context import SessionContext
 from app.prompting.global_rules import GLOBAL
 from app.prompting.personas import persona_card
+from app.prompting.overlays import overlay_block
 
 #: What the retrieved block is introduced with, in the human turn.
 _CONTEXT_HEADING = "Reference material for this question:"
@@ -89,6 +90,7 @@ def stable_prefix(context: SessionContext, agent_role: str) -> str:
             GLOBAL,
             _contact_block(),
             _fill_card(persona_card(context.persona, context.age_band), context),
+            overlay_block(context.overlay, context.age_band),
             agent_role,
         )
         if part and part.strip()

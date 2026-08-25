@@ -297,6 +297,12 @@ def make_intent_gate(
         if card is not None:
             return card
 
+        # A savings goal said out loud becomes a signable pledge card, and the
+        # signed pledge becomes a standing goal every later turn keeps in view.
+        card = _pledge_turn(state, message)
+        if card is not None:
+            return card
+
         # Before registration help and the router: asking for a person is not a question to answer.
         asked = _asked_for_a_person(message)
         if asked is not None:
@@ -314,6 +320,134 @@ def make_intent_gate(
         return {}
 
     return intent_gate
+
+
+#: "I want to save EC$200 a month for a bike" -- an amount, a period, and
+#: maybe a named goal. The trigger for the pledge card.
+_PLEDGE_INTENT = re.compile(
+    r"\b(?:i (?:want|plan|am going|'m going|would like) to save|i will save|"
+    r"quiero ahorrar|je veux (?:[eé]conomiser|[eé]pargner))\b.{0,40}?"
+    r"(?:ec\$?\s?|\$)(\d[\d,]*)"
+    r"(?:.{0,30}?\b(a week|per week|each week|a month|per month|each month|al mes|a la semana|par mois|par semaine|"
+    r"every (?:week|month|payday)|this (?:week|month|year)|a year)\b)?",
+    re.IGNORECASE,
+)
+
+#: What the goal is for, trailing the amount: "for a bike", "towards CFBC".
+_PLEDGE_GOAL = re.compile(
+    r"\b(?:for|towards?|para|pour)\s+((?:my |a |an |the |mi |mon |ma )?[^.,!?]{2,40})",
+    re.IGNORECASE,
+)
+
+#: What the sign button sends, per locale. Read back by `_pledge_turn`, which
+#: accepts ANY of them -- a reader who switched language mid-conversation must
+#: not have their earlier button refused.
+_PLEDGE_PREFIXES = {"en": "I pledge: ", "es": "Me comprometo: ", "fr": "Je m'engage : "}
+_PLEDGE_SEPARATORS = {"en": " towards ", "es": " para ", "fr": " pour "}
+_PLEDGE_COPY = {
+    "en": {
+        "ask_young": "That is a real plan. Want to make it a promise?",
+        "ask": "That is a real goal. Want to make it a pledge? Signing it means I keep it in view and ask how it is going.",
+        "salute_young": "You made a promise to your tin! I will remember it.",
+        "salute": "Signed. That pledge is yours now -- I will keep it in view.",
+        "button_young": "I promise",
+        "button": "Sign my pledge",
+        "sealed": "Pledged",
+    },
+    "es": {
+        "ask_young": "Ese es un buen plan. ¿Quieres convertirlo en una promesa?",
+        "ask": "Esa es una meta de verdad. ¿Quieres convertirla en un compromiso? Si lo firmas, lo tendré presente y te preguntaré cómo va.",
+        "salute_young": "¡Hiciste una promesa a tu alcancía! La recordaré.",
+        "salute": "Firmado. Ese compromiso ya es tuyo -- lo tendré presente.",
+        "button_young": "Lo prometo",
+        "button": "Firmar mi compromiso",
+        "sealed": "Comprometido",
+    },
+    "fr": {
+        "ask_young": "C'est un vrai plan. Tu veux en faire une promesse ?",
+        "ask": "C'est un vrai objectif. Tu veux en faire un engagement ? Si tu le signes, je le garde en vue et je te demanderai où tu en es.",
+        "salute_young": "Tu as fait une promesse à ta tirelire ! Je m'en souviendrai.",
+        "salute": "Signé. Cet engagement est à toi -- je le garde en vue.",
+        "button_young": "Je promets",
+        "button": "Signer mon engagement",
+        "sealed": "Engagé",
+    },
+}
+
+
+def _pledge_turn(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Offer a pledge card for a stated savings goal; store it when signed."""
+    from app.schemas.directives import PledgeDirective
+
+    band = str(state.get("age_band") or "adult")
+    young = band == "5-8"
+
+    locale = str(state.get("locale") or "en")
+    copy = _PLEDGE_COPY.get(locale, _PLEDGE_COPY["en"])
+
+    # ── the signed pledge coming back, in whichever language it was offered ──
+    matched = next(
+        (p for p in _PLEDGE_PREFIXES.values() if message.startswith(p)), None
+    )
+    if matched is not None:
+        body = message[len(matched):].strip()
+        amount_line, goal = body, ""
+        for sep in _PLEDGE_SEPARATORS.values():
+            if sep in body:
+                amount_line, _, goal = body.partition(sep)
+                break
+        pledge = {"amount_line": amount_line.strip(), "goal": goal.strip()}
+        salute = copy["salute_young"] if young else copy["salute"]
+        from app.graph.tin import COINS_PLEDGE_SIGNED, tin_award
+
+        coins = tin_award(state, COINS_PLEDGE_SIGNED, locale)
+        return {
+            **{k: v for k, v in coins.items() if k != "ui_directives"},
+            "pledge": pledge,
+            "messages": [AIMessage(content=salute)],
+            "ui_directives": [
+                PledgeDirective(
+                    amount_line=pledge["amount_line"],
+                    goal=pledge["goal"],
+                    button_label=copy["sealed"],
+                    button_value="",
+                    pledged=True,
+                ),
+                *coins.get("ui_directives", []),
+            ],
+            "active_agent": _holding_agent(state),
+            "safety_flags": {"card": "pledge_signed"},
+        }
+
+    # ── a fresh goal worth offering a card for ──
+    if state.get("pledge"):
+        return None
+    match = _PLEDGE_INTENT.search(message)
+    if match is None:
+        return None
+    amount = match.group(1)
+    period = (match.group(2) or "").strip()
+    goal_match = _PLEDGE_GOAL.search(message[match.end():])
+    goal = (goal_match.group(1).strip() if goal_match else "")
+
+    amount_line = f"EC${amount}" + (f" {period}" if period else "")
+    prefix = _PLEDGE_PREFIXES.get(locale, _PLEDGE_PREFIXES["en"])
+    sep = _PLEDGE_SEPARATORS.get(locale, _PLEDGE_SEPARATORS["en"])
+    value = prefix + amount_line + (f"{sep}{goal}" if goal else "")
+    ask = copy["ask_young"] if young else copy["ask"]
+    return {
+        "messages": [AIMessage(content=ask)],
+        "ui_directives": [
+            PledgeDirective(
+                amount_line=amount_line,
+                goal=goal,
+                button_label=copy["button_young"] if young else copy["button"],
+                button_value=value,
+            )
+        ],
+        "active_agent": _holding_agent(state),
+        "safety_flags": {"card": "pledge_offer"},
+    }
 
 
 #: Which personas meet the learn-vs-teach clarifier, and how it is worded.
@@ -465,6 +599,79 @@ def _purpose_is_explicit(message: str, persona: str) -> bool:
     return _purpose_from_answer(message, persona) != "self" or bool(_SELF_ANSWER.search(message))
 
 
+#: The artifacts a finished story can grant, named in the reader's language.
+#: Picked by crc32 of the topic, so one story always grants one artifact.
+_ARTIFACTS: dict[str, tuple[tuple[str, str], ...]] = {
+    # Named from home: Brimstone Hill guards, the sugar mill turns steady work,
+    # the Narrows is the crossing between the two islands, the pelican is the
+    # national bird, Liamuiga is the mountain, and the vervet is the clever one.
+    "en": (
+        ("The Brimstone Shield", "🛡️"), ("The Sugar Mill Wheel", "⚙️"),
+        ("The Compass of the Narrows", "🧭"), ("The Lantern of Liamuiga", "🏮"),
+        ("The Vervet's Key", "🗝️"), ("The Pelican's Anchor", "⚓"),
+        ("The Railway Star", "🚂"), ("The Sugar Mas Ribbon", "🎀"),
+    ),
+    "es": (
+        ("El Escudo de Brimstone", "🛡️"), ("La Rueda del Ingenio", "⚙️"),
+        ("La Brújula de los Estrechos", "🧭"), ("El Farol de Liamuiga", "🏮"),
+        ("La Llave del Vervet", "🗝️"), ("El Ancla del Pelícano", "⚓"),
+        ("La Estrella del Tren", "🚂"), ("La Cinta de Sugar Mas", "🎀"),
+    ),
+    "fr": (
+        ("Le Bouclier de Brimstone", "🛡️"), ("La Roue du Moulin à Sucre", "⚙️"),
+        ("La Boussole des Narrows", "🧭"), ("La Lanterne de Liamuiga", "🏮"),
+        ("La Clé du Vervet", "🗝️"), ("L'Ancre du Pélican", "⚓"),
+        ("L'Étoile du Petit Train", "🚂"), ("Le Ruban de Sugar Mas", "🎀"),
+    ),
+}
+
+#: What the earned line says, per locale.
+_ARTIFACT_CAPTION = {
+    "en": "Artifact unlocked — you finished the story!",
+    "es": "¡Artefacto desbloqueado — terminaste el cuento!",
+    "fr": "Artefact débloqué — tu as fini l'histoire !",
+}
+
+#: Easter eggs: whisper one of these, exactly, and a secret story begins with
+#: a fuller wallet and its own artifact at the end. Harmless by construction --
+#: it opens a STORY, so CARE, the gates and every register cap still apply.
+_SECRET_STORIES: dict[str, tuple[str, int]] = {
+    "golden goose": ("The Golden Goose", 500),
+    "la gansa dorada": ("La Gansa Dorada", 500),
+    "l'oie dorée": ("L'Oie Dorée", 500),
+}
+_SECRET_ARTIFACT = {
+    "en": ("The Golden Egg", "🥚"),
+    "es": ("El Huevo de Oro", "🥚"),
+    "fr": ("L'Œuf d'Or", "🥚"),
+}
+
+
+def _artifact_for(topic: str, locale: str = "en") -> tuple[str, str]:
+    import zlib
+
+    if topic.lower().startswith(("the golden goose", "la gansa", "l'oie")):
+        return _SECRET_ARTIFACT.get(locale, _SECRET_ARTIFACT["en"])
+    table = _ARTIFACTS.get(locale, _ARTIFACTS["en"])
+    # crc32 of the TOPIC only, so the same story grants the same artifact in
+    # every language -- just under its translated name.
+    return table[zlib.crc32(topic.encode()) % len(table)]
+
+
+#: A priced story choice: "Buy the rope (EC$30)" or "Walk on (free)".
+_STORY_CHOICE = re.compile(
+    r"^(.*?)\s*\((?:EC\$\s?(\d+)|free|gratis|gratuit)\)\s*$", re.IGNORECASE
+)
+
+
+def _story_choice(message: str) -> tuple[str, int] | None:
+    """The (item, cost) a chip-shaped reply carries, or None."""
+    m = _STORY_CHOICE.match(message.strip())
+    if m is None:
+        return None
+    return (m.group(1).strip() or "that", int(m.group(2) or 0))
+
+
 #: Suggested subjects, offered as chips when a reader asks for a story.
 #:
 #: Every one is something the corpus can actually ground a story in, so the
@@ -579,13 +786,62 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 "quick_replies": _STORY_TOPICS[locale],
                 "safety_flags": {"card": "story_closed"},
             }
-        if story_continues(message):
+        choice = _story_choice(message)
+        if choice is not None or story_continues(message):
             beat = int(arc.get("beat") or 1) + 1
+            wallet = int(arc.get("wallet") or 0)
+            inventory = list(arc.get("inventory") or [])
+            last_choice, afforded = "", True
+            if choice is not None:
+                item, cost = choice
+                last_choice = item
+                # The wallet is the lesson: an unaffordable pick is not an
+                # error, it is the consequence the next beat is built on.
+                afforded = cost <= wallet
+                if afforded:
+                    wallet -= cost
+                    if cost > 0:
+                        inventory.append(item)
+            # Reaching the final beat earns the artifact: the card rides the
+            # same update, so it drops in beside the story's ending. Awarded on
+            # ARRIVAL at the last beat, not after -- there is no turn after.
+            award: dict[str, Any] = {}
+            if beat >= STORY_BEATS:
+                from app.schemas.directives import CollectibleDirective
+
+                topic_now = str(arc.get("topic") or "")
+                name, emoji = _artifact_for(topic_now, locale)
+                caption = _ARTIFACT_CAPTION.get(locale, _ARTIFACT_CAPTION["en"])
+                from app.graph.tin import COINS_STORY_FINISHED, tin_award
+
+                coins = tin_award(state, COINS_STORY_FINISHED, locale)
+                award = {
+                    **{k: v for k, v in coins.items() if k != "ui_directives"},
+                    "collectibles": [
+                        *list(state.get("collectibles") or []),
+                        {"name": name, "emoji": emoji, "topic": topic_now},
+                    ],
+                    "ui_directives": [
+                        CollectibleDirective(
+                            name=name, emoji=emoji, caption=caption, topic=topic_now
+                        ),
+                        *coins.get("ui_directives", []),
+                    ],
+                }
+
             # Not a card: the router runs and an agent writes the next beat,
             # with the story instruction and the story word cap applied.
             return {
+                **award,
                 "story_topic": str(arc.get("topic") or ""),
-                "story_arc": {"topic": arc.get("topic"), "beat": beat},
+                "story_arc": {
+                    "topic": arc.get("topic"),
+                    "beat": beat,
+                    "wallet": wallet,
+                    "inventory": inventory,
+                    "last_choice": last_choice,
+                    "afforded": afforded,
+                },
                 "awaiting_story_topic": False,
             }
         # Thinking about the story is not leaving it. Empty update, so the
@@ -626,7 +882,25 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
         return {
             "awaiting_story_topic": False,
             "story_topic": topic[:120],
-            "story_arc": {"topic": topic[:120], "beat": 1},
+            # The adventure state: an in-story wallet and inventory, so the
+            # reader PLAYS the money idea instead of only hearing it. EC$100
+            # of story-money, spent by picking choices priced "(EC$N)".
+            "story_arc": {
+                "topic": topic[:120],
+                "beat": 1,
+                "wallet": 100,
+                "inventory": [],
+            },
+        }
+
+    # The easter egg: an exact whisper starts a secret story, no topic asked.
+    secret = _SECRET_STORIES.get(message.strip().lower().rstrip(".!?"))
+    if secret is not None:
+        topic, purse = secret
+        return {
+            "awaiting_story_topic": False,
+            "story_topic": topic,
+            "story_arc": {"topic": topic, "beat": 1, "wallet": purse, "inventory": []},
         }
 
     if not wants_story(message):

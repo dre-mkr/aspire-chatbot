@@ -109,6 +109,24 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         # are, so it rides in the body rather than in the signed token. Written
         # every turn -- the reader can turn it off between two questions.
         update["simple_mode"] = bool((body or {}).get("simple_mode"))
+        # The personality overlay: a preference like simple_mode, validated
+        # against the known set so the body cannot inject prompt text.
+        from app.prompting.overlays import KNOWN_OVERLAYS
+
+        raw_overlay = str((body or {}).get("overlay") or "").strip().lower()
+        update["overlay"] = raw_overlay if raw_overlay in KNOWN_OVERLAYS else ""
+
+        # Guest rotation: a signed-out reader who chose nothing meets a little
+        # personality anyway -- Classic, the Limer or the Hustler, decided by
+        # their session id so one conversation keeps one flavour throughout.
+        if not update["overlay"] and claims.persona == "guest":
+            import zlib
+
+            rotation = ("", "limer", "hustler")
+            # crc32, not hash(): hash() is salted per process, and a flavour
+            # that changed on a server restart would read as a mood swing.
+            stable = zlib.crc32(claims.session_id.encode())
+            update["overlay"] = rotation[stable % 3]
 
         # Same shape, same reason. Absent means Automatic: every client that
         # predates the selector, and every deep link without the parameter,

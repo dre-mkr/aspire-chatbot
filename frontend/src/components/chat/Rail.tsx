@@ -27,6 +27,7 @@ import {
 	groupByRecency,
 	type StoredConversation,
 } from "#/lib/aspire/history";
+import { say } from "#/lib/aspire/i18n";
 import { type AgeBand, guideFor, type PersonaId } from "#/lib/aspire/personas";
 import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
@@ -330,12 +331,12 @@ export function Rail({
 						<button
 							type="button"
 							className="btn-help btn-seed"
-							onClick={() => onSeed("Can you tell me a story?")}
+							onClick={() => onSeed(say("seedStory"))}
 						>
 							<span className="btn-help__glyph" aria-hidden="true">
 								<i className="ph-duotone ph-book-open-text" />
 							</span>
-							<span className="rail__fold">Stories</span>
+							<span className="rail__fold">{say("navStories")}</span>
 						</button>
 						{/* Lessons are the point of the product and had no door at all.
 						    "teach me about ..." is the phrase the tutor answers to --
@@ -343,22 +344,22 @@ export function Rail({
 						<button
 							type="button"
 							className="btn-help btn-seed"
-							onClick={() => onSeed("Teach me about saving.")}
+							onClick={() => onSeed(say("seedLearn"))}
 						>
 							<span className="btn-help__glyph" aria-hidden="true">
 								<i className="ph-duotone ph-graduation-cap" />
 							</span>
-							<span className="rail__fold">Learn</span>
+							<span className="rail__fold">{say("navLearn")}</span>
 						</button>
 						<button
 							type="button"
 							className="btn-help btn-seed"
-							onClick={() => onSeed("I'd like to play a game.")}
+							onClick={() => onSeed(say("seedGame"))}
 						>
 							<span className="btn-help__glyph" aria-hidden="true">
 								<i className="ph-duotone ph-game-controller" />
 							</span>
-							<span className="rail__fold">Games</span>
+							<span className="rail__fold">{say("navGames")}</span>
 						</button>
 						{/* These three open the landing page's own section views in
 						    place. None of them is a route -- `LandingScreen` renders
@@ -371,34 +372,37 @@ export function Rail({
 						    scans to the bottom of a rail. A child does not go looking
 						    for "For Educators" at all. */}
 						<ViewLauncher
-							label="My Journey"
+							label={say("navJourney")}
 							icon="ph-duotone ph-medal"
 							dialogLabel="Your financial journey"
 							triggerClassName="btn-journey"
 						>
 							{(close) => (
-								<JourneyView onBack={close} backLabel="Back to chat" />
+								<JourneyView onBack={close} backLabel={say("navBackToChat")} />
 							)}
 						</ViewLauncher>
 						<ViewLauncher
-							label="For Parents & Guardians"
+							label={say("navParents")}
 							icon="ph-duotone ph-users-three"
 							ariaLabel="For parents and guardians"
 							dialogLabel="For parents and guardians"
 							triggerClassName="btn-parents"
 						>
 							{(close) => (
-								<ParentsView onBack={close} backLabel="Back to chat" />
+								<ParentsView onBack={close} backLabel={say("navBackToChat")} />
 							)}
 						</ViewLauncher>
 						<ViewLauncher
-							label="For Educators"
+							label={say("navEducators")}
 							icon="ph-duotone ph-chalkboard-teacher"
 							dialogLabel="For teachers and educators"
 							triggerClassName="btn-educators"
 						>
 							{(close) => (
-								<EducatorsView onBack={close} backLabel="Back to chat" />
+								<EducatorsView
+									onBack={close}
+									backLabel={say("navBackToChat")}
+								/>
 							)}
 						</ViewLauncher>
 					</>

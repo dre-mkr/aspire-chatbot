@@ -60,6 +60,29 @@ const NOTES: Record<NoteKind, Omit<VoiceNote, "kind">> = {
 	},
 };
 
+/** Per-personality flavour for the notes, where the register truly differs. */
+const OVERLAY_NOTES: Record<string, Partial<Record<NoteKind, string>>> = {
+	quiet: {
+		denied: "Mic blocked. Go fix it or just type.",
+		"no-speech": "Heard nothing. Try again or type, you good.",
+		offline: "Voice down. Typing works same way.",
+	},
+	unbothered: {
+		denied: "Mic not working. Up to you.",
+		"no-speech": "Didn't catch that. Or don't repeat it. Your call.",
+		offline: "Voice is down. It is what it is -- typing works.",
+	},
+	limer: {
+		denied: "De mic block up. Allow it in the browser or just type, y'know.",
+		"no-speech": "Didn' hear nothing -- come closer and talk again.",
+		offline: "Voice gone for now. Type it out, same answers.",
+	},
+	hype: {
+		"no-speech": "MIC MISSED IT! Run it back one more time! 🎉",
+		offline: "Voice taking a break -- typing still gets the party! 🎉",
+	},
+};
+
 /**
  * Read text aloud with the device's own speech engine.
  *
@@ -125,6 +148,8 @@ interface VoicePrefs {
 	 * the room a child is in is not always a room that wants noise.
 	 */
 	gameSound: boolean;
+	/** Chosen personality overlay key, or "". */
+	overlay: string;
 }
 
 const DEFAULT_PREFS: VoicePrefs = {
@@ -133,6 +158,7 @@ const DEFAULT_PREFS: VoicePrefs = {
 	language: "en",
 	autoLanguage: true,
 	gameSound: true,
+	overlay: "",
 };
 
 function readPrefs(): VoicePrefs {
@@ -154,6 +180,7 @@ function readPrefs(): VoicePrefs {
 				typeof parsed.autoLanguage === "boolean" ? parsed.autoLanguage : true,
 			gameSound:
 				typeof parsed.gameSound === "boolean" ? parsed.gameSound : true,
+			overlay: typeof parsed.overlay === "string" ? parsed.overlay : "",
 		};
 	} catch {
 		return DEFAULT_PREFS;
@@ -222,6 +249,7 @@ export function useVoice({
 	const enableAutoLanguage = useCallback(() => setAutoLanguage(true), []);
 
 	const [gameSound, setGameSound] = useState(DEFAULT_PREFS.gameSound);
+	const [overlay, setOverlay] = useState(DEFAULT_PREFS.overlay);
 
 	const [autoSpeak, setAutoSpeak] = useState(DEFAULT_PREFS.autoSpeak);
 	const [speed, setSpeed] = useState(DEFAULT_PREFS.speed);
@@ -250,6 +278,7 @@ export function useVoice({
 		setSpeed(prefs.speed);
 		setAutoLanguage(prefs.autoLanguage);
 		setGameSound(prefs.gameSound);
+		setOverlay(prefs.overlay);
 		setPrefsLoaded(true);
 	}, []);
 
@@ -259,12 +288,27 @@ export function useVoice({
 		try {
 			window.localStorage.setItem(
 				PREFS_KEY,
-				JSON.stringify({ autoSpeak, speed, language, autoLanguage, gameSound }),
+				JSON.stringify({
+					autoSpeak,
+					speed,
+					language,
+					autoLanguage,
+					gameSound,
+					overlay,
+				}),
 			);
 		} catch {
 			// Private browsing throws. Preferences are a convenience, not a feature.
 		}
-	}, [autoSpeak, autoLanguage, gameSound, language, prefsLoaded, speed]);
+	}, [
+		autoSpeak,
+		autoLanguage,
+		gameSound,
+		language,
+		overlay,
+		prefsLoaded,
+		speed,
+	]);
 
 	// A 404 or a disabled module both mean "no voice": unavailable, not an error.
 	useEffect(() => {
@@ -298,9 +342,21 @@ export function useVoice({
 		stream.current = null;
 	}, []);
 
-	const showNote = useCallback((kind: NoteKind) => {
-		setNote({ kind, ...NOTES[kind] });
-	}, []);
+	const showNote = useCallback(
+		(kind: NoteKind) => {
+			// The chosen personality colours even the bad news. "Mic not working.
+			// Up to you." is The Unbothered being itself where a default note
+			// would break character -- overrides exist only where the register
+			// genuinely differs, and every other overlay keeps the plain text.
+			const flavoured = OVERLAY_NOTES[overlay]?.[kind];
+			setNote({
+				kind,
+				...NOTES[kind],
+				...(flavoured ? { text: flavoured } : {}),
+			});
+		},
+		[overlay],
+	);
 
 	const finish = useCallback(
 		async (blob: Blob, seconds: number) => {
@@ -450,21 +506,46 @@ export function useVoice({
 	const play = useCallback(
 		async (id: number, text: string) => {
 			if (playingId === id) {
-				audio.current?.pause();
+				// Two engines. The ASPIRE voice is an <audio> element; the
+				// browser fallback is speechSynthesis, which has no element at
+				// all -- pausing only `audio.current` left the device voice
+				// talking straight through the button. This was the report
+				// "when you play it and try to stop it it does not stop".
+				if (audio.current) {
+					audio.current.pause();
+				} else if (
+					typeof window !== "undefined" &&
+					"speechSynthesis" in window
+				) {
+					window.speechSynthesis.pause();
+				}
 				setPlayingId(null);
 				setPausedId(id);
 				return;
 			}
 
-			if (pausedId === id && audio.current) {
-				setPausedId(null);
-				setPlayingId(id);
-				try {
-					await audio.current.play();
-				} catch {
-					stopPlayback();
+			if (pausedId === id) {
+				if (audio.current) {
+					setPausedId(null);
+					setPlayingId(id);
+					try {
+						await audio.current.play();
+					} catch {
+						stopPlayback();
+					}
+					return;
 				}
-				return;
+				if (
+					typeof window !== "undefined" &&
+					"speechSynthesis" in window &&
+					window.speechSynthesis.paused
+				) {
+					setPausedId(null);
+					setPlayingId(id);
+					window.speechSynthesis.resume();
+					return;
+				}
+				// Nothing left to resume: fall through and start this answer fresh.
 			}
 
 			stopPlayback();
@@ -615,6 +696,8 @@ export function useVoice({
 		runNoteAction,
 		setLanguage,
 		autoLanguage,
+		overlay,
+		setOverlay,
 		enableAutoLanguage,
 		gameSound,
 		toggleGameSound: () => setGameSound((on) => !on),

@@ -156,35 +156,22 @@ def launch_game(
 # ── reacting to the result ───────────────────────────────────────────────────
 
 
-def reaction_for(result: GameResult, band: str) -> str:
-    """What the agent says, containing the child's actual score."""
+def reaction_for(result: GameResult, band: str, locale: str = "en") -> str:
+    """What the agent says, containing the child's actual score, in their language."""
+    from app.prompting.ui_lines import reaction
+
     score, total = result.score, result.max_score
+    young = band == "5-8"
 
     if not result.completed:
-        return (
-            f"You got {score} before we stopped. Want to pick it up again, or "
-            "carry on with the lesson?"
-        )
-
-    if result.fraction >= 0.8:
-        if band == "5-8":
-            return f"{score} out of {total}! You knew those."
-        return f"{score} out of {total}. You have that one."
-
-    if result.fraction >= 0.5:
-        if band == "5-8":
-            return f"{score} out of {total}. Good going -- let us look at the tricky ones."
-        return (
-            f"{score} out of {total}. Solid. The ones you missed are the ones "
-            "worth going over."
-        )
-
-    if band == "5-8":
-        return f"You got {score}. That one was tricky! Let us do it together."
-    return (
-        f"{score} out of {total} -- that set was a hard one. Let us go back over "
-        "it and try again after."
-    )
+        key = "stopped"
+    elif result.fraction >= 0.8:
+        key = "high_young" if young else "high"
+    elif result.fraction >= 0.5:
+        key = "mid_young" if young else "mid"
+    else:
+        key = "low_young" if young else "low"
+    return reaction(key, locale, score=score, total=total)
 
 
 async def record_result(
@@ -216,6 +203,40 @@ async def record_result(
     )
 
 
+#: Perfect-run artifacts, for the two games where perfection is earned:
+#: Millionaire is the hardest question set, Hangman punishes every wrong
+#: letter. Scramble and true/false stay score-only -- perfect runs there are
+#: common enough that a crown would cheapen the others.
+_GAME_ARTIFACTS: dict[str, dict[str, Any]] = {
+    "millionaire": {
+        "emoji": "👑",
+        "name": {
+            "en": "The Crown of Questions",
+            "es": "La Corona de las Preguntas",
+            "fr": "La Couronne des Questions",
+        },
+        "caption": {
+            "en": "A perfect run — every question, first try!",
+            "es": "¡Una partida perfecta — cada pregunta, al primer intento!",
+            "fr": "Une partie parfaite — chaque question, du premier coup !",
+        },
+    },
+    "hangman": {
+        "emoji": "🪶",
+        "name": {
+            "en": "The Quill of Letters",
+            "es": "La Pluma de las Letras",
+            "fr": "La Plume des Lettres",
+        },
+        "caption": {
+            "en": "Not one letter wasted — a perfect word!",
+            "es": "¡Ni una letra perdida — una palabra perfecta!",
+            "fr": "Pas une lettre perdue — un mot parfait !",
+        },
+    },
+}
+
+
 def make_game_result_node(store: MasteryStore | None = None):
     """The node that runs when a game finishes."""
 
@@ -232,9 +253,64 @@ def make_game_result_node(store: MasteryStore | None = None):
         learner = state.get("user_id") or None
         await record_result(result, learner_id=learner, store=store, age_band=band)
 
+        # A PERFECT run of the two hardest games earns an artifact, the same
+        # collectible a finished story grants. Perfect only -- an artifact for
+        # any score is a participation sticker, and children can tell.
+        award: dict[str, Any] = {}
+        crown = _GAME_ARTIFACTS.get(result.game)
+        if (
+            crown is not None
+            and result.completed
+            and result.max_score > 0
+            and result.score == result.max_score
+        ):
+            from app.schemas.directives import CollectibleDirective
+
+            locale = str(state.get("locale") or "en")
+            name = crown["name"].get(locale, crown["name"]["en"])
+            caption = crown["caption"].get(locale, crown["caption"]["en"])
+            item = {"name": name, "emoji": crown["emoji"], "topic": result.game}
+            already = any(
+                c.get("topic") == result.game
+                for c in (state.get("collectibles") or [])
+            )
+            if not already:
+                award = {
+                    "collectibles": [*list(state.get("collectibles") or []), item],
+                    "ui_directives": [
+                        CollectibleDirective(
+                            name=name,
+                            emoji=crown["emoji"],
+                            caption=caption,
+                            topic=result.game,
+                        )
+                    ],
+                }
+
+        from app.graph.tin import (
+            COINS_GAME_COMPLETED,
+            COINS_GAME_PERFECT,
+            tin_award,
+        )
+
+        if result.completed:
+            perfect = result.max_score > 0 and result.score == result.max_score
+            delta = COINS_GAME_PERFECT if perfect else COINS_GAME_COMPLETED
+            coins = tin_award(state, delta, str(state.get("locale") or "en"))
+            if coins:
+                award = {
+                    **coins,
+                    **award,
+                    "ui_directives": [
+                        *award.get("ui_directives", []),
+                        *coins.get("ui_directives", []),
+                    ],
+                }
+
         return {
-            "messages": [AIMessage(content=reaction_for(result, band))],
-            "quick_replies": _chips(band),
+            **award,
+            "messages": [AIMessage(content=reaction_for(result, band, str(state.get("locale") or "en")))],
+            "quick_replies": _chips(band, str(state.get("locale") or "en")),
             # Keep the learning agent the router picked; hardcoding `learn_agent` broke stickiness.
             "active_agent": state.get("active_agent") or "learn_agent",
             "learning": _learning_after(state, result),
@@ -282,7 +358,9 @@ def _learning_after(state: Any, result: GameResult) -> dict[str, Any]:
     )
 
 
-def _chips(band: str) -> list[str]:
+def _chips(band: str, locale: str = "en") -> list[str]:
+    from app.prompting.ui_lines import chips
+
     if band == "5-8":
-        return ["Again", "Back to lesson"]
-    return ["Play again", "Back to the lesson"]
+        return chips(["again", "back_lesson_short"], locale)
+    return chips(["play_again", "back_to_lesson"], locale)

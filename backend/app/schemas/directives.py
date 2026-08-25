@@ -244,6 +244,59 @@ class VideoDirective(_Directive):
 # ── widget ───────────────────────────────────────────────────────────────────
 
 
+class TinDirective(_Directive):
+    """Coins dropping into the Tin. See `app/graph/tin.py`."""
+
+    t: Literal["tin"] = "tin"
+    #: The new running total for this conversation.
+    coins: int
+    #: What this event added.
+    delta: int
+    #: True when a milestone was crossed -- the client celebrates bigger.
+    milestone: bool = False
+    #: Already in the reader's language.
+    caption: str
+
+
+class CollectibleDirective(_Directive):
+    """A story artifact, granted when a played story reaches its ending.
+
+    The reward for finishing: a shiny card drops into the chat, and the client
+    keeps the collection so My Journey can shelve it. Cosmetic by design -- it
+    unlocks nothing and costs nothing, so there is nothing to gate or refund.
+    """
+
+    t: Literal["collectible"] = "collectible"
+    #: "The Shield of Savings"
+    name: str
+    #: One emoji, the artifact's face.
+    emoji: str
+    #: Why it was earned, in the reader's language.
+    caption: str
+    #: The story topic it came from.
+    topic: str = ""
+
+
+class PledgeDirective(_Directive):
+    """A savings pledge card: the reader's own goal, made signable.
+
+    A goal said out loud in chat evaporates; a card with a button makes it a
+    small ceremony. "Pledge", never "contract" -- most readers are minors.
+    """
+
+    t: Literal["pledge"] = "pledge"
+    #: "EC$200 each month" -- already formatted, band-appropriate.
+    amount_line: str
+    #: What it is for, in the reader's own words. May be empty.
+    goal: str = ""
+    #: The button. "Sign my pledge", or "I promise" for the youngest.
+    button_label: str
+    #: What tapping the button SENDS, as a plain message the cards node reads.
+    button_value: str
+    #: True on the confirmation re-render, after the pledge is stored.
+    pledged: bool = False
+
+
 class WidgetDirective(_Directive):
     """A concept widget, already validated through every gate."""
 
@@ -260,6 +313,9 @@ UIDirective = Annotated[
         SignupDirective,
         UploadDirective,
         ReviewCardDirective,
+        PledgeDirective,
+        CollectibleDirective,
+        TinDirective,
         ChartDirective,
         ProgressDirective,
         CitationsDirective,

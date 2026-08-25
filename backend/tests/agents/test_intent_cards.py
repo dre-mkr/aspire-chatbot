@@ -537,7 +537,9 @@ class TestTheStoryFlowIsAlwaysAskedFor:
         # the telling.
         assert update["awaiting_story_topic"] is False
         assert update["story_topic"] == "saving money"
-        assert update["story_arc"] == {"topic": "saving money", "beat": 1}
+        assert update["story_arc"] == {
+            "topic": "saving money", "beat": 1, "wallet": 100, "inventory": [],
+        }
         assert "messages" not in update
         assert "card" not in (update.get("safety_flags") or {})
 

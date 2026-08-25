@@ -433,7 +433,7 @@ def make_tutor(
             # The minimum that keeps the turn coherent: what was said, and a way to reply.
             return {
                 "messages": [AIMessage(content=lesson.text)],
-                "quick_replies": _chips(band, _chip_options(move, band)),
+                "quick_replies": _chips(band, _chip_options(move, band, str(state.get("locale") or "en"))),
             }
 
     return tutor
@@ -867,7 +867,7 @@ def _state_after(
     return {
         # The message is returned as well as emitted.
         "messages": [AIMessage(content=lesson.text)],
-        "quick_replies": _chips(band, _chip_options(move, band)),
+        "quick_replies": _chips(band, _chip_options(move, band, str(state.get("locale") or "en"))),
         **_lesson_citations(resolution, taught_concept),
         # The widget travels in STATE, not on the custom channel.
         #
@@ -956,23 +956,25 @@ def _remember_kind(learning: dict[str, Any], kind: str | None, *, keep: int = 3)
     return kinds[-keep:]
 
 
-def _chip_options(move: Move, band: str) -> list[str]:
-    """What to offer after this move. The chips are the next teaching action."""
+def _chip_options(move: Move, band: str, locale: str = "en") -> list[str]:
+    """What to offer after this move, in the reader's language."""
+    from app.prompting.ui_lines import chips
+
     if move is Move.HINT:
-        return ["Try again", "Tell me the answer"]
+        return chips(["try_again", "tell_answer"], locale)
     if move is Move.EVALUATE:
-        return ["Next", "Say more"]
+        return chips(["next", "say_more"], locale)
     if move is Move.ANSWER:
         # They have the answer. What they need now is a chance to use it.
-        return ["Let me try one", "Got it"]
+        return chips(["let_me_try", "got_it"], locale)
     if move in (Move.RETEACH, Move.CORRECT_MISCONCEPTION):
         # Never "Got it" first here -- they have just said it did not land.
-        return ["That helps", "Still stuck", "Show me a number"]
+        return chips(["that_helps", "still_stuck", "show_number"], locale)
     if move is Move.STEP_BACK:
-        return ["Okay", "Go back to the other one"]
+        return chips(["okay", "go_back"], locale)
     if band == "5-8":
-        return ["Got it", "Say it again"]
-    return ["Got it", "Say more", "Something else"]
+        return chips(["got_it", "say_it_again"], locale)
+    return chips(["got_it", "say_more", "something_else"], locale)
 
 
 def _chips(band: str, options: list[str]) -> list[str]:

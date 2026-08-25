@@ -180,7 +180,7 @@ def make_hint_ladder(curriculum=None):
 
         return {
             "messages": [AIMessage(content=hint.text)],
-            "quick_replies": hint.options or _continue_chips(band),
+            "quick_replies": hint.options or _continue_chips(band, str(state.get("locale") or "en")),
             "learning": merge(
                 learning,
                 hint_rung=hint.rung,
@@ -192,8 +192,10 @@ def make_hint_ladder(curriculum=None):
     return hint_ladder
 
 
-def _continue_chips(band: str) -> list[str]:
+def _continue_chips(band: str, locale: str = "en") -> list[str]:
     """Something to tap after a nudge, so the turn is never a dead end."""
+    from app.prompting.ui_lines import chips, line
+
     if band == "5-8":
-        return ["Try again", "Show me"]
-    return ["Let me try again", "Show me the answer"]
+        return [line("try_again", locale), {"en": "Show me", "es": "Muéstrame", "fr": "Montre-moi"}.get(locale, "Show me")]
+    return chips(["let_me_try_again", "show_answer"], locale)

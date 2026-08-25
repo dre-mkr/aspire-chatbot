@@ -377,9 +377,45 @@ def make_teach(curriculum=None, *, invoke=None):
             )
             kind = None
 
+        # A video that teaches this concept, offered as one extra chip. Matched
+        # by CONCEPT, so a video added to the catalog later with the right tag
+        # is recommended here with no change to any lesson. The chip rides the
+        # existing offered_video state, so a tap or a "yes" opens the card.
+        from app.videos.catalog import for_concept
+
+        video = for_concept(lesson.concept_id, str(state.get("persona") or ""))
+        offer = {}
+        video_chip = []
+        if video is not None:
+            offer = {"offered_video": video.id}
+            # Four words at most -- the lesson chip gate counts words, and a
+            # full title blows it. The tap routes through `wants_video`.
+            from app.prompting.ui_lines import line
+
+            video_chip = [line("watch_video", str(state.get("locale") or "en"))]
+
+        # Two coins the FIRST time this thread is taught this lesson. The
+        # farm-proofing is the list: `coined_lessons` remembers which lessons
+        # already paid, so "say that again" and a re-teach of the same lesson
+        # drop nothing. A different lesson is new learning, and pays.
+        from app.graph.tin import COINS_LESSON_TAUGHT, tin_award
+
+        coined = list(learning.get("coined_lessons") or [])
+        coins: dict[str, Any] = {}
+        if lesson.id not in coined:
+            coins = tin_award(
+                state, COINS_LESSON_TAUGHT, str(state.get("locale") or "en")
+            )
+            coined = [*coined, lesson.id]
+
         return {
+            **{k: v for k, v in coins.items() if k != "ui_directives"},
+            **offer,
+            "ui_directives": [
+                *coins.get("ui_directives", []),
+            ],
             "messages": [AIMessage(content=body)],
-            "quick_replies": _chips(band, ["Got it", "Say that again"]),
+            "quick_replies": _chips_i18n(state, ["got_it", "say_again"]) + video_chip,
             "learning": merge(
                 learning,
                 phase="checking",
@@ -388,6 +424,7 @@ def make_teach(curriculum=None, *, invoke=None):
                 last_widget_kinds=remember_widget(learning, kind),
                 recent_openings=remember_opening(learning, body),
                 teach_count=taught_again(learning, lesson.id),
+                coined_lessons=coined,
                 # Consumed.
                 pending_widget=None,
             ),
@@ -439,7 +476,7 @@ def make_reteach(curriculum=None, *, retrieve=None, invoke=None):
 
         return {
             "messages": [AIMessage(content=body)],
-            "quick_replies": _chips(band, ["Got it", "Next"]),
+            "quick_replies": _chips_i18n(state, ["got_it", "next"]),
             "learning": merge(
                 learning,
                 phase="updating_mastery",
@@ -449,6 +486,13 @@ def make_reteach(curriculum=None, *, retrieve=None, invoke=None):
         }
 
     return reteach
+
+
+def _chips_i18n(state, keys: list[str]) -> list[str]:
+    """Authored chips, in the reader's language."""
+    from app.prompting.ui_lines import chips
+
+    return chips(keys, str(state.get("locale") or "en"))
 
 
 def _chips(band: str, options: list[str]) -> list[str]:

@@ -10043,3 +10043,123 @@ a.source__site--link:hover .source__out {
 		font-size: 10px;
 	}
 }
+
+/* ── The pledge card ─────────────────────────────────────────────────────── */
+.pledge {
+	max-width: 340px;
+	margin: 4px 0 19px;
+	padding: 18px 22px;
+	border: 1.5px solid var(--plum, #4a2977);
+	border-radius: 16px;
+	background: rgb(255 255 255 / 0.7);
+	text-align: center;
+}
+.pledge__eyebrow {
+	margin: 0 0 6px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--plum, #4a2977);
+}
+.pledge__amount {
+	margin: 0;
+	font-family: var(--font-display, Georgia, serif);
+	font-size: 1.75rem;
+	color: var(--ink, #241234);
+}
+.pledge__goal {
+	margin: 2px 0 0;
+	color: var(--ink, #241234);
+}
+.pledge__sign {
+	margin-top: 14px;
+	padding: 10px 22px;
+	border: none;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--plum, #4a2977), var(--plum-light, #7a4fd0));
+	color: #fff;
+	font-weight: 700;
+	cursor: pointer;
+}
+.pledge__sealed {
+	margin: 10px 0 0;
+	font-weight: 700;
+	color: var(--plum, #4a2977);
+}
+
+/* Personality chips wrap to two rows inside the voice menu. */
+.voice-menu__choices--wrap { flex-wrap: wrap; }
+
+/* ── The collectible drop, and the Journey shelf ────────────────────────── */
+.collectible {
+	max-width: 300px;
+	margin: 4px 0 19px;
+	padding: 22px 24px;
+	border-radius: 18px;
+	text-align: center;
+	color: #fff;
+	background: linear-gradient(150deg, #6435b6, #b03d8f 55%, #e0a558);
+	box-shadow: 0 10px 30px rgb(90 40 140 / 0.35);
+	animation: collectible-drop 500ms var(--ease) both;
+}
+@keyframes collectible-drop {
+	from { opacity: 0; transform: translateY(-14px) scale(0.94); }
+	to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.collectible { animation: none; }
+}
+.collectible__emoji { font-size: 2.6rem; line-height: 1; display: block; }
+.collectible__name {
+	margin: 10px 0 2px;
+	font-family: var(--font-display, Georgia, serif);
+	font-size: 1.35rem;
+}
+.collectible__caption { margin: 0; font-size: 0.85rem; opacity: 0.9; }
+
+.shelf {
+	display: flex; flex-wrap: wrap; gap: 12px;
+	list-style: none; margin: 12px 0 0; padding: 0;
+}
+.shelf__item {
+	display: flex; flex-direction: column; align-items: center; gap: 4px;
+	width: 108px; padding: 12px 8px;
+	border: 1px solid var(--hairline, #e5dfd4); border-radius: 14px;
+	text-align: center;
+}
+.shelf__emoji { font-size: 1.8rem; }
+.shelf__name { font-size: 0.78rem; font-weight: 600; }
+
+/* ── The Tin ────────────────────────────────────────────────────────────── */
+.tin-drop {
+	display: inline-flex; align-items: center; gap: 8px;
+	margin: 2px 0 16px; padding: 8px 14px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, #fdf3e3, #ffe9c2);
+	border: 1px solid #e0a558; color: #6b4a12;
+	font-size: 0.9rem;
+	animation: collectible-drop 400ms var(--ease) both;
+}
+.tin-drop[data-milestone] {
+	background: linear-gradient(135deg, #ffe9c2, #ffd58a);
+	box-shadow: 0 6px 18px rgb(224 165 88 / 0.4);
+}
+.tin-drop__coin { font-size: 1.15rem; }
+.tin-drop__total {
+	padding: 2px 8px; border-radius: 999px;
+	background: #6b4a12; color: #ffe9c2; font-weight: 700; font-size: 0.8rem;
+}
+.tin-total { display: flex; align-items: baseline; gap: 12px; margin: 10px 0 0; }
+.tin-total strong { font-family: var(--font-display, Georgia, serif); font-size: 2rem; }
+.tin-total__next { color: var(--muted, #6b6377); font-size: 0.85rem; }
+
+/* Gallery placeholders */
+.gallery-panel { position: relative; padding-bottom: 52px; }
+.gallery-soon {
+	position: absolute; left: 22px; bottom: 18px;
+	padding: 4px 12px; border-radius: 999px;
+	background: var(--plum-soft, #efe9f8); color: var(--plum, #5b3a92);
+	font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em;
+	text-transform: uppercase;
+}

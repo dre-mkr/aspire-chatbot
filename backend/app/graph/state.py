@@ -185,6 +185,22 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: The reader's chosen personality overlay ("coach", "limer", ...), or "".
+    #: A preference, not identity: it rides the request body like simple_mode.
+    overlay: str
+
+    #: The Tin: {"coins": int}. Only ever fills. See `app/graph/tin.py`.
+    tin: dict | None
+
+    #: Story artifacts earned by finishing played stories: [{"name","emoji","topic"}].
+    collectibles: list
+
+    #: A standing savings pledge: {"amount_line": str, "goal": str}.
+    #:
+    #: Written when the reader signs the pledge card, read by the QA shaping
+    #: layer so every later turn can keep the goal in view. Thread-scoped.
+    pledge: dict | None
+
     #: The latch for the Azuri/Imani learn-vs-teach clarifier.
     #:
     #: An educator or a parent who asks to be TAUGHT is ambiguous in a way a
@@ -336,6 +352,10 @@ def initial_state(
         auto_language=True,
         awaiting_story_topic=False,
         story_topic=None,
+        overlay="",
+        collectibles=[],
+        tin=None,
+        pledge=None,
         awaiting_learner_purpose=False,
         learner_purpose="",
         pending_learning=None,

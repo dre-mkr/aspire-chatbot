@@ -24,14 +24,29 @@ export interface VoiceSettingsProps {
 		language: VoiceLanguage;
 		autoLanguage: boolean;
 		gameSound: boolean;
+		overlay: string;
 		toggleAutoSpeak: () => void;
 		setSpeed: (value: string) => void;
 		setLanguage: (value: VoiceLanguage) => void;
 		enableAutoLanguage: () => void;
 		toggleGameSound: () => void;
+		setOverlay: (value: string) => void;
 		reviewConsent: () => void;
 	};
 }
+
+/** The personality overlays a reader may choose. "" is the guide as written. */
+const OVERLAYS: ReadonlyArray<{ key: string; label: string }> = [
+	{ key: "", label: "Classic" },
+	{ key: "coach", label: "🏆 The Coach" },
+	{ key: "limer", label: "😎 The Limer" },
+	{ key: "professor", label: "🤓 The Professor" },
+	{ key: "storyteller", label: "📖 The Storyteller" },
+	{ key: "hype", label: "🎉 The Party Animal" },
+	{ key: "quiet", label: "🌙 The Lowkey" },
+	{ key: "hustler", label: "💼 The Hustler" },
+	{ key: "unbothered", label: "🧊 The Unbothered" },
+];
 
 export function VoiceSettings({ voice }: VoiceSettingsProps) {
 	const [open, setOpen] = useState(false);
@@ -152,6 +167,23 @@ export function VoiceSettings({ voice }: VoiceSettingsProps) {
 				>
 					<span className="voice-switch__knob" />
 				</button>
+			</div>
+
+			<hr className="voice-menu__rule" />
+
+			<p className="voice-menu__label">Personality</p>
+			<div className="voice-menu__choices voice-menu__choices--wrap">
+				{OVERLAYS.map((option) => (
+					<button
+						key={option.key || "none"}
+						type="button"
+						className="voice-choice"
+						aria-pressed={voice.overlay === option.key}
+						onClick={() => voice.setOverlay(option.key)}
+					>
+						{option.label}
+					</button>
+				))}
 			</div>
 
 			<hr className="voice-menu__rule" />
