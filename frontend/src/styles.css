@@ -8715,6 +8715,52 @@ a.source__site--link:hover .source__out {
 	transform: translateX(-50%) translateY(0);
 }
 
+/* ON THE LANDING THE HINT OPENS UPWARD.
+ *
+ * The compact row is the last thing above the footer on a page that fills the
+ * window exactly, so a hint dropping BELOW the card has only the page edge
+ * under it. Two ancestors clip there -- the `h-dvh` scroller and the wrapper
+ * above it -- and how much of the hint survives depends on the window height:
+ * at 900 it happens to fit, at the height the reader had it lost its last
+ * line mid-word. A tooltip whose legibility depends on the size of the window
+ * is not a tooltip.
+ *
+ * Upward there is the whole page. Nothing is resized to make room -- the guide
+ * faces stay the size they were drawn at -- and the full-page selector, which
+ * has room beneath it, keeps opening downward.
+ */
+.guide-selector--compact .guide-card__hint {
+	top: auto;
+	bottom: calc(100% + 6px);
+	transform: translateX(-50%) translateY(4px);
+}
+
+.guide-selector--compact .guide-card__hint[data-visible="true"] {
+	transform: translateX(-50%) translateY(0);
+}
+
+/* The row's end cards sit against the panel edge, and a 15rem hint centred on
+   an 83px card reaches past it -- Azuri's crossed the window's right edge by
+   3px. The outer two anchor to their own edge instead of their centre. */
+.guide-selector--compact .guide-card:first-child .guide-card__hint {
+	left: 0;
+	transform: translateX(0) translateY(4px);
+}
+
+.guide-selector--compact .guide-card:first-child .guide-card__hint[data-visible="true"] {
+	transform: translateX(0) translateY(0);
+}
+
+.guide-selector--compact .guide-card:last-child .guide-card__hint {
+	left: auto;
+	right: 0;
+	transform: translateX(0) translateY(4px);
+}
+
+.guide-selector--compact .guide-card:last-child .guide-card__hint[data-visible="true"] {
+	transform: translateX(0) translateY(0);
+}
+
 .guide-selector__skip {
 	margin: 28px 0 0;
 	text-align: center;
