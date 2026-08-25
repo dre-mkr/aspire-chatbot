@@ -89,6 +89,45 @@ class TestTheWordsOfThreeLanguages:
         assert story_continues(phrase)
 
 
+class TestATappedChoiceIsNeverAStop:
+    """A priced line is a chip this story drew; stopping is typed prose.
+
+    `story_ends` used to run first, so a stop word anywhere inside a choice
+    label closed the story instead of scoring it -- and the words are common
+    ones in all three languages: `enough`, `suficiente`, `assez`. The child
+    pressed a button the bot had just offered them and was told "that's a
+    good place to stop".
+    """
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "Buy enough rope (EC$30)",
+            "Save enough for the bike (free)",
+            "Guardar suficiente dinero (gratis)",
+            "Comprar comida para la fiesta (EC$20)",
+            "Acheter assez de pain (EC$10)",
+        ],
+    )
+    def test_a_priced_choice_containing_a_stop_word_still_advances(self, label):
+        state = {"story_arc": {"topic": "saving", "beat": 2, "wallet": 100}, "locale": "en"}
+        update = cards._story_turn(state, label)
+        assert update is not None
+        assert update.get("story_arc") is not None, "the arc was closed by a tap"
+        assert update["story_arc"]["beat"] == 3
+
+    @pytest.mark.parametrize(
+        "typed,locale",
+        [("that's enough", "en"), ("ya basta", "es"), ("ça suffit", "fr")],
+    )
+    def test_typed_prose_still_stops_the_story(self, typed, locale):
+        state = {"story_arc": {"topic": "saving", "beat": 2, "wallet": 100}, "locale": locale}
+        update = cards._story_turn(state, typed)
+        assert update is not None
+        assert update.get("story_arc") is None
+        assert update["safety_flags"]["card"] == "story_closed"
+
+
 class TestTheReaderEndsIt:
     @pytest.mark.parametrize("locale", LOCALES)
     def test_enough_closes_the_arc(self, locale):
