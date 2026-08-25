@@ -802,51 +802,41 @@ class TestMetadataSurvivesEveryHop:
 
 
 class TestTheLinkGate:
+    """Every reader sees the source URL.
+
+    This class used to test the opposite: the panel withheld links from stella,
+    kaleb and younger orion, mirroring `safety_out.strips_links`. Reversed as a
+    product decision (25 Aug 2026): every answer must show where it came from,
+    for every reader. What these tests now pin is that the reversal is total --
+    no persona, band, or missing-claims fallback quietly withholds -- while the
+    URL itself is still only ever a validated `documents.source_url`, never
+    model prose (the prose gate is untouched and tested with `safety_out`).
+    """
+
     STORED = [{"kb_id": "ASP-001", "source_url": "https://aspire.gov.kn/", "site": "ASPIRE",
                "page": "Official website", "domain": "aspire.gov.kn"}]
 
-    def test_an_adult_reader_gets_the_link(self):
-        assert citation_refs(self.STORED, claims=Reader("nova", "adult"))[0].source_url
-
     @pytest.mark.parametrize(
-        "persona,band", [("stella", "5-8"), ("stella", "9-12"), ("orion", "13-15")]
+        "persona,band",
+        [("stella", "5-8"), ("stella", "9-12"), ("kaleb", "9-12"),
+         ("orion", "13-15"), ("orion", "16-18"), ("aurora", "adult"),
+         ("nova", "adult"), ("guest", "adult")],
     )
-    def test_a_reader_who_is_shown_no_links_is_shown_no_link_here_either(
+    def test_every_reader_gets_the_link_the_domain_and_the_name(
         self, persona: str, band: str
     ):
-        """The panel is not a way around `safety_out.strips_links`."""
-        refs = citation_refs(self.STORED, claims=Reader(persona, band))
-        assert refs[0].source_url == ""
+        ref = citation_refs(self.STORED, claims=Reader(persona, band))[0]
+        assert ref.source_url == "https://aspire.gov.kn/"
+        assert ref.domain == "aspire.gov.kn"
+        assert ref.site == "ASPIRE"
+        assert ref.page == "Official website"
 
-    @pytest.mark.parametrize(
-        "persona,band", [("stella", "5-8"), ("orion", "13-15")]
-    )
-    def test_withholding_the_link_never_withholds_the_attribution(
-        self, persona: str, band: str
-    ):
-        """§33: the source is still named. Only the address is gone."""
-        refs = citation_refs(self.STORED, claims=Reader(persona, band))
-        assert refs[0].site == "ASPIRE"
-        assert refs[0].page == "Official website"
+    def test_an_unidentified_reader_still_gets_the_link(self):
+        """With no gate left, missing claims cannot change what is shown."""
+        assert citation_refs(self.STORED, claims=None)[0].source_url
+        assert citation_refs(self.STORED, claims=Reader("", ""))[0].source_url
 
-    @pytest.mark.parametrize(
-        "persona,band", [("stella", "5-8"), ("orion", "13-15")]
-    )
-    def test_the_domain_goes_with_the_link_and_not_beside_it(
-        self, persona: str, band: str
-    ):
-        """`aspire.gov.kn` is a URL written shorter, and this reader gets none."""
-        assert citation_refs(self.STORED, claims=Reader(persona, band))[0].domain == ""
-
-    def test_a_reader_who_gets_links_gets_the_domain_too(self):
-        refs = citation_refs(self.STORED, claims=Reader("nova", "adult"))
-        assert refs[0].domain == "aspire.gov.kn"
-
-    def test_a_host_used_as_its_own_name_is_withheld_along_with_the_domain(self):
-        """An unregistered source is named by its hostname, which is still a URL.
-
-        Blanking `domain` alone handed the same string straight back in `site`.
-        """
+    def test_a_hostname_used_as_a_name_is_kept_for_everyone(self):
         unregistered = [
             {
                 "kb_id": "ASP-500",
@@ -856,47 +846,20 @@ class TestTheLinkGate:
                 "domain": "consumerfinance.gov",
             }
         ]
-        ref = citation_refs(unregistered, claims=Reader("stella", "5-8"))[0]
-        assert ref.source_url == ""
-        assert ref.domain == ""
-        assert ref.site == ""
-        # Still attributed: the page title, the row id and the row's own words.
-        assert ref.page == "Saving"
-        assert ref.kb_id == "ASP-500"
+        for claims in (Reader("stella", "5-8"), Reader("nova", "adult")):
+            ref = citation_refs(unregistered, claims=claims)[0]
+            assert ref.source_url == "https://consumerfinance.gov/saving/"
+            assert ref.site == "consumerfinance.gov"
+            assert ref.domain == "consumerfinance.gov"
 
-    def test_a_real_site_name_is_kept_even_when_the_link_is_withheld(self):
-        """Only a name that IS the hostname goes. "ASPIRE" is not one."""
-        ref = citation_refs(self.STORED, claims=Reader("stella", "5-8"))[0]
-        assert ref.site == "ASPIRE"
-
-    def test_a_reader_who_gets_links_keeps_a_hostname_name(self):
-        unregistered = [
-            {
-                "kb_id": "ASP-500",
-                "source_url": "https://consumerfinance.gov/saving/",
-                "site": "consumerfinance.gov",
-                "domain": "consumerfinance.gov",
-            }
+    def test_the_url_is_still_validated_not_merely_shown(self):
+        """The reversal grants every reader the link -- not every string a link."""
+        stored = [
+            {"kb_id": "ASP-009", "source_url": "javascript:alert(1)", "site": "ASPIRE"},
+            {"kb_id": "ASP-011", "source_url": "https://aspire.gov.kn/", "site": "ASPIRE"},
         ]
-        ref = citation_refs(unregistered, claims=Reader("nova", "adult"))[0]
-        assert ref.site == "consumerfinance.gov"
-        assert ref.source_url == "https://consumerfinance.gov/saving/"
-
-    def test_an_older_orion_gets_the_link(self):
-        assert citation_refs(self.STORED, claims=Reader("orion", "16-18"))[0].source_url
-
-    def test_an_unidentified_reader_is_treated_as_the_youngest_one(self):
-        """The gate fails closed: not knowing who this is withholds the link."""
-        assert citation_refs(self.STORED, claims=None)[0].source_url == ""
-        assert citation_refs(self.STORED, claims=Reader("", ""))[0].source_url == ""
-
-    def test_a_claims_object_missing_the_fields_altogether_withholds(self):
-        """A call site that forgets to thread claims must not open the gate."""
-
-        class Nothing:
-            pass
-
-        assert citation_refs(self.STORED, claims=Nothing())[0].source_url == ""
+        refs = citation_refs(stored, claims=Reader("stella", "5-8"))
+        assert [ref.source_url for ref in refs] == ["", "https://aspire.gov.kn/"]
 
 
 # ── caps and shape ───────────────────────────────────────────────────────────
@@ -981,11 +944,11 @@ class TestTheShapeHistoryHandsBack:
     def test_an_internal_grounding_field_does_not_come_back(self):
         assert "supports" not in self.replayed(self.STORED)
 
-    def test_history_obeys_the_same_link_gate_a_live_turn_does(self):
-        """Reopening a conversation must not hand a child what the live turn withheld."""
+    def test_history_shows_the_same_link_a_live_turn_does(self):
+        """Reopening a conversation shows the same source URL the live turn did."""
         replayed = self.replayed(self.STORED, Reader("stella", "5-8"))
-        assert replayed["source_url"] == ""
-        assert replayed["domain"] == ""
+        assert replayed["source_url"] == "https://aspire.gov.kn/#faqs"
+        assert replayed["domain"] == "aspire.gov.kn"
         assert replayed["site"] == "ASPIRE"
 
     def test_a_stored_turn_from_before_provenance_existed_still_replays(self):

@@ -608,12 +608,15 @@ def citation_refs(
     Two things happen here and nowhere else, so that a live turn and a replayed
     cached one cannot drift apart:
 
-    *The link gate.* `safety_out.strips_links` decides whether this reader gets
-    links at all, and a citation is not the exception to it -- a five-year-old
-    who never sees a URL in the prose should not be handed one in the panel. The
-    source keeps its NAME either way, so nothing goes un-attributed; it simply
-    is not a link. `claims` is effectively required: omitting it withholds every
-    link rather than granting them.
+    *Every reader gets the link.* The panel used to obey `safety_out.strips_links`
+    -- the youngest personas were shown the source's name but not its URL. That
+    was reversed as a product decision (25 Aug 2026): every answer must show
+    where it came from, for every reader. The prose gate is NOT loosened by
+    this: `strip_links` still removes model-written URLs from the youngest
+    personas' text, and what is linked here is different in kind -- it comes
+    from `documents.source_url`, was validated against scheme, host and port
+    when the citation was built, and is re-validated below. Nothing the model
+    or the reader says can put a URL in this panel.
 
     *A last validation.* The URL was validated when the citation was built, but
     a turn can also arrive from the response cache or the checkpointer, written
@@ -627,19 +630,6 @@ def citation_refs(
     server having to remember what it collapsed.
     """
     from app import sources
-    from app.graph.account import YOUNGEST_BAND
-    from app.graph.nodes.safety_out import strips_links
-
-    # Fails CLOSED. `claims=None`, a claims object missing either field, or an
-    # empty persona all resolve to the youngest reader, so the answer to "we do
-    # not know who this is" is the same one `conversations._UnknownReader`
-    # gives: a child until proven otherwise. Defaulting to `adult` here meant a
-    # future call site that forgot to thread `claims` would quietly hand links
-    # to every reader, and nothing would fail to say so.
-    linkable = not strips_links(
-        str(getattr(claims, "persona", "") or "stella"),
-        str(getattr(claims, "age_band", "") or YOUNGEST_BAND),
-    )
 
     refs: list[CitationRef] = []
     distinct: set[str] = set()
@@ -652,8 +642,8 @@ def citation_refs(
         if not isinstance(citation, dict):
             continue
         raw = str(citation.get("source_url") or "")
-        url = sources.safe_url(raw) if linkable else None
-        if raw and url is None and linkable:
+        url = sources.safe_url(raw)
+        if raw and url is None:
             # Validated once already, so reaching here means the stored value
             # came from an older build or a hand-edited row. Worth saying.
             logger.warning(
@@ -673,12 +663,6 @@ def citation_refs(
         # question was asked again.
         domain = str(citation.get("domain") or "")[: sources.MAX_HOST_OCTETS]
         site = str(citation.get("site") or "")
-        if not linkable and site.casefold() == domain.casefold():
-            # An unregistered host is NAMED by its own hostname, so blanking
-            # `domain` alone handed the same string back in `site` and defeated
-            # the gate by half. A source with no name left is still attributed
-            # by its page title, its row id and the row's own words.
-            site = ""
 
         refs.append(
             CitationRef(
@@ -689,10 +673,7 @@ def citation_refs(
                 source_url=url or "",
                 site=sources.clip(site, sources.MAX_SITE_CHARS),
                 page=sources.clip(str(citation.get("page") or ""), sources.MAX_PAGE_CHARS),
-                # Withheld with the link, not just alongside it. `aspire.gov.kn`
-                # IS a URL, and printing it under a source for a reader the
-                # product never shows one to would defeat the gate by half.
-                domain=domain if linkable else "",
+                domain=domain,
                 updated=sources.clip(
                     str(citation.get("updated") or ""), sources.MAX_UPDATED_CHARS
                 ),
@@ -701,12 +682,10 @@ def citation_refs(
 
     if refs:
         logger.info(
-            "Citations: %d row(s), %d linkable source(s), %d with no source at "
-            "all, links %s.",
+            "Citations: %d row(s), %d linkable source(s), %d with no source at all.",
             len(refs),
             len(distinct),
             unattributed,
-            "on" if linkable else "withheld for this reader",
         )
     return refs
 
