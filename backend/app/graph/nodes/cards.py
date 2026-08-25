@@ -788,7 +788,19 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
     # words mean something different: "more" is the next beat, not a new story.
     arc = state.get("story_arc")
     if arc:
-        if story_ends(message):
+        # A PRICED LINE IS A TAP, AND A TAP IS NEVER A COMMAND.
+        #
+        # Read before `story_ends`, and that order is the whole fix. A message
+        # in the exact chip format -- "Buy enough rope (EC$30)" -- is one of
+        # the choices this story just offered, tapped. Graded as prose first,
+        # any stop word ANYWHERE inside the label closed the story instead of
+        # scoring the choice: `enough` in English, `suficiente` in Spanish,
+        # `assez` in French. The child pressed a button the bot drew for them
+        # and was told "that's a good place to stop".
+        #
+        # Stopping is something a reader types. It does not arrive priced.
+        choice = _story_choice(message)
+        if choice is None and story_ends(message):
             return {
                 "story_arc": None,
                 "active_agent": _holding_agent(state),
@@ -796,7 +808,6 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
                 "quick_replies": _STORY_TOPICS[locale],
                 "safety_flags": {"card": "story_closed"},
             }
-        choice = _story_choice(message)
         if choice is not None or story_continues(message):
             beat = int(arc.get("beat") or 1) + 1
             wallet = int(arc.get("wallet") or 0)
