@@ -488,7 +488,7 @@ def make_wrap_session(store: MasteryStore | None = None):
         )
 
         return {
-            "messages": [AIMessage(content=_wrap_text(band, moved))],
+            "messages": [AIMessage(content=_wrap_text(band, moved, state))],
             "quick_replies": _chips_i18n(state, ["play_a_game", "see_tomorrow"]),
             "ui_directives": [directive],
             "learning": merge(learning, phase="done", wrapped=True),
@@ -497,7 +497,21 @@ def make_wrap_session(store: MasteryStore | None = None):
     return wrap_session
 
 
-def _wrap_text(band: str, moved: int) -> str:
+def _wrap_text(band: str, moved: int, state: AspireState | None = None) -> str:
+    """The end of a session, said only if there was one.
+
+    NOTHING COVERED IS NOT AN ACHIEVEMENT. "Nice work. You covered 0 concepts
+    today" was observed on the live site mid-conversation, after a question
+    that was never a lesson -- praise for work nobody did, ending a session the
+    reader had not ended. When the count is zero the line says so plainly and
+    offers the lesson instead.
+    """
+    if moved == 0 and state is not None:
+        from app.prompting.ui_lines import line
+
+        locale = str(state.get("locale") or "en")
+        key = "wrap_nothing_young" if band in ("5-8", "9-12") else "wrap_nothing"
+        return line(key, locale)
     if band == "5-8":
         return "That was great work today. Come back tomorrow and we will do more!"
     if band == "9-12":

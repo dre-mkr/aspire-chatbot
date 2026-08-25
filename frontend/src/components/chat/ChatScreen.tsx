@@ -250,9 +250,9 @@ export function ChatScreen() {
 	// Only new answers are spoken.
 	useEffect(() => {
 		speakArrival.current = (id, text) => {
-			if (voice.autoSpeak && voice.available) void voice.play(id, text);
+			if (voice.autoSpeak && voice.canPlay) void voice.play(id, text);
 		};
-	}, [voice.autoSpeak, voice.available, voice.play]);
+	}, [voice.autoSpeak, voice.canPlay, voice.play]);
 
 	/**
 	 * Arrived by tapping the landing page's microphone: open the mic, not a
@@ -485,7 +485,7 @@ export function ChatScreen() {
 			onEditSlot: (slot: string) => ask(`I need to change ${slot}.`),
 			onSubmit: () => ask("Submit my application."),
 			onSpeak: (text: string) => voice.play(ELIGIBILITY_SPEECH_ID, text),
-			speakAvailable: voice.available,
+			speakAvailable: voice.canPlay,
 			locale: voice.language,
 		}),
 		[
@@ -495,7 +495,7 @@ export function ChatScreen() {
 			sendUploadResult,
 			sendGameResult,
 			voice.play,
-			voice.available,
+			voice.canPlay,
 			voice.language,
 		],
 	);
@@ -922,7 +922,10 @@ export function ChatScreen() {
 											onRegenerate={handleRegenerate}
 											onAsk={ask}
 											playback={{
-												available: voice.available,
+												// The player, not the mic: it is offered
+												// whenever anything can speak, including
+												// the device's own voice.
+												available: voice.canPlay,
 												playingId: voice.playingId,
 												pausedId: voice.pausedId,
 												play: voice.play,
@@ -977,7 +980,7 @@ export function ChatScreen() {
 															// Speaks the question, or the verdict.
 															onSpeak: (text) =>
 																voice.play(ELIGIBILITY_SPEECH_ID, text),
-															speakAvailable: voice.available,
+															speakAvailable: voice.canPlay,
 														}
 													: null
 											}

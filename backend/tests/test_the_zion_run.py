@@ -230,3 +230,80 @@ class TestTheLessonSpeaksTheReadersLanguage:
         assert chips(["play_a_game", "see_tomorrow"], "es") == ["Jugar un juego", "Hasta mañana"]
         assert chips(["play_a_game", "see_tomorrow"], "fr") == ["Jouer à un jeu", "À demain"]
         assert chips(["play_a_game", "see_tomorrow"], "en") == ["Play a game", "See you tomorrow"]
+
+
+# ── 7. the voice that could not speak, and never said so ─────────────────────
+
+
+class TestTheConfigSaysWhichVoiceYouWillHear:
+    """`/api/voice/config` returned `enabled: true` with six guides listed
+    across three languages while `ELEVENLABS_API_KEY` was unset, so every Play
+    spent a round trip discovering a 503 before falling back to the device."""
+
+    def test_no_key_means_no_native_voice(self, monkeypatch):
+        from app.voice import config as voice_config
+
+        monkeypatch.setattr(
+            voice_config.get_voice_settings(), "elevenlabs_api_key", None, raising=False
+        )
+        assert not voice_config.get_voice_settings().elevenlabs_api_key
+
+    def test_the_response_carries_the_field(self):
+        from app.voice.schemas import VoiceConfigResponse
+
+        assert "native_voice" in VoiceConfigResponse.model_fields
+
+    def test_it_defaults_true_so_an_older_client_is_unaffected(self):
+        from app.voice.schemas import VoiceConfigResponse
+
+        assert VoiceConfigResponse.model_fields["native_voice"].default is True
+
+
+# ── 8. a wrap-up with nothing in it ──────────────────────────────────────────
+
+
+class TestNothingCoveredIsNotAnAchievement:
+    """"Nice work. You covered 0 concepts today." arrived mid-conversation,
+    after a question that was never a lesson."""
+
+    def test_zero_does_not_congratulate(self):
+        from app.agents.learn.graph import _wrap_text
+
+        text = _wrap_text("16-18", 0, {"locale": "en"})
+        assert "0 concept" not in text
+        assert "Nice work" not in text
+        assert "lesson" in text.lower()
+
+    @pytest.mark.parametrize("locale,word", [("es", "lección"), ("fr", "leçon")])
+    def test_it_speaks_the_readers_language(self, locale, word):
+        from app.agents.learn.graph import _wrap_text
+
+        assert word in _wrap_text("16-18", 0, {"locale": locale})
+
+    def test_real_progress_is_still_celebrated(self):
+        from app.agents.learn.graph import _wrap_text
+
+        assert "2 concepts" in _wrap_text("16-18", 2, {"locale": "en"})
+
+
+# ── 9. a personality that stops after the first sentence ─────────────────────
+
+
+class TestThePersonalityCarriesThroughTheAnswer:
+    def test_the_block_says_so(self):
+        from app.prompting.overlays import overlay_block
+
+        block = overlay_block("limer", "16-18")
+        assert "CARRY IT THROUGH" in block
+        assert "last sentence" in block
+
+    def test_and_still_forbids_moving_a_figure(self):
+        from app.prompting.overlays import overlay_block
+
+        block = overlay_block("professor", "16-18").lower()
+        assert "never change is a figure" in block
+
+    def test_a_barred_band_still_gets_nothing(self):
+        from app.prompting.overlays import overlay_block
+
+        assert overlay_block("professor", "5-8") == ""

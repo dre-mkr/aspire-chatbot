@@ -49,4 +49,18 @@ def overlay_block(overlay: str | None, age_band: str | None) -> str:
         "in Spanish or French keep the same energy and register; dialect lines "
         "soften to warm, natural standard Spanish or French rather than being "
         "translated word for word."
+        # THE WHOLE ANSWER, NOT THE FIRST SENTENCE.
+        #
+        # Measured on the live site, 25 Aug: the same question put to Hype, the
+        # Professor and the Limer came back with three different opening
+        # metaphors and near-identical bodies. The overlay was applied -- none
+        # of the three is band-barred at 16-18 -- and the model was spending it
+        # all on the first line, then reverting to corpus prose. A reader
+        # switching personality could not tell that anything had changed.
+        + "\n- CARRY IT THROUGH. This voice belongs to the whole reply, not to "
+        "an opening line with a neutral explanation behind it: the rhythm, the "
+        "word choice, the examples and the sign-off are all in it. A reader who "
+        "read only your last sentence should still know which personality they "
+        "chose. What it may never change is a figure, a rule, a citation or a "
+        "gate -- those are identical whoever is speaking."
     )

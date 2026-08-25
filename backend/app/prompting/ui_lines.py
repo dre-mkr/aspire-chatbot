@@ -44,6 +44,20 @@ _LINES: dict[str, dict[str, str]] = {
     "ask_later": {"en": "Ask again later", "es": "Pregúntame luego", "fr": "Redemande plus tard"},
     "see_tomorrow": {"en": "See you tomorrow", "es": "Hasta mañana", "fr": "À demain"},
     "tell_me": {"en": "Tell me", "es": "Dime", "fr": "Dis-moi"},
+    # The end of a session, which was three English literals -- and one of them
+    # congratulated a reader for nothing. Observed on the live site, 25 Aug:
+    # "Nice work. You covered 0 concepts today." arrived in the middle of a
+    # conversation, after a question that was not a lesson at all.
+    "wrap_nothing_young": {
+        "en": "We did not get to a lesson this time. Want to try one?",
+        "es": "Esta vez no llegamos a una lección. ¿Quieres probar una?",
+        "fr": "On n'a pas fait de leçon cette fois. Tu veux en essayer une ?",
+    },
+    "wrap_nothing": {
+        "en": "We did not cover a lesson this time. Want to start one?",
+        "es": "Esta vez no vimos ninguna lección. ¿Quieres empezar una?",
+        "fr": "Nous n'avons pas fait de leçon cette fois. Tu veux en commencer une ?",
+    },
     "go_back": {
         "en": "Go back to the other one", "es": "Volver a la otra", "fr": "Revenir à l'autre",
     },

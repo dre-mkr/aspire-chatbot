@@ -44,6 +44,16 @@ export interface PersonaVoice {
 
 export interface VoiceConfig {
 	enabled: boolean;
+	/**
+	 * Whether the GUIDE voices can actually be synthesised.
+	 *
+	 * `enabled` is the module's feature flag; this is whether the server has an
+	 * ElevenLabs key behind it. On production the two disagreed -- the flag was
+	 * on, the key was missing -- so every Play spent a round trip discovering a
+	 * 503 before falling back to the device voice. Optional, and defaulting to
+	 * true when absent, so an older server keeps behaving exactly as it did.
+	 */
+	native_voice?: boolean;
 	languages: Array<VoiceLanguage>;
 	limits: VoiceLimits;
 	/**
