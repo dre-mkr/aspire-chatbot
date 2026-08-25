@@ -367,7 +367,26 @@ def make_rerank(score=None):
             logger.warning("Reranking failed; keeping the fused order.", exc_info=True)
             return {"retrieved": chunks[:top], "qa_related": chunks[top:]}
 
-        paired = sorted(zip(chunks, scores), key=lambda pair: -pair[1])
+        # THE READER'S OWN AUDIENCE OUTRANKS SOMEBODY ELSE'S MATERIAL.
+        #
+        # `_permitted` decides what a reader MAY see and lets everything
+        # through, and `_for_this_reader` sorted only the follow-up chips -- so
+        # the extracts the ANSWER is written from were audience-blind. Observed
+        # on the live site, 25 Aug: Zion, seventeen, asked for his story to star
+        # a fisherman from Sandy Point and was told "After the story, STUDENTS
+        # CAN ACT IT OUT and discuss what choice he made" -- a teacher's lesson
+        # plan, read out to the child it was written about.
+        #
+        # A demotion rather than a filter, and deliberately: it is a tie-break
+        # applied to the cross-encoder's score, so a row written for another
+        # audience still wins when it is the only thing that answers. The chips
+        # already work this way, for the same reason -- a thin corpus slice must
+        # not leave a reader with nothing.
+        audience = reader_audience(state)
+        paired = sorted(
+            zip(chunks, scores),
+            key=lambda pair: (-(1 if _for_this_reader(pair[0], audience) else 0), -pair[1]),
+        )
         return {
             "retrieved": [
                 chunk.model_copy(update={"score": float(value)})

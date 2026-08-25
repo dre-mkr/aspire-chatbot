@@ -501,6 +501,36 @@ def wants_story(message: str) -> bool:
     return bool(_JUST_A_STORY.match(folded) or _MAYBE_A_STORY.search(folded))
 
 
+#: "Say that simpler." The button already exists; the words did not.
+#:
+#: `simple_mode` arrived only as a flag on the body, set by the "Explain it
+#: simply" chip. A reader who TYPED the same request had nothing reading it --
+#: so on the live site, 25 Aug, "make it simpler" landed in the tutor and came
+#: back as a quiz question about payday. The chip and the sentence should do
+#: the same thing.
+_SIMPLER = re.compile(
+    r"\b(?:make|say|explain|put|word)\s+(?:it|that|this)\s+(?:more\s+)?"
+    r"(?:simpl(?:er|y)|easier|plainer|clearer)\b"
+    r"|\b(?:simpl(?:er|y)|easier)\s+(?:please|version)\b"
+    r"|^\s*(?:simpler|simply|easier)\s*[.!?]*\s*$"
+    r"|\bin\s+(?:simpler|plainer|easier)\s+(?:words|terms|english)\b"
+    r"|\bi\s+(?:don'?t|do not|can'?t)\s+understand\b"
+    # Spanish and French, where the same request is one everyday verb.
+    r"|\b(?:mas|m[aá]s)\s+(?:simple|f[aá]cil|sencillo)\b"
+    r"|\bexpl[ií]ca(?:melo|lo)?\s+(?:mas|m[aá]s)\s+(?:simple|f[aá]cil|sencillo)\b"
+    r"|\bno\s+entiendo\b"
+    r"|\bplus\s+(?:simple|facile)\b"
+    r"|\bexplique[sz]?[- ]?(?:le|moi)?\s+plus\s+simplement\b"
+    r"|\bje\s+ne\s+comprends\s+pas\b",
+    re.IGNORECASE,
+)
+
+
+def wants_it_simpler(message: str) -> bool:
+    """Whether this asks for the LAST answer again, in plainer words."""
+    return bool(_SIMPLER.search(fold(message)))
+
+
 def wants_video(message: str) -> bool:
     """Whether this message is accepting a video, rather than mentioning one."""
     folded = fold(message)

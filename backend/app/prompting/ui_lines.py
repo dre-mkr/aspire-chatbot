@@ -36,6 +36,14 @@ _LINES: dict[str, dict[str, str]] = {
         "en": "Show me a number", "es": "Muéstrame un número", "fr": "Montre-moi un nombre",
     },
     "okay": {"en": "Okay", "es": "Vale", "fr": "D'accord"},
+    # The lesson's own way out, which was English in all three languages: a
+    # Spanish reader finishing a lesson was offered "Play a game" and "See you
+    # tomorrow". Observed on the live site, 25 Aug.
+    "play_a_game": {"en": "Play a game", "es": "Jugar un juego", "fr": "Jouer à un jeu"},
+    "ask_a_question": {"en": "Ask a question", "es": "Hacer una pregunta", "fr": "Poser une question"},
+    "ask_later": {"en": "Ask again later", "es": "Pregúntame luego", "fr": "Redemande plus tard"},
+    "see_tomorrow": {"en": "See you tomorrow", "es": "Hasta mañana", "fr": "À demain"},
+    "tell_me": {"en": "Tell me", "es": "Dime", "fr": "Dis-moi"},
     "go_back": {
         "en": "Go back to the other one", "es": "Volver a la otra", "fr": "Revenir à l'autre",
     },

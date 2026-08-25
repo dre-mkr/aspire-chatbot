@@ -81,7 +81,7 @@ def make_resume_or_place(curriculum=None, store: MasteryStore | None = None):
         if placement.lesson is None:
             return {
                 "messages": [AIMessage(content=_all_done(_band(state)))],
-                "quick_replies": _chips(_band(state), ["Play a game", "Ask a question"]),
+                "quick_replies": _chips_i18n(state, ["play_a_game", "ask_a_question"]),
                 "learning": merge(learning, phase="done"),
             }
 
@@ -154,7 +154,7 @@ def make_check(curriculum=None):
         return {
             "messages": [AIMessage(content=prompt)],
             # The options ARE the interaction.
-            "quick_replies": list(question.options) or _chips(band, ["Tell me"]),
+            "quick_replies": list(question.options) or _chips_i18n(state, ["tell_me"]),
             "learning": merge(learning, question_id=question.id, phase="checking"),
         }
 
@@ -392,7 +392,7 @@ def _digress(state: AspireState, learning: dict, lesson: Lesson) -> dict[str, An
 
     return {
         "messages": [AIMessage(content=text)],
-        "quick_replies": _chips(band, ["Okay", "Ask again later"]),
+        "quick_replies": _chips_i18n(state, ["okay", "ask_later"]),
         "learning": merge(
             learning,
             digression_count=count,
@@ -489,7 +489,7 @@ def make_wrap_session(store: MasteryStore | None = None):
 
         return {
             "messages": [AIMessage(content=_wrap_text(band, moved))],
-            "quick_replies": _chips(band, ["Play a game", "See you tomorrow"]),
+            "quick_replies": _chips_i18n(state, ["play_a_game", "see_tomorrow"]),
             "ui_directives": [directive],
             "learning": merge(learning, phase="done", wrapped=True),
         }
@@ -514,6 +514,18 @@ def _all_done(band: str) -> str:
 def _chips(band: str, options: list[str]) -> list[str]:
     """Chips, capped at four and at four words each."""
     return [" ".join(option.split()[:4]) for option in options[:4]]
+
+
+def _chips_i18n(state: AspireState, keys: list[str]) -> list[str]:
+    """The lesson's own chips, in the reader's language.
+
+    These were English literals passed through `_chips`, which caps length and
+    does not translate -- so a Spanish reader finishing a lesson was offered
+    "Play a game" and "See you tomorrow" under Spanish prose.
+    """
+    from app.prompting.ui_lines import chips
+
+    return chips(keys, str(state.get("locale") or "en"))
 
 
 # ── routing ──────────────────────────────────────────────────────────────────

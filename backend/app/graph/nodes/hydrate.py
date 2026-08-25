@@ -108,7 +108,15 @@ def make_hydrate(token: str | None, body: dict[str, Any] | None = None):
         # An answer-shaping request from the reader, not a claim about who they
         # are, so it rides in the body rather than in the signed token. Written
         # every turn -- the reader can turn it off between two questions.
-        update["simple_mode"] = bool((body or {}).get("simple_mode"))
+        # The chip sets the flag; typing the same words has to do the same
+        # thing. Without this, "make it simpler" was not a request at all -- it
+        # fell through to whatever agent held the session, and mid-lesson that
+        # meant it was graded as an attempt at the last check question.
+        from app.graph.nodes.cards import _last_human
+        from app.graph.nodes.intents import wants_it_simpler
+
+        asked_simpler = wants_it_simpler(_last_human(state))
+        update["simple_mode"] = bool((body or {}).get("simple_mode")) or asked_simpler
         # The personality overlay: a preference like simple_mode, validated
         # against the known set so the body cannot inject prompt text.
         from app.prompting.overlays import KNOWN_OVERLAYS
