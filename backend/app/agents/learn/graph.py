@@ -473,6 +473,27 @@ def make_wrap_session(store: MasteryStore | None = None):
         touched_ids = list(learning.get("concepts_touched") or [])
 
         moved = sum(1 for row in rows if row.concept_id in touched_ids and row.score > 0)
+
+        # A SESSION WITH NOTHING IN IT DOES NOT GET A CEREMONY.
+        #
+        # "Nice work. You covered 0 concepts today." was observed mid
+        # conversation, after a question that was never a lesson: an ending
+        # nobody asked for, congratulating work nobody did, with a progress
+        # card behind it showing a zero.
+        #
+        # A wrap-up now requires something to wrap: a concept actually touched.
+        # Without one the graph simply does not end the session here -- no
+        # message, no progress directive, no chips -- and the turn goes on to
+        # whichever agent the reader was talking to. Conservative on purpose:
+        # the cost of a missed wrap-up is nothing, and the cost of a false one
+        # is a reader being told their session is over while they are using it.
+        if not touched_ids:
+            logger.info(
+                "Not wrapping session %s: no concept was touched, so there is "
+                "nothing to wrap.",
+                state.get("session_id"),
+            )
+            return {"learning": merge(learning, phase="idle", wrapped=False)}
         streak = scheduler.streak_after(
             int(state.get("streak") or 0),
             max((row.last_seen for row in rows if row.last_seen), default=None),

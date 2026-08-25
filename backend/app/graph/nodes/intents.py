@@ -318,6 +318,25 @@ _REGISTER = (
     re.compile(r"\b(?:start|begin|open)\s+(?:an?\s+)?(?:application|account)\b"),
     re.compile(r"\b(?:quiero|queremos)\s+(?:registrar|inscribir)\b"),
     re.compile(r"\b(?:je\s+veux|nous\s+voulons)\s+(?:inscrire|enregistrer)\b"),
+    # THE REFLEXIVE FORMS, which is how both languages actually say it.
+    #
+    # Spanish and French put the reader inside the verb -- "registrarme",
+    # "inscribirme", "m'inscrire" -- and the patterns above wanted the bare
+    # infinitive, so "quiero registrarme" and "je veux m'inscrire" were not
+    # registration requests at all. `fold` strips the accents before these run.
+    re.compile(r"\b(?:quiero|queremos|puedo|podemos|deseo)\s+"
+               r"(?:registrar|inscribir|apuntar|anotar)(?:me|nos)?\b"),
+    re.compile(r"\bcomo\s+(?:me|nos)\s+(?:registro|inscribo|apunto|"
+               r"registramos|inscribimos)\b"),
+    re.compile(r"\bcomo\s+(?:puedo|podemos)\s+"
+               r"(?:registrar|inscribir|apuntar)(?:me|nos)?\b"),
+    re.compile(r"\b(?:je\s+veux|je\s+peux|puis-je|on\s+peut|comment\s+(?:je|on))\s+"
+               r"(?:m'?|s'?|nous\s+)?(?:inscri|enregistr)\w*"),
+    re.compile(r"\bcomment\s+(?:s'?|m'?)?(?:inscrire|enregistrer)\b"),
+    # And the English one that was missing: joining is what a teenager calls it.
+    re.compile(r"\bhow\s+do\s+(?:i|we)\s+(?:join|get\s+(?:in|on)|get\s+started)\b"),
+    re.compile(r"\bhow\s+(?:can|could)\s+(?:i|we)\s+"
+               r"(?:register|sign\s+up|enroll?|apply|join)\b"),
 )
 
 

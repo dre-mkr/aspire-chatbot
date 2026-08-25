@@ -185,6 +185,19 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: Waiting on "how old are you now?" from a teen who asked to sign up.
+    #:
+    #: The band says 16-18, which is three ages and two different answers: at
+    #: eighteen the programme's adult route applies, at sixteen or seventeen a
+    #: parent or legal guardian completes the enrolment. Asking is one short
+    #: question; guessing is telling a seventeen-year-old the wrong thing.
+    awaiting_teen_age: bool
+
+    #: The age that reader gave, once. Never a date of birth: an age is enough
+    #: to route the guidance, and a date of birth is personal data this
+    #: conversation has no reason to hold.
+    teen_age: int | None
+
     #: The reader's chosen personality overlay ("coach", "limer", ...), or "".
     #: A preference, not identity: it rides the request body like simple_mode.
     overlay: str
@@ -351,6 +364,8 @@ def initial_state(
         locale_override=None,
         auto_language=True,
         awaiting_story_topic=False,
+        awaiting_teen_age=False,
+        teen_age=None,
         story_topic=None,
         overlay="",
         collectibles=[],

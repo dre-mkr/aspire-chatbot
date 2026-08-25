@@ -290,20 +290,177 @@ class TestNothingCoveredIsNotAnAchievement:
 
 
 class TestThePersonalityCarriesThroughTheAnswer:
-    def test_the_block_says_so(self):
+    def test_the_block_names_the_dimensions_it_moves(self):
+        """"More colourful" is not an instruction. These are."""
         from app.prompting.overlays import overlay_block
 
         block = overlay_block("limer", "16-18")
         assert "CARRY IT THROUGH" in block
-        assert "last sentence" in block
+        assert "LAST sentence" in block
+        for dimension in ("rhythm", "analogy", "vocabulary", "humour", "follow-up"):
+            assert dimension in block, f"{dimension} is not named"
 
-    def test_and_still_forbids_moving_a_figure(self):
+    def test_and_names_what_it_may_never_move(self):
         from app.prompting.overlays import overlay_block
 
-        block = overlay_block("professor", "16-18").lower()
-        assert "never change is a figure" in block
+        block = overlay_block("professor", "16-18")
+        assert "NEVER MOVES" in block
+        for fixed in ("figure", "date", "rule", "citation", "source", "safety gate", "word cap"):
+            assert fixed in block, f"{fixed} is not protected"
 
     def test_a_barred_band_still_gets_nothing(self):
         from app.prompting.overlays import overlay_block
 
         assert overlay_block("professor", "5-8") == ""
+
+
+# ── 10. the teen registration policy ─────────────────────────────────────────
+
+
+class TestATeenIsPreparedNotEnrolled:
+    """Policy, resolved: 16-17 may prepare and understand the whole process;
+    the enrolment is completed with a parent or legal guardian; the adult is
+    handed to Imani. None of it blocks the teenager from information.
+
+    Before this, Zion at seventeen asked "ok how do i sign up" and was asked
+    "And how are you related to the child?" over chips reading Mother, Father,
+    Grandmother, Grandfather -- one turn after being told he could register
+    himself.
+    """
+
+    @staticmethod
+    def _state(band: str, message: str, locale: str = "en", **extra):
+        state = {"age_band": band, "locale": locale, "persona": "orion"}
+        state.update(extra)
+        return state
+
+    def test_sixteen_to_eighteen_is_asked_its_age_first(self):
+        from app.graph.nodes.cards import _teen_registration
+
+        update = _teen_registration(self._state("16-18", "how do i sign up"), "how do i sign up")
+        assert update is not None
+        assert update["awaiting_teen_age"] is True
+        assert "how old are you" in update["messages"][0].content.lower()
+        assert len(update["quick_replies"]) == 4
+
+    def test_thirteen_to_fifteen_needs_no_probe(self):
+        from app.graph.nodes.cards import _teen_registration
+
+        update = _teen_registration(self._state("13-15", "how do i sign up"), "how do i sign up")
+        assert update is not None
+        assert not update.get("awaiting_teen_age")
+        assert "guardian" in update["messages"][0].content.lower()
+
+    @pytest.mark.parametrize("said", ["I am 17", "17", "i'm 16", "tengo 17"])
+    def test_under_eighteen_gets_the_guardian_route_and_imani(self, said):
+        from app.graph.nodes.cards import _teen_registration
+
+        state = self._state("16-18", said, awaiting_teen_age=True)
+        update = _teen_registration(state, said)
+        text = update["messages"][0].content.lower()
+        assert "guardian" in text
+        assert "imani" in text
+        # Prepared, not blocked.
+        assert "prepared" in text
+        assert update["teen_age"] in (16, 17)
+        assert update["awaiting_teen_age"] is False
+        assert update["quick_replies"], "the process is still offered"
+
+    @pytest.mark.parametrize("said", ["I am 18", "18", "older than 18"])
+    def test_eighteen_or_over_is_not_sent_to_a_guardian(self, said):
+        from app.graph.nodes.cards import _teen_registration
+
+        state = self._state("16-18", said, awaiting_teen_age=True)
+        text = _teen_registration(state, said)["messages"][0].content.lower()
+        assert "guardian has to do it for you" in text or "18" in text
+        assert "imani" not in text
+
+    def test_an_unclear_answer_drops_the_question_rather_than_repeating_it(self):
+        """The latch is the fault this whole flow exists to undo."""
+        from app.graph.nodes.cards import _teen_registration
+
+        state = self._state("16-18", "what is compound interest", awaiting_teen_age=True)
+        assert _teen_registration(state, "what is compound interest") is None
+
+    def test_a_teenager_applying_for_a_child_is_still_a_guardian_question(self):
+        from app.graph.nodes.cards import _teen_registration
+
+        message = "i want to register my daughter"
+        assert _teen_registration(self._state("16-18", message), message) is None
+
+    @pytest.mark.parametrize(
+        "locale,message,word",
+        [
+            ("es", "quiero registrarme", "tutor legal"),
+            ("fr", "je veux m'inscrire", "tuteur légal"),
+        ],
+    )
+    def test_the_policy_is_stated_in_the_readers_language(self, locale, message, word):
+        from app.graph.nodes.cards import _teen_registration
+
+        state = self._state("13-15", message, locale=locale)
+        assert word in _teen_registration(state, message)["messages"][0].content
+
+    def test_it_never_asks_for_anything_more_than_an_age(self):
+        """No national ID, no date of birth, no address, no account number."""
+        from app.graph.nodes.cards import _TEEN_AGE_ASK, _TEEN_AGE_CHIPS
+
+        for locale in ("en", "es", "fr"):
+            asked = (_TEEN_AGE_ASK[locale] + " " + " ".join(_TEEN_AGE_CHIPS[locale])).lower()
+            for forbidden in ("birth", "nacimiento", "naissance", "id", "address",
+                              "dirección", "adresse", "account", "cuenta", "compte"):
+                assert forbidden not in asked.split(), f"{forbidden!r} asked in {locale}"
+
+
+class TestSigningUpIsUnderstoodInThreeLanguages:
+    @pytest.mark.parametrize(
+        "text",
+        ["how do i sign up", "how do i join", "how can i register",
+         "¿cómo me inscribo?", "quiero registrarme", "puedo inscribirme",
+         "je veux m'inscrire", "comment je m'inscris", "comment s'inscrire"],
+    )
+    def test_these_ask_to_register(self, text):
+        from app.graph.nodes.intents import wants_registration
+
+        assert wants_registration(text) is True
+
+    @pytest.mark.parametrize("text", ["what is ASPIRE", "who can join ASPIRE?"])
+    def test_asking_about_it_is_not_asking_for_it(self, text):
+        from app.graph.nodes.intents import wants_registration
+
+        assert wants_registration(text) is False
+
+    @pytest.mark.parametrize(
+        "text",
+        ["quiero registrar a mi hijo", "je veux inscrire mon enfant",
+         "quiero registrar a mi nieta", "i want to register my child"],
+    )
+    def test_applying_for_a_child_is_recognised_in_all_three(self, text):
+        from app.graph.nodes.cards import _FOR_ANOTHER
+
+        assert bool(_FOR_ANOTHER.search(text)) is True
+
+
+# ── 11. the wrap-up that ended a session nobody had finished ─────────────────
+
+
+class TestAWrapUpNeedsSomethingToWrap:
+    @pytest.mark.asyncio
+    async def test_no_concept_touched_means_no_ceremony(self):
+        from app.agents.learn.graph import make_wrap_session
+
+        class _EmptyStore:
+            async def all_for(self, _learner):
+                return []
+
+        state = {
+            "learning": {"phase": "wrapping", "concepts_touched": []},
+            "age_band": "16-18",
+            "locale": "en",
+            "session_id": "s-1",
+            "user_id": "u-1",
+        }
+        update = await make_wrap_session(_EmptyStore())(state)
+        assert "messages" not in update, "it announced an ending nobody asked for"
+        assert "ui_directives" not in update, "and drew a progress card behind it"
+        assert update["learning"]["wrapped"] is False
