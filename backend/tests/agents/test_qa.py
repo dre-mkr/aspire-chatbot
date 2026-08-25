@@ -206,6 +206,54 @@ class TestGroundCheck:
         assert_declined(command, "no_context")
 
     @pytest.mark.asyncio
+    async def test_a_story_turn_is_not_graded_as_a_corpus_answer(self):
+        """The production failure of 25 Aug, pinned.
+
+        Skye asked what the story should be about, the child said "Earning
+        your own money" -- one of the cards node's own suggested topics -- and
+        the gate declined the story for citing nothing and scoring low against
+        the corpus. A story cites nothing because it is a story.
+        """
+        state = state_for("Earning your own money", persona="stella", age_band="5-8")
+        state["story_topic"] = "Earning your own money"
+        state["retrieved"] = []
+        state["messages"].append(
+            AIMessage(content="Amara sold mangoes at the Basseterre market...")
+        )
+        command = await nodes.make_ground_check()(state)
+        update = command.update
+        assert "decline" not in str(update.get("safety_flags") or "")
+        assert update.get("citations") == []
+        assert update.get("decline_streak") == {}
+
+    @pytest.mark.asyncio
+    async def test_a_story_turn_with_no_text_still_declines(self):
+        """An empty story is not a story; the model failed and a person hears."""
+        state = state_for("Earning your own money", persona="stella", age_band="5-8")
+        state["story_topic"] = "Earning your own money"
+        state["retrieved"] = []
+        command = await nodes.make_ground_check()(state)
+        assert_declined(command, "no_context")
+
+    @pytest.mark.asyncio
+    async def test_a_playable_beat_keeps_its_priced_choices_as_chips(self):
+        """The wallet's invented prices must not be treated as ungrounded figures."""
+        state = state_for("more", persona="kaleb", age_band="9-12")
+        state["story_topic"] = "Saving up for something"
+        state["story_arc"] = {"topic": "Saving up for something", "beat": 2, "wallet": 50}
+        state["retrieved"] = []
+        state["messages"].append(
+            AIMessage(
+                content="The rope seller smiled.\nBuy the rope (EC$30)\nWalk on (free)"
+            )
+        )
+        command = await nodes.make_ground_check()(state)
+        assert command.update.get("quick_replies") == [
+            "Buy the rope (EC$30)",
+            "Walk on (free)",
+        ]
+
+    @pytest.mark.asyncio
     async def test_a_weak_best_chunk_escalates(self):
         state = state_for("something tangential")
         state["retrieved"] = chunks_for("ASP-006", score=0.05)

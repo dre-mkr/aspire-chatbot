@@ -1201,6 +1201,43 @@ def make_ground_check(threshold: float | None = None):
         messages = state.get("messages") or []
         answer = text_of(messages[-1]) if messages else ""
 
+        # ── a story the reader asked for is not a corpus answer ─────────────
+        #
+        # Every gate below grades an answer as a claim about the programme:
+        # retrieval floors, citations, figures. A story is none of that -- the
+        # reader asked for fiction, `_story_instruction` already forbids it
+        # from inventing programme facts, and a playable beat MUST state
+        # figures no extract contains ("Buy the rope (EC$30)" is the game).
+        # Graded as a factual answer, every story lost: observed on production,
+        # 25 Aug -- Skye asked what the story should be about, was told
+        # "Earning your own money" (one of this file's own suggested topics),
+        # and answered the child with the decline copy. A promise made by the
+        # cards node and broken by this gate.
+        #
+        # A story with no text still declines below: the model produced
+        # nothing, and nothing is not a story. And the text has to be the
+        # MODEL'S -- with no generation, `messages[-1]` is the reader's own
+        # message, and serving a child their words back as the tale is worse
+        # than declining.
+        story_told = (
+            bool((state.get("story_topic") or "").strip())
+            and bool(messages)
+            and isinstance(messages[-1], AIMessage)
+            and bool(answer.strip())
+        )
+        if story_told:
+            return Command(
+                update={
+                    # Fiction has no sources; the panel stays empty rather than
+                    # dressing a tale in citations.
+                    "citations": [],
+                    "groundedness": 1.0,
+                    "active_agent": state.get("active_agent"),
+                    "quick_replies": follow_up_chips(state, [], set(), answer),
+                    "decline_streak": {},
+                }
+            )
+
         if not chunks or not answer.strip():
             return _ungrounded(state, "no_context", "Nothing in the knowledge base matched.")
 
