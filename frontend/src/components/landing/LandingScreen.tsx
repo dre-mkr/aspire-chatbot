@@ -447,7 +447,14 @@ export function LandingScreen({ onStartConversation }: LandingScreenProps) {
 			</div>
 
 			{/* Elegant Header */}
-			<header className="landing-head relative z-10 w-full px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
+			{/* z-20, NOT z-10. The header and `<main>` below are siblings, and while
+			    both sat at z-10 the tie broke on document order -- so the hero
+			    painted over the header. The account menu is `z-40` INSIDE this
+			    header's stacking context, which meant it could never rise above
+			    the hero however high it climbed: `elementFromPoint` over the
+			    "Sign out" row returned the h1, and the click went to the heading.
+			    A header is above the page it heads. */}
+			<header className="landing-head relative z-20 w-full px-4 sm:px-8 pt-6 pb-4 flex items-center justify-between">
 				<div className="flex items-center gap-8">
 					<Brandmark variant="header" />
 					{/* One nav, one weight.
