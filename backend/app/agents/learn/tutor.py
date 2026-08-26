@@ -42,6 +42,7 @@ from app.agents.learn.planner import (
 from app.agents.learn.render import RenderResult, TeachContext, decline_text, render_teach
 from app.agents.learn.resolve import (
     ConceptResolution,
+    asks_about_a_topic,
     asks_to_practise,
     enqueue_candidate,
     place_concept,
@@ -282,6 +283,15 @@ def make_tutor(
             hints_available=len(outstanding.hints) if outstanding else 0,
             prerequisite_available=prerequisite is not None,
             wants_practice=asks_to_practise(utterance),
+            # A question of their own, or a request to be taught something --
+            # either way this turn is theirs and the check timer stands down.
+            # Not set while a check is outstanding: "what does interest mean?"
+            # in the middle of answering IS the answer sometimes, and the
+            # grader above has already read it.
+            asked_their_own=(
+                outstanding is None
+                and (asks_about_a_topic(utterance) or wants_a_lesson(utterance))
+            ),
         )
         move = plan_move(snapshot)
 

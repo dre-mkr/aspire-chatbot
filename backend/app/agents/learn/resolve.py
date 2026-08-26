@@ -383,3 +383,41 @@ async def enqueue_candidate(
             await session.commit()
     except Exception:
         logger.debug("Could not record a concept candidate.", exc_info=True)
+
+
+#: Whether a message is a question about a topic rather than a lesson reply.
+_ASKS_ABOUT = re.compile(
+    r"""\b(?:
+        what(?:'?s|\s+is|\s+are|\s+does|\s+do)\s+(?:\w+\s+){0,3}\w{3,}
+      | (?:why|how)\s+(?:do|does|did|is|are|can|come)\b\s*(?:\w+\s+){0,3}\w{3,}
+      | tell\s+me\s+(?:about|what|how|why)\s+(?:\w+\s+){0,3}\w{3,}
+      | (?:teach|explain)\s+(?:me\s+)?(?:about\s+)?(?:\w+\s+){0,3}\w{4,}
+      | i\s+(?:want|need|would\s+like)\s+to\s+(?:know|learn|understand)\s+(?:\w+\s+){0,3}\w{3,}
+      | can\s+you\s+(?:tell|teach|explain|show)\s+me\s+(?:about\s+)?(?:\w+\s+){0,3}\w{3,}
+      | what\s+(?:is\s+)?a\s+\w{3,}
+      | what\s+about\s+\w{3,}
+      | what\s+does\s+\w+\s+mean
+    )""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+#: Verbs that ask for a lesson without naming one.
+_NAMES_NOTHING = re.compile(
+    r"""^\s*(?:
+        (?:teach|show|tell)\s+me\s*(?:something|anything|a\s+lesson|more)?
+      | (?:i\s+want\s+to\s+)?learn\s*(?:something|anything|more)?
+      | (?:let'?s|lets)\s+(?:learn|start|go|begin)\b.*
+      | (?:start|begin)\s+(?:a\s+)?(?:lesson|learning)?
+      | next\s+lesson
+      | (?:another|a\s+new)\s+(?:one|lesson|topic)
+    )\s*[.!?]*\s*$""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def asks_about_a_topic(text: str) -> bool:
+    """Whether this message names something specific the learner wants explained."""
+    body = (text or "").strip()
+    if not body or _NAMES_NOTHING.match(body):
+        return False
+    return bool(_ASKS_ABOUT.search(body))

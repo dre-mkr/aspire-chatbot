@@ -826,3 +826,83 @@ class TestFollowUpChips:
         chips = nodes.follow_up_chips(state_for("Tell me about saving"), chunks, set())
 
         assert chips == ["What is compound interest?", "How do I open an account?"]
+
+
+class TestASavingsPlanIsNotACorpusClaim:
+    """The Kaleb failure of 25 Aug, pinned.
+
+    A nine-year-old asked how to save up for a bike and was declined twice,
+    while the same sentence in a fresh session was answered well. The corpus
+    has rows about saving and none about bikes, so every retrieval floor scored
+    a good plan as an answer about nothing -- retrieval deciding a question of
+    KIND, which a cosine score cannot see.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_plan_survives_an_empty_retrieval(self):
+        state = state_for("how do i save up for a bike", persona="kaleb", age_band="9-12")
+        state["plan_goal"] = "a bike"
+        state["retrieved"] = []
+        state["messages"].append(
+            AIMessage(
+                content="A bike is about EC$300. Put EC$15 aside each week and "
+                "you are there in 20 weeks -- by the middle of January."
+            )
+        )
+
+        command = await nodes.make_ground_check()(state)
+
+        assert "decline" not in str(command.update.get("safety_flags") or "")
+        assert command.update.get("decline_streak") == {}
+
+    @pytest.mark.asyncio
+    async def test_a_plan_may_state_figures_no_extract_contains(self):
+        """The arithmetic IS the plan. It is the reader's numbers, not ours."""
+        state = state_for("how long to save for a laptop", persona="orion", age_band="13-15")
+        state["plan_goal"] = "a laptop"
+        state["retrieved"] = chunks_for("ASP-001")
+        state["messages"].append(
+            AIMessage(content="EC$40 a week for 30 weeks reaches EC$1,200.")
+        )
+
+        command = await nodes.make_ground_check()(state)
+
+        assert "decline" not in str(command.update.get("safety_flags") or "")
+
+    @pytest.mark.asyncio
+    async def test_a_plan_still_may_not_invent_a_source(self):
+        """The one gate a plan does not get out of."""
+        state = state_for("how do i save up for a bike", persona="kaleb", age_band="9-12")
+        state["plan_goal"] = "a bike"
+        state["retrieved"] = chunks_for("ASP-001")
+        state["messages"].append(
+            AIMessage(content="Save EC$15 a week [ASP-999].")
+        )
+
+        command = await nodes.make_ground_check()(state)
+
+        assert_declined(command, "invented_citation")
+
+    @pytest.mark.asyncio
+    async def test_a_plan_with_no_answer_still_declines(self):
+        """The exemption is for a plan, and nothing is not a plan."""
+        state = state_for("how do i save up for a bike", persona="kaleb", age_band="9-12")
+        state["plan_goal"] = "a bike"
+        state["retrieved"] = []
+        state["messages"].append(AIMessage(content="   "))
+
+        command = await nodes.make_ground_check()(state)
+
+        assert_declined(command, "no_context")
+
+    @pytest.mark.asyncio
+    async def test_an_ordinary_question_is_still_graded(self):
+        """The exemption must not leak to the turn next door."""
+        state = state_for("what is the capital of Mongolia")
+        state["plan_goal"] = None
+        state["retrieved"] = []
+        state["messages"].append(AIMessage(content="Ulaanbaatar."))
+
+        command = await nodes.make_ground_check()(state)
+
+        assert_declined(command, "no_context")
