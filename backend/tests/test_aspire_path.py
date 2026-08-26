@@ -73,3 +73,70 @@ class TestItCannotCostAnybodyAnAnswer:
         """A typo in a call site would silently stop that stage appearing."""
         for stage in ("aim", "source", "plan", "interact", "recommend", "enable"):
             assert stage in STAGES
+
+
+# ── the vocabulary, which is a decision and not an accident ──────────────────
+
+
+class TestThePathIsNotCalledASpine:
+    """Five things here are already called a spine and they agree about what
+    the word means: a governing contract about how ASPIRE SPEAKS to a
+    particular audience -- the Voice Spine (the client's own source of truth),
+    the Educator Spine, the Hook Spine, the Adult Learner spine, and
+    `teach._spine()`.
+
+    The Path is about what ASPIRE DOES. A sixth meaning, and the first that is
+    not about speech, would cost the other five their precision -- and the
+    Voice Spine arrives from the client, so the word is not ours to widen.
+
+    This is the kind of thing that drifts back in one careless docstring, which
+    is why it is a test rather than a paragraph.
+    """
+
+    @staticmethod
+    def _sources() -> list[tuple[str, str]]:
+        from pathlib import Path as FsPath
+
+        root = FsPath(__file__).resolve().parents[1]
+        files = [
+            root / "app" / "graph" / "path.py",
+            root.parent / "docs" / "ASPIRE_PATH.md",
+            root.parent / "frontend" / "src" / "components" / "chat" / "AspirePath.tsx",
+        ]
+        return [(f.name, f.read_text(encoding="utf-8")) for f in files if f.is_file()]
+
+    def test_the_path_never_calls_itself_one(self):
+        for name, text in self._sources():
+            for line in text.splitlines():
+                lowered = line.lower()
+                if "spine" not in lowered:
+                    continue
+                # Naming the OTHER spines in order to distinguish them is the
+                # whole point of the section that does it.
+                # Naming an existing spine, or the filename of one, is what
+                # the distinguishing section is FOR. What is forbidden is the
+                # word attaching to this feature.
+                allowed = (
+                    "voice spine", "educator spine", "hook spine",
+                    "adult learner spine", "_spine()",
+                    "hook_spine.md", "educator_spine.md",
+                    "aspire_personas.yaml",
+                    # The section that exists to say it is not one.
+                    "not a spine", "not one of them", "on the word",
+                    "already called", "called one", "five things",
+                    "sixth meaning", "the word is not ours", "the word means",
+                )
+                assert any(token in lowered for token in allowed), (
+                    f"{name}: {line.strip()!r} uses 'spine' for the Path itself"
+                )
+
+    def test_the_stages_spell_the_product(self):
+        """The acronym is the asset, and it is why no other noun is needed."""
+        assert "".join(stage[0] for stage in STAGES).upper() == "ASPIRE"
+
+    def test_the_last_stage_is_enable_rather_than_execute(self):
+        """This assistant is bounded: it can prepare and hand off, never act on
+        an account. A stage named for authority it does not have would be the
+        one dishonest word in the sequence."""
+        assert STAGES[-1] == "enable"
+        assert "execute" not in STAGES

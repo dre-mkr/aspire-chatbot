@@ -18,14 +18,42 @@ THE STAGES ARE THE PRODUCT'S OWN, NOT THE GRAPH'S. A reader is never shown
 somebody trying to get something done -- and each guide says it in their own
 register, because that is what this product does everywhere else.
 
-Underneath, one order runs for everybody:
+Underneath, one order runs for everybody, and it spells the product:
 
-    AIM        what are they actually trying to do
-    SOURCE     find it in the approved material, and check it
-    PLAN       break it into what has to happen
-    INTERACT   calculate, compare, simulate, teach, play
-    RECOMMEND  the one next move
-    ENABLE     make that move possible -- a widget, a checklist, a handoff
+    A  AIM        what are they actually trying to do
+    S  SOURCE     find it in the approved material, and check it
+    P  PLAN       break it into what has to happen
+    I  INTERACT   calculate, compare, simulate, teach, play
+    R  RECOMMEND  the one next move
+    E  ENABLE     make that move possible -- a widget, a checklist, a handoff
+
+`ENABLE`, not "execute". This assistant is bounded on purpose: it can build a
+plan, open a simulator, produce a checklist, prepare a lesson, hand a parent to
+Imani or route to the ASPIRE team. It cannot act on anybody's account, and a
+stage named for authority it does not have would be the one dishonest word in
+the sequence.
+
+THIS IS NOT A SPINE, AND THE WORD IS AVOIDED DELIBERATELY.
+
+Five things in this codebase are already called one, and they agree with each
+other about what the word means -- a governing contract about HOW ASPIRE SPEAKS
+to a particular audience:
+
+    the Voice Spine       `prompting/spine/aspire_personas.yaml`, the client's
+                          own source of truth: keys, bands, word caps, the
+                          vocabulary ladder
+    the Educator Spine    `docs/EDUCATOR_SPINE.md` -- what may be told to a
+                          professional who will act on it
+    the Hook Spine        `docs/HOOK_SPINE.md` -- how a greeting earns the right
+                          to say anything specific about somebody
+    the Adult Learner spine    the register for an adult learning for
+                          themselves, explicitly not the educator's
+    `teach._spine()`      the points a lesson must cover
+
+Every one is about what is SAID. This is about what is DONE, which is a
+different category, and putting a sixth meaning on the word -- the first one
+that is not about speech -- would cost the other five their precision. The
+acronym is the asset here; it does not need a noun in front of it.
 
 NOT EVERY TURN EARNS ONE. "What is compound interest?" is a question with an
 answer, and drawing four stages over it is theatre. A Path appears when the
