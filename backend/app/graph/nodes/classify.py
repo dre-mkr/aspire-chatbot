@@ -415,6 +415,13 @@ def _is_an_outright_question(state: AspireState) -> bool:
     )
 
 
+def _new_intent(state: AspireState) -> str | None:
+    """A top-level intent in this turn, whatever activity is running."""
+    from app.graph.nodes.intents import top_level_intent
+
+    return top_level_intent(_latest_user_text(state) or "")
+
+
 def _is_a_question_not_an_answer(state: AspireState) -> bool:
     """Whether this turn asks something rather than answering the last thing."""
     text = (_latest_user_text(state) or "").strip()
@@ -588,7 +595,16 @@ def apply_stickiness(decision: Classification, state: AspireState) -> Classifica
     if (
         active in TEACHING_AGENTS
         and decision.agent not in TEACHING_AGENTS
-        and (_is_a_question_not_an_answer(state) or _is_about_the_reader(state))
+        and (
+            _is_a_question_not_an_answer(state)
+            or _is_about_the_reader(state)
+            # PRECEDENCE. The two tests above were written for the two cases
+            # that had been observed, and each was blind to the others: a
+            # reader asking for a game, a story or plainer words was none of
+            # them, so the lesson kept the turn. Measured across a twenty-four
+            # turn run, the same question escaped once and was swallowed once.
+            or _new_intent(state) is not None
+        )
     ):
         logger.info(
             "Letting %s take session %s from %s at %.2f: the reader asked a "

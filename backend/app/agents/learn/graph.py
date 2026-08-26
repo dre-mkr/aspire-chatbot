@@ -697,6 +697,31 @@ def _entry(state: AspireState) -> str:
 
     if len(get_store()):
         text = latest_user_text(state)
+
+        # ── PRECEDENCE: a plea for plainer words outranks the phase table ────
+        #
+        # This is where the fix belonged all along, and it took a production
+        # run to find out. `sounds_confused` already knows "make it simpler",
+        # "no entiendo" and "je ne comprends pas" -- but it is consulted INSIDE
+        # the tutor node, and a reader mid-lesson never reaches the tutor. No
+        # claim below matched, so the phase table sent the turn to `teach` and
+        # then to `check`, and the reader who said they were lost was asked a
+        # new question about payday.
+        #
+        # Teaching the matcher more words could not have fixed that. The turn
+        # was never routed to the code doing the matching.
+        #
+        # `reteach` is a node of its own and has been all along: it explains
+        # the same concept a different way. A reader who says the explanation
+        # missed is asking for exactly that, so they go straight there -- but
+        # only when a lesson is actually open, because "I don't understand"
+        # with nothing being taught is a question for the router, not a
+        # re-explanation of nothing.
+        from app.agents.learn.tutor import sounds_confused
+
+        if sounds_confused(text) and learning.get("lesson_id"):
+            return "reteach"
+
         # Asking to move on is a request the phase table already knows how to honour
         # (`branch` places another lesson). The claim below would swallow it, and then
         # nothing could ever leave a concept: `branch` is only reached from the phase

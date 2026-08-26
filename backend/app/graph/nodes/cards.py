@@ -899,8 +899,38 @@ def _story_turn(state: AspireState, message: str) -> dict[str, Any] | None:
         #
         # A fresh "tell me a story" falls through instead, to the topic ask
         # below, which starts a new arc rather than continuing the old one.
-        if not wants_story(message):
+        # ── PRECEDENCE, and the difference between leaving and steering ─────
+        #
+        # Anything unrecognised used to drop the arc, on the reasoning that a
+        # reader who says something else has changed the subject. That is right
+        # for a QUESTION and wrong for an INSTRUCTION ABOUT THE STORY.
+        #
+        # Observed on production, 26 Aug: "make the character a fisherman from
+        # Sandy Point", mid-story, dropped the arc and left a request to change
+        # a story to be answered as a corpus question -- which the corpus has
+        # no answer to, so a child asking for their story to be about a
+        # fisherman got a decline and a phone number.
+        #
+        # A top-level intent leaves the story. Everything else steers it.
+        from app.graph.nodes.intents import top_level_intent
+
+        if top_level_intent(message) is not None:
             return {"story_arc": None}
+
+        # Steering: carry it into the next beat and keep the arc. The model is
+        # told to honour it from here on, so "make him a fisherman" changes the
+        # story rather than ending it.
+        beat = int(arc.get("beat") or 1) + 1
+        return {
+            "story_arc": {
+                **arc,
+                "beat": beat,
+                "direction": message.strip()[:160],
+                "last_choice": "",
+                "afforded": True,
+            },
+            "story_topic": str(arc.get("topic") or ""),
+        }
 
     if state.get("awaiting_story_topic"):
         topic = message.strip()

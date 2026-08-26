@@ -550,6 +550,69 @@ def wants_it_simpler(message: str) -> bool:
     return bool(_SIMPLER.search(fold(message)))
 
 
+#: A closing rather than a question. "thanks, that helps" is where a
+#: conversation ends, and it must not be answered with a phone number.
+_THANKS = re.compile(
+    r"^\W*(?:thanks|thank you|ty|cheers|gracias|merci|much appreciated)\b"
+    r"|\b(?:that|this)\s+(?:helps|helped|is helpful|was helpful|makes sense)\b"
+    r"|\beso ayuda\b|\bme sirve\b|\b[cç]a (?:m'?)?aide\b",
+    re.IGNORECASE,
+)
+
+#: An outright question, judged loosely -- this is used to decide whether a
+#: reader has LEFT an activity, where the cost of a false positive is a turn
+#: answered normally, not a wrong grade.
+#: The fillers a real person opens with before the question itself. Without
+#: these, "actually what is a sinking fund" was not a question -- and it was
+#: graded as a wrong answer to a lesson's check, which is where it was found.
+_FILLER = r"(?:actually|wait|but|so|ok(?:ay)?|hmm|hey|erm?|um|and|also|oh)[,\s]+"
+
+_A_QUESTION = re.compile(
+    r"\?\s*$"
+    rf"|^\s*(?:{_FILLER})?"
+    r"(?:what|who|whose|when|where|why|how|which|is|are|do|does|did|can|could|should)\b"
+    r"|^\s*(?:qu[eé]|qui[eé]n|cu[aá]ndo|d[oó]nde|por qu[eé]|c[oó]mo|cu[aá]l|puedo|puede)\b"
+    r"|^\s*(?:que|qui|quand|o[uù]|pourquoi|comment|quel|puis-je|est-ce)\b",
+    re.IGNORECASE,
+)
+
+
+def top_level_intent(message: str) -> str | None:
+    """What this message is asking for, above whatever is already running.
+
+    ONE ORDERED ANSWER, in one place. Every activity in this graph used to keep
+    its own idea of what counted as leaving it -- the lesson had a question
+    escape, the story knew three replies, registration wanted a question mark
+    -- and each of them was right about its own case and blind to the others.
+    The result was a product that could be talked out of a form but not out of
+    a story, and that graded a plea for plainer words as a wrong answer.
+
+    Order is the whole design. `simplify` is checked before `question` because
+    "i don't understand" is both, and the useful reading is the first one.
+    `story` and `game` are checked before `question` because "can I watch a
+    story?" is a question in form and a request in substance.
+
+    Returns None for anything that is not a new intent -- which includes a quiz
+    answer, a tapped choice, a name, a date, and a sentence steering the story
+    that is already running. None means "this belongs to whatever is running",
+    and that is the safe default: it changes nothing.
+    """
+    text = (message or "").strip()
+    if not text:
+        return None
+    if wants_it_simpler(text):
+        return "simplify"
+    if wants_game(text):
+        return "game"
+    if wants_story(text):
+        return "story"
+    if _THANKS.search(fold(text)):
+        return "thanks"
+    if _A_QUESTION.search(text) and len(text.split()) >= 3:
+        return "question"
+    return None
+
+
 def wants_video(message: str) -> bool:
     """Whether this message is accepting a video, rather than mentioning one."""
     folded = fold(message)
