@@ -852,6 +852,10 @@ def make_classify(invoke=None):
         )
 
         _announce(state, decision.agent)
+        # AIM: the objective is understood well enough to choose who answers.
+        from app.graph.path import emit as emit_path
+
+        emit_path({**state, "active_agent": decision.agent}, "aim")
         return {
             "active_agent": decision.agent,
             "safety_flags": {

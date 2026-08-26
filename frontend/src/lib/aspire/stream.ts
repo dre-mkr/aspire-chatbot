@@ -52,6 +52,18 @@ export async function streamAspire(
 	input: AskInput & {
 		onDelta?: (delta: string) => void;
 		onTextEnd?: () => void;
+		/**
+		 * ASPIRE Path: a stage of the work finished, mid-turn.
+		 *
+		 * Passed straight through from the wire. It is not part of the answer,
+		 * so it does not close the prose and does not touch `sources`.
+		 */
+		onPath?: (path: {
+			title: string;
+			labels: string[];
+			at: number;
+			done: boolean;
+		}) => void;
 		onTurn?: (result: AskResult) => void;
 		/** A widget interaction instead of a typed message. */
 		interaction?: WidgetInteraction;
@@ -175,6 +187,7 @@ export async function streamAspire(
 				}
 			: {}),
 		onToken: (text) => onDelta?.(text),
+		onPath: (path) => input.onPath?.(path),
 		onDirective: (directive) => {
 			// Directives close the prose: the server emits them after the last token.
 			closeProse();

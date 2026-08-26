@@ -1,7 +1,7 @@
 /** The v2 wire protocol, as types. */
 
 /** Every event the server can send. */
-export type WireEventName = "token" | "directive" | "done" | "error";
+export type WireEventName = "token" | "directive" | "path" | "done" | "error";
 
 export interface TokenEvent {
 	event: "token";
@@ -11,6 +11,25 @@ export interface TokenEvent {
 export interface DirectiveEvent {
 	event: "directive";
 	data: { i: number; d: Directive };
+}
+
+/**
+ * ASPIRE Path: which stage of the work has just finished.
+ *
+ * Sent while the turn is still running, and deliberately not held with the
+ * prose. Nothing streams tokens here -- every word waits for the outbound
+ * safety gates -- so without this the reader watches a blank screen for as
+ * long as the work takes. Measured on production: 1.5 to 14.7 seconds.
+ *
+ * The labels are chosen by the SERVER, per guide and per language. The client
+ * renders an index into them and never invents a stage name.
+ */
+export interface PathEvent {
+	event: "path";
+	data: {
+		i: number;
+		p: { title: string; labels: string[]; at: number; done: boolean };
+	};
 }
 
 export interface DoneEvent {
@@ -24,7 +43,12 @@ export interface ErrorEvent {
 	data: { code: string; message: string };
 }
 
-export type WireEvent = TokenEvent | DirectiveEvent | DoneEvent | ErrorEvent;
+export type WireEvent =
+	| TokenEvent
+	| DirectiveEvent
+	| PathEvent
+	| DoneEvent
+	| ErrorEvent;
 
 export interface TurnUsage {
 	elapsed_ms?: number;

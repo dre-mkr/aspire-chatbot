@@ -353,6 +353,10 @@ def make_rerank(score=None):
 
     async def rerank(state: AspireState) -> dict[str, Any]:
         chunks = list(state.get("retrieved") or [])
+        # SOURCE: the approved material has been searched, whatever it returned.
+        from app.graph.path import emit as emit_path
+
+        emit_path(state, "source")
         if not chunks:
             return {}
         top = get_settings().qa_rerank_k
@@ -559,6 +563,10 @@ def make_generate(invoke=None):
         if invoke is None:
             return {"groundedness": 0.0}
 
+        # PLAN: everything the answer will be built from is now in hand.
+        from app.graph.path import emit as emit_path
+
+        emit_path(state, "plan")
         messages = _generation_messages(state, question, chunks)
         text = await invoke(messages)
         return {"messages": [AIMessage(content=text)]}
