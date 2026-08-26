@@ -39,6 +39,26 @@ GDPR Article 8 both bear on storing a child's birth date and school alongside a
 guardian's contact details — rather than treated as settled because it is
 implemented.
 
+## Tracing, and what a third party can see
+
+`LANGSMITH_TRACING` sends a record of each turn to LangSmith, a hosted service
+run by LangChain. It is **off by default**, and when it is on the default is
+still that **nothing anybody typed leaves this service**: the client is
+constructed with `hide_inputs` and `hide_outputs`, so what is uploaded is the
+shape of the turn — which agents ran, in what order, how long each took, what
+errored — together with the persona, band, locale and an opaque session id.
+
+That is a deliberate split, not a limitation. Every question worth asking of a
+trace here is about routing and timing, and none of those answers requires a
+child's sentence.
+
+`LANGSMITH_TRACE_CONTENT=true` lifts the redaction and uploads prompts and
+replies as well. Nothing in the code sets it, and nothing should set it without
+the same review the under-13 sign-up flow is owed: it adds a processor outside
+this service, holding what a child wrote, in a jurisdiction this document does
+not name. If it is ever switched on, this section stops being true and must be
+rewritten before it is.
+
 ## Retention
 
 | What | Kept for |

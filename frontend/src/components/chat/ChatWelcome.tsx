@@ -50,110 +50,286 @@ export interface WelcomeCard {
 	icon: string;
 }
 
-/** For the readers who may be offered games and films. */
-const YOUNG: ReadonlyArray<WelcomeCard> = [
-	{
-		title: "What is ASPIRE?",
-		blurb: "Learn how ASPIRE helps you build money skills for life.",
-		question: "What is ASPIRE?",
-		icon: "ph-duotone ph-graduation-cap",
-	},
-	{
-		title: "Play a 2-minute challenge",
-		blurb: "Quick challenges to learn and earn coins.",
-		question: "I'd like to play a game.",
-		icon: "ph-duotone ph-game-controller",
-	},
-	{
-		title: "Tell me a story",
-		blurb: "Island tales that teach money lessons.",
-		question: "Can I watch a story?",
-		icon: "ph-duotone ph-book-open-text",
-	},
-	{
-		title: "How does saving work?",
-		blurb: "The idea behind putting money away.",
-		question: "How does saving work?",
-		icon: "ph-duotone ph-piggy-bank",
-	},
-];
+/**
+ * The starter cards, in one table across three languages.
+ *
+ * THEY WERE ENGLISH LITERALS, and the reader could see it: a Spanish
+ * conversation opened with "Hola. Soy Azuri." over four cards reading "What
+ * exists, at what level?" and "Can I use this with Form 3?". Reported from the
+ * live site, 26 Aug.
+ *
+ * The shape is the one `hooks.ts` already chose, and for the reason its own
+ * comment gives: a per-persona switch was fine for one language and would have
+ * become three near-identical switches for three. `icon` and `panel` are not
+ * language, so they are written once per card and shared.
+ *
+ * `question` is translated too, not just the label. It is the text actually
+ * sent, and sending English from a Spanish screen makes the reader's own
+ * language look like a skin over an English product.
+ */
+type CardSet = "young" | "guardian" | "educator";
 
-/** Imani's readers arrive with a question, not for an activity. */
-const GUARDIAN: ReadonlyArray<WelcomeCard> = [
-	{
-		title: "What is ASPIRE?",
-		blurb: "The programme, and who runs it.",
-		question: "What is ASPIRE?",
-		icon: "ph-duotone ph-graduation-cap",
-	},
-	{
-		title: "Who is eligible?",
-		blurb: "Who qualifies, and from what age.",
-		question: "Who is eligible for ASPIRE?",
-		icon: "ph-duotone ph-user",
-	},
-	{
-		title: "How do I register?",
-		blurb: "Where to go and what to bring.",
-		question: "How do I register a young person for ASPIRE?",
-		icon: "ph-duotone ph-file-text",
-	},
-	{
-		title: "What will they learn?",
-		blurb: "The material, split by age.",
-		question: "What will young people learn through ASPIRE?",
-		icon: "ph-duotone ph-books",
-	},
-];
+const ICONS: Record<
+	CardSet,
+	ReadonlyArray<Pick<WelcomeCard, "icon" | "panel">>
+> = {
+	young: [
+		{ icon: "ph-duotone ph-graduation-cap" },
+		{ icon: "ph-duotone ph-game-controller" },
+		{ icon: "ph-duotone ph-book-open-text" },
+		{ icon: "ph-duotone ph-piggy-bank" },
+	],
+	guardian: [
+		{ icon: "ph-duotone ph-graduation-cap" },
+		{ icon: "ph-duotone ph-user" },
+		{ icon: "ph-duotone ph-file-text" },
+		{ icon: "ph-duotone ph-books" },
+	],
+	educator: [
+		{ icon: "ph-duotone ph-graduation-cap" },
+		{ icon: "ph-duotone ph-books" },
+		{ icon: "ph-duotone ph-chart-line-up" },
+		{ icon: "ph-duotone ph-file-text" },
+	],
+};
 
-/** Azuri's readers are evaluating, not learning. */
-const EDUCATOR: ReadonlyArray<WelcomeCard> = [
-	{
-		title: "What is ASPIRE?",
-		blurb: "The programme, and who runs it.",
-		question: "What is ASPIRE?",
-		icon: "ph-duotone ph-graduation-cap",
-	},
-	{
-		title: "What exists, at what level?",
-		blurb: "The material as it stands today.",
-		question: "What ASPIRE material exists, and at what levels?",
-		icon: "ph-duotone ph-books",
-	},
-	{
-		title: "Where are the figures from?",
-		blurb: "Every number, with its source.",
-		question: "Where do the ASPIRE figures come from? Please include sources.",
-		icon: "ph-duotone ph-chart-line-up",
-	},
-	{
-		/* Taken from Azuri's own card, not invented: her EVALUATING branch is
-		   written against this exact question -- `IF he is EVALUATING ("can I use
-		   this with Form 3") -> state the pitch level, describe the material
-		   honestly, and name the gap BEFORE he finds it`. So the chip lands on a
-		   route she is built for, in local school vocabulary.
+type CardCopy = { title: string; blurb: string; question: string };
 
-		   Two earlier drafts were wrong. "What is not built yet?" asked about the
-		   product's build status rather than about ASPIRE. "Running it as a
-		   lesson" was worse: her red line 2 forbids claiming to be a curriculum
-		   or a scheme of work, so that chip primed the one answer she must
-		   refuse. A chip that invites a refusal is a broken chip. */
-		title: "Can I use this with Form 3?",
-		blurb: "The pitch level, and the gaps.",
-		question: "Can I use ASPIRE with a Form 3 class?",
-		icon: "ph-duotone ph-file-text",
+const COPY: Record<HookLanguage, Record<CardSet, ReadonlyArray<CardCopy>>> = {
+	en: {
+		young: [
+			{
+				title: "What is ASPIRE?",
+				blurb: "Learn how ASPIRE helps you build money skills for life.",
+				question: "What is ASPIRE?",
+			},
+			{
+				title: "Play a 2-minute challenge",
+				blurb: "Quick challenges to learn and earn coins.",
+				question: "I'd like to play a game.",
+			},
+			{
+				title: "Tell me a story",
+				blurb: "Island tales that teach money lessons.",
+				question: "Can I watch a story?",
+			},
+			{
+				title: "How does saving work?",
+				blurb: "The idea behind putting money away.",
+				question: "How does saving work?",
+			},
+		],
+		guardian: [
+			{
+				title: "What is ASPIRE?",
+				blurb: "The programme, in one answer.",
+				question: "What is ASPIRE?",
+			},
+			{
+				title: "Who is eligible?",
+				blurb: "Who qualifies, and from what age.",
+				question: "Who is eligible for ASPIRE?",
+			},
+			{
+				title: "How do I register?",
+				blurb: "Where to go and what to bring.",
+				question: "How do I register a young person for ASPIRE?",
+			},
+			{
+				title: "What will they learn?",
+				blurb: "The material, split by age.",
+				question: "What will young people learn through ASPIRE?",
+			},
+		],
+		/* The fourth educator card is taken from Azuri's own persona card, not
+		   invented: her EVALUATING branch is written against this exact question
+		   -- `IF he is EVALUATING ("can I use this with Form 3") -> state the
+		   pitch level, describe the material honestly, and name the gap BEFORE
+		   he finds it`. A chip that invites a refusal is a broken chip, so the
+		   Spanish and French versions keep the same intent in local school
+		   vocabulary rather than translating "Form 3" literally. */
+		educator: [
+			{
+				title: "What is ASPIRE?",
+				blurb: "The programme, and who runs it.",
+				question: "What is ASPIRE?",
+			},
+			{
+				title: "What exists, at what level?",
+				blurb: "The material as it stands today.",
+				question: "What ASPIRE material exists, and at what levels?",
+			},
+			{
+				title: "Where are the figures from?",
+				blurb: "Every number, with its source.",
+				question:
+					"Where do the ASPIRE figures come from? Please include sources.",
+			},
+			{
+				title: "Can I use this with Form 3?",
+				blurb: "The pitch level, and the gaps.",
+				question: "Can I use ASPIRE with a Form 3 class?",
+			},
+		],
 	},
-];
+	es: {
+		young: [
+			{
+				title: "¿Qué es ASPIRE?",
+				blurb: "Descubre cómo ASPIRE te ayuda a manejar tu dinero.",
+				question: "¿Qué es ASPIRE?",
+			},
+			{
+				title: "Reto de 2 minutos",
+				blurb: "Retos rápidos para aprender y ganar monedas.",
+				question: "Quiero jugar un juego.",
+			},
+			{
+				title: "Cuéntame un cuento",
+				blurb: "Cuentos isleños que enseñan sobre el dinero.",
+				question: "¿Puedo ver un cuento?",
+			},
+			{
+				title: "¿Cómo funciona ahorrar?",
+				blurb: "La idea de guardar dinero para después.",
+				question: "¿Cómo funciona ahorrar?",
+			},
+		],
+		guardian: [
+			{
+				title: "¿Qué es ASPIRE?",
+				blurb: "El programa, en una respuesta.",
+				question: "¿Qué es ASPIRE?",
+			},
+			{
+				title: "¿Quién puede participar?",
+				blurb: "Quién califica y desde qué edad.",
+				question: "¿Quién puede participar en ASPIRE?",
+			},
+			{
+				title: "¿Cómo lo inscribo?",
+				blurb: "A dónde ir y qué llevar.",
+				question: "¿Cómo inscribo a un joven en ASPIRE?",
+			},
+			{
+				title: "¿Qué van a aprender?",
+				blurb: "El material, por edades.",
+				question: "¿Qué aprenderán los jóvenes con ASPIRE?",
+			},
+		],
+		educator: [
+			{
+				title: "¿Qué es ASPIRE?",
+				blurb: "El programa y quién lo dirige.",
+				question: "¿Qué es ASPIRE?",
+			},
+			{
+				title: "¿Qué hay y para qué nivel?",
+				blurb: "El material tal como está hoy.",
+				question: "¿Qué material de ASPIRE existe y para qué niveles?",
+			},
+			{
+				title: "¿De dónde salen las cifras?",
+				blurb: "Cada número, con su fuente.",
+				question:
+					"¿De dónde vienen las cifras de ASPIRE? Incluye las fuentes, por favor.",
+			},
+			{
+				title: "¿Sirve para mi clase?",
+				blurb: "El nivel y lo que falta.",
+				question: "¿Puedo usar ASPIRE con una clase de Form 3?",
+			},
+		],
+	},
+	fr: {
+		young: [
+			{
+				title: "C'est quoi ASPIRE ?",
+				blurb: "Découvre comment ASPIRE t'aide avec ton argent.",
+				question: "C'est quoi ASPIRE ?",
+			},
+			{
+				title: "Défi de 2 minutes",
+				blurb: "Des défis rapides pour apprendre et gagner des pièces.",
+				question: "Je veux jouer à un jeu.",
+			},
+			{
+				title: "Raconte-moi une histoire",
+				blurb: "Des histoires des îles qui parlent d'argent.",
+				question: "Je peux avoir une histoire ?",
+			},
+			{
+				title: "Comment fonctionne l'épargne ?",
+				blurb: "L'idée de mettre de l'argent de côté.",
+				question: "Comment fonctionne l'épargne ?",
+			},
+		],
+		guardian: [
+			{
+				title: "C'est quoi ASPIRE ?",
+				blurb: "Le programme, en une réponse.",
+				question: "C'est quoi ASPIRE ?",
+			},
+			{
+				title: "Qui peut participer ?",
+				blurb: "Qui remplit les conditions, et à partir de quel âge.",
+				question: "Qui peut participer à ASPIRE ?",
+			},
+			{
+				title: "Comment l'inscrire ?",
+				blurb: "Où aller et quoi apporter.",
+				question: "Comment inscrire un jeune à ASPIRE ?",
+			},
+			{
+				title: "Qu'est-ce qu'ils apprennent ?",
+				blurb: "Le contenu, par tranche d'âge.",
+				question: "Qu'apprendront les jeunes avec ASPIRE ?",
+			},
+		],
+		educator: [
+			{
+				title: "C'est quoi ASPIRE ?",
+				blurb: "Le programme, et qui le dirige.",
+				question: "C'est quoi ASPIRE ?",
+			},
+			{
+				title: "Quel contenu, quel niveau ?",
+				blurb: "Le matériel tel qu'il est aujourd'hui.",
+				question: "Quel matériel ASPIRE existe, et pour quels niveaux ?",
+			},
+			{
+				title: "D'où viennent les chiffres ?",
+				blurb: "Chaque chiffre, avec sa source.",
+				question:
+					"D'où viennent les chiffres d'ASPIRE ? Merci d'indiquer les sources.",
+			},
+			{
+				title: "Utilisable dans ma classe ?",
+				blurb: "Le niveau visé, et les manques.",
+				question: "Puis-je utiliser ASPIRE avec une classe de Form 3 ?",
+			},
+		],
+	},
+};
+
+function build(
+	set: CardSet,
+	language: HookLanguage,
+): ReadonlyArray<WelcomeCard> {
+	const copy = COPY[language]?.[set] ?? COPY.en[set];
+	return copy.map((card, index) => ({ ...card, ...ICONS[set][index] }));
+}
 
 export function cardsFor(
 	persona: string | null | undefined,
+	language: HookLanguage = "en",
 ): ReadonlyArray<WelcomeCard> {
 	const key = (persona ?? "").trim().toLowerCase();
-	if (key === "aurora") return GUARDIAN;
-	if (key === "nova") return EDUCATOR;
+	if (key === "aurora") return build("guardian", language);
+	if (key === "nova") return build("educator", language);
 	// Everything else, including no persona at all, gets the young set. Nothing
 	// in it can fail for any reader now, so an unknown key costs nothing.
-	return YOUNG;
+	return build("young", language);
 }
 
 /* The hooks themselves moved to `lib/aspire/hooks.ts`, where they sit in one
@@ -205,7 +381,7 @@ export function ChatWelcome({
 	 */
 	showOnboarding?: boolean;
 }) {
-	const cards = cardsFor(persona);
+	const cards = cardsFor(persona, language);
 	const welcome = hookFor(persona, language, priorConversations, readerName);
 	const tagline = TAGLINES[language] ?? TAGLINES.en;
 

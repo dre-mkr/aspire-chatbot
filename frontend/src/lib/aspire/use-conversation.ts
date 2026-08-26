@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { PathState } from "#/components/chat/AspirePath";
 import type {
 	Directive,
 	GameResultPayload,
@@ -233,6 +234,14 @@ export function useConversation({
 }: UseConversationOptions = {}) {
 	const [messages, setMessages] = useState<Array<ChatMessage>>([]);
 	const [streaming, setStreaming] = useState<StreamingAnswer | null>(null);
+	/**
+	 * ASPIRE Path for the turn in flight, or null between turns.
+	 *
+	 * One frame, replaced -- not a list. The server sends the whole strip each
+	 * time with the stage index moved on, so the client never has to reassemble
+	 * an order or guess what it missed if a frame is dropped.
+	 */
+	const [path, setPath] = useState<PathState | null>(null);
 	const [isThinking, setIsThinking] = useState(false);
 	const queryClient = useQueryClient();
 
@@ -624,6 +633,9 @@ export function useConversation({
 					gameResult,
 					onDelta,
 					onTextEnd,
+					// ASPIRE Path: progress while the turn is still running. It is
+					// cleared when the answer settles, not accumulated.
+					onPath: (frame) => setPath(frame),
 					onTurn: settleTurn,
 					signal: controller.signal,
 					// Read now, not closed over: see `threadRef`.
@@ -1001,6 +1013,8 @@ export function useConversation({
 		adoptThread,
 		messages,
 		streaming,
+		/** ASPIRE Path for the turn in flight, or null between turns. */
+		path,
 		isThinking,
 		followUps,
 		hasHistory,

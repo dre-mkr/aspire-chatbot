@@ -272,6 +272,11 @@ def citation_payload(citation: Any) -> dict[str, Any]:
 
 def _publish_turn(state: AspireState) -> None:
     """Hand the transport what it needs to close the turn."""
+    # ENABLE: the answer has passed every outbound gate and the next move is
+    # attached to it. Marked done, which is what retires the strip.
+    from app.graph.path import emit as emit_path
+
+    emit_path(state, "enable", done=True)
     try:
         from langgraph.config import get_stream_writer
 

@@ -157,6 +157,7 @@ export function ChatScreen() {
 	const {
 		messages,
 		streaming,
+		path,
 		isThinking,
 		followUps,
 		activeStoredTitle,
@@ -916,6 +917,9 @@ export function ChatScreen() {
 											messages={messages}
 											streaming={streaming}
 											isThinking={isThinking}
+											/* Shown beside the waiting orb, at the foot of
+											   the thread. Only multi-step turns send one. */
+											path={path}
 											followUps={followUps}
 											animateAfterId={animateAfterId}
 											scrollRef={threadRef}

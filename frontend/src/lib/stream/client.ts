@@ -18,6 +18,20 @@ export interface StreamCallbacks {
 	onToken?: (text: string, ordinal: number) => void;
 	/** One directive, with the ordinal that positions it in the prose. */
 	onDirective?: (directive: Directive, ordinal: number) => void;
+	/**
+	 * ASPIRE Path: a stage of the work finished, while the turn is still running.
+	 *
+	 * Named `onPath` rather than reusing `onDirective` because it is not one: a
+	 * directive is part of the finished answer and carries an ordinal into the
+	 * prose. This is progress, it arrives before any prose exists, and it is
+	 * replaced by the next frame rather than appended.
+	 */
+	onPath?: (path: {
+		title: string;
+		labels: string[];
+		at: number;
+		done: boolean;
+	}) => void;
 	onDone?: (usage: TurnUsage) => void;
 	onError?: (code: string, message: string) => void;
 }
@@ -129,6 +143,7 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 		body,
 		onToken,
 		onDirective,
+		onPath,
 		onDone,
 		onError,
 	} = input;
@@ -213,6 +228,10 @@ export async function streamTurn(input: StreamInput): Promise<StreamResult> {
 				} else if (event.event === "directive") {
 					buffer.directive(event.data.i, event.data.d);
 					onDirective?.(event.data.d, event.data.i);
+				} else if (event.event === "path") {
+					// Straight through. A Path frame carries no answer, so it
+					// neither waits for the buffer nor takes an ordinal slot in it.
+					onPath?.(event.data.p);
 				} else if (event.event === "done") {
 					usage = event.data.usage ?? {};
 					onDone?.(usage);

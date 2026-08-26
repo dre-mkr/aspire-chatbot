@@ -10316,3 +10316,107 @@ a.source__site--link:hover .source__out {
 	font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em;
 	text-transform: uppercase;
 }
+
+/* ── ASPIRE Path ───────────────────────────────────────────────────────────
+ *
+ * A progress strip that appears only while a genuinely multi-step turn is
+ * running. Four stages at most: a reader glancing at a strip reads four things
+ * and skims six.
+ *
+ * The colours follow the stage rather than decorating it -- a stage that is
+ * waiting is quiet, the one in progress carries the accent, and a finished one
+ * settles into plum. Under `prefers-reduced-motion` the pulse stops and the
+ * STATE does not, which is the rule this stylesheet already holds for the
+ * piggy bank and the wrong-guess shake: a meaningful animation is replaced,
+ * never deleted.
+ */
+.aspire-path {
+	margin: 4px 0 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--hairline);
+	border-radius: 14px;
+	background: rgb(255 255 255 / 0.72);
+	backdrop-filter: blur(10px);
+	animation: rise 200ms var(--ease) both;
+}
+
+.aspire-path__title {
+	/* An `<output>`, which is inline by default. */
+	display: block;
+	margin: 0 0 8px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--quiet);
+}
+
+.aspire-path__stages {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.aspire-path__stage {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 0.82rem;
+	color: var(--quiet);
+	transition: color var(--swift);
+}
+
+.aspire-path__dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--wash-12, rgb(53 29 90 / 0.12));
+	flex: none;
+	transition:
+		background var(--swift),
+		transform var(--swift);
+}
+
+.aspire-path__stage[data-state="active"] {
+	color: var(--magenta);
+	font-weight: 600;
+}
+
+.aspire-path__stage[data-state="active"] .aspire-path__dot {
+	background: var(--magenta);
+	animation: aspire-path-pulse 1.1s ease-in-out infinite;
+}
+
+.aspire-path__stage[data-state="done"] {
+	color: var(--plum);
+}
+
+.aspire-path__stage[data-state="done"] .aspire-path__dot {
+	background: var(--plum);
+	transform: scale(1.15);
+}
+
+@keyframes aspire-path-pulse {
+	0%,
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+	50% {
+		transform: scale(1.45);
+		opacity: 0.65;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.aspire-path {
+		animation: none;
+	}
+	.aspire-path__stage[data-state="active"] .aspire-path__dot {
+		animation: none;
+		/* The state still has to be visible without the pulse carrying it. */
+		box-shadow: 0 0 0 3px rgb(194 47 153 / 0.22);
+	}
+}

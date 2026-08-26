@@ -356,6 +356,16 @@ class StreamInterceptor:
                 self.locale = meta["locale"]
             return []
 
+        # `path` is ASPIRE Path: which stage of the work has just finished.
+        #
+        # Sent straight out rather than held with the prose. It carries no
+        # answer, no figure and no claim -- only a stage index into labels the
+        # server chose -- so there is nothing for the outbound gates to correct,
+        # and holding it would defeat the entire point of showing progress.
+        path = payload.get("path")
+        if isinstance(path, dict):
+            return [WireEvent("path", {"i": self._next(), "p": path})]
+
         # `turn` is the closing summary `persist` writes: chips, citations, and state directives.
         turn = payload.get("turn")
         if isinstance(turn, dict):
