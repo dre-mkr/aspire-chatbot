@@ -262,6 +262,13 @@ def make_plan_widget(curriculum=None, *, retrieve=None, plan=None):
         if lesson is None:  # pragma: no cover - routing guards this
             return {}
 
+        # INTERACT: the lesson is building the thing the reader will DO -- the
+        # widget, the worked example, the question. The other half of the stage
+        # that was declared and never emitted.
+        from app.graph.path import emit as emit_path
+
+        emit_path(state, "interact")
+
         band = band_of(state)
         chunks, planned = await _ground_and_plan(
             state=state,

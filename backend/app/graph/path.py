@@ -92,12 +92,17 @@ _LABELS: Final[dict[str, dict[str, list[str]]]] = {
         "es": ["Descubriendo", "Probándolo", "Te toca"],
         "fr": ["On cherche", "On essaie", "À toi"],
     },
-    # Kaleb 9-12 -- his card already says "Answer. Reason. Challenge. In that
-    # order, every time." The Path shows the rhythm he was already keeping.
+    # Kaleb 9-12. His card says "Answer. Reason. Challenge. In that order,
+    # every time." -- and that is the shape of his REPLY, not of the work.
+    # Labelled literally, "The answer" lit while the router was still choosing
+    # who would answer, which is a progress strip claiming a thing exists
+    # before it does. The words keep his rhythm and describe the work instead:
+    # finding it, checking it, handing him the challenge that always closes a
+    # Kaleb turn.
     "kaleb": {
-        "en": ["The answer", "The reason", "Your challenge"],
-        "es": ["La respuesta", "El porqué", "Tu reto"],
-        "fr": ["La réponse", "Le pourquoi", "Ton défi"],
+        "en": ["Finding the answer", "Checking why", "Your challenge"],
+        "es": ["Buscando la respuesta", "Comprobando el porqué", "Tu reto"],
+        "fr": ["Je cherche la réponse", "Je vérifie pourquoi", "Ton défi"],
     },
     # Zion 13-18 -- Goal, Facts, Plan, Next move.
     "orion": {
@@ -137,6 +142,33 @@ _TITLE: Final[dict[str, str]] = {
 _AGENTIC_AGENTS: Final[frozenset[str]] = frozenset(
     {"learn_agent", "register_agent", "register_agent_step1", "qa_agent"}
 )
+
+
+#: Which visible label each internal stage lights.
+#:
+#: WRITTEN OUT, NOT CALCULATED. The first version spread six stages across the
+#: labels arithmetically, and it was wrong in a way that only showed up when
+#: the stages were listed against the words: `source` landed on "Your goal",
+#: `plan` landed on "Facts checked", and "Your plan" never lit at all. So the
+#: strip said the facts were being checked while the answer was being written,
+#: which is precisely the kind of plausible-looking lie this component exists
+#: not to tell.
+#:
+#: Keyed by how many labels a guide has rather than by the guide, because the
+#: correspondence is about the shape of the work, and Zion and Imani do the
+#: same shape of work in different words.
+_FOLD: Final[dict[int, dict[str, int]]] = {
+    3: {"aim": 0, "source": 0, "plan": 1, "interact": 1, "recommend": 2, "enable": 2},
+    4: {"aim": 0, "source": 1, "plan": 2, "interact": 2, "recommend": 3, "enable": 3},
+}
+
+
+def visible_index(stage: str, count: int) -> int:
+    """Which of a guide's labels this internal stage lights."""
+    table = _FOLD.get(count)
+    if table is None:  # pragma: no cover - every guide has three or four
+        return min(STAGES.index(stage), count - 1)
+    return min(table.get(stage, 0), count - 1)
 
 
 def labels(persona: str, locale: str) -> list[str]:
@@ -188,9 +220,7 @@ def emit(state: dict[str, Any], stage: str, *, done: bool = False) -> None:
     persona = str(state.get("persona") or "guest")
     locale = str(state.get("locale") or "en")
     names = labels(persona, locale)
-    # Six internal stages onto three or four visible ones, in order, without
-    # ever going backwards.
-    index = min(int(STAGES.index(stage) * len(names) / len(STAGES)), len(names) - 1)
+    index = visible_index(stage, len(names))
     try:
         writer(
             {

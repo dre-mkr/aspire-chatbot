@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.graph.path import STAGES, emit, labels, should_show, title
+from app.graph.path import STAGES, emit, labels, should_show, title, visible_index
 
 
 class TestTheStagesAreTheReadersNotTheGraphs:
@@ -140,3 +140,75 @@ class TestThePathIsNotCalledASpine:
         one dishonest word in the sequence."""
         assert STAGES[-1] == "enable"
         assert "execute" not in STAGES
+
+
+# ── the fold, which was wrong in a way only a list could show ────────────────
+
+
+class TestEveryLabelLightsAndNoneLightsTwice:
+    """The first fold spread six stages across the labels arithmetically. Listed
+    against the words, `source` landed on "Your goal", `plan` landed on "Facts
+    checked", and "Your plan" never lit at all -- so the strip said the facts
+    were being checked while the answer was being written."""
+
+    def test_the_stages_land_where_they_belong_for_zion(self):
+        names = labels("orion", "en")
+        landed = {stage: names[visible_index(stage, len(names))] for stage in STAGES}
+        assert landed["aim"] == "Your goal"
+        assert landed["source"] == "Facts checked"
+        assert landed["plan"] == "Your plan"
+        assert landed["enable"] == "Next move"
+
+    @pytest.mark.parametrize("persona", ["stella", "kaleb", "orion", "aurora", "nova", "guest"])
+    def test_every_label_is_reachable(self, persona):
+        """A label that no stage can light is a promise the strip cannot keep."""
+        names = labels(persona, "en")
+        reached = {visible_index(stage, len(names)) for stage in STAGES}
+        assert reached == set(range(len(names))), (
+            f"{persona}: unreachable labels "
+            f"{[names[i] for i in range(len(names)) if i not in reached]}"
+        )
+
+    @pytest.mark.parametrize("persona", ["stella", "kaleb", "orion", "aurora", "nova", "guest"])
+    def test_the_strip_never_goes_backwards(self, persona):
+        names = labels(persona, "en")
+        indexes = [visible_index(stage, len(names)) for stage in STAGES]
+        assert indexes == sorted(indexes), f"{persona}: {indexes}"
+
+
+class TestEveryStageIsActuallyEmitted:
+    """Two of the six were declared and never wired, so a four-label strip could
+    only ever light three of them."""
+
+    def test_every_stage_has_a_call_site(self):
+        import re
+        from pathlib import Path as FsPath
+
+        root = FsPath(__file__).resolve().parents[1] / "app"
+        wired: set[str] = set()
+        # The whole call, braces and all: one call site passes a dict literal
+        # as its first argument, and a naive "up to the first comma" pattern
+        # reported `aim` as unwired when it is the best-wired stage there is.
+        call = re.compile(r"emit_path\((?:[^()]|\([^()]*\)|\{[^{}]*\})*\)", re.S)
+        for source in root.rglob("*.py"):
+            text = source.read_text(encoding="utf-8")
+            for match in call.finditer(text):
+                wired.update(set(re.findall(r'"(\w+)"', match.group(0))) & set(STAGES))
+        assert set(STAGES) <= wired, f"declared but never emitted: {sorted(set(STAGES) - wired)}"
+
+
+class TestKalebIsDescribedByHisWorkNotHisReply:
+    """"The answer" lit while the router was still choosing who would answer --
+    a progress strip claiming a thing exists before it does."""
+
+    def test_the_first_label_does_not_claim_the_answer_exists(self):
+        first = labels("kaleb", "en")[0].lower()
+        assert first != "the answer"
+        assert "finding" in first
+
+    def test_his_rhythm_survives(self):
+        """Answer, reason, challenge -- still in that order, every time."""
+        names = [n.lower() for n in labels("kaleb", "en")]
+        assert "answer" in names[0]
+        assert "why" in names[1] or "reason" in names[1]
+        assert "challenge" in names[2]
