@@ -1429,6 +1429,13 @@ def make_ground_check(threshold: float | None = None):
             best if dense_seen else max((chunk.score for chunk in chunks), default=0.0),
         )
 
+        # RECOMMEND: the answer stood up to every gate above, and the next move
+        # is being chosen from it. This is the stage that was declared and never
+        # emitted -- so a four-label strip could only ever light three of them.
+        from app.graph.path import emit as emit_path
+
+        emit_path(state, "recommend")
+
         return Command(
             update={
                 "citations": citations,

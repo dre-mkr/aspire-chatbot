@@ -44,18 +44,42 @@ or four, in their own register and their own language:
 | Guide | Visible Path |
 | --- | --- |
 | Skye · 5–8 | Finding out → Trying it → Your turn |
-| Kaleb · 9–12 | The answer → The reason → Your challenge |
+| Kaleb · 9–12 | Finding the answer → Checking why → Your challenge |
 | Zion · 13–18 | Your goal → Facts checked → Your plan → Next move |
 | Imani · parents | What you need → What to prepare → Who acts → Next step |
 | Azuri · educators | Need understood → Source checked → Adapted → Ready to use |
 | Guest | Understanding → Checking → Guiding |
 
-Kaleb's is not a new idea. His persona card has said *"Answer. Reason.
-Challenge. In that order, every time."* since he was written; the Path shows a
-rhythm he was already keeping. Skye gets three because a five-year-old counts to
+Kaleb's rhythm is not a new idea. His persona card has said *"Answer. Reason.
+Challenge. In that order, every time."* since he was written — but that is the
+shape of his **reply**, not of the work. Labelled literally, "The answer" lit
+while the router was still choosing who would answer: a progress strip claiming
+a thing exists before it does. The words keep his rhythm and describe the work
+instead. Skye gets three because a five-year-old counts to
 three. Guest stays plain because nothing is known about that reader yet, and a
 Path that promises personalisation before it has any is a lie with a tick next
 to it.
+
+### Which stage lights which label
+
+Written out per label-count, never calculated. The first version spread six
+stages across three or four labels arithmetically, and it was wrong in a way
+that only appeared when the stages were listed against the words: `source`
+landed on "Your goal", `plan` landed on "Facts checked", and "Your plan" never
+lit at all — so the strip said the facts were being checked while the answer was
+being written.
+
+| Stage | 4 labels | 3 labels |
+| --- | --- | --- |
+| Aim | 1st | 1st |
+| Source | 2nd | 1st |
+| Plan | 3rd | 2nd |
+| Interact | 3rd | 2nd |
+| Recommend | 4th | 3rd |
+| Enable | 4th | 3rd |
+
+Two tests hold it: every label must be reachable by some stage, and the sequence
+must never go backwards.
 
 ## What it never shows
 
