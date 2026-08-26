@@ -658,6 +658,19 @@ def _story_instruction(state: AspireState) -> str | None:
             "before it.\n"
         )
 
+    # What the reader asked the story to become. Carried on the arc by
+    # `cards._story_turn`, which now keeps a steering instruction rather than
+    # dropping the story on the floor when it is not a choice or a "next".
+    direction = str(arc.get("direction") or "").strip()
+    steer = (
+        f"The reader has asked for the story to change: {direction}\n"
+        "Honour it from this beat on -- the same story, moved the way they "
+        "asked. Do not restart it, do not explain the change, and do not "
+        "treat the request as a question to answer.\n"
+        if direction
+        else ""
+    )
+
     # The adventure block: the deterministic state the model must honour.
     adventure = ""
     if "wallet" in arc:
@@ -692,6 +705,7 @@ def _story_instruction(state: AspireState) -> str | None:
     return (
         f"The reader has asked for a story about: {topic}\n"
         f"{page}"
+        f"{steer}"
         f"{adventure}"
         f"{shape}\n"
         "Set it in Saint Kitts and Nevis and use EC dollars. Invent the "
@@ -1879,7 +1893,21 @@ def _asked_questions(state: AspireState) -> list[set[str]]:
 # ── small talk: a greeting is not an ungrounded question, so it never opens a ticket ──
 _SMALL_TALK: Final[tuple[tuple[str, str], ...]] = (
     ("greeting", r"(hi|hey|hello|good\s+(morning|afternoon|evening)|hola|buenos\s+d[ií]as|bonjour|salut)"),
-    ("thanks", r"(thanks|thank\s+you|ty|cheers|gracias|merci)"),
+    # A CLOSING, not just the word. "thanks, that helps" is how a conversation
+    # ends, and the anchoring below -- which is right, and stops "yo what is
+    # aspire" being read as a greeting -- meant those three extra words turned
+    # the last turn of a demo into a decline with a phone number in it.
+    # Observed on production, 26 Aug, on the twenty-fourth turn.
+    #
+    # Widened by a CLOSED set of appreciations rather than by loosening the
+    # anchor: "thanks, but what about my brother?" is still a question.
+    ("thanks", r"((?:ok(?:ay)?|alright|cool|great)[,!.\s]+)?"
+               r"(thanks|thank\s+you|ty|cheers|gracias|merci)"
+               r"(\s+(so|very)\s+much|\s+a\s+lot)?"
+               r"([,!.\s]+(that|this|it)\s+(helps|helped|is\s+(really\s+)?(helpful|useful)"
+               r"|was\s+(really\s+)?(helpful|useful)|makes\s+sense))?"
+               r"([,!.\s]+(eso|esto)\s+(ayuda|me\s+sirve|tiene\s+sentido))?"
+               r"([,!.\s]+([cç]a\s+(aide|m'?aide)|c'?est\s+(utile|clair)))?"),
     ("ack", r"(ok|okay|k|sure|got\s+it|cool|nice|yes|no|yeah|yep|vale|d'accord)"),
     # "what is your name" was missing, which is the phrasing most people
     # actually use -- so the persona could say its name only to somebody who
