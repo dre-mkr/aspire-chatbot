@@ -469,10 +469,27 @@ def make_wrap_session(store: MasteryStore | None = None):
     async def wrap_session(state: AspireState) -> dict[str, Any]:
         learning = state.get("learning") or {}
         band = _band(state)
-        rows = await (store or MasteryStore()).all_for(_learner(state))
+        learner = _learner(state)
+        rows = await (store or MasteryStore()).all_for(learner) if learner else []
         touched_ids = list(learning.get("concepts_touched") or [])
 
-        moved = sum(1 for row in rows if row.concept_id in touched_ids and row.score > 0)
+        # SIGNED OUT, THE STORE CANNOT ANSWER THIS.
+        #
+        # `_learner` is None without a user id, mastery is never recorded for a
+        # reader who has not signed in -- deliberately, and PRIVACY.md is why --
+        # so `all_for(None)` returns nothing and the count was always zero. Most
+        # readers are signed out, so this was not an edge case: it was the
+        # normal one. Reported from the live site, Kaleb, who answered "putting
+        # money away for a rainy day" and was told "We did not get to a lesson
+        # this time."
+        #
+        # The session's own record is the only truth available there, and it is
+        # a true one: these are the concepts this conversation actually touched.
+        moved = (
+            sum(1 for row in rows if row.concept_id in touched_ids and row.score > 0)
+            if learner
+            else len(touched_ids)
+        )
 
         # A SESSION WITH NOTHING IN IT DOES NOT GET A CEREMONY.
         #

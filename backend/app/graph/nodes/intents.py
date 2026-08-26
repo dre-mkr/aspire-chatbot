@@ -110,7 +110,23 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:can|could|may) (?:i|we) play\b",
         r"\b(?:let'?s|lets|let us) play\b",
         r"\bi want to play\b",
-        r"\bwhat games?\b",
+        # WANTING A GAME WITHOUT SAYING "PLAY". Every pattern here needed the
+        # verb, so "I want a game" was not a game request -- and a nine-year-old
+        # typing "NO I WANT A GAME", in capitals, after being handed a lesson
+        # question, was handed another one. Reported from the live site.
+        r"\b(?:i|we)\s+(?:want|wanna|need)\s+(?:a|another|the|some)?\s*"
+        r"(?:game|games|quiz|puzzle)\b",
+        r"\b(?:can|could|may)\s+(?:i|we)\s+(?:have|get|do)\s+(?:a|another|the)?\s*"
+        r"(?:game|quiz|puzzle)\b",
+        r"\bgive me\s+(?:a|another|the)?\s*(?:game|quiz|puzzle)\b",
+        r"\b(?:quiero|queremos|dame)\s+(?:un|otro|el)?\s*(?:juego|jueguito)\b",
+        r"\bje\s+(?:veux|voudrais)\s+(?:un|encore un|le)?\s*jeu\b",
+        # "what games do you have", "what video game do you have" -- the noun
+        # can be qualified. Plural on its own is a request; the singular needs
+        # a having or playing sense, so "what is a game" stays a question.
+        r"\b(?:what|which)\b[^.?!]{0,14}\bgames\b",
+        r"\b(?:what|which)\b[^.?!]{0,14}\bgame\b[^.?!]{0,16}"
+        r"\b(?:do you have|have you got|can i play|can we play|is there|are there)\b",
         r"\bany games?\b",
         r"\b(?:word )?scramble\b",
         r"\btrue or false\b",
@@ -238,6 +254,24 @@ _ASKS_FOR_VIDEO: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:watch|play|show|see|open|start)\b[^.?!]{0,20}\b(?:video|videos|film|films|cartoon|cartoons)\b",
         # "videos", "video please", "a video" -- the whole message, nothing else.
         r"^(?:a |the |some )?(?:video|videos|film|cartoon)(?:,? please)?[.!?]*$",
+        # ASKING WHICH ONE. "what video do you have about savings" reached none
+        # of the shapes above -- it is a question, not a command -- so it was
+        # answered from the corpus, which holds no video titles. The reply said
+        # "I don't have a savings video title to share" while the chip directly
+        # beneath it offered the saving video. Measured on the live site.
+        #
+        # The catalog is the only thing that knows what films exist, and a
+        # question about which ones there are has to reach it.
+        # `(?!...)` because "video" is a word in other compounds: a question
+        # about a video CALL, a video CHAT or a video GAME is not a request for
+        # a film, and a game request must reach the games rather than the shelf.
+        r"\b(?:what|which|any)\b[^.?!]{0,24}"
+        r"\b(?:video|videos|film|films|cartoon|cartoons)\b"
+        r"(?!\s*(?:call|calls|chat|conference|game|games))",
+        r"\b(?:video|videos|film|films)\b(?!\s*(?:call|calls|chat|conference|game|games))"
+        r"[^.?!]{0,24}\b(?:do you have|are there|have you got|about)\b",
+        r"\b(?:qu[eé]|cu[aá]l|cu[aá]les)\b[^.?!]{0,24}\bvideos?\b",
+        r"\b(?:quel|quelle|quels)\b[^.?!]{0,24}\b(?:video|videos|film)\b",
         # Spanish and French, same three shapes collapsed.
         r"\b(?:ver|mira|muestra|pon|quiero)\b[^.?!]{0,20}\b(?:video|videos)\b",
         r"^(?:un |el |los )?videos?(?:,? por favor)?[.!?]*$",

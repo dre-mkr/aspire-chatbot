@@ -272,10 +272,32 @@ def make_intent_gate(
     async def intent_gate(state: AspireState) -> dict[str, Any]:
         # A continuation turn has no new message; `_last_human` would re-open the previous card.
         flags = state.get("safety_flags") or {}
-        if any(flags.get(name) for name in ("widget_interaction", "game_result")):
-            return {}
-
         message = _last_human(state)
+
+        if any(flags.get(name) for name in ("widget_interaction", "game_result")):
+            # AN ABANDONED GAME PLUS A REQUEST FOR ANOTHER MEANS THEY MOVED ON.
+            #
+            # A result jumps the queue, which is right when a game FINISHED --
+            # the score deserves its reaction. It is wrong when the game was
+            # abandoned and the reader abandoned it BY asking for a different
+            # one: the result was reacted to and the request was never read.
+            # Observed on the live site: a nine-year-old picked "Hangman" from
+            # the menu and was answered "You got 2 before we stopped. Want to
+            # pick it up again, or carry on with the lesson?"
+            #
+            # Only for an abandoned game, and only for an explicit game
+            # request. A finished game keeps its reaction, and no coins are
+            # lost either way -- an abandoned game earns none.
+            result = flags.get("game_result")
+            abandoned = isinstance(result, dict) and not result.get("completed")
+            if not (
+                abandoned
+                and message.strip()
+                and _games_available(games_on)
+                and wants_game(message)
+            ):
+                return {}
+
         if not message.strip():
             return {}
 
