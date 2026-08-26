@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.learn.nodes.explain_back import make_explain_back
 from app.agents.learn.nodes.hint_ladder import make_hint_ladder
+from app.agents.learn.resolve import asks_about_a_topic
 from app.agents.learn.state import (
     band_of,
     NON_SCORING_AGENTS as _NON_SCORING_AGENTS,
@@ -469,10 +470,27 @@ def make_wrap_session(store: MasteryStore | None = None):
     async def wrap_session(state: AspireState) -> dict[str, Any]:
         learning = state.get("learning") or {}
         band = _band(state)
-        rows = await (store or MasteryStore()).all_for(_learner(state))
+        learner = _learner(state)
+        rows = await (store or MasteryStore()).all_for(learner) if learner else []
         touched_ids = list(learning.get("concepts_touched") or [])
 
-        moved = sum(1 for row in rows if row.concept_id in touched_ids and row.score > 0)
+        # SIGNED OUT, THE STORE CANNOT ANSWER THIS.
+        #
+        # `_learner` is None without a user id, mastery is never recorded for a
+        # reader who has not signed in -- deliberately, and PRIVACY.md is why --
+        # so `all_for(None)` returns nothing and the count was always zero. Most
+        # readers are signed out, so this was not an edge case: it was the
+        # normal one. Reported from the live site, Kaleb, who answered "putting
+        # money away for a rainy day" and was told "We did not get to a lesson
+        # this time."
+        #
+        # The session's own record is the only truth available there, and it is
+        # a true one: these are the concepts this conversation actually touched.
+        moved = (
+            sum(1 for row in rows if row.concept_id in touched_ids and row.score > 0)
+            if learner
+            else len(touched_ids)
+        )
 
         # A SESSION WITH NOTHING IN IT DOES NOT GET A CEREMONY.
         #
@@ -604,36 +622,6 @@ def _after_mastery(state: AspireState) -> str:
     return "wrap_session" if learning.get("phase") == "wrapping" else "resume_or_place"
 
 
-#: Whether a message is a question about a topic rather than a lesson reply.
-_ASKS_ABOUT = re.compile(
-    r"""\b(?:
-        what(?:'?s|\s+is|\s+are|\s+does|\s+do)\s+(?:\w+\s+){0,3}\w{3,}
-      | (?:why|how)\s+(?:do|does|did|is|are|can|come)\b\s*(?:\w+\s+){0,3}\w{3,}
-      | tell\s+me\s+(?:about|what|how|why)\s+(?:\w+\s+){0,3}\w{3,}
-      | (?:teach|explain)\s+(?:me\s+)?(?:about\s+)?(?:\w+\s+){0,3}\w{4,}
-      | i\s+(?:want|need|would\s+like)\s+to\s+(?:know|learn|understand)\s+(?:\w+\s+){0,3}\w{3,}
-      | can\s+you\s+(?:tell|teach|explain|show)\s+me\s+(?:about\s+)?(?:\w+\s+){0,3}\w{3,}
-      | what\s+(?:is\s+)?a\s+\w{3,}
-      | what\s+about\s+\w{3,}
-      | what\s+does\s+\w+\s+mean
-    )""",
-    re.VERBOSE | re.IGNORECASE,
-)
-
-#: Verbs that ask for a lesson without naming one.
-_NAMES_NOTHING = re.compile(
-    r"""^\s*(?:
-        (?:teach|show|tell)\s+me\s*(?:something|anything|a\s+lesson|more)?
-      | (?:i\s+want\s+to\s+)?learn\s*(?:something|anything|more)?
-      | (?:let'?s|lets)\s+(?:learn|start|go|begin)\b.*
-      | (?:start|begin)\s+(?:a\s+)?(?:lesson|learning)?
-      | next\s+lesson
-      | (?:another|a\s+new)\s+(?:one|lesson|topic)
-    )\s*[.!?]*\s*$""",
-    re.VERBOSE | re.IGNORECASE,
-)
-
-
 #: Whether the empty-store warning has already been said this process.
 _SAID_NO_CONCEPTS = False
 
@@ -665,14 +653,6 @@ def _warn_no_concepts() -> None:
         "answered with a check question the reader did not ask for. Seed the "
         "concepts and confirm `get_store().reload()` returns a non-zero count."
     )
-
-
-def asks_about_a_topic(text: str) -> bool:
-    """Whether this message names something specific the learner wants explained."""
-    body = (text or "").strip()
-    if not body or _NAMES_NOTHING.match(body):
-        return False
-    return bool(_ASKS_ABOUT.search(body))
 
 
 def _entry(state: AspireState) -> str:

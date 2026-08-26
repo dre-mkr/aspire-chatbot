@@ -622,6 +622,55 @@ _STORY_BY_PERSONA: dict[str, str] = {
 }
 
 
+def _plan_instruction(state: AspireState) -> str | None:
+    """The extra system line for a turn that asks for a savings plan.
+
+    Set only by `cards._plan_turn`, from the reader's own sentence. A plan is
+    arithmetic over numbers the reader owns, so this line's real work is to
+    stop the model reaching for the corpus and finding nothing: the knowledge
+    base has rows about saving and none about bikes, and the honest answer to
+    "how do I save up for a bike" is a plan, not a decline.
+    """
+    goal = state.get("plan_goal")
+    if goal is None:
+        return None
+    band = str(state.get("age_band") or "adult")
+    named = str(goal).strip()
+
+    what = (
+        f'The reader wants to save for: "{named}".'
+        if named
+        else "The reader asked for a savings plan but has not said what for."
+    )
+    # Without a price and an income there is no plan, only a lecture about
+    # saving -- which is the corpus answer this turn is not asking for.
+    ask = (
+        "If you do not know what it costs, or how much they can put aside and "
+        "how often, ASK for the missing one first -- one question, not three. "
+        "Do not invent a price for them."
+    )
+    work = (
+        "When you have the numbers, do the arithmetic and show it: how much "
+        "each week or month, how many weeks or months, and the date they get "
+        "there. End with the first step they take this week."
+    )
+    # A five-to-eight-year-old plans in coins and weeks, not in percentages.
+    if band == "5-8":
+        work = (
+            "When you have the numbers, count it out in small steps they can "
+            "picture -- how many weeks of putting the same coins away -- and "
+            "end with the one thing they do first."
+        )
+
+    return (
+        f"This turn is a SAVINGS PLAN, not a question about the programme. "
+        f"{what} {ask} {work}\n"
+        "Their numbers are theirs: use them as given and do not check them "
+        "against the extracts. Everything you say about ASPIRE itself still "
+        "comes from the extracts and is still cited."
+    )
+
+
 def _story_instruction(state: AspireState) -> str | None:
     """The extra system line for the one turn that tells a story.
 
@@ -863,6 +912,7 @@ def _shaping_instructions(state: AspireState) -> str | None:
             _pledge_instruction(state),
             _stage_instruction(state),
             _story_instruction(state),
+            _plan_instruction(state),
         )
         if line
     ]
@@ -1296,7 +1346,34 @@ def make_ground_check(threshold: float | None = None):
                 }
             )
 
-        if not chunks or not answer.strip():
+        # ── a plan the reader asked for is not a corpus answer either ───────
+        #
+        # A narrower exemption than the story above, and for a different
+        # reason. "How do I save up for a bike" is answered out of the
+        # reader's own numbers; the knowledge base has rows about saving and
+        # none about bikes, so every retrieval floor below scores it as an
+        # answer about nothing. Observed on production, 25 Aug: a nine-year-old
+        # asked it twice and was declined twice, while the same sentence in a
+        # fresh session was answered well -- retrieval deciding a question of
+        # KIND, which a cosine score cannot see.
+        #
+        # What is exempt: the floors, the citation requirement and the figure
+        # check, all three of which grade the answer as a claim about the
+        # programme. The arithmetic in a plan is the reader's own and appears
+        # in no extract, exactly as a story's prices do.
+        #
+        # What is NOT exempt: an invented citation. A story may invent a
+        # dragon; neither may invent a source. `plan_goal` is set only by
+        # `cards._plan_turn` from the reader's typed sentence, so a model
+        # cannot award itself this exemption.
+        planning = (
+            state.get("plan_goal") is not None
+            and bool(messages)
+            and isinstance(messages[-1], AIMessage)
+            and bool(answer.strip())
+        )
+
+        if not answer.strip() or (not chunks and not planning):
             return _ungrounded(state, "no_context", "Nothing in the knowledge base matched.")
 
         query = state.get("qa_query") or _latest_user_text(state)
@@ -1339,7 +1416,12 @@ def make_ground_check(threshold: float | None = None):
         best = max((chunk.relevance for chunk in chunks), default=0.0)
         dense_seen = any(chunk.relevance > 0.0 for chunk in chunks)
         hard_floor = settings.qa_relevance_hard_floor
-        if dense_seen and best < floor and (best < hard_floor or not grounded_citations):
+        if (
+            dense_seen
+            and not planning
+            and best < floor
+            and (best < hard_floor or not grounded_citations)
+        ):
             return _ungrounded(
                 state,
                 "below_relevance_floor",
@@ -1348,7 +1430,7 @@ def make_ground_check(threshold: float | None = None):
             )
 
         # ── the lexical floor: English only, and only when the dense side never ran ──
-        if str(state.get("locale") or "en") == "en":
+        if str(state.get("locale") or "en") == "en" and not planning:
             coverage = lexical_coverage(query, chunks)
             matched = matched_terms(query, chunks)
             needed = required_terms(query)
@@ -1370,7 +1452,7 @@ def make_ground_check(threshold: float | None = None):
         missing = unattributed_figures(
             answer, chunks, reference, _latest_user_text(state)
         )
-        if missing:
+        if missing and not planning:
             logger.warning(
                 "Ungrounded figures %s in an answer for session %s; escalating.",
                 missing[:5],
@@ -1385,7 +1467,7 @@ def make_ground_check(threshold: float | None = None):
         # ── attribution: an answer citing no retrieved extract is ungrounded ──
         # `known`, `cited` and `grounded_citations` are read above, before the
         # floors, because they decide whether those floors apply at all.
-        if not grounded_citations:
+        if not grounded_citations and not planning:
             return _ungrounded(
                 state,
                 "uncited",

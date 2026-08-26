@@ -110,7 +110,23 @@ _PLAY: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:can|could|may) (?:i|we) play\b",
         r"\b(?:let'?s|lets|let us) play\b",
         r"\bi want to play\b",
-        r"\bwhat games?\b",
+        # WANTING A GAME WITHOUT SAYING "PLAY". Every pattern here needed the
+        # verb, so "I want a game" was not a game request -- and a nine-year-old
+        # typing "NO I WANT A GAME", in capitals, after being handed a lesson
+        # question, was handed another one. Reported from the live site.
+        r"\b(?:i|we)\s+(?:want|wanna|need)\s+(?:a|another|the|some)?\s*"
+        r"(?:game|games|quiz|puzzle)\b",
+        r"\b(?:can|could|may)\s+(?:i|we)\s+(?:have|get|do)\s+(?:a|another|the)?\s*"
+        r"(?:game|quiz|puzzle)\b",
+        r"\bgive me\s+(?:a|another|the)?\s*(?:game|quiz|puzzle)\b",
+        r"\b(?:quiero|queremos|dame)\s+(?:un|otro|el)?\s*(?:juego|jueguito)\b",
+        r"\bje\s+(?:veux|voudrais)\s+(?:un|encore un|le)?\s*jeu\b",
+        # "what games do you have", "what video game do you have" -- the noun
+        # can be qualified. Plural on its own is a request; the singular needs
+        # a having or playing sense, so "what is a game" stays a question.
+        r"\b(?:what|which)\b[^.?!]{0,14}\bgames\b",
+        r"\b(?:what|which)\b[^.?!]{0,14}\bgame\b[^.?!]{0,16}"
+        r"\b(?:do you have|have you got|can i play|can we play|is there|are there)\b",
         r"\bany games?\b",
         r"\b(?:word )?scramble\b",
         r"\btrue or false\b",
@@ -238,6 +254,24 @@ _ASKS_FOR_VIDEO: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:watch|play|show|see|open|start)\b[^.?!]{0,20}\b(?:video|videos|film|films|cartoon|cartoons)\b",
         # "videos", "video please", "a video" -- the whole message, nothing else.
         r"^(?:a |the |some )?(?:video|videos|film|cartoon)(?:,? please)?[.!?]*$",
+        # ASKING WHICH ONE. "what video do you have about savings" reached none
+        # of the shapes above -- it is a question, not a command -- so it was
+        # answered from the corpus, which holds no video titles. The reply said
+        # "I don't have a savings video title to share" while the chip directly
+        # beneath it offered the saving video. Measured on the live site.
+        #
+        # The catalog is the only thing that knows what films exist, and a
+        # question about which ones there are has to reach it.
+        # `(?!...)` because "video" is a word in other compounds: a question
+        # about a video CALL, a video CHAT or a video GAME is not a request for
+        # a film, and a game request must reach the games rather than the shelf.
+        r"\b(?:what|which|any)\b[^.?!]{0,24}"
+        r"\b(?:video|videos|film|films|cartoon|cartoons)\b"
+        r"(?!\s*(?:call|calls|chat|conference|game|games))",
+        r"\b(?:video|videos|film|films)\b(?!\s*(?:call|calls|chat|conference|game|games))"
+        r"[^.?!]{0,24}\b(?:do you have|are there|have you got|about)\b",
+        r"\b(?:qu[eé]|cu[aá]l|cu[aá]les)\b[^.?!]{0,24}\bvideos?\b",
+        r"\b(?:quel|quelle|quels)\b[^.?!]{0,24}\b(?:video|videos|film)\b",
         # Spanish and French, same three shapes collapsed.
         r"\b(?:ver|mira|muestra|pon|quiero)\b[^.?!]{0,20}\b(?:video|videos)\b",
         r"^(?:un |el |los )?videos?(?:,? por favor)?[.!?]*$",
@@ -577,6 +611,98 @@ _A_QUESTION = re.compile(
 )
 
 
+#: Asking how to reach a money goal of their own.
+#:
+#: This is not a corpus question and it is not small talk. "How do I save up
+#: for a bike" asks for something built out of the reader's own numbers, and
+#: the knowledge base has no row about bikes -- so on 25 Aug a nine-year-old
+#: asked it and was told the programme had no answer, twice, while the same
+#: sentence in a fresh session was answered well. That is retrieval deciding a
+#: question of kind, and kind is not something a cosine score can see.
+#:
+#: Deliberately narrow. "How does saving work" and "why should I save" are
+#: questions ABOUT saving and belong to the corpus, which has good answers for
+#: them; only a goal the reader owns lands here.
+_A_PLAN: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\bhow (?:do|can|could|should|would) (?:i|we) "
+        r"(?:save(?: up)?|budget|put money aside) (?:for|to (?:buy|get)) "
+        r"(?P<goal>[^.?!]{2,80})",
+        r"\bhow (?:do|can|could) (?:i|we) afford (?P<goal>[^.?!]{2,80})",
+        r"\bhow long (?:will|would|does) it take (?:me |us )?to "
+        r"(?:save(?: up)?|afford)(?: for)? (?P<goal>[^.?!]{2,80})",
+        r"\b(?:help me|help us) (?:save(?: up)?|budget) (?:for|to buy) "
+        r"(?P<goal>[^.?!]{2,80})",
+        r"\bi (?:want|need|would like) to save(?: up)? for (?P<goal>[^.?!]{2,80})",
+        r"\bi(?:'m| am) (?:trying to )?sav(?:e|ing)(?: up)? for (?P<goal>[^.?!]{2,80})",
+        # A plan with no goal named yet. The goal is asked for, not guessed.
+        r"\b(?:make|build|write|create|give) (?:me |us )?a "
+        r"(?:savings?|money|budget) plan\b(?P<goal>)",
+        # Spanish. `fold` has already stripped the accents.
+        r"\bcomo (?:puedo|hago para|podria) ahorrar para (?P<goal>[^.?!]{2,80})",
+        r"\bquiero ahorrar para (?P<goal>[^.?!]{2,80})",
+        r"\bcuanto tiempo .{0,20}ahorrar para (?P<goal>[^.?!]{2,80})",
+        # French.
+        r"\bcomment (?:je peux|puis-je|faire pour) economiser pour "
+        r"(?P<goal>[^.?!]{2,80})",
+        r"\bje veux economiser pour (?P<goal>[^.?!]{2,80})",
+    )
+)
+
+
+def wants_a_plan(message: str) -> str | None:
+    """The goal this message asks for a plan towards, or None.
+
+    Returns the goal rather than a bare True because the plan is about it: an
+    empty string is a real answer, meaning a plan was asked for without naming
+    what it is for, and the reader is asked rather than assumed at.
+    """
+    folded = fold(message)
+    for pattern in _A_PLAN:
+        match = pattern.search(folded)
+        if match:
+            return (match.group("goal") or "").strip(" ?.!,")
+    return None
+
+
+#: A turn that carries a plan already under way, rather than starting one.
+#:
+#: "How much should I put away each week" names no goal and asks no corpus
+#: question -- on the live site it landed in the tutor and came back as a quiz
+#: question about what saving is called, which is the answer to a question the
+#: reader had passed two turns earlier. A plan is arithmetic, and arithmetic
+#: takes more than one message: the goal arrives, then the price, then what
+#: they can spare.
+_PLAN_FOLLOW_UP = re.compile(
+    r"\b(?:ec\$|\$)\s?\d"
+    r"|\b\d+(?:[.,]\d+)?\s*(?:dollars?|bucks|a week|a month|per week|per month|each week|each month|weeks?|months?)\b"
+    r"|\bhow (?:much|long|many)\b"
+    r"|\bwhen (?:will|would|do) i\b"
+    r"|\bcuanto\b|\bcombien\b",
+)
+
+
+#: A question about the PROGRAMME, which no open plan may claim.
+#:
+#: The plan exemption skips the retrieval floors, so a sentence that reaches it
+#: is a sentence nothing checked against the corpus. "How much do I get from
+#: ASPIRE" is arithmetic by the look of it and a claim about a government
+#: programme in substance, and it must go through the gates like any other.
+_ABOUT_THE_PROGRAMME = re.compile(
+    r"\baspire\b|\bprogram(?:me)?\b|\beligib|\bqualif|\bapply\b|\bsign\s*up\b"
+    r"|\benrol|\bthe\s+bank\b|\bnational\s+bank\b|\bshares?\b|\bgovernment\b",
+)
+
+
+def continues_a_plan(message: str) -> bool:
+    """Whether this message carries on a plan rather than changing the subject."""
+    folded = fold(message)
+    if _ABOUT_THE_PROGRAMME.search(folded):
+        return False
+    return bool(_PLAN_FOLLOW_UP.search(folded))
+
+
 def top_level_intent(message: str) -> str | None:
     """What this message is asking for, above whatever is already running.
 
@@ -608,6 +734,10 @@ def top_level_intent(message: str) -> str | None:
         return "story"
     if _THANKS.search(fold(text)):
         return "thanks"
+    # Before `question`, and for the same reason `story` is: "how do I save up
+    # for a bike" is a question in form and a request for a plan in substance.
+    if wants_a_plan(text) is not None:
+        return "plan"
     if _A_QUESTION.search(text) and len(text.split()) >= 3:
         return "question"
     return None

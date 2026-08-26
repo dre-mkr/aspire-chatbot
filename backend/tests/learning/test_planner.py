@@ -8,6 +8,7 @@ import pytest
 
 from app.agents.learn.evaluate import Diagnosis, Verdict
 from app.agents.learn.planner import (
+    EXPLAINING_MOVES,
     GAME_BANDS,
     MASTERED,
     MAX_HINT_LEVEL,
@@ -383,3 +384,58 @@ class TestExhaustively:
                 )
             )
             assert move not in remedial, combination
+
+
+class TestTheQuizWaitsItsTurn:
+    """What a check question is anchored to, and what it is not.
+
+    A quiz may take a turn for two reasons: it is holding a question nobody has
+    answered, or the learner asked to be tested. A timer counting elapsed turns
+    is neither, and a nine-year-old who asked what saving is and was told to
+    name a need rather than a want learns that the thing is not listening.
+    """
+
+    def _due_for_a_check(self, **overrides):
+        """A learner mid-concept with the check timer already elapsed."""
+        return LearnerSnapshot(
+            concept_id="CON-0001",
+            band="9-12",
+            has_been_taught=True,
+            has_check_item=True,
+            turns_since_check=TURNS_BEFORE_CHECK + 1,
+            **overrides,
+        )
+
+    def test_the_timer_asks_when_the_learner_brought_nothing(self):
+        assert plan_move(self._due_for_a_check()) is Move.CHECK
+
+    def test_a_question_of_their_own_outranks_the_timer(self):
+        move = plan_move(self._due_for_a_check(asked_their_own=True))
+        assert move is not Move.CHECK, (
+            "The learner asked something. Answering with a new quiz question is "
+            "how 'Here's another money question' ends up replying to 'teach me "
+            "about saving'."
+        )
+
+    def test_their_turn_is_still_answered(self):
+        """Standing the timer down must not end the turn in silence."""
+        move = plan_move(self._due_for_a_check(asked_their_own=True))
+        assert move in EXPLAINING_MOVES
+
+    def test_an_outstanding_check_still_owns_the_turn(self):
+        """The real anchor is untouched: an unanswered question is re-asked."""
+        move = plan_move(
+            LearnerSnapshot(
+                concept_id="CON-0001",
+                has_been_taught=True,
+                has_check_item=True,
+                awaiting_check_answer=True,
+                asked_their_own=True,
+            )
+        )
+        assert move is Move.CHECK
+
+    def test_asking_to_practise_still_gets_a_question(self):
+        """§10's case is a request, not a timer, so the anchor leaves it alone."""
+        move = plan_move(self._due_for_a_check(wants_practice=True, asked_their_own=True))
+        assert move is Move.CHECK

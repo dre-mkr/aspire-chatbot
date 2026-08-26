@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.graph.nodes.intents import top_level_intent
+from app.graph.nodes.intents import top_level_intent, wants_a_plan
 
 
 class TestWhatOutranksAnActivity:
@@ -199,3 +199,46 @@ class TestTheLessonYieldsToAPleaForPlainerWords:
             )
             != "reteach"
         )
+
+
+class TestAPlanIsNotAQuestion:
+    """"How do I save up for a bike" asks for arithmetic, not for a corpus row."""
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "how do i save up for a bike",
+            "How can I save for a laptop?",
+            "how do i afford a laptop",
+            "how long will it take me to save for a bike",
+            "i want to save up for a phone",
+            "help me save for school shoes",
+            "make me a savings plan",
+            "como puedo ahorrar para una bicicleta",
+        ],
+    )
+    def test_a_goal_of_their_own_reads_as_a_plan(self, message):
+        assert top_level_intent(message) == "plan"
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "how does saving work",
+            "what is saving",
+            "why should i save money",
+            "what is compound interest",
+            "how do i join ASPIRE",
+            "how do i renew a fishing licence",
+        ],
+    )
+    def test_a_question_about_saving_still_belongs_to_the_corpus(self, message):
+        """The corpus answers these well. Only a goal the reader OWNS is a plan."""
+        assert top_level_intent(message) != "plan"
+
+    def test_the_goal_comes_back_so_the_plan_can_be_about_it(self):
+        assert wants_a_plan("how do i save up for a bike") == "a bike"
+
+    def test_a_plan_with_no_goal_named_is_still_a_plan(self):
+        """An empty string and None are different answers: asked, but not said."""
+        assert wants_a_plan("make me a savings plan") == ""
+        assert wants_a_plan("what is compound interest") is None

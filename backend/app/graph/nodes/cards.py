@@ -11,8 +11,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.agents.escalation.contract import EscalationReason
 from app.graph.nodes.intents import (
     asks_for_a_video,
+    continues_a_plan,
     is_complaint,
     named_game,
+    top_level_intent,
+    wants_a_plan,
     wants_account,
     wants_eligibility,
     wants_game,
@@ -272,10 +275,32 @@ def make_intent_gate(
     async def intent_gate(state: AspireState) -> dict[str, Any]:
         # A continuation turn has no new message; `_last_human` would re-open the previous card.
         flags = state.get("safety_flags") or {}
-        if any(flags.get(name) for name in ("widget_interaction", "game_result")):
-            return {}
-
         message = _last_human(state)
+
+        if any(flags.get(name) for name in ("widget_interaction", "game_result")):
+            # AN ABANDONED GAME PLUS A REQUEST FOR ANOTHER MEANS THEY MOVED ON.
+            #
+            # A result jumps the queue, which is right when a game FINISHED --
+            # the score deserves its reaction. It is wrong when the game was
+            # abandoned and the reader abandoned it BY asking for a different
+            # one: the result was reacted to and the request was never read.
+            # Observed on the live site: a nine-year-old picked "Hangman" from
+            # the menu and was answered "You got 2 before we stopped. Want to
+            # pick it up again, or carry on with the lesson?"
+            #
+            # Only for an abandoned game, and only for an explicit game
+            # request. A finished game keeps its reaction, and no coins are
+            # lost either way -- an abandoned game earns none.
+            result = flags.get("game_result")
+            abandoned = isinstance(result, dict) and not result.get("completed")
+            if not (
+                abandoned
+                and message.strip()
+                and _games_available(games_on)
+                and wants_game(message)
+            ):
+                return {}
+
         if not message.strip():
             return {}
 
@@ -313,6 +338,14 @@ def make_intent_gate(
         # A savings goal said out loud becomes a signable pledge card, and the
         # signed pledge becomes a standing goal every later turn keeps in view.
         card = _pledge_turn(state, message)
+        if card is not None:
+            return card
+
+        # A goal with no number yet: "how do I save up for a bike". Marked here
+        # so the grounding gate knows this turn is a plan and not a claim about
+        # the programme -- see `ground_check`, which declined exactly this
+        # sentence on the live site because no corpus row is about bikes.
+        card = _plan_turn(state, message)
         if card is not None:
             return card
 
@@ -516,6 +549,59 @@ _SELF_ANSWER = re.compile(
     r"\b(?:myself|for me|my own|just me|i want to learn|para m[ií]|pour moi|moi-?m[eê]me)\b",
     re.IGNORECASE,
 )
+
+
+def _plan_turn(state: AspireState, message: str) -> dict[str, Any] | None:
+    """Mark a turn that asks for a savings plan, so the gates read it as one.
+
+    Returns no card and no prose. Like the story handoff above it, this records
+    what the turn IS and lets an agent do the writing -- a plan is reasoning
+    over the reader's own numbers, which is not something this node can fill in
+    from a template.
+
+    It runs after `_pledge_turn` deliberately. "I want to save $20 a week for a
+    bike" names an amount and is a commitment, which is the pledge card's job.
+    A plan is what someone asks for when they do NOT have the amount yet, and
+    the two hand to each other: the plan works out the number, and the number
+    is what there is to pledge.
+    """
+    # A story in progress owns its own steering; a sentence inside one is not a
+    # request to stop and do arithmetic.
+    if state.get("story_arc"):
+        return None
+
+    goal = wants_a_plan(message)
+    if goal is not None:
+        return {
+            "plan_goal": goal[:120],
+            "plan_arc": {"goal": goal[:120], "turns": 1},
+        }
+
+    # ── carrying one that is already under way ──────────────────────────────
+    #
+    # A plan takes more than one message: the goal arrives, then the price,
+    # then what they can spare. "How much should I put away each week" names
+    # nothing and asks the corpus nothing, and on the live site it fell into
+    # the tutor and came back as a quiz question about what saving is called.
+    #
+    # Two conditions, both required. The message must read as arithmetic about
+    # the goal, and it must not be a new intent -- a reader who asks for a game
+    # in the middle of planning wanted a game.
+    arc = state.get("plan_arc") or {}
+    if not arc or int(arc.get("turns") or 0) >= PLAN_TURNS:
+        return None
+    # A plan follow-up is a QUESTION in form -- "how much should I put away
+    # each week" -- so `question` cannot be in the set that ends one, for the
+    # same reason `top_level_intent` checks `story` and `plan` before it.
+    # These four are the reader genuinely leaving.
+    if top_level_intent(message) in ("game", "story", "simplify", "thanks"):
+        return None
+    if not continues_a_plan(message):
+        return None
+    return {
+        "plan_goal": str(arc.get("goal") or ""),
+        "plan_arc": {**arc, "turns": int(arc.get("turns") or 1) + 1},
+    }
 
 
 def _purpose_from_answer(message: str, persona: str) -> str:
@@ -724,6 +810,13 @@ _STORY_ASK: dict[str, str] = {
 #: beat there has to be an ending, or the arc is just a treadmill with a
 #: character on it.
 STORY_BEATS = 6
+
+#: How many turns a plan stays open before a new one has to be asked for.
+#:
+#: A plan is a short exchange, not a mode. Left open it would claim every later
+#: message that happened to contain a number.
+PLAN_TURNS = 4
+
 
 #: Carrying on, in the reader's own words. The chip sends the first of these.
 #: Spanish and French had two words too common to be commands. `más` is in

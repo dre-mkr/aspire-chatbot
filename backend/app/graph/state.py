@@ -185,6 +185,21 @@ class AspireState(TypedDict, total=False):
     #: What the story should be about, for the one turn that tells it.
     story_topic: str | None
 
+    #: A plan still open across turns: its goal and how many turns it has had.
+    #:
+    #: NOT cleared by `hydrate`, exactly like `story_arc` and for the same
+    #: reason: a plan takes more than one message. `cards._plan_turn` closes it
+    #: after `PLAN_TURNS` or the moment the reader asks for something else.
+    plan_arc: dict[str, Any] | None
+
+    #: What the reader is saving towards, for the one turn that plans it.
+    #:
+    #: An empty string means a plan was asked for without naming a goal, which
+    #: is a different turn from `None` -- no plan was asked for at all. Set by
+    #: `cards` from the reader's own words, never by a model, and cleared by
+    #: `hydrate` like `story_topic` for the same reason.
+    plan_goal: str | None
+
     #: Waiting on "how old are you now?" from a teen who asked to sign up.
     #:
     #: The band says 16-18, which is three ages and two different answers: at
@@ -367,6 +382,8 @@ def initial_state(
         awaiting_teen_age=False,
         teen_age=None,
         story_topic=None,
+        plan_goal=None,
+        plan_arc=None,
         overlay="",
         collectibles=[],
         tin=None,

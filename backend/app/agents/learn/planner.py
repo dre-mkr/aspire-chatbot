@@ -97,6 +97,10 @@ class LearnerSnapshot:
     prerequisite_available: bool = False
     #: Whether the learner asked, in so many words, to practise. §10's first case.
     wants_practice: bool = False
+    #: Whether this message is the learner's OWN question or request, rather
+    #: than a move inside the lesson. A turn they brought belongs to them, and
+    #: the check timer below may not take it from them.
+    asked_their_own: bool = False
 
     @classmethod
     def from_state(
@@ -113,6 +117,7 @@ class LearnerSnapshot:
         hints_available: int = 0,
         prerequisite_available: bool = False,
         wants_practice: bool = False,
+        asked_their_own: bool = False,
     ) -> "LearnerSnapshot":
         concept_id = concept.id if concept else None
         per_concept = (learning.get("turns_on_concept") or {}) if isinstance(
@@ -140,6 +145,7 @@ class LearnerSnapshot:
             hint_rung=int(learning.get("hint_rung_now") or 0),
             prerequisite_available=bool(prerequisite_available),
             wants_practice=bool(wants_practice),
+            asked_their_own=bool(asked_their_own),
         )
 
     @property
@@ -193,7 +199,21 @@ def plan_move(snapshot: LearnerSnapshot) -> Move:
     if snapshot.wants_practice and snapshot.has_check_item:
         return Move.CHECK
 
-    if snapshot.turns_since_check >= TURNS_BEFORE_CHECK and snapshot.has_check_item:
+    # The check timer, and the one thing that outranks it.
+    #
+    # A quiz may occupy a turn for exactly two reasons: it is holding a question
+    # nobody has answered yet -- the `awaiting_check_answer` case above, which is
+    # the real anchor -- or the learner asked to be tested. This timer is neither.
+    # It fires on elapsed turns, so on a turn where the learner brought their own
+    # question it answers a different question than the one they asked, and does
+    # it in the voice of a quizmaster: "Here's another money question." Asked what
+    # saving is and told to name a need rather than a want, a child concludes the
+    # thing is not listening, and they are right.
+    #
+    # A turn the learner brought is theirs. Teach into it; the teaching moves end
+    # with a check of their own, so nothing is lost but the interruption.
+    due_a_check = snapshot.turns_since_check >= TURNS_BEFORE_CHECK
+    if due_a_check and snapshot.has_check_item and not snapshot.asked_their_own:
         return Move.CHECK
 
     # Taught recently, nothing outstanding. Say it another way.
