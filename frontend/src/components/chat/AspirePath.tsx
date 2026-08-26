@@ -59,9 +59,23 @@ export function AspirePath({ path }: { path: PathState | null }) {
 	if (!path || !visible || path.labels.length === 0) return null;
 
 	return (
-		<div className="aspire-path" aria-live="polite" aria-atomic="false">
-			<p className="aspire-path__title">{path.title}</p>
-			<ol className="aspire-path__stages">
+		/* ONE ANNOUNCEMENT, NOT FOUR.
+		 *
+		 * A polite live region on the whole strip meant a screen reader heard
+		 * every stage change -- four per turn -- and then the answer, which
+		 * says everything the stages did. That is chatter, and it arrives
+		 * during the one moment the reader is waiting to hear something real.
+		 *
+		 * The title is a `status`, so "Working through this" is announced once
+		 * when the strip appears. The stages themselves are progress a sighted
+		 * reader watches; they are `aria-hidden`, because their content is
+		 * already on its way in the answer. */
+		<div className="aspire-path">
+			{/* `<output>` rather than a `role="status"` paragraph: it carries
+			    the status role natively, and the linter is right that the
+			    element should say what it is. */}
+			<output className="aspire-path__title">{path.title}</output>
+			<ol className="aspire-path__stages" aria-hidden="true">
 				{path.labels.map((label, index) => {
 					const state =
 						path.done || index < path.at
@@ -70,14 +84,7 @@ export function AspirePath({ path }: { path: PathState | null }) {
 								? "active"
 								: "waiting";
 					return (
-						<li
-							key={label}
-							className="aspire-path__stage"
-							data-state={state}
-							/* The tick is decoration; the state is already in the text
-							   for anyone reading this with their ears. */
-							aria-current={state === "active" ? "step" : undefined}
-						>
+						<li key={label} className="aspire-path__stage" data-state={state}>
 							<span className="aspire-path__dot" aria-hidden="true" />
 							<span className="aspire-path__label">{label}</span>
 						</li>

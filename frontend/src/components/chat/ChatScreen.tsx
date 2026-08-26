@@ -52,7 +52,6 @@ import { useVoice } from "#/lib/aspire/use-voice";
 import { guideIdFor, rememberGuide } from "#/lib/aspire/workspace";
 import { useMediaQuery } from "#/lib/use-media-query";
 import { AgeBandProvider, bandForPersona } from "./AgeBandProvider";
-import { AspirePath } from "./AspirePath";
 import { ChatTitleBar } from "./ChatTitleBar";
 import { ChatWelcome } from "./ChatWelcome";
 import { Composer } from "./Composer";
@@ -912,16 +911,15 @@ export function ChatScreen() {
 										}
 										onAsk={ask}
 									/>
-									{/* ASPIRE Path sits directly above the answer it is
-									    building, and retires itself once the answer lands.
-									    Only genuinely multi-step turns send one. */}
-									<AspirePath path={path} />
 									<section aria-label="Conversation">
 										<Transcript
 											guideName={guideName}
 											messages={messages}
 											streaming={streaming}
 											isThinking={isThinking}
+											/* Shown beside the waiting orb, at the foot of
+											   the thread. Only multi-step turns send one. */
+											path={path}
 											followUps={followUps}
 											animateAfterId={animateAfterId}
 											scrollRef={threadRef}

@@ -38,6 +38,7 @@ import type {
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
 import { say } from "../../lib/aspire/i18n";
+import { AspirePath, type PathState } from "./AspirePath";
 import type { DirectiveContext } from "./DirectiveRegistry";
 import { DirectiveView } from "./DirectiveRegistry";
 import { PlayingStars } from "./Voice";
@@ -104,6 +105,8 @@ interface TranscriptProps {
 	/** The answer still being revealed, if there is one. */
 	streaming: Streaming | null;
 	isThinking: boolean;
+	/** ASPIRE Path for the turn in flight, or null. Shown beside the orb. */
+	path?: PathState | null;
 	followUps: Array<string>;
 	/** Takes the id of the message being retried, so it replaces that one. */
 	/** `simple` forces the plain-words answer regardless of the composer toggle. */
@@ -133,6 +136,7 @@ export function Transcript({
 	messages,
 	streaming,
 	isThinking,
+	path = null,
 	followUps,
 	onRegenerate,
 	onAsk,
@@ -375,13 +379,24 @@ export function Transcript({
 			)}
 
 			{isThinking ? (
+				/* The guide's orb stays; what sits beside it depends on whether
+				   this turn has anything true to say about its progress.
+				   Three dots mean "something is happening". An ASPIRE Path
+				   means "here is what is happening", and it belongs HERE --
+				   at the foot of the thread, where a reader waiting for an
+				   answer is actually looking. Above the transcript it would be
+				   off-screen by the third turn of any real conversation. */
 				<div className="thinking">
 					<div className="orb orb--thinking" />
-					<div className="thinking__dots" aria-hidden="true">
-						<i />
-						<i />
-						<i />
-					</div>
+					{path ? (
+						<AspirePath path={path} />
+					) : (
+						<div className="thinking__dots" aria-hidden="true">
+							<i />
+							<i />
+							<i />
+						</div>
+					)}
 				</div>
 			) : null}
 

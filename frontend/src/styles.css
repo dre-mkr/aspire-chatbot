@@ -10341,6 +10341,8 @@ a.source__site--link:hover .source__out {
 }
 
 .aspire-path__title {
+	/* An `<output>`, which is inline by default. */
+	display: block;
 	margin: 0 0 8px;
 	font-size: 0.78rem;
 	font-weight: 600;
