@@ -280,6 +280,20 @@ async def _turn_frames(token: str | None, body: dict[str, Any]) -> AsyncIterator
         checkpointer=checkpointer,
     )
     config = thread_config(thread_id)
+    # A no-op when tracing is off, which is the default and the common case.
+    from app.observability import turn_config
+
+    config = turn_config(
+        config,
+        {
+            "persona": getattr(claims, "persona", ""),
+            "age_band": getattr(claims, "age_band", ""),
+            "locale": getattr(claims, "locale", "") or "",
+            "account_status": getattr(claims, "account_status", ""),
+            "overlay": body.get("overlay") or "",
+        },
+        session_id=thread_id,
+    )
 
     # Just the message.
     payload: dict[str, Any] = {

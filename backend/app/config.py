@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     # Whether the console provider may write message bodies to the log.
     mail_console_logs_links: bool = False
 
+    # --- Observability (LangSmith) ---
+    # Off by default. See `app/observability.py` for why this is three
+    # decisions rather than one flag, and PRIVACY.md for whose product it is.
+    langsmith_tracing: bool = False
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "aspire"
+    #: Upload the WORDS as well as the shape of the turn. A separate variable
+    #: because it is a separate decision: children's messages leaving the
+    #: service is not something a tracing tutorial should be able to turn on.
+    langsmith_trace_content: bool = False
+
     # --- Website watcher ---
     # The public pages the watcher polls for changes. Empty list disables it.
     watcher_urls: list[str] = ["https://aspire.gov.kn/"]

@@ -93,6 +93,12 @@ async def lifespan(app: FastAPI):
     for noisy in ("openai", "httpx", "httpcore", "anthropic", "urllib3"):
         logging.getLogger(noisy).setLevel(max(logging.INFO, logging.getLogger().level))
 
+    # Decided once, at boot, and said out loud in the log -- including whether
+    # the words are being uploaded or only the shape of the turn.
+    from app.observability import configure as configure_tracing
+
+    configure_tracing()
+
     # Neon scales to zero, so without this the first message after an idle period pays the wake-up.
     if database_enabled():
         await warm(settings)
