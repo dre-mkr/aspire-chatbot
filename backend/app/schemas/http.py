@@ -81,3 +81,31 @@ class HealthResponse(BaseModel):
     # own failure, so nothing said. Now something does, from outside, over curl.
     concepts: int = 0
 
+    #: Concepts the tutor can actually TEACH, per band.
+    #:
+    #: `concepts` above counts rows, which is a weaker thing than its comment
+    #: claims. A row is loaded when its status is servable; it is teachable only
+    #: when it also has a BODY for the band in front of it -- `teachable_at`
+    #: ends on `body_for(band) is not None`. The two numbers come apart exactly
+    #: when the concepts table holds metadata shells: `seed_curriculum` writes
+    #: eight columns and none of them is a body, so a deployment seeded only by
+    #: it reports a healthy count and cannot teach a single thing.
+    #:
+    #: That is the failure this endpoint was added to catch, and until now it
+    #: reported the number that does not catch it.
+    concepts_teachable: dict[str, int] = Field(default_factory=dict)
+
+    #: Concepts carrying at least one authored check question.
+    #:
+    #: Separate from teachability because they fail separately: a concept can
+    #: have a body to teach from and no check to ask, in which case the tutor
+    #: explains and never verifies.
+    concepts_with_checks: int = 0
+
+    #: Whether semantic resolution is available at all.
+    #:
+    #: Without embeddings there is no matrix to rank against, so "explain
+    #: budgeting to me" cannot be matched to a concept by meaning -- which is
+    #: the only way an unnamed topic ever reaches the tutor.
+    concepts_ranked: bool = False
+
