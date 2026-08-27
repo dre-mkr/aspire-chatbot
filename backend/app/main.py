@@ -203,14 +203,20 @@ app.include_router(accounts_router)
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Liveness, plus whether the data layer actually connected."""
-    from app.learning.concepts import get_store
+    from app.learning.concepts import BANDS, get_store
 
+    store = get_store()
     return HealthResponse(
         status="ok",
         database=database_enabled(),
         cache=response_cache.cache_enabled(),
         cache_stats=await response_cache.stats(),
-        concepts=len(get_store()),
+        concepts=len(store),
+        # All in memory already -- the store holds every concept and its
+        # matrix, so this is a walk over a handful of objects, not a query.
+        concepts_teachable={band: len(store.teachable(band)) for band in BANDS},
+        concepts_with_checks=sum(1 for concept in store.all() if concept.check_bank),
+        concepts_ranked=store.has_embeddings,
     )
 
 
