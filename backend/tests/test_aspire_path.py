@@ -212,3 +212,50 @@ class TestKalebIsDescribedByHisWorkNotHisReply:
         assert "answer" in names[0]
         assert "why" in names[1] or "reason" in names[1]
         assert "challenge" in names[2]
+
+
+class TestEveryReaderSeesIt:
+    """The Path must not depend on having an account.
+
+    Observed on production, 27 Aug: an anonymous session streamed `directive`,
+    `token` and `done` and nothing else -- no Path frame reached the client at
+    all. `should_show` listed `qa_agent` and not the two variants everybody
+    else is actually routed to, so the strip appeared only for a reader with a
+    proven identity. Every first visit, and every anonymous evaluation of this
+    product, saw an answer arrive with no sign that anything had been worked
+    out. The capability was there and invisible, which is indistinguishable
+    from not having it.
+    """
+
+    #: The three names `access.py` routes readers to, by identity.
+    QA_AGENTS = ("qa_agent", "qa_agent_limited", "qa_agent_public")
+
+    @pytest.mark.parametrize("agent", QA_AGENTS)
+    def test_every_qa_variant_earns_a_path(self, agent):
+        assert should_show({"active_agent": agent}) is True
+
+    def test_the_anonymous_reader_is_not_the_exception(self):
+        """`qa_agent_public` is what a reader with no account gets."""
+        from app.graph.access import _ANONYMOUS
+
+        served = [a for a in _ANONYMOUS if a.startswith("qa_agent")]
+        assert served, "anonymous readers reach no QA agent at all"
+        for agent in served:
+            assert should_show({"active_agent": agent}) is True, (
+                f"{agent} is what an anonymous reader gets and it shows no Path"
+            )
+
+    def test_the_youngest_reader_is_not_the_exception(self):
+        """Skye is routed to `qa_agent_limited`, and five-year-olds count."""
+        from app.graph.access import _STELLA
+
+        served = [a for a in _STELLA if a.startswith("qa_agent")]
+        for agent in served:
+            assert should_show({"active_agent": agent}) is True
+
+    def test_silence_still_means_silence(self):
+        """Widening the allowlist must not have turned the quiet cases on."""
+        for agent in ("servicing_agent", "escalate_agent", ""):
+            assert should_show({"active_agent": agent}) is False
+        assert should_show({"active_agent": "qa_agent_public", "story_arc": {"beat": 1}}) is False
+        assert should_show({"active_agent": "qa_agent_public", "story_topic": "saving"}) is False
