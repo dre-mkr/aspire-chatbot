@@ -140,7 +140,27 @@ _TITLE: Final[dict[str, str]] = {
 
 #: The agents whose turns are multi-step by nature.
 _AGENTIC_AGENTS: Final[frozenset[str]] = frozenset(
-    {"learn_agent", "register_agent", "register_agent_step1", "qa_agent"}
+    {
+        "learn_agent",
+        "register_agent",
+        "register_agent_step1",
+        # ALL THREE QA variants, not just the signed-in one.
+        #
+        # `qa_agent` is what a proven identity gets. Everybody else is on
+        # `qa_agent_public` (anonymous) or `qa_agent_limited` (Skye, and any
+        # reader on a restricted band) -- see `access._ANONYMOUS` and
+        # `access._STELLA`. Listing only `qa_agent` meant the Path never
+        # appeared for a reader who had not signed in, which is every first
+        # visit and every anonymous evaluation of this product.
+        #
+        # The work is identical in all three; the agent name records who is
+        # allowed to see what, not how hard the turn was. A reader watching an
+        # answer being built has the same right to know what it is doing
+        # whether or not they have an account.
+        "qa_agent",
+        "qa_agent_limited",
+        "qa_agent_public",
+    }
 )
 
 
