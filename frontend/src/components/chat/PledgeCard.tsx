@@ -1,4 +1,4 @@
-import { say } from "#/lib/aspire/i18n";
+import { say, useLocale } from "#/lib/aspire/i18n";
 import type { PledgeDirective } from "#/lib/stream/types";
 
 /**
@@ -15,6 +15,9 @@ export function PledgeCard({
 	directive: PledgeDirective;
 	send: (value: string) => void;
 }) {
+	// Re-render when the reader changes language: `say` reads storage,
+	// and storage changing is not something React can see on its own.
+	useLocale();
 	const { amount_line, goal, button_label, button_value, pledged } = directive;
 	return (
 		<div className="pledge" data-pledged={pledged || undefined}>

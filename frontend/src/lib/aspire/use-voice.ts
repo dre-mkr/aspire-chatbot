@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { announceLocaleChange } from "#/lib/aspire/i18n";
 import {
 	fetchVoiceConfig,
 	pickRecorderMimeType,
@@ -304,6 +305,10 @@ export function useVoice({
 					overlay,
 				}),
 			);
+			// The language lives in this object, and components that render
+			// translated copy read it straight from storage. Storage changing
+			// is not something React can see, so say so out loud.
+			announceLocaleChange();
 		} catch {
 			// Private browsing throws. Preferences are a convenience, not a feature.
 		}

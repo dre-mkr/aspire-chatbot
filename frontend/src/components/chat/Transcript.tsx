@@ -37,7 +37,7 @@ import type {
 	ChatMessage,
 	StreamingAnswer as Streaming,
 } from "#/lib/aspire/use-conversation";
-import { say } from "../../lib/aspire/i18n";
+import { say, useLocale } from "../../lib/aspire/i18n";
 import { AspirePath, type PathState } from "./AspirePath";
 import type { DirectiveContext } from "./DirectiveRegistry";
 import { DirectiveView } from "./DirectiveRegistry";
@@ -148,6 +148,9 @@ export function Transcript({
 	animateAfterId,
 	scrollRef,
 }: TranscriptProps) {
+	// Re-render when the reader changes language: `say` reads storage,
+	// and storage changing is not something React can see on its own.
+	useLocale();
 	/** The answer being revealed, rendered as the message it is about to become. */
 	const turns: Array<ChatMessage> = streaming
 		? [

@@ -9,7 +9,7 @@ import {
 	SparkIcon,
 } from "#/components/icons";
 import { type HelpSection, helpCopy } from "#/lib/aspire/help-copy";
-import { currentLocale, say } from "#/lib/aspire/i18n";
+import { currentLocale, say, useLocale } from "#/lib/aspire/i18n";
 import { GUIDES } from "#/lib/aspire/personas";
 
 /**
@@ -25,6 +25,9 @@ import { GUIDES } from "#/lib/aspire/personas";
  * before opening and handed back on close.
  */
 export function HelpLauncher() {
+	// Re-render when the reader changes language: `say` reads storage,
+	// and storage changing is not something React can see on its own.
+	useLocale();
 	const [open, setOpen] = useState(false);
 	const [mounted, setMounted] = useState(false);
 	const dialogId = useId();

@@ -65,6 +65,12 @@ import { VoiceConsent, VoiceNote } from "./Voice";
 const COMPACT = "(max-width: 860px)";
 /** How far from the bottom still counts as "following along". */
 const STICK_THRESHOLD_PX = 160;
+
+//: How much of the previous turn stays on screen above a long new answer.
+//:
+//: Enough to see what was asked, without pinning the answer's first line to
+//: the very top edge, which reads as a jump rather than as a scroll.
+const SETTLE_ABOVE_PX = 24;
 /** The playback id the eligibility card speaks under. */
 const ELIGIBILITY_SPEECH_ID = -1;
 
@@ -367,6 +373,16 @@ export function ChatScreen() {
 	const following = useRef<string | null>(null);
 
 	// Follow the stream only from the bottom; scrolling up to re-read must not be yanked back.
+	// Whether the reader was at the bottom BEFORE this answer arrived.
+	//
+	// It used to be measured after. By the time the effect ran the answer was
+	// already in the DOM, so the answer's own height counted as distance from
+	// the bottom: a short reply stayed under the threshold and stuck, a long
+	// one did not, and the reader had to scroll down by hand to read the thing
+	// they had just asked for. "Sometimes" -- which is the shape of a bug that
+	// depends on how much was said.
+	const wasAtBottom = useRef(true);
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: change trigger
 	useEffect(() => {
 		const thread = threadRef.current;
@@ -375,14 +391,26 @@ export function ChatScreen() {
 		// A different conversation just arrived.
 		if (following.current !== threadId) {
 			following.current = threadId;
+			wasAtBottom.current = true;
 			return;
 		}
 
-		const distance =
-			thread.scrollHeight - thread.scrollTop - thread.clientHeight;
-		if (distance < STICK_THRESHOLD_PX) {
-			thread.scrollTop = thread.scrollHeight;
-		}
+		// They had scrolled up to read something. Leave them there.
+		if (!wasAtBottom.current) return;
+
+		// An answer taller than the window is not read from its end. Put its
+		// FIRST line just below the top and let the reader go down it, which is
+		// what they would have done by hand. Anything that fits is shown whole.
+		const turns = thread.querySelectorAll<HTMLElement>(".turn--assistant");
+		const last = turns[turns.length - 1];
+		const tall = last && last.offsetHeight > thread.clientHeight * 0.8;
+
+		thread.scrollTo({
+			top: tall
+				? Math.max(0, last.offsetTop - SETTLE_ABOVE_PX)
+				: thread.scrollHeight,
+			behavior: "smooth",
+		});
 	}, [messages, streaming, isThinking, threadId]);
 
 	// Restore before paint, so a reopened conversation is never briefly shown at the wrong offset.
@@ -877,6 +905,14 @@ export function ChatScreen() {
 								onScroll={(event) => {
 									// Not during a restore: that scroll is ours, and banking it overwrites the saved offset.
 									if (restoring.current) return;
+									// Recorded here, acted on when the next answer
+									// lands: once it has landed, whether the reader
+									// WAS at the bottom is no longer knowable.
+									wasAtBottom.current =
+										event.currentTarget.scrollHeight -
+											event.currentTarget.scrollTop -
+											event.currentTarget.clientHeight <
+										STICK_THRESHOLD_PX;
 									scrollTops.current.set(
 										scrollKey,
 										event.currentTarget.scrollTop,

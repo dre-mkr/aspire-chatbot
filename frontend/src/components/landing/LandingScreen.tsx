@@ -7,7 +7,7 @@ import {
 	stageFirstTurn,
 	stageVoiceStart,
 } from "#/lib/aspire/handoff";
-import { currentLocale, say } from "#/lib/aspire/i18n";
+import { currentLocale, say, useLocale } from "#/lib/aspire/i18n";
 import { type AgeBand, GUIDES, type PersonaId } from "#/lib/aspire/personas";
 import { useSession } from "#/lib/aspire/use-session";
 import {
@@ -195,6 +195,9 @@ interface LandingScreenProps {
 }
 
 export function LandingScreen({ onStartConversation }: LandingScreenProps) {
+	// Re-render when the reader changes language: `say` reads storage,
+	// and storage changing is not something React can see on its own.
+	useLocale();
 	const navigate = useNavigate();
 	const [draft, setDraft] = useState("");
 	const [activeView, setActiveView] = useState<ViewState>("landing");
