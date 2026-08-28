@@ -67,7 +67,7 @@ class TestWhatCountsAsNative:
         assert profile.voice_id == "stella-es"
 
     def test_an_understudys_per_language_id_carries_nativeness(self):
-        """Guest understudies Imani. If Imani's Spanish is cast, Guest's Spanish
+        """Guest understudies Orion. If Orion's Spanish is cast, Guest's Spanish
         is a Spanish-cast voice -- the wrong character, which is the tradeoff
         every understudy already is, but never the wrong language.
 
@@ -75,10 +75,10 @@ class TestWhatCountsAsNative:
         `_NEVER_BORROWS_A_VOICE`, so his Spanish is silent whoever else is cast.
         See `TestKalebNeverBorrows` below.
         """
-        registry = build_registry(_settings(voice_aurora_es="aurora-es"))
+        registry = build_registry(_settings(voice_orion_es="orion-es"))
         profile = registry[(Persona.GUEST, Language.ES)]
         assert profile.native is True
-        assert profile.voice_id == "aurora-es"
+        assert profile.voice_id == "orion-es"
 
     def test_an_understudys_base_id_does_not(self):
         registry = build_registry(_settings())
