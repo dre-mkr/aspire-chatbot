@@ -216,6 +216,60 @@ async def seed_curriculum(curriculum: Any | None = None) -> int:
                     )
                     written += 1
 
+            # ── the eleven authored topics ──────────────────────────
+            #
+            # The module teaches six concepts, all savings-adjacent. These are
+            # the rest of the curriculum -- interest, credit, investing, taxes,
+            # scams, digital money, entrepreneurship, and what AI does with a
+            # reader's own money -- written voice by voice and band by band.
+            # Three of them are another name for a concept the module already
+            # teaches, and those ENRICH rather than duplicate: a second
+            # `saving` id would split one reader's mastery across two rows.
+            from app.curriculum.topics import concept_rows
+
+            for row in concept_rows():
+                await db.execute(
+                    sql(
+                        """
+                        INSERT INTO concepts (
+                            id, slug, title, name, band_min, band_max,
+                            body_5_8, body_9_12, body_13_15, body_16_18,
+                            body_adult, local_example, check_bank, status
+                        ) VALUES (
+                            :id, :id, :title, :title, :band_min, :band_max,
+                            :body_5_8, :body_9_12, :body_13_15, :body_16_18,
+                            :body_adult, :local_example,
+                            CAST(:check_bank AS jsonb), 'approved'
+                        )
+                        ON CONFLICT (id) DO UPDATE SET
+                            title = EXCLUDED.title,
+                            band_min = LEAST(concepts.band_min, EXCLUDED.band_min),
+                            band_max = GREATEST(concepts.band_max, EXCLUDED.band_max),
+                            -- COALESCE keeps the module's own words where it
+                            -- has them and fills the bands it never reached.
+                            body_5_8 = COALESCE(concepts.body_5_8, EXCLUDED.body_5_8),
+                            body_9_12 = COALESCE(concepts.body_9_12, EXCLUDED.body_9_12),
+                            body_13_15 = COALESCE(concepts.body_13_15, EXCLUDED.body_13_15),
+                            body_16_18 = COALESCE(concepts.body_16_18, EXCLUDED.body_16_18),
+                            body_adult = COALESCE(concepts.body_adult, EXCLUDED.body_adult),
+                            status = 'approved'
+                        """
+                    ),
+                    {
+                        "id": row["id"],
+                        "title": row["title"],
+                        "band_min": row["band_min"],
+                        "band_max": row["band_max"],
+                        **{
+                            f"body_{b.replace('-', '_')}": row["bodies"].get(b)
+                            for b in ("5-8", "9-12", "13-15", "16-18", "adult")
+                        },
+                        "local_example": row["local_example"],
+                        "check_bank": json.dumps(row["check_bank"]),
+                    },
+                )
+                written += 1
+
             await db.commit()
     except Exception:
         logger.error(

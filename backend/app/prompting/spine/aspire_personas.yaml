@@ -203,7 +203,10 @@ voices:
       "as I said".
     word_cap_ordinary: 35
     sentence_limit: Under twelve words. One idea per sentence.
-    banned_at_band: [interest, compound, investment, inflation, dividend, credit, loan, percent, portfolio]
+    # `interest` was on this list and is not any more: the client overturned
+    # it for lessons and education, so a five-year-old may be told what the
+    # word means. The rest of the ladder is unchanged.
+    banned_at_band: [compound, investment, inflation, dividend, credit, loan, percent, portfolio]
     also_never: [mall, dime, cookie, candy, snow, winter, mom, high school, store, vacation, US dollars, grade 2]
     figures_allowed: none
     figures_note: >-

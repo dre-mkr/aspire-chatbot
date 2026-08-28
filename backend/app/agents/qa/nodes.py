@@ -1763,7 +1763,52 @@ def follow_up_chips(
 
     # Anything tagged for someone else is a fallback, not a filter: a thin
     # corpus slice must not leave a reader with no follow-ups at all.
-    return [*mine, *theirs][:FOLLOW_UP_CHIPS]
+    chips = [*mine, *theirs][:FOLLOW_UP_CHIPS]
+    if len(chips) < FOLLOW_UP_CHIPS:
+        chips.extend(_teachable_follow_ups(state, seen, FOLLOW_UP_CHIPS - len(chips)))
+    return chips[:FOLLOW_UP_CHIPS]
+
+
+def _teachable_follow_ups(state: AspireState, seen: list, room: int) -> list[str]:
+    """Topics this reader could be taught, when the corpus offers too few.
+
+    Chips are drawn from the rows RETRIEVED for this answer, so they stay
+    close to whatever was just asked: a question about saving returns three
+    more questions about saving, and a reader never learns that the product
+    also teaches interest, credit, taxes, scams, digital money or
+    entrepreneurship. That is a corpus slice deciding the shape of the whole
+    product.
+
+    So a thin slice is topped up from what is actually TEACHABLE at this
+    reader's band -- the concept titles, which are already written as
+    questions. It never displaces a relevant follow-up; it only fills a gap
+    that would otherwise be empty or narrow.
+    """
+    if room <= 0:
+        return []
+    try:
+        from app.graph.state import band_of
+        from app.learning.concepts import get_store
+
+        band = band_of(state)
+        titles = [c.title.strip() for c in get_store().teachable(band) if c.title.strip()]
+    except Exception:  # pragma: no cover - a chip must never cost an answer
+        logger.debug("Could not read teachable concepts for follow-ups.", exc_info=True)
+        return []
+
+    asked = _asked_questions(state)
+    out: list[str] = []
+    for title in titles:
+        if len(title) > CHIP_MAX_CHARS:
+            continue
+        words = _words(title)
+        if not words or any(_restates(words, other) for other in (*asked, *seen)):
+            continue
+        seen.append(words)
+        out.append(title)
+        if len(out) == room:
+            break
+    return out
 
 
 def _for_this_reader(chunk: KBChunk, audience: str) -> bool:
