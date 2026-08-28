@@ -230,6 +230,25 @@ class TestEveryReaderSeesIt:
     #: The three names `access.py` routes readers to, by identity.
     QA_AGENTS = ("qa_agent", "qa_agent_limited", "qa_agent_public")
 
+    #: The three the lesson machine is served under, likewise.
+    LEARN_AGENTS = ("learn_agent", "learning_preview", "learning_sample")
+
+    @pytest.mark.parametrize("agent", LEARN_AGENTS)
+    def test_every_lesson_variant_earns_a_path(self, agent):
+        """One module, three names. Skye's readers land on `learning_sample`."""
+        assert should_show({"active_agent": agent}) is True
+
+    def test_the_names_match_what_the_graph_actually_serves(self):
+        """If a fourth variant is added, this fails rather than going quiet."""
+        from app.graph.main_graph import _PROVIDES
+
+        for module, names in _PROVIDES.items():
+            if module.endswith(("learn.graph", "qa.graph")):
+                for name in names:
+                    assert should_show({"active_agent": name}) is True, (
+                        f"{name} is served by {module} and shows no Path"
+                    )
+
     @pytest.mark.parametrize("agent", QA_AGENTS)
     def test_every_qa_variant_earns_a_path(self, agent):
         assert should_show({"active_agent": agent}) is True
