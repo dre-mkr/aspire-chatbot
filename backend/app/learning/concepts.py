@@ -357,21 +357,47 @@ class ConceptStore:
     def get(self, concept_id: str | None) -> TeachingConcept | None:
         return self._by_id.get(concept_id or "")
 
+    #: What a reader falls back to when nothing is authored in their language.
+    #:
+    #: The corpus is English and always has been: `ground_check` localises what
+    #: a citation SAYS and leaves what it POINTS AT alone, and an answer is
+    #: written in the reader's language from English source. The concept store
+    #: was the one place that did not follow that rule -- it filtered strictly
+    #: on locale, and since every authored row is English, `teachable` returned
+    #: NOTHING for a Spanish or French reader. They could not be taught a
+    #: single concept in either language.
+    #:
+    #: So the filter prefers the reader's language and falls back to English
+    #: rather than to silence. The guide still answers in their language; only
+    #: the source material is English, exactly as it is everywhere else.
+    FALLBACK_LOCALE = "en"
+
+    def _in_locale(
+        self, locale: str, predicate
+    ) -> list[TeachingConcept]:
+        """Concepts matching `predicate`, in this language or in English."""
+        wanted = [
+            concept
+            for concept in self._by_id.values()
+            if concept.locale == locale and predicate(concept)
+        ]
+        if wanted or locale == self.FALLBACK_LOCALE:
+            return wanted
+        return [
+            concept
+            for concept in self._by_id.values()
+            if concept.locale == self.FALLBACK_LOCALE and predicate(concept)
+        ]
+
     def by_slug(self, slug: str, locale: str = "en") -> TeachingConcept | None:
-        for concept in self._by_id.values():
-            if concept.slug == slug and concept.locale == locale:
-                return concept
-        return None
+        found = self._in_locale(locale, lambda c: c.slug == slug)
+        return found[0] if found else None
 
     def all(self) -> list[TeachingConcept]:
         return list(self._by_id.values())
 
     def teachable(self, band: str, locale: str = "en") -> list[TeachingConcept]:
-        return [
-            concept
-            for concept in self._by_id.values()
-            if concept.locale == locale and concept.teachable_at(band)
-        ]
+        return self._in_locale(locale, lambda c: c.teachable_at(band))
 
     def rank(
         self, vector: Sequence[float], *, band: str, locale: str = "en", top: int = 3
@@ -388,12 +414,14 @@ class ConceptStore:
             return []
         scores = self._matrix @ (query / norm)
 
+        # Same fallback as `teachable`: prefer the reader's language, and use
+        # English rather than rank nothing at all.
+        allowed = {c.id for c in self.teachable(band, locale)}
+
         ranked: list[tuple[TeachingConcept, float]] = []
         for position, concept_id in enumerate(self._matrix_ids):
             concept = self._by_id.get(concept_id)
-            if concept is None or concept.locale != locale:
-                continue
-            if not concept.teachable_at(band):
+            if concept is None or concept.id not in allowed:
                 continue
             ranked.append((concept, float(scores[position])))
 

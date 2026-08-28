@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 /**
  * The app's own words, in the three languages the product ships.
  *
@@ -202,4 +204,31 @@ export function currentLocale(): Locale {
  */
 export function say(phrase: Phrase, locale: Locale = currentLocale()): string {
 	return COPY[phrase][locale] ?? COPY[phrase].en;
+}
+
+/** Broadcast that the reader's language changed. */
+export const LOCALE_EVENT = "aspire:locale";
+
+export function announceLocaleChange(): void {
+	if (typeof window === "undefined") return;
+	window.dispatchEvent(new Event(LOCALE_EVENT));
+}
+
+export function useLocale(): Locale {
+	const [locale, setLocale] = useState<Locale>(currentLocale);
+
+	useEffect(() => {
+		const sync = () => setLocale(currentLocale());
+		// Our own switcher, and another tab via the native storage event.
+		window.addEventListener(LOCALE_EVENT, sync);
+		window.addEventListener("storage", sync);
+		// Storage may already have moved between first render and this effect.
+		sync();
+		return () => {
+			window.removeEventListener(LOCALE_EVENT, sync);
+			window.removeEventListener("storage", sync);
+		};
+	}, []);
+
+	return locale;
 }

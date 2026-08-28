@@ -109,8 +109,15 @@ def _delivery_for(settings: VoiceSettings, persona: Persona) -> dict[str, float]
 #:
 #: `guest` arrived after the twelve ids were provisioned, and a deployment that
 #: has not been given a thirteenth should keep speaking rather than refuse to
-#: boot. Zion is the understudy because it is the most neutral of the four.
-#: An explicit VOICE_GUEST always wins over this.
+#: boot.
+#:
+#: IMANI, NOT ZION. Zion was chosen for neutrality, and neutral was the wrong
+#: axis: Zion is cast for thirteen to eighteen, so an unknown visitor -- a
+#: parent, a teacher, someone from the ministry -- was greeted by a teenager.
+#: Guest is the one persona whose reader is an unknown adult more often than
+#: not, and Imani is the adult voice this product already has cast. An explicit
+#: VOICE_GUEST still wins over this, and remains the right way to give guest a
+#: voice of its own rather than a borrowed one.
 #: Kaleb understudies Stella so the split cannot silence him. He is a new
 #: persona, so `VOICE_KALEB` does not exist in any deployed .env yet, and
 #: `validate` fails startup on an unmapped pair -- without this line, shipping
@@ -118,7 +125,7 @@ def _delivery_for(settings: VoiceSettings, persona: Persona) -> dict[str, float]
 #: Give him his own `VOICE_KALEB` when a voice is cast for him; until then he
 #: speaks in Skye's voice at his own pace, since `_DELIVERY` is his own.
 _VOICE_UNDERSTUDY: dict[Persona, Persona] = {
-    Persona.GUEST: Persona.ORION,
+    Persona.GUEST: Persona.AURORA,
     Persona.KALEB: Persona.STELLA,
 }
 

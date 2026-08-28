@@ -8,7 +8,7 @@ import {
 	useState,
 } from "react";
 import { MicIcon, SendIcon, SparkIcon, StopIcon } from "#/components/icons";
-import { say } from "#/lib/aspire/i18n";
+import { say, useLocale } from "#/lib/aspire/i18n";
 import type { AgeBand, PersonaId } from "#/lib/aspire/personas";
 import type { MicState, VoicePhase } from "#/lib/aspire/use-voice";
 import { useMediaQuery } from "#/lib/use-media-query";
@@ -82,6 +82,9 @@ export function Composer({
 	focusSignal,
 	voice,
 }: ComposerProps) {
+	// Re-render when the reader changes language: `say` reads storage,
+	// and storage changing is not something React can see on its own.
+	useLocale();
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const touch = useMediaQuery(TOUCH);
 	const fieldRef = useRef<HTMLTextAreaElement>(null);

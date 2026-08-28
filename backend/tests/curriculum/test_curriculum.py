@@ -396,14 +396,25 @@ class TestTheSeed:
 
         written = await seed.seed_curriculum(curriculum)
 
-        assert written == len(curriculum.concepts)
+        # The module's own concepts, plus the eleven authored topics that carry
+        # the rest of the curriculum -- interest, credit, investing, taxes,
+        # scams, digital money, entrepreneurship, and what AI does with a
+        # reader's own money.
+        from app.curriculum.topics import concept_rows
+
+        assert written == len(curriculum.concepts) + len(concept_rows())
         assert ("COMMIT", {}) in writes
         seeded = {
             params["id"]
             for statement, params in writes
             if statement.startswith("INSERT INTO concepts")
         }
-        assert seeded == set(curriculum.concepts)
+        # Every module concept, and every authored topic alongside them. Three
+        # topics share an id with a module concept on purpose: they enrich it
+        # with the bands the module's own lessons never reached, rather than
+        # splitting one reader's mastery across two rows for one idea.
+        assert seeded >= set(curriculum.concepts)
+        assert seeded >= {row["id"] for row in concept_rows()}
 
     @pytest.mark.anyio
     async def test_the_insert_supplies_every_column_the_table_requires(self):

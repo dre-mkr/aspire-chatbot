@@ -27,7 +27,7 @@ import {
 	groupByRecency,
 	type StoredConversation,
 } from "#/lib/aspire/history";
-import { say } from "#/lib/aspire/i18n";
+import { say, useLocale } from "#/lib/aspire/i18n";
 import { type AgeBand, guideFor, type PersonaId } from "#/lib/aspire/personas";
 import { conversationsQuery } from "#/lib/aspire/queries";
 import { useSession } from "#/lib/aspire/use-session";
@@ -87,6 +87,9 @@ export function Rail({
 	band,
 	onPersonaChange,
 }: RailProps) {
+	// Re-render when the reader changes language: `say` reads storage,
+	// and storage changing is not something React can see on its own.
+	useLocale();
 	/** The list, subscribed here rather than passed in. */
 	const { session } = useSession();
 	/** The card is for people with an account: it is theirs to change and keep. */

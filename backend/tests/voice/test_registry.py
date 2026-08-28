@@ -44,11 +44,17 @@ def test_every_persona_and_language_resolves():
             assert (persona, language) in registry
 
 
-def test_guest_borrows_zions_voice_when_it_has_none_of_its_own():
-    """A deployment provisioned before the default voice existed must still boot."""
+def test_guest_borrows_imanis_voice_when_it_has_none_of_its_own():
+    """A deployment provisioned before the default voice existed must still boot.
+
+    Imani, not Zion. Zion was picked for neutrality and neutral was the wrong
+    axis: he is cast for thirteen to eighteen, so an unknown visitor -- a
+    parent, a teacher, somebody from the ministry -- was greeted by a teenager.
+    Imani is the adult voice this product already has.
+    """
     registry = build_registry(_settings())
     for language in Language:
-        assert registry[(Persona.GUEST, language)].voice_id == "voice-orion"
+        assert registry[(Persona.GUEST, language)].voice_id == "voice-aurora"
 
 
 def test_an_explicit_guest_voice_beats_the_understudy():
@@ -80,21 +86,21 @@ def test_validate_passes_when_complete():
 
 
 def test_missing_persona_raises_and_names_the_variable():
+    settings = _settings(voice_nova=None)
+    with pytest.raises(VoiceRegistryError) as exc:
+        validate_registry(settings)
+    message = str(exc.value)
+    assert "VOICE_NOVA" in message
+    assert f"3 of {len(Persona) * len(Language)}" in message
+
+
+def test_losing_imani_also_loses_the_persona_that_borrows_her():
+    """The understudy is a fallback, not a second source of ids."""
     settings = _settings(voice_aurora=None)
     with pytest.raises(VoiceRegistryError) as exc:
         validate_registry(settings)
     message = str(exc.value)
     assert "VOICE_AURORA" in message
-    assert f"3 of {len(Persona) * len(Language)}" in message
-
-
-def test_losing_orion_also_loses_the_persona_that_borrows_it():
-    """The understudy is a fallback, not a second source of ids."""
-    settings = _settings(voice_orion=None)
-    with pytest.raises(VoiceRegistryError) as exc:
-        validate_registry(settings)
-    message = str(exc.value)
-    assert "VOICE_ORION" in message
     assert "VOICE_GUEST" in message
     assert f"6 of {len(Persona) * len(Language)}" in message
 
@@ -174,3 +180,37 @@ def test_every_speed_is_within_the_supported_range():
 def test_model_override_is_applied():
     registry = build_registry(_settings(), model_id="eleven_multilingual_v2")
     assert all(p.model_id == "eleven_multilingual_v2" for p in registry.values())
+
+
+class TestGuestSoundsLikeAnAdult:
+    """An unknown visitor is more often an adult than a teenager.
+
+    `guest` has no cast voice of its own, so it borrows. It borrowed Zion,
+    chosen for neutrality -- but neutral was the wrong axis. Zion is cast for
+    thirteen to eighteen, so a parent, a teacher or somebody from the ministry
+    arriving on the site was greeted by a teenager. Imani is the adult voice
+    this product already has, so guest borrows hers until it is given its own.
+    """
+
+    def test_guest_borrows_the_adult_voice(self):
+        from app.domain import Persona
+        from app.voice.registry import _VOICE_UNDERSTUDY
+
+        assert _VOICE_UNDERSTUDY[Persona.GUEST] is Persona.AURORA
+
+    def test_guest_does_not_borrow_a_child_or_a_teenager(self):
+        from app.domain import Persona
+        from app.voice.registry import _VOICE_UNDERSTUDY
+
+        young = {Persona.STELLA, Persona.KALEB, Persona.ORION}
+        assert _VOICE_UNDERSTUDY[Persona.GUEST] not in young
+
+    def test_an_explicit_id_still_wins(self):
+        """`VOICE_GUEST` remains the right way to give guest its own voice."""
+        import inspect
+
+        from app.voice import registry
+
+        source = inspect.getsource(registry._resolve_voice_id)
+        assert "understudy" in source.lower()
+        assert "specific" in source, "the per-language override must be read first"

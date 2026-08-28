@@ -141,7 +141,16 @@ _TITLE: Final[dict[str, str]] = {
 #: The agents whose turns are multi-step by nature.
 _AGENTIC_AGENTS: Final[frozenset[str]] = frozenset(
     {
+        # ALL THREE lesson agents, for the same reason as the QA three below.
+        # `main_graph` serves `learn_agent`, `learning_preview` and
+        # `learning_sample` from one module: the lesson machine. The name
+        # records who is asking -- a signed-in learner, a guardian looking in,
+        # a signed-out visitor trying a taste -- not how much work the turn
+        # does. Listing only `learn_agent` meant Skye, whose readers are
+        # signed out and land on `learning_sample`, showed no Path at all.
         "learn_agent",
+        "learning_preview",
+        "learning_sample",
         "register_agent",
         "register_agent_step1",
         # ALL THREE QA variants, not just the signed-in one.

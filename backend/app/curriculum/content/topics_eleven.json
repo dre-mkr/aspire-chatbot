@@ -1,0 +1,984 @@
+{
+ "meta": {
+  "document": "ASPIRE financial education curriculum",
+  "version": "2026-08-22",
+  "prepared_by": "ASPIRE AI Team",
+  "for": "Government of Saint Kitts and Nevis — ASPIRE Programme",
+  "scope": "Saint Kitts and Nevis, and the ECCU. Nothing outside it.",
+  "source": "curriculum_data.js",
+  "topics": 11,
+  "voices": 7,
+  "cells": 77,
+  "checked_against": "the enforced word caps and vocabulary ladder in the ASPIRE codebase at commit b02a2ec"
+ },
+ "voices": {
+  "skye": {
+   "label": "Skye",
+   "band": "5-8",
+   "cap": 35
+  },
+  "kaleb": {
+   "label": "Kaleb",
+   "band": "9-12",
+   "cap": 70
+  },
+  "z13": {
+   "label": "Zion",
+   "band": "13-15",
+   "cap": 120
+  },
+  "z16": {
+   "label": "Zion",
+   "band": "16-18",
+   "cap": 180
+  },
+  "imani": {
+   "label": "Imani",
+   "band": "adult · parent",
+   "cap": 110
+  },
+  "azuri": {
+   "label": "Azuri",
+   "band": "adult · teacher",
+   "cap": 220
+  },
+  "guest": {
+   "label": "Guest",
+   "band": "signed out → 13-15",
+   "cap": 120
+  }
+ },
+ "topics": [
+  {
+   "n": 1,
+   "title": "What is Budgeting?",
+   "range": "Bands 9-12 → adult",
+   "gate": "`budget` enters the vocabulary ladder at 9-12. The 5-8 version teaches the idea without the word.",
+   "voices": {
+    "skye": {
+     "words": 26,
+     "copy": [
+      "A money plan means you decide before you spend.",
+      "Three tins: one to keep, one to use, one to share.",
+      "Ten coins. Where do yours go?"
+     ],
+     "note": "\"Budgeting\" is not on the 5-8 ladder as a taught concept, so the idea is taught and the noun is not. \"Jars\" became tins, which is what a child here actually uses.",
+     "words_as_drafted": 33
+    },
+    "kaleb": {
+     "words": 51,
+     "copy": [
+      "Budgeting is telling your money where to go before you spend it.",
+      "A simple split: half for needs, a third for wants, the rest saved.",
+      "You get EC$20 for the week. Phone credit is EC$5, snacks EC$8. What can you save?",
+      "That is how you avoid an empty pocket on Friday."
+     ],
+     "note": "\"50% / 30% / 20%\" written as words. The arithmetic was wrong anyway — those shares of EC$20 leave nothing to reconcile with the EC$5 and EC$8 in the next line.",
+     "words_as_drafted": 68
+    },
+    "z13": {
+     "words": 80,
+     "copy": [
+      "A budget is a plan for what comes in against what goes out. It is how you control money instead of money controlling you.",
+      "Say a Saturday job pays EC$400 a month. Transport EC$100, phone EC$60, lunch EC$120. That leaves EC$120 — and the whole point of writing it down is that you decide where those EC$120 go before the month does it for you.",
+      "Want to build a budget tracker in Python that warns you when a category runs over?"
+     ],
+     "note": "The EC$800 / rent EC$300 example belongs to the older rung — a fourteen-year-old is not paying rent. Recentred on identity and independence, which is what this rung's card asks for.",
+     "words_as_drafted": 96
+    },
+    "z16": {
+     "words": 100,
+     "copy": [
+      "A budget is a plan for income against expenses, and it is the difference between deciding where your money goes and finding out afterwards.",
+      "A first job paying EC$1,600 a month: rent EC$600, food EC$400, transport EC$200, phone EC$80. That leaves EC$320. Zero-based budgeting says give every one of those dollars a job before the month starts — savings, a course at CFBC, an emergency fund — because an unassigned dollar is a spent dollar.",
+      "Hurricane season is the reason the emergency line is not optional here.",
+      "Want to build a Python budget tracker that flags a category before it goes over?"
+     ],
+     "note": "Split out as its own rung — planning and consequence, per the 16-18 card. Figures raised to a realistic first salary.",
+     "words_as_drafted": 129
+    },
+    "imani": {
+     "words": 82,
+     "copy": [
+      "ASPIRE teaches your child to plan money before spending it — needs first, then wants, then what stays saved. It is done on paper and in a practice app. No real accounts and no real money.",
+      "This week, at the shop: hand her EC$20 and the list, and let her decide what comes off it if the total runs over. Ask on the way home what she cut and whether she would cut the same thing again.",
+      "aspire@gov.kn · (869) 667-5566 · (869) 762-1947"
+     ],
+     "note": "The entire original entry was a classroom activity — play money, group sorting, a winner. Rewritten as a description plus one home moment.",
+     "words_as_drafted": 89
+    },
+    "azuri": {
+     "copy": [
+      "Objective: students build and follow a personal budget.",
+      "CXC: POB Unit 2 (The Consumer); POA Unit 3 (Financial Statements).",
+      "Materials: budget template; the \"teen in Basseterre\" case study; play money.",
+      "Activity, 30 minutes. Ten minutes on the needs/wants/save split. Twenty minutes in groups of three or four, budgeting a EC$1,000 monthly salary against real local costs — transport, phone, food, a contribution at home.",
+      "Solo variant: one learner budgets with the adult playing the household. Siblings of different ages: the older one runs the numbers aloud while the younger sorts the items.",
+      "Assessment: submit the budget plus one reflection — what was hardest to cut, and why?",
+      "The honest gap: this is one module, not a scheme of work, and it is not aligned to CSEC. It supports POB Unit 2; it does not cover it."
+     ],
+     "note": "Added the solo variant (required — a home-schooling family is one child) and the honest-gap line, which his card requires before he is asked for it.",
+     "words": 136
+    },
+    "guest": {
+     "words": 60,
+     "copy": [
+      "Budgeting is deciding how to use your money before you spend it — how much goes to food, to what you need, and to what you keep.",
+      "With food and fuel costs where they are, a plan is what stops the last week of the month being the hard one.",
+      "Want the children's version, the teen version, or the parent version?"
+     ],
+     "note": "The EC$100 worked example removed. Guest's red line 1 forbids any figure, because the reader might be seven.",
+     "words_as_drafted": 66
+    }
+   }
+  },
+  {
+   "n": 2,
+   "title": "What is Interest?",
+   "range": "Bands 9-12 → adult",
+   "gate": "`interest` is banned at 5-8. `compound` waits until 13-15.",
+   "voices": {
+    "skye": {
+     "words": 33,
+     "copy": [
+      "When you leave your money in the bank, it slowly gets bigger.",
+      "You do nothing at all. The bank adds a little because you left it alone.",
+      "Would you like to hear how?"
+     ],
+     "danger": true,
+     "note": "\"That extra coin is interest\" — interest is a BANNED WORD at 5-8. The module would refuse to load, and if it loaded the word would be stripped, leaving a hole in the sentence. The idea survives; the noun does not. No figure either — percent and % are banned at this band.",
+     "words_as_drafted": 34
+    },
+    "kaleb": {
+     "words": 62,
+     "copy": [
+      "Interest is what you earn for leaving money alone — or what you pay for borrowing it.",
+      "An ASPIRE savings account earns 2%, added twice a year. Leave EC$100 alone and after a year you have about EC$102 without doing anything.",
+      "Borrowing runs the other way: you pay it instead of earning it.",
+      "Would you rather save EC$10 or borrow EC$10? Say why."
+     ],
+     "danger": true,
+     "note": "\"5% interest\" was INVENTED. The published figure is 2%, credited twice a year, and it needs a source_url. This is the exact error FIN-123 and FIN-126 were rewritten to fix. Also `loan` is banned at 9-12, so \"borrowing\" carries it.",
+     "words_as_drafted": 66
+    },
+    "z13": {
+     "words": 73,
+     "copy": [
+      "Interest is what money costs over time.",
+      "Saving: an ASPIRE account earns 2%, credited twice a year. Compound interest means the interest you have already earned starts earning too — small at first, and then not.",
+      "Borrowing: it runs the other way, and it is why a balance you ignore grows faster than you expect.",
+      "Every figure above is published and linked. Want to build the compound calculator in Python and check it yourself?"
+     ],
+     "note": "`compound` opens at 13-15, so this is the first rung that may use it at all.",
+     "words_as_drafted": 99
+    },
+    "z16": {
+     "words": 111,
+     "copy": [
+      "Interest is the price of time attached to money.",
+      "Earning it: an ASPIRE account pays 2%, compounded semi-annually. EC$1,000 left alone becomes about EC$1,020 after a year — and the useful part is not the EC$20, it is that the following year is calculated on EC$1,020. That is compounding, and it is why starting early beats starting bigger.",
+      "Paying it: the same arithmetic pointed at you. On borrowing, the balance you do not clear becomes the balance you are charged on next period.",
+      "Rates published by the ECCB are the number. Anything I cannot link, I will tell you I cannot link.",
+      "Want to build the calculator and run your own figures?"
+     ],
+     "note": "Worked to the cent, labelled as an illustration, sourced.",
+     "words_as_drafted": 143
+    },
+    "imani": {
+     "words": 82,
+     "copy": [
+      "ASPIRE teaches interest as two things: what the bank pays for money left alone, and what borrowing costs. The rate quoted is the published one — 2%, added twice a year — and every figure the bot gives your child is one you can open and check.",
+      "Nothing here touches a real account. It is all worked on a simulator.",
+      "At home: when a bank message comes in, show her the line that says what was added and ask her why it is there."
+     ],
+     "note": "\"5% / how $10 grows\" replaced with the sourced figure.",
+     "words_as_drafted": 96
+    },
+    "azuri": {
+     "copy": [
+      "Objective: calculate simple and compound interest and explain the difference.",
+      "CXC: POMA Unit 1 (Consumer Arithmetic); POA Unit 4.   Formula: A = P(1 + r)ⁿᵗ",
+      "Materials: the ECCB published rate page; calculators; the compound worksheet.",
+      "Activity, 30 minutes. Work EC$1,000 at the published 2%, compounded semi-annually, to the cent. Then run it over 5, 10 and 20 years and have the class say what changes and what does not.",
+      "Solo variant: one learner works it and explains each step aloud to the adult.",
+      "Assessment: is 2% on savings better or worse than 2% on borrowing — and for whom?",
+      "The honest gap: the module teaches the mechanism at the published rate. It does not model variable rates, fees or default, and it should not be presented as doing so."
+     ],
+     "danger": true,
+     "note": "\"Compare 3% vs 7%\" — BOTH INVENTED. Replaced with the one published rate across time horizons, which teaches compounding better anyway.",
+     "words": 126
+    },
+    "guest": {
+     "words": 58,
+     "copy": [
+      "Interest is what money earns for sitting still, or costs when it is borrowed. Save, and the bank pays you. Borrow, and you pay.",
+      "Over a long enough period, small differences matter far more than people expect.",
+      "I can give you the published ASPIRE figures once I know who is reading — want the children's, teen or parent version?"
+     ],
+     "note": "All figures removed per Guest red line 1. The offer to give them once the reader is known is what the card asks for.",
+     "words_as_drafted": 63
+    }
+   }
+  },
+  {
+   "n": 3,
+   "title": "How does AI help you with budgeting, planning and saving?",
+   "range": "Bands 5-8 → adult",
+   "gate": "No vocabulary gate at any band. Register is the only constraint.",
+   "voices": {
+    "skye": {
+     "words": 29,
+     "copy": [
+      "A helper lives in the bank's computer.",
+      "It watches for people trying to take money that is not theirs, and it says stop.",
+      "It helps keep your money safe."
+     ],
+     "note": "\"Robot 🤖 / bad guys\" softened, and emoji removed to match the shipped 5-8 card, which uses none. Trimmed to land inside 35 words.",
+     "words_as_drafted": 35
+    },
+    "kaleb": {
+     "words": 53,
+     "copy": [
+      "Three real jobs:",
+      "Answering questions at two in the morning when the branch is shut.",
+      "Spotting fraud — the same card buying ten phones in an hour is not you.",
+      "Noticing patterns — \"you could keep EC$5 back this week\" comes from your own spending, not a guess.",
+      "What one job would you give it?"
+     ],
+     "note": null,
+     "words_as_drafted": 63
+    },
+    "z13": {
+     "words": 78,
+     "copy": [
+      "Banks across the ECCU use it in three places.",
+      "Fraud — flagging a transaction that does not fit the pattern, in real time.",
+      "Service — answering the routine questions so people are freed for the hard ones.",
+      "Suggestions — proposing a savings amount from what you actually spend.",
+      "The one worth arguing about: should a system decide who gets credit? What happens when the data it learned from was already unfair to someone?",
+      "Want to build a small spending-flagger in Python?"
+     ],
+     "note": "The ethics question is sharper as credit than as lending generally.",
+     "words_as_drafted": 89
+    },
+    "z16": {
+     "words": 107,
+     "copy": [
+      "Three deployments, and one problem worth your attention.",
+      "Risk assessment — scoring an application in seconds rather than days. Fraud detection — pattern-matching transactions in real time. Personalisation — budget and product suggestions derived from actual behaviour.",
+      "The problem: a model trained on past lending decisions learns the pattern of those decisions, including who was refused and why. If that history was unfair, the system reproduces the unfairness at speed and calls it objective. \"The algorithm decided\" is not an answer to a person who has been refused.",
+      "This is live policy across the region, not a thought experiment. Want to build a flagger and then try to break it?"
+     ],
+     "note": null,
+     "words_as_drafted": 122
+    },
+    "imani": {
+     "words": 67,
+     "copy": [
+      "ASPIRE teaches your child how banks use these tools — spotting fraud, answering questions, suggesting savings — so the technology they will bank with as adults is not a mystery.",
+      "No real data is used. Every example is a demonstration.",
+      "The safety lesson runs alongside it: a machine can flag something, but a person decides, and anything that feels like a scam gets told to a trusted adult first."
+     ],
+     "note": "Was a bullet list of programme mechanics; now written as she reads.",
+     "words_as_drafted": 74
+    },
+    "azuri": {
+     "copy": [
+      "Objective: explain three uses of AI in financial services and name two risks.",
+      "CXC: IT Unit 3 (Impact of IT); POB Unit 1 (Technology).",
+      "Materials: a regional mobile banking app; a fraud-awareness clip; the pitch sheet.",
+      "Activity, 30 minutes. Groups design one feature for a credit union and pitch it in ninety seconds — what it does, who it helps, what could go wrong with it.",
+      "Solo variant: the learner pitches to the adult, who plays the sceptical board member and must ask \"what could go wrong?\"",
+      "Assessment — 3-2-1 exit. Three uses, two risks, one question they still have.",
+      "The honest gap: the module covers uses and risks at a conceptual level. It does not teach how a model is trained, and a student who asks will find that out."
+     ],
+     "note": null,
+     "words": 129
+    },
+    "guest": {
+     "words": 49,
+     "copy": [
+      "AI helps banks by handling routine work and spotting patterns people would miss — answering questions, flagging fraud, suggesting a savings amount.",
+      "For smaller institutions across the region, it is a way to serve more people without more cost.",
+      "Want this explained for a child, a teenager, or an adult?"
+     ],
+     "note": null,
+     "words_as_drafted": 61
+    }
+   },
+   "renamed_from": "How does AI help banks?"
+  },
+  {
+   "n": 4,
+   "title": "What is Credit & Debt?",
+   "range": "Bands 13-15 → adult, with a partial version at 9-12",
+   "gate": "`credit` is banned at 5-8. `loan` is banned at BOTH 5-8 and 9-12 and only opens at 13-15, along with `credit score`. The topic cannot be taught whole before then.",
+   "voices": {
+    "skye": {
+     "skip": true,
+     "note": "The draft taught it with \"Mom, can I have candy now and pay Sunday?\" — which contains TWO banned foreign words (candy, mom) and turns on `credit`, banned at this band. There is no version of this topic that survives the 5-8 ladder. The nearest safe idea — if you borrow something, you give it back — belongs in Needs vs Wants, not here."
+    },
+    "kaleb": {
+     "words": 61,
+     "copy": [
+      "Credit means paying later for something you take now.",
+      "You want EC$50 trainers and have EC$20. If someone lets you take them and pay the EC$30 over the next weeks, that EC$30 is what you owe.",
+      "Paying EC$10 a week — how many weeks until you are clear?",
+      "The rule: only ever take on what you already know you can pay back."
+     ],
+     "note": "`loan` is banned at 9-12, so the whole entry avoids the word.",
+     "words_as_drafted": 68
+    },
+    "z13": {
+     "words": 86,
+     "copy": [
+      "Credit is a tool. Debt is what happens when the tool uses you.",
+      "The distinction worth learning: borrowing for something that grows — a qualification, equipment for work — against borrowing for something that is worth less the moment you own it.",
+      "A loan for a course at CFBC is one thing. A balance run up on clothes, carrying interest you did not read, is another.",
+      "Here, a missed payment follows you. The next thing you apply for is harder.",
+      "Want to build a repayment calculator in Python?"
+     ],
+     "note": "`loan` opens at this band, so it can finally be named.",
+     "words_as_drafted": 96
+    },
+    "z16": {
+     "words": 140,
+     "copy": [
+      "Credit is a tool, and debt is the consequence of using it badly.",
+      "Borrowing that can pay for itself: a student loan for CFBC, equipment for a business, a vehicle you earn with. The debt buys something that produces.",
+      "Borrowing that cannot: a revolving balance on things that depreciate, carrying interest you never read the rate on. The item is worth less every month; the balance is not.",
+      "Two things to know before you sign anything: what the rate actually is, and what happens if you miss one. Your record follows you here, and the next application is priced by it.",
+      "Two repayment strategies exist — clearing the highest rate first, or clearing the smallest balance first. One is cheaper; the other is easier to keep doing. Want to build both in Python and see which wins on your own numbers?"
+     ],
+     "danger": true,
+     "note": "\"24% interest\" removed — an invented figure. \"Avalanche vs Snowball\" described rather than named, since neither term is local.",
+     "words_as_drafted": 161
+    },
+    "imani": {
+     "words": 78,
+     "copy": [
+      "ASPIRE teaches borrowing as something with a cost attached — read the terms, know the rate, and never take on more than the repayment you can actually make. Older learners work through repayment schedules; younger ones only meet the idea of paying later.",
+      "Nothing is real. Every arrangement is simulated.",
+      "At home: the strongest thing you can do is let them see a bill paid on time. That is the habit, and it is more convincing than any lesson."
+     ],
+     "note": null,
+     "words_as_drafted": 83
+    },
+    "azuri": {
+     "copy": [
+      "Objective: distinguish productive from unproductive borrowing; calculate a repayment.",
+      "CXC: POB Unit 3 (Financial Institutions); POA Unit 4.",
+      "Materials: a sample application form from a local credit union; a repayment table.",
+      "Activity, 30 minutes. Case study — should a Form 5 student take EC$5,000 for a laptop? Groups argue it, then calculate what the repayment actually costs against the useful life of the machine.",
+      "Solo variant: the learner argues both sides in turn and writes the stronger case.",
+      "Assessment: monthly repayment on EC$2,000 over two years at a rate you supply from a real published schedule — not one I have given you.",
+      "The honest gap: the module does not model default, penalty rates or collections, and those are the part that actually hurts people. Say so."
+     ],
+     "danger": true,
+     "note": "The \"8%\" in the assessment replaced with an instruction to source a real rate. Red line 1 of his card: never state a figure he cannot open and check.",
+     "words": 125
+    },
+    "guest": {
+     "words": 62,
+     "copy": [
+      "Credit means taking something now and paying for it later, usually with a cost added for the time.",
+      "Banks and credit unions here lend for vehicles, homes and study. The question that matters is always the same one: can you make the repayment every month, not just the first one?",
+      "Want the teen version with a repayment calculator, or the parent version?"
+     ],
+     "note": null,
+     "words_as_drafted": 64
+    }
+   }
+  },
+  {
+   "n": 5,
+   "title": "What is Investing?",
+   "range": "Bands 9-12 → adult",
+   "gate": "Every form of `invest` is banned at 5-8. Thin at 9-12 (`portfolio` and `dividend` are still out) and only whole at 13-15 when `risk` arrives.",
+   "voices": {
+    "skye": {
+     "skip": true,
+     "danger": true,
+     "note": "The draft's \"Investing is planting money! 🌱 You put 1 coin in the ground. Later it grows into 2 coins!\" has THREE separate problems: `investing` is a banned word at this band, so the module refuses to load; one coin becoming two is a 100% return, an invented figure; and the framing implies growth is certain. There is no fix. The concept has no 5-8-safe vocabulary and should not be forced."
+    },
+    "kaleb": {
+     "words": 68,
+     "copy": [
+      "Investing means putting money into something that might be worth more later.",
+      "Instead of spending EC$20, you own a small piece of a business. If it does well, your piece is worth more. If it does badly, it is worth less — and that half matters as much.",
+      "The Eastern Caribbean Securities Exchange is where regional company shares are traded.",
+      "Juice stand or phone shop — which would you back?"
+     ],
+     "note": "Added the downside sentence. \"If the business grows, your tokens are worth $30\" states only the upside, which is the shape of every bad investment pitch. Trimmed to fit 70 words, which is the ENFORCED cap at 9-12 -- the first draft ran to 77 and would have arrived cut off mid-sentence.",
+     "words_as_drafted": 69
+    },
+    "z13": {
+     "words": 96,
+     "copy": [
+      "Investing means buying something you expect to be worth more later — a share in a company, a bond, a stake in a business.",
+      "Locally that means the ECSE, credit union shares, and government bonds.",
+      "The rule that governs all of it: higher possible return means higher risk. Anything promising a high return with no risk is either misunderstood or a lie, and there is no third option.",
+      "Spreading money across different things is how you survive being wrong about one of them.",
+      "Want to simulate a EC$1,000 portfolio in Python and track it over five years?"
+     ],
+     "danger": true,
+     "note": "CBI REMOVED. Citizenship by Investment is politically live and this is a government service addressing minors — not a call to make inside a curriculum.",
+     "words_as_drafted": 106
+    },
+    "z16": {
+     "words": 143,
+     "copy": [
+      "Investing is committing money now to assets you expect to be worth more later — equities, bonds, property, or a business you build.",
+      "Locally: the ECSE lists regional companies in EC dollars. Credit unions issue shares to members. Government bonds exist. Tourism and agri-business are where most real local capital actually goes.",
+      "The governing rule: return and risk move together. A higher expected return is compensation for a higher chance of loss, and anything sold to you as high return with no risk is a scam wearing a suit.",
+      "Diversification is the one free thing available: spread across assets that do not fail for the same reason, and being wrong about one stops being fatal.",
+      "Inflation is the reason doing nothing is also a decision — money under a mattress loses value every year without moving.",
+      "Want to build a EC$1,000 portfolio simulation in Python?"
+     ],
+     "danger": true,
+     "note": "CBI removed here too. `inflation` opens at 13-15 so it is available. Cryptocurrency is banned at EVERY band including adult — if anyone adds it, it will be stripped mid-sentence.",
+     "words_as_drafted": 152
+    },
+    "imani": {
+     "words": 80,
+     "copy": [
+      "ASPIRE teaches investing as long-term growth with real risk attached — the ECSE, credit union shares, government bonds — and it teaches the scams alongside, because the two arrive in the same inbox.",
+      "Not one dollar is real. Learners build a mock plan and track it.",
+      "At home: if anyone ever promises your child that an investment cannot lose, that is the moment to talk. No such promise is true, and hearing that from you lands harder than hearing it from us."
+     ],
+     "note": "CBI removed from the local-context list. The warning used to name the phrase it was warning about, which is banned at EVERY band -- the gate would have stripped it and delivered the sentence with a hole where the point was. The warning now describes the promise instead of quoting it.",
+     "words_as_drafted": 83
+    },
+    "azuri": {
+     "copy": [
+      "Objective: explain types of investment and the relationship between risk and return.",
+      "CXC: POB Unit 4 (Financial Management); Economics Unit 2.",
+      "Materials: the current ECSE listing; a risk/return chart; the mock portfolio sheet.",
+      "Activity, 30 minutes. Groups allocate EC$10,000 across a savings account, ECSE shares, a small business and land. They present and must name one risk they are accepting, not just the return they hope for.",
+      "Solo variant: the learner allocates, then defends it against the adult asking \"what happens if you are wrong about this one?\"",
+      "Assessment: present the allocation with one named risk and one expected return — and the reasoning that connects them.",
+      "The honest gap: the module teaches the concepts. It does not give current prices, it does not model tax, and it is not investment advice — say that to the class before they ask."
+     ],
+     "note": "CBI removed from the options list.",
+     "words": 140
+    },
+    "guest": {
+     "words": 67,
+     "copy": [
+      "Investing means putting money into something today because you expect it to be worth more later — shares, a business, property.",
+      "Locally that includes the Eastern Caribbean Securities Exchange and credit union shares.",
+      "The one thing worth knowing before anything else: return and risk travel together, and nobody can give you the first without the second.",
+      "Want this broken down for a child, a teenager, or an adult?"
+     ],
+     "note": "No figures per Guest red line 1.",
+     "words_as_drafted": 71
+    }
+   }
+  },
+  {
+   "n": 6,
+   "title": "What are Needs vs Wants?",
+   "range": "Bands 9-12 → adult, with a real 5-8 version",
+   "gate": "`need` and `want` enter the ladder at 9-12, so the youngest band gets the idea without the pair of nouns.",
+   "voices": {
+    "skye": {
+     "words": 32,
+     "copy": [
+      "Some things you must have. Food. Water. A place to sleep.",
+      "Some things are lovely to have. A toy. A game.",
+      "The must-haves come first. Rice, or a game — which one first?"
+     ],
+     "note": null,
+     "words_as_drafted": 35
+    },
+    "kaleb": {
+     "words": 50,
+     "copy": [
+      "Needs keep you going. Wants make it better.",
+      "Bus fare to school is a need. New trainers are a want. Both are fine — the order is what matters.",
+      "You have EC$40. Lunch is EC$10, data is EC$15, an ice cream is EC$5. What is left, and where does it go?"
+     ],
+     "note": null,
+     "words_as_drafted": 56
+    },
+    "z13": {
+     "words": 75,
+     "copy": [
+      "Every budget starts here, and the line is less obvious than it looks.",
+      "With food and fuel prices where they are, the sorting is not an exercise — it is what decides whether the last week of the month works.",
+      "The genuinely hard question: is a phone a need for a student here? You cannot get schoolwork, transport arrangements or a job message without one. Defend your answer either way — the point is that you can."
+     ],
+     "note": null,
+     "words_as_drafted": 79
+    },
+    "z16": {
+     "words": 124,
+     "copy": [
+      "Every budget starts here, and the interesting part is that the line moves.",
+      "A phone is a want until your work depends on it. A vehicle is a want until the bus does not reach where you need to be. Transport, tools and connectivity move across the line the moment income depends on them — and that is not a rationalisation, it is the actual test: does this thing produce, or does it only cost?",
+      "With food and fuel where they are, and with hurricane season needing its own line, the sorting is what makes the difference between a month that works and one that does not.",
+      "Sort your own last month honestly. The ones you argue hardest for are the ones worth looking at."
+     ],
+     "note": null,
+     "words_as_drafted": 131
+    },
+    "imani": {
+     "words": 69,
+     "copy": [
+      "ASPIRE teaches your child to sort spending before deciding — what has to be paid, what can wait. It is the habit that prevents debt later, and it is the one thing on this list that works at every age.",
+      "At home: hand her the grocery list and ask which two things could come off if they had to. No judgement attached — just the question. The sorting is the lesson."
+     ],
+     "note": "\"No shame, just choices\" reads as though shame were on the table.",
+     "words_as_drafted": 73
+    },
+    "azuri": {
+     "copy": [
+      "Objective: categorise expenditure as essential or discretionary and justify the call.",
+      "CXC: POB Unit 2 (The Consumer).   Materials: the household budget sheet; expense cards.",
+      "Activity, 30 minutes. Groups receive a EC$500 household budget and must reduce it by a fifth. They present what went and why. The argument is the assessment — the arithmetic is trivial and the reasoning is not.",
+      "Solo variant: the learner cuts, then the adult challenges any two of the cuts and the learner defends or revises.",
+      "Assessment: five needs and five wants for a household in Nevis, with one item they found genuinely hard to place and an explanation of why.",
+      "The honest gap: the module treats this as a household exercise. It does not deal with a household where the essentials alone exceed the income, and some of your students live in one."
+     ],
+     "note": "The last line added. It is the honest gap the card requires him to name before it is found.",
+     "words": 138
+    },
+    "guest": {
+     "words": 49,
+     "copy": [
+      "Needs are what you cannot go without. Wants are everything else — and the ordering, not the label, is what matters.",
+      "Here, telling them apart is what carries a household through hurricane season or a jump in prices.",
+      "Want a printable sorting sheet, or the version for a particular age?"
+     ],
+     "note": null,
+     "words_as_drafted": 53
+    }
+   }
+  },
+  {
+   "n": 7,
+   "title": "What is Saving?",
+   "range": "Bands 5-8 → adult — EVERY band",
+   "gate": "The one topic fully native to the youngest reader, and the only one already authored in the codebase as module_01_saving.yaml. It runs the whole ladder to 16-18 and adult.",
+   "voices": {
+    "skye": {
+     "words": 34,
+     "copy": [
+      "Saving means you keep your money instead of using it today.",
+      "It does not go away. It waits for you.",
+      "Every coin you keep makes your pile bigger.",
+      "What are you keeping yours for?"
+     ],
+     "note": "Matches the shipped module_01_saving.yaml teach points exactly.",
+     "words_as_drafted": 35
+    },
+    "kaleb": {
+     "words": 54,
+     "copy": [
+      "Save for something named — a bicycle, a Carnival costume, the school trip. A goal you can picture beats a vague plan every time.",
+      "Keeping EC$5 a week for a year is EC$260. Not because EC$5 is a lot, but because you actually kept doing it.",
+      "Small and regular beats big and occasional, every time."
+     ],
+     "note": null,
+     "words_as_drafted": 56
+    },
+    "z13": {
+     "words": 72,
+     "copy": [
+      "Saving is moving money from now to later. It is still yours; what changes is when you use it.",
+      "A Carnival costume at EC$450, set aside at EC$25 a week from January, means you are not scrambling in July. That is the whole mechanism.",
+      "The habit matters more than the amount: EC$10 every week is a habit, EC$500 once is an event, and only one of them is still happening next year."
+     ],
+     "note": null,
+     "words_as_drafted": 75
+    },
+    "z16": {
+     "words": 122,
+     "copy": [
+      "Saving is the decision to move money from now to later, and money in an account is still money you can reach — saving is not the same as locking it away.",
+      "The emergency fund is the one that matters here: three to six months of expenses, untouched. Hurricane season is not a hypothetical, and neither is a job that ends without notice.",
+      "The mechanism: move it on payday, before you have seen it as spendable. A first pay packet of EC$1,600 with EC$250 moved on day one is a different year from the same EC$1,600 with EC$250 \"left over\" at the end.",
+      "An ASPIRE account earns 2%, credited twice a year — published and linkable.",
+      "Want to build a goal tracker in Python?"
+     ],
+     "note": "\"High-yield savings\" removed — no such product is published here, and naming one is a claim.",
+     "words_as_drafted": 137
+    },
+    "imani": {
+     "words": 73,
+     "copy": [
+      "ASPIRE teaches paying yourself first: money moved to savings before anything else, into a real institution rather than kept at home. The published rate is 2%, credited twice a year, and your child will be shown where that figure comes from.",
+      "At home: when she gets money — a gift, a job, anything — ask what she is keeping back before she decides what to spend. The order of the two questions is the lesson."
+     ],
+     "note": null,
+     "words_as_drafted": 79
+    },
+    "azuri": {
+     "copy": [
+      "Objective: explain saving and calculate growth over time.",
+      "CXC: POMA Unit 1 (Consumer Arithmetic); POB Unit 2.   Formula: A = P(1 + r)ⁿᵗ",
+      "Materials: the published ECCB/ASPIRE rate page; calculators; the goal-tracker sheet.",
+      "Activity, 30 minutes. Work EC$100 at the published 2% over one, five and twenty years. Then work the same total saved as EC$10 monthly rather than EC$120 once, and have the class explain the difference in their own words.",
+      "Solo variant: the learner works both and explains which surprised them.",
+      "Assessment: which reaches EC$1,000 first — EC$20 weekly, or EC$100 monthly? Show the working, and say what assumption you had to make.",
+      "The honest gap: the module uses the one published rate. It does not model rate changes, fees, or inflation eroding the real value — the last of which is the honest counterweight to everything above."
+     ],
+     "danger": true,
+     "note": "\"Compare saving $100 at 2% vs 5%\" — the 5% is INVENTED. Replaced with one real rate across time horizons.",
+     "words": 137
+    },
+    "guest": {
+     "words": 55,
+     "copy": [
+      "Saving means setting money aside now for something later — a goal, or something unexpected.",
+      "Credit unions and banks here both take savings, and the account matters less than the habit of actually doing it.",
+      "Want the children's, teen or adult version? I can give you the published ASPIRE figures once I know who is reading."
+     ],
+     "note": null,
+     "words_as_drafted": 58
+    }
+   }
+  },
+  {
+   "n": 8,
+   "title": "Scams and staying safe",
+   "range": "Bands 5-8 → adult",
+   "gate": "No vocabulary gate. This topic carries the highest real-world stakes of the eleven.",
+   "voices": {
+    "skye": {
+     "words": 28,
+     "copy": [
+      "Some people try to trick you to get money.",
+      "Never tell anyone your password. Not even a friend.",
+      "If something sounds too good, ask a grown-up you trust."
+     ],
+     "note": "Trimmed to land inside the 35-word cap.",
+     "words_as_drafted": 35
+    },
+    "kaleb": {
+     "words": 62,
+     "copy": [
+      "What actually goes around here: a job offer that asks you to pay first. A message saying you have won something you never entered. A friend's account sending something that does not sound like them.",
+      "Two signs, every time: they want money or details first, and they want it now. Real things wait. Scams cannot afford to.",
+      "Want to try spotting one?"
+     ],
+     "note": null,
+     "words_as_drafted": 64
+    },
+    "z13": {
+     "words": 85,
+     "copy": [
+      "The common ones: phishing messages that copy a real bank, offers promising returns that do not exist, and accounts taken over and used on the people who trust them.",
+      "The ECCB and the commercial banks publish warnings. Reading them once a term is not a lot of effort.",
+      "Protect yourself: two-factor on everything, a password you use nowhere else, and verify before you send anything — call the number you already had, never the one in the message.",
+      "Want to build a message flagger in Python?"
+     ],
+     "danger": true,
+     "note": "\"CBI fraud\" REMOVED. Naming the Citizenship by Investment programme in a scam lesson on a government service is a political statement, not a safety one.",
+     "words_as_drafted": 91
+    },
+    "z16": {
+     "words": 143,
+     "copy": [
+      "Phishing — a message that copies an institution you actually use, close enough that the difference is one character in a domain.",
+      "Investment fraud — a return promised with no matching risk. The tell is not sophistication; it is the promise itself, because return and risk cannot be separated.",
+      "Account takeover — the account is not the target, the people who trust it are.",
+      "Advance fee — money or details required before the thing you were promised.",
+      "The habit that beats all of them: verify on a channel you already had. Call the number on your card, not the number in the message. Anything urgent enough that you cannot do that is the thing you should be most suspicious of.",
+      "If it has already happened: tell your institution immediately and tell the police. The delay is what does the damage, and embarrassment is what causes the delay."
+     ],
+     "note": "CBI removed. Added the \"already happened\" step — the draft stopped at prevention, and the person who most needs this has already sent the money.",
+     "words_as_drafted": 159
+    },
+    "imani": {
+     "words": 79,
+     "copy": [
+      "ASPIRE teaches digital safety before it teaches anything about money online: never share a password, verify before sending, and tell an adult. No real details are ever collected here — not a name, not a school, not an account.",
+      "At home: tell them once, plainly, that if they ever get tricked they can tell you and you will not be angry. Shame is what keeps a child quiet, and quiet is what turns a small loss into a large one."
+     ],
+     "note": "The original said \"stranger danger\". The realistic risk to a teenager is a compromised account belonging to someone they know.",
+     "words_as_drafted": 84
+    },
+    "azuri": {
+     "copy": [
+      "Objective: identify three common financial scams and the signals shared by all of them.",
+      "CXC: IT Unit 3 (Impact of IT); POB Unit 2 (The Consumer).",
+      "Materials: real scam messages with identifying details removed; the ECCB consumer protection page.",
+      "Activity, 30 minutes. Students mark up real messages — circle the pressure, the payment request, the wrong domain, the detail that does not fit. Then they write one, which is the exercise that actually teaches it.",
+      "Solo variant: the learner writes a convincing one and the adult tries to spot the tells.",
+      "Assessment: three scams, the signal each relies on, and the single first step for someone who has already sent money.",
+      "Safeguarding note: this topic surfaces disclosures. A student who says this happened to their family is telling you something. Your school's process, not this module, is what handles that."
+     ],
+     "note": "The safeguarding note added. His card requires the school's own process to lead on a disclosure.",
+     "words": 139
+    },
+    "guest": {
+     "words": 71,
+     "copy": [
+      "Scams work by promising something fast and asking you to move before you think.",
+      "The rule that covers nearly all of them: verify on a channel you already had — the number on your card, not the number in the message.",
+      "If money has already gone, tell your bank and the police straight away. Speed is what limits the damage.",
+      "Want the current common ones, or this explained for a particular age?"
+     ],
+     "note": null,
+     "words_as_drafted": 72
+    }
+   }
+  },
+  {
+   "n": 9,
+   "title": "Mobile money and digital banking",
+   "range": "Bands 5-8 → adult",
+   "gate": "No vocabulary gate.",
+   "voices": {
+    "skye": {
+     "words": 26,
+     "copy": [
+      "Money can live in a phone as well as in a tin.",
+      "You can send it with a tap.",
+      "Always ask your grown-up first. Every time."
+     ],
+     "danger": true,
+     "note": "\"Ask Mom or Dad\" — `mom` is a BANNED FOREIGN WORD and fails the lint. \"Your grown-up\" is what the shipped 5-8 card already uses.",
+     "words_as_drafted": 27
+    },
+    "kaleb": {
+     "words": 47,
+     "copy": [
+      "The banks here have apps. Pay a bill, send money, check what is left — without going to the branch.",
+      "Safer than carrying cash at Carnival, for the obvious reason.",
+      "What two things would make an app safe to use? One of them is not the app's job."
+     ],
+     "note": null,
+     "words_as_drafted": 54
+    },
+    "z13": {
+     "words": 80,
+     "copy": [
+      "Digital banking means the branch is wherever you are — bill payments, transfers, balances.",
+      "The ECCB has been developing a digital EC dollar, which is a central bank issuing currency electronically rather than a private company running a wallet. That distinction is the whole point of it.",
+      "The risks are yours to manage: a reused password, a session left open on a shared device, a transfer sent to the wrong number and gone.",
+      "Want to design a simple wallet in Python?"
+     ],
+     "note": null,
+     "words_as_drafted": 85
+    },
+    "z16": {
+     "words": 124,
+     "copy": [
+      "Digital banking and fintech have moved the branch to the phone across the ECCU — transfers, bill payments, balances, applications.",
+      "The ECCB's digital EC dollar matters more than an app does: a central bank issuing currency electronically is a different thing from a private company running a wallet, because the question of who is liable when it fails has a different answer.",
+      "Where it helps here specifically: reaching people far from a branch, and continuing to work when getting to Basseterre or Charlestown is not possible — which, in this country, is a seasonal certainty rather than an edge case.",
+      "What you carry: password reuse, sessions on shared devices, and transfers that are irreversible the moment they send.",
+      "Want to build a wallet prototype in Python?"
+     ],
+     "note": null,
+     "words_as_drafted": 129
+    },
+    "imani": {
+     "words": 64,
+     "copy": [
+      "ASPIRE uses demonstration apps only — no real transactions, no real accounts, no details collected. What your child learns is the habit set: a password used nowhere else, logging out, and checking a statement rather than assuming.",
+      "At home: ask your institution whether they offer a youth account with a view for you. Seeing the statement together is worth more than any rule you set."
+     ],
+     "note": null,
+     "words_as_drafted": 67
+    },
+    "azuri": {
+     "copy": [
+      "Objective: explain the benefits and risks of digital banking.",
+      "CXC: IT Unit 3 (Impact of IT); POB Unit 3 (Financial Institutions).",
+      "Materials: a regional banking app; a printed statement; the comparison sheet.",
+      "Activity, 30 minutes. Compare paying an electricity bill in cash against paying it in an app — time, cost, record, and what happens when each one goes wrong. The last column is the one students skip and the one that matters.",
+      "Solo variant: the learner does both columns and the adult adds the \"what goes wrong\" row from experience.",
+      "Assessment: three benefits, three risks, and which of the risks is the user's responsibility rather than the bank's.",
+      "The honest gap: the module covers consumer use. It does not cover what the institution owes the customer when a transfer fails, and that is a live question."
+     ],
+     "note": null,
+     "words": 136
+    },
+    "guest": {
+     "words": 53,
+     "copy": [
+      "Mobile money lets you bank without going to a branch — payments, transfers, balances, from a phone.",
+      "Here that matters most for reaching people far from a branch, and for keeping things moving when the weather does not.",
+      "Want a plain list of what it is good for and what to watch out for?"
+     ],
+     "note": null,
+     "words_as_drafted": 60
+    }
+   }
+  },
+  {
+   "n": 10,
+   "title": "What are Taxes?",
+   "range": "Bands 9-12 → adult",
+   "gate": "No vocabulary gate on the word, but `percent` and `%` are banned at 5-8, so no rate can be stated to the youngest band.",
+   "voices": {
+    "skye": {
+     "words": 32,
+     "copy": [
+      "Everybody gives a little of their money to help the whole country.",
+      "That money builds the roads and the schools and pays the nurses.",
+      "It is how we share the big things."
+     ],
+     "note": "No figure — percent and % are banned at this band.",
+     "words_as_drafted": 33
+    },
+    "kaleb": {
+     "words": 51,
+     "copy": [
+      "When you buy most things here, a bit is added on top that goes to the government. That is VAT — Value Added Tax.",
+      "It pays for roads, schools, the hospital and the police. Things nobody could buy alone.",
+      "Check a receipt at home and find the line. It is always printed."
+     ],
+     "danger": true,
+     "note": "The draft's \"$10 + 17% VAT = $11.70\" states a rate. The rate needs a source_url before it can be quoted — and 17% is asserted from memory, not from a source. Until sourced, the topic teaches the mechanism and sends the learner to a real receipt for the number.",
+     "words_as_drafted": 57
+    },
+    "z13": {
+     "words": 78,
+     "copy": [
+      "Taxes fund what nobody buys individually — the hospital, the roads, the police, the schools.",
+      "Where you already meet them: VAT, added at the till on most goods and services. The current rate is published; find it on a receipt rather than taking my word for it.",
+      "Where you will meet them: income tax on a pay slip, and property tax if you own.",
+      "Want to build a VAT calculator in Python and check it against a real receipt?"
+     ],
+     "note": "The rate is pointed at rather than stated, for the same reason.",
+     "words_as_drafted": 82
+    },
+    "z16": {
+     "words": 140,
+     "copy": [
+      "Taxes are how a country pays for what nobody could buy individually — the hospital, the roads, the police, the schools.",
+      "VAT is added at the point of sale on most goods and services, and it is the one you have been paying since before you earned anything. The current rate is published; check it on a receipt.",
+      "Income tax appears on your pay slip, and the gap between what you are offered and what arrives is the first thing that surprises people about a first job. Read the deductions line before you plan around the salary.",
+      "Property tax applies if you own.",
+      "There is a real argument about how a tourism economy should raise revenue, and you are old enough to have a view on it. Want to build a VAT calculator and check it against a receipt from today?"
+     ],
+     "note": null,
+     "words_as_drafted": 152
+    },
+    "imani": {
+     "words": 60,
+     "copy": [
+      "ASPIRE teaches taxes as part of being a citizen rather than as paperwork — what VAT is, why it is on the receipt, and what it pays for. Nothing about filing is taught to children.",
+      "At home: next receipt, point at the VAT line and ask what she thinks it paid for. It turns an abstraction into something she has seen."
+     ],
+     "note": null,
+     "words_as_drafted": 63
+    },
+    "azuri": {
+     "copy": [
+      "Objective: calculate VAT and explain the purpose of taxation.",
+      "CXC: POMA Unit 1 (Consumer Arithmetic); POB Unit 6 (Government and Business).",
+      "Materials: real receipts collected by students; the published VAT rate from the Inland Revenue page — not from me.",
+      "Activity, 30 minutes. Students price ten items and add VAT at the published rate, then work backwards from a real receipt total to check their method against reality. The reverse calculation is where the understanding actually lands.",
+      "Solo variant: the learner works from the household's own receipts.",
+      "Assessment: VAT on a mixed basket, plus one sentence on why some items are treated differently from others.",
+      "The honest gap: the module does not cover exemptions, zero-rating or the policy argument about a consumption tax in a tourism economy. Your Form 5s will raise the last one."
+     ],
+     "note": "The rate is sourced from the revenue authority rather than stated by the bot, per his red line 1.",
+     "words": 134
+    },
+    "guest": {
+     "words": 55,
+     "copy": [
+      "Taxes are money collected by government to pay for services everyone uses — roads, schools, hospitals, police.",
+      "The one you meet most often here is VAT, added to most purchases at the till.",
+      "I am not the right place for the current rate — that is published, and it changes. Want this explained for a particular age?"
+     ],
+     "danger": true,
+     "note": "The \"17%\" removed. Guest's red line 1 forbids any percentage.",
+     "words_as_drafted": 58
+    }
+   }
+  },
+  {
+   "n": 11,
+   "title": "What is Entrepreneurship?",
+   "range": "Bands 9-12 → adult",
+   "gate": "`earn` enters the ladder at 9-12.",
+   "voices": {
+    "skye": {
+     "words": 31,
+     "copy": [
+      "Some people make something and sell it.",
+      "Sugar cakes at the gate. Tamarind balls at the market.",
+      "You make it, someone buys it, you get a coin. What would you make?"
+     ],
+     "danger": true,
+     "note": "\"Lemonade or cookies\" — `cookies` is a BANNED FOREIGN WORD and fails the lint. Replaced with what a child here has actually seen sold.",
+     "words_as_drafted": 33
+    },
+    "kaleb": {
+     "words": 63,
+     "copy": [
+      "Around here: a food van, a tour guide, hair braiding, a stall at the market.",
+      "Three things every one of them needs — something people want, a bit of money to start, and someone willing to pay.",
+      "The third is the one people forget, and it is the one that decides it.",
+      "Invent a business for Carnival. What are you selling, and to whom?"
+     ],
+     "note": null,
+     "words_as_drafted": 66
+    },
+    "z13": {
+     "words": 73,
+     "copy": [
+      "Starting something means finding a problem people will pay to have solved.",
+      "Locally that is tourism, agriculture, creative work and tech — and the smallest version of any of them is a weekend, not a company.",
+      "You need a plan, a budget, and a real answer to \"who buys this and how often?\" Money can come later; that question cannot.",
+      "Want to build a profit calculator in Python — costs in, price set, break-even out?"
+     ],
+     "note": null,
+     "words_as_drafted": 79
+    },
+    "z16": {
+     "words": 142,
+     "copy": [
+      "Entrepreneurship is finding a problem people will pay to have solved, and building something that solves it repeatably.",
+      "Where the opportunity is here: tourism and the services around it, agriculture and agri-processing, creative work, and technology that does not need to be near a market to sell into one.",
+      "What you will actually need: a business plan, a realistic budget, and an honest answer to who buys this, how often, and what it costs you to serve them. Financing exists — SIDF, credit unions, development lending — but no one funds an idea without the second and third answers.",
+      "The number that decides it is break-even: the point where what comes in covers what goes out. Everything before that point is funded by somebody, and it is worth knowing who.",
+      "Want to build a profit and break-even calculator in Python for your own idea?"
+     ],
+     "note": null,
+     "words_as_drafted": 148
+    },
+    "imani": {
+     "words": 70,
+     "copy": [
+      "ASPIRE teaches problem-solving and earning — spotting what people need, working out what it costs, setting a price. Nothing real is launched; it is all a simulation.",
+      "At home: when she comes up with a business idea, ask what it would cost her to make one. Not to discourage it — the costing is the part that turns an idea into a plan, and she will enjoy it more than you expect."
+     ],
+     "note": null,
+     "words_as_drafted": 74
+    },
+    "azuri": {
+     "copy": [
+      "Objective: produce a costed mini business plan.",
+      "CXC: POB Unit 5 (Entrepreneurship); POA Unit 2 (Costing).",
+      "Materials: the one-page plan template; a costing sheet; the pitch rubric.",
+      "Activity, 30 minutes. Groups build and pitch a business for Independence Day — what it is, who buys it, what one unit costs to make, what it sells for, and how many before they are even.",
+      "Solo variant: the learner builds it and pitches to the adult, who asks the one question every investor asks: who buys the second one?",
+      "Assessment: cost per unit, price, margin, and break-even quantity — with the assumption behind each number stated.",
+      "The honest gap: the module covers costing and pitching. It does not cover registration, tax obligations or licensing, which is the part that stops most real small businesses, and a student who is serious should be sent to the right office."
+     ],
+     "note": null,
+     "words": 143
+    },
+    "guest": {
+     "words": 62,
+     "copy": [
+      "Entrepreneurship is starting and running your own business — finding something people will pay for and building a way to deliver it.",
+      "Here that most often means tourism, agriculture, creative work and local services.",
+      "The question that decides it is never the idea. It is who buys it, and how often.",
+      "Want a one-page plan template, or this explained for a particular age?"
+     ],
+     "note": null,
+     "words_as_drafted": 64
+    }
+   }
+  }
+ ]
+}
